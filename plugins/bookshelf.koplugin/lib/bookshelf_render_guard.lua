@@ -56,7 +56,42 @@ function M.addressLimit(vsize, available)
     return math.floor(vsize + available * M.AVAILABLE_SHARE)
 end
 
+-- Which limit the child gets. RLIMIT_AS (address space) counts every font
+-- and library mapped in whole, most of it never touched: on the PW5 a render
+-- using ~30 MB failed with 120 MB of address space spare, a different 76-97
+-- books each scan, and every one passed with no cap. From Linux 4.7
+-- RLIMIT_DATA counts the process's own private memory (heap and anonymous
+-- mappings), which is what ran out in issue 518, and leaves mapped files
+-- out. Older kernels only count the heap there, so they keep RLIMIT_AS.
+-- Resource numbers as on x86, ARM and AArch64.
+M.RLIMIT_DATA, M.RLIMIT_AS = 2, 9
+
+-- kernelAtLeast(release, major, minor) -> bool, release as uname -r prints it.
+function M.kernelAtLeast(release, major, minor)
+    local a, b = tostring(release or ""):match("^(%d+)%.(%d+)")
+    a, b = tonumber(a), tonumber(b)
+    if not a then return false end
+    return a > major or (a == major and b >= minor)
+end
+
+-- pickLimit(release, vmsize, vmdata, available) -> resource, limit, room
+-- (bytes), or nil when there is not enough to go on. room: what the child may
+-- take above what it has, the same share of the free memory either way.
+function M.pickLimit(release, vmsize, vmdata, available)
+    if not available or available <= 0 then return nil end
+    local room = math.floor(available * M.AVAILABLE_SHARE)
+    if vmdata and vmdata > 0 and M.kernelAtLeast(release, 4, 7) then
+        return M.RLIMIT_DATA, vmdata + room, room
+    end
+    local as = M.addressLimit(vmsize, available)
+    if as then return M.RLIMIT_AS, as, as - vmsize end
+    return nil
+end
+
+-- childLimits() -> room, available (bytes, either nil when unknown): what it
+-- set, for the scan's log when a render fails.
 function M.childLimits()
+    local set_limit, avail
     pcall(function()
         local f = io.open("/proc/self/oom_score_adj", "w")
         if f then f:write("1000"); f:close() end
@@ -73,13 +108,26 @@ function M.childLimits()
         local page = 4096
         local ok_p, p = pcall(function() return tonumber(ffi.C.sysconf(30)) end)  -- _SC_PAGESIZE
         if ok_p and p and p > 0 then page = p end
-        local limit = M.addressLimit(pages and pages * page,
-                                     M.memAvailableBytes(readFile("/proc/meminfo")))
+        avail = M.memAvailableBytes(readFile("/proc/meminfo"))
+        local status = readFile("/proc/self/status")
+        local data_kb = status and tonumber(status:match("VmData:%s*(%d+)%s*kB"))
+        local res, limit, room = M.pickLimit(readFile("/proc/sys/kernel/osrelease"),
+            pages and pages * page, data_kb and data_kb * 1024, avail)
         -- unsigned long is 32 bits on the Kobos and Kindles: stay under it.
         if not limit or (ffi.sizeof("unsigned long") == 4 and limit >= 2^32) then return end
         local rl = ffi.new("struct bookshelf_rlimit", limit, limit)
-        ffi.C.setrlimit(9, rl)   -- RLIMIT_AS on Linux (x86, ARM, AArch64)
+        if ffi.C.setrlimit(res, rl) == 0 then set_limit = room end
     end)
+    return set_limit, avail
+end
+
+-- failureNote(err, headroom, avail) -> "why" for the log line of a render that
+-- gave no count: the error, the room the child had over what it started with,
+-- and what the device had free then. MB, rounded.
+function M.failureNote(err, headroom, avail)
+    local function mb(b) return b and string.format("%d MB", math.floor(b / 1048576 + 0.5)) or "?" end
+    local e = tostring(err or "no count"):gsub("%s+", " "):sub(1, 200)
+    return string.format("%s; room %s, free %s", e, mb(headroom), mb(avail))
 end
 
 local function inflightPath()

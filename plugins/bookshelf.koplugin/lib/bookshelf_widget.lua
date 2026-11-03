@@ -237,6 +237,13 @@ function BookshelfWidget:init()
     BookshelfWidget._clip_target = self
     BookshelfWidget.installClipHook()
     require("lib/bookshelf_underlay").install(self)
+    -- %published reads book files in the background (lib/bookshelf_published);
+    -- the books that gained a date repaint where they show. The newest shelf
+    -- is the one listened for, as above.
+    require("lib/bookshelf_published").on_filled = function(fps)
+        if self._closed then return end
+        self:_refreshPublished(fps)
+    end
     -- A registered source that has fetched more (lib/bookshelf_sources,
     -- ui.bookshelf:sourceChanged) redraws the shelf, but only while that
     -- source is what is on screen. One named slot, so a later widget replaces
@@ -20964,6 +20971,17 @@ function BookshelfWidget:_opdsRunDownload(book, acq, dest, dialog)
                 dmap[path] = desc
                 BookshelfSettings.save(OPDS_DESC_KEY, dmap)
             end
+            -- The catalog's publication date too, for %published: calibre-web
+            -- serves the file as it was added, so the date it shows in the
+            -- catalog is often not inside the file (GitHub issue 566).
+            if book.published then
+                pcall(function()
+                    local Published = require("lib/bookshelf_published")
+                    local mtime = ok_lfs2 and lfs2 and lfs2.attributes(path, "modification")
+                    Published.remember(path, book.published, mtime)
+                    require("lib/bookshelf_book_facts_db").flushSoon()
+                end)
+            end
             -- A new file inside the library the shelf walks -- the local chips
             -- have to re-derive or the book simply isn't there.
             Repo.invalidateWalkCache()
@@ -21121,12 +21139,31 @@ local function _headerThumbBB(filepath, fresh, thumb_w)
     return nil
 end
 
+-- _headerCardBook(book, fresh) -> the record the book menu's cover card draws.
+-- A plain spine's page record is light: it carries no has_cover, and the card
+-- reads that as "no cover" and draws the text placeholder (575). The menu's
+-- own full record answers it; the shelf's record keeps everything else, and
+-- is copied rather than changed.
+function BookshelfWidget._headerCardBook(book, fresh)
+    if book.has_cover ~= nil or type(fresh) ~= "table" or fresh == book then
+        return book
+    end
+    local b = {}
+    for k, v in pairs(book) do b[k] = v end
+    b.has_cover = fresh.has_cover
+    if b.cover_image_path == nil then b.cover_image_path = fresh.cover_image_path end
+    return b
+end
+
 function BookshelfWidget:_buildBookMenuHeader(book, override_width, pill_specs, bookmark_action, opts)
     if not book or not book.filepath then return nil end
     -- rich = the book-detail popup's header: +2pt detail fonts, a page count,
     -- "Last read" wording, and the folder path with the filename. The long-press
     -- menu (opts nil) keeps the compact original.
     local rich = opts and opts.rich or false
+    -- band: the book menu's header ground (bookshelf_reviews_modal), which
+    -- the text boxes paint behind their text, as they would white.
+    local band = opts and opts.band or nil
     local Font           = require("ui/font")
     local ImageWidget    = require("ui/widget/imagewidget")
     local HorizontalGroup_   = require("ui/widget/horizontalgroup")
@@ -21257,7 +21294,7 @@ function BookshelfWidget:_buildBookMenuHeader(book, override_width, pill_specs, 
         if ok_sw and SpineWidget then
             local ok_card, card = pcall(function()
                 return SpineWidget:new{
-                    book   = book,
+                    book   = BookshelfWidget._headerCardBook(book, fresh),
                     width  = thumb_w,
                     height = thumb_h,
                     on_tap = function() previewCover() end,
@@ -21369,6 +21406,7 @@ function BookshelfWidget:_buildBookMenuHeader(book, override_width, pill_specs, 
     local top_stack = VerticalGroup_:new{ align = "left" }
     local mtitle_face, mtitle_bold = BFont:getFace("smalltfont", rich and 26 or 22, { bold = true })
     top_stack[#top_stack + 1] = TextBoxWidget_:new{
+            bgcolor = band,
         text  = book.title or book.filename or _("(no title)"),
         face  = mtitle_face,
         bold  = mtitle_bold,
@@ -21379,6 +21417,7 @@ function BookshelfWidget:_buildBookMenuHeader(book, override_width, pill_specs, 
     if book.author and book.author ~= "" then
         local mauthor_face, mauthor_bold = BFont:getFace("cfont", rich and 22 or 18)
         top_stack[#top_stack + 1] = TextBoxWidget_:new{
+            bgcolor = band,
             text  = book.author,
             face  = mauthor_face,
             bold  = mauthor_bold,
@@ -21466,6 +21505,7 @@ function BookshelfWidget:_buildBookMenuHeader(book, override_width, pill_specs, 
             }
         else
             txt = TextBoxWidget_:new{
+                bgcolor = band,
                 text  = text,
                 face  = meta_face,
                 bold  = meta_bold,
@@ -21535,6 +21575,7 @@ function BookshelfWidget:_buildBookMenuHeader(book, override_width, pill_specs, 
         local rface, rbold = BFont:getFace("cfont", 20, { bold = true })
         top_stack[#top_stack + 1] = VerticalSpan_:new{ width = Space.px(6) }
         top_stack[#top_stack + 1] = TextBoxWidget_:new{
+            bgcolor = band,
             text  = table.concat(parts, "  \xC2\xB7  "),  -- middle-dot
             face  = rface,
             bold  = rbold,
@@ -21560,10 +21601,11 @@ function BookshelfWidget:_buildBookMenuHeader(book, override_width, pill_specs, 
 
     if #meta_parts > 0 then
         top_stack[#top_stack + 1] = TextBoxWidget_:new{
+            bgcolor = band,
             text  = table.concat(meta_parts, "  \xC2\xB7  "),  -- middle-dot
             face  = meta_face,
             bold  = meta_bold,
-            fgcolor = rich and Blitbuffer.COLOR_DARK_GRAY or nil,
+            fgcolor = rich and (band and require("lib/bookshelf_popup_kit").DIM_ON_GREY or Blitbuffer.COLOR_DARK_GRAY) or nil,
             width = text_w,
         }
     end
@@ -21589,6 +21631,7 @@ function BookshelfWidget:_buildBookMenuHeader(book, override_width, pill_specs, 
         top_stack[#top_stack + 1] = _icon_row("\xEF\x80\x96", fname, true)  -- U+F016 file
     else
         top_stack[#top_stack + 1] = TextBoxWidget_:new{
+            bgcolor = band,
             text  = fname,
             face  = meta_face,
             bold  = meta_bold,
@@ -25322,8 +25365,8 @@ function BookshelfWidget:_showBookDetail(book, opts)
         -- Cover + metadata header in place of a title bar. Rebuilt fresh on each
         -- layout by the modal (cover bb is one-shot); no pills here (Tags tab),
         -- no bookmark button.
-        header_builder = function(avail_w)
-            return self:_buildBookMenuHeader(book, avail_w, nil, nil, { rich = true })
+        header_builder = function(avail_w, band)
+            return self:_buildBookMenuHeader(book, avail_w, nil, nil, { rich = true, band = band })
         end,
     }
     -- The description-source choice (Embedded vs Hardcover) now persists via the
@@ -25385,6 +25428,32 @@ function BookshelfWidget:_refreshSingleBookCover(filepath, reason)
         UIManager:setDirty(self, "ui")
     end
     return false
+end
+
+-- _refreshPublished(fps): books whose publication date just arrived from the
+-- background read (lib/bookshelf_published). Only the ones on this page
+-- repaint, each in place; a page where most of them did is rebuilt once
+-- instead, which costs less than a swap per row.
+function BookshelfWidget:_refreshPublished(fps)
+    if self._closed or not (self._inner_vgroup and self._shelf_dims) then return end
+    local wanted = {}
+    for _i, fp in ipairs(fps or {}) do wanted[fp] = true end
+    local on_page = {}
+    for _i, it in ipairs(self._page_items or {}) do
+        local fp = type(it) == "table" and it.filepath
+        if fp and wanted[fp] then on_page[#on_page + 1] = fp end
+    end
+    local preview_fp = self._preview_book and self._preview_book.filepath
+    local hero = preview_fp and wanted[preview_fp] and not self._expanded
+    if #on_page > 6 then
+        self:_rebuild()
+        UIManager:setDirty(self, "ui")
+        return
+    end
+    for _i, fp in ipairs(on_page) do
+        pcall(self._refreshSpineInPlace, self, fp)
+    end
+    if hero then pcall(self._swapHeroInPlace, self) end
 end
 
 function BookshelfWidget:_refreshHardcoverEnrichmentView(reason, filepath)
@@ -26166,6 +26235,7 @@ function BookshelfWidget:_openGroupMenu(group, kind)
                  callback = act(fn), half = half }
     end
     local blocks = {}
+    local strip_actions
     local function section(heading, items)
         if #items == 0 then return end
         blocks[#blocks + 1] = { type = "heading", text = heading }
@@ -26208,6 +26278,9 @@ function BookshelfWidget:_openGroupMenu(group, kind)
         _("Finds page counts for just these books."), function()
         require("lib/bookshelf_page_count_dialog").showScoped(display_name, bw_ref:_resolveStackPaths(group), bw_ref)
     end)
+    -- Two share a line (Select, Extract page counts); three (Add more,
+    -- Remove, Extract) keep a line each rather than leave one half alone.
+    if #books == 2 then books[1].half, books[2].half = true, true end
     section(_("Books"), books)
 
     if kind == "series" and self:_isSpineMode() then
@@ -26258,22 +26331,17 @@ function BookshelfWidget:_openGroupMenu(group, kind)
             end, true)
         end
         section(_("Image"), image)
-        -- File management (feature/file-move): relocate or rename the real
-        -- directory behind this folder card.
-        section(_("Folder"), {
-            opt("\u{E951}", _("Move folder\xE2\x80\xA6"),   -- folder-move
-                _("Moves it and its books to another folder."), function()
-                require("lib/bookshelf_move_flow").moveFolder{
-                    bw = bw_ref, folder_path = group.path,
-                }
-            end, true),
-            opt("\u{EB54}", _("Rename folder\xE2\x80\xA6"),   -- rename-box
-                _("Changes its name on the device."), function()
-                require("lib/bookshelf_move_flow").renameFolder{
-                    bw = bw_ref, folder_path = group.path,
-                }
-            end, true),
-        })
+        -- File management: move, rename or delete the real directory behind
+        -- this folder card, as buttons beside the book count (456).
+        local MoveFlow = function() return require("lib/bookshelf_move_flow") end
+        strip_actions = {
+            { icon = "\u{E951}", label = _("Move\xE2\x80\xA6"),   -- folder-move
+              callback = act(function() MoveFlow().moveFolder{ bw = bw_ref, folder_path = group.path } end) },
+            { icon = "\u{EB54}", label = _("Rename\xE2\x80\xA6"),   -- rename-box
+              callback = act(function() MoveFlow().renameFolder{ bw = bw_ref, folder_path = group.path } end) },
+            { icon = "\xEE\xA2\xBF", label = _("Delete\xE2\x80\xA6"),   -- delete
+              callback = act(function() MoveFlow().deleteFolder{ bw = bw_ref, folder_path = group.path } end) },
+        }
     elseif (kind == "author" or kind == "series" or kind == "genre" or kind == "tag")
            and type(source_id) == "string" and source_id ~= "" then
         -- Per-kind label so a user holding an author stack sees "Set author
@@ -26360,7 +26428,7 @@ function BookshelfWidget:_openGroupMenu(group, kind)
         for _i, b in ipairs(blocks) do
             if b.active_func then b.active = b.active_func() end
         end
-        return { strip = { { type = "summary", text = prompt } }, blocks = blocks }
+        return { strip = { { type = "summary", text = prompt, actions = strip_actions } }, blocks = blocks }
     end
     dialog = require("lib/bookshelf_page_dialog").show{
         title = display_name,

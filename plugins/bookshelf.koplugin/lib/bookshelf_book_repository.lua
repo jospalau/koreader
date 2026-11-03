@@ -656,8 +656,13 @@ end
 
 -- getBookInfo with that recovery around it. Returns the info table (nil when
 -- BIM has no row) and, on failure, the error message. Never raises.
+-- Per-book BIM reads, for the perf lines: each one reads the book's whole
+-- row, its compressed cover included, whether or not a cover is wanted
+-- (BookInfoManager's SELECT names every column).
+Repo._bim_reads = 0
 local function _bimGetBookInfo(bim, filepath, want_cover, what)
     if not bim or type(bim.getBookInfo) ~= "function" then return nil end
+    Repo._bim_reads = Repo._bim_reads + 1
     local ok, res = pcall(bim.getBookInfo, bim, filepath, want_cover)
     if ok then return res end
     if _resetBimConnection(bim) then
@@ -4063,6 +4068,8 @@ function Repo.batchRowFor(fp) return _batchInfoFor(fp) end
 -- batch, the book is read live, has no row, and is queued.
 function Repo.forgetBook(fp)
     if type(fp) ~= "string" then return end
+    -- %published's date, when the file is no longer the one it came from.
+    pcall(function() require("lib/bookshelf_published").forget(fp) end)
     for _key, entry in pairs(_light_meta_cache) do
         if entry.rows then entry.rows[fp] = nil end
     end
@@ -4345,6 +4352,7 @@ function Repo.folderCoverPaths(path, sort_priority, limit, opts)
     end
     local all = Repo.getFolderBookPaths(path) or {}
     if #all == 0 then return {} end
+    local _fc_t0, _fc_b0 = _gettime(), Repo._bim_reads
 
     local prefix = path
     if prefix:sub(-1) ~= "/" then prefix = prefix .. "/" end
@@ -4407,6 +4415,11 @@ function Repo.folderCoverPaths(path, sort_priority, limit, opts)
         local keep = {}
         for _i = 1, #out do keep[_i] = out[_i] end
         _capInsert(_folder_cover_cache, _folder_cover_cache_order, ckey, keep)
+    end
+    local _fc_ms = (_gettime() - _fc_t0) * 1000
+    if _fc_ms > 200 then
+        logger.dbg(string.format("[bookshelf perf] folderCoverPaths: %.0fms books=%d here=%d below=%d bim_reads=%d light=%s path=%s",
+            _fc_ms, #all, #here, #below, Repo._bim_reads - _fc_b0, tostring(_light ~= nil or opts.light_cache ~= nil), path))
     end
     return out
 end
@@ -4567,6 +4580,7 @@ end
 
 function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
     local _t0 = _gettime()
+    local _bim0 = Repo._bim_reads
     offset = offset or 0
     -- Explicit `path` (folder drilldown) wins; fallback resolves the
     -- user's library root and bails when it's unconfigured rather than
@@ -4614,8 +4628,14 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
             _cover_match_built = true
             if Filter.isActive(filter) then
                 local compiled = Filter.compile(filter, Repo.filterOpts())
+                -- From the shared light map first, as the shelf's own filter
+                -- pass reads it: a fresh read per book is a whole BIM row,
+                -- cover included, and a big folder on a filtered shelf of
+                -- shelves cost 25 s and 250 MB a time on the PW5.
                 _cover_match = function(fp)
-                    local rec = _buildBookMetaLight(fp) or { filepath = fp }
+                    local map = _coverLightCache()
+                    local rec = (map and map[fp]) or _buildBookMetaLight(fp)
+                        or { filepath = fp }
                     return _recordMatches(rec, compiled)
                 end
             end
@@ -5119,9 +5139,9 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
             if b then out[#out + 1] = b end
         end
     end
-    logger.dbg(string.format("[bookshelf perf] getAll: MISS build=%.0fms items=%d/%d sort=%s rev=%s mixed=%s",
+    logger.dbg(string.format("[bookshelf perf] getAll: MISS build=%.0fms items=%d/%d sort=%s rev=%s mixed=%s bim_reads=%d path=%s",
         (_gettime() - _t0) * 1000, #out, total, sort_key,
-        tostring(reverse), tostring(mixed)))
+        tostring(reverse), tostring(mixed), Repo._bim_reads - _bim0, tostring(path)))
     return out, total
 end
 
@@ -6613,6 +6633,7 @@ local function _buildGroups(group_kind, key_fn, multi, records)
             end
         end
     end
+    local _t_loop = _gettime()
     local list = {}
     for _i, k in ipairs(order) do list[#list + 1] = groups[k] end
     -- Insertion order; getAuthors/getGenres/getTags sort at hydrate time
@@ -6637,8 +6658,11 @@ local function _buildGroups(group_kind, key_fn, multi, records)
         g._first = nil
         table.sort(g.books, within_cmp)
     end
-    logger.dbg(string.format("[bookshelf perf] _buildGroups(%s): %.0fms cands=%d groups=%d",
-        group_kind, (_gettime() - _t0) * 1000, #cands, #list))
+    local _members = 0
+    for _i, g in ipairs(list) do _members = _members + #g.books end
+    logger.dbg(string.format("[bookshelf perf] _buildGroups(%s): %.0fms (loop=%.0f sort=%.0f) cands=%d groups=%d members=%d",
+        group_kind, (_gettime() - _t0) * 1000, (_t_loop - _t0) * 1000, (_gettime() - _t_loop) * 1000,
+        #cands, #list, _members))
     return list
 end
 
