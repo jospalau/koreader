@@ -5205,11 +5205,11 @@ end
 -- Close the fonts menu and repaint the page underneath
 function PageTextInfo:closeFontsMenu()
     local UIManager = require("ui/uimanager")
-    if self.fonts_dialog then
-        UIManager:close(self.fonts_dialog)
-        self.fonts_dialog = nil
+    local d = self.fonts_dialog
+    self.fonts_dialog = nil
+    if d then
+        UIManager:close(d, "ui", d.frame_rect)
     end
-    UIManager:setDirty(nil, "ui")
 end
 
 -- Close the menu, apply the font directly on the reader, then reopen
@@ -5218,15 +5218,10 @@ function PageTextInfo:applyFontAndReopen(face)
     local UIManager = require("ui/uimanager")
     local page = self.fonts_page
 
-    if self.fonts_dialog then
-        UIManager:close(self.fonts_dialog)
-        self.fonts_dialog = nil
-    end
-
+    -- Don't close the dialog: the new one replaces it
     self.ui:handleEvent(Event:new("SetFont", face))
-    UIManager:setDirty(self.ui, "partial")
 
-    UIManager:scheduleIn(0.5, function()
+    UIManager:nextTick(function()
         self:onShowFonts(page)
     end)
 end
@@ -5443,11 +5438,11 @@ function PageTextInfo:onShowFonts(page)
         return true
     end
 
-    -- Close a previous dialog if still open
-    if self.fonts_dialog then
-        UIManager:close(self.fonts_dialog)
-        self.fonts_dialog = nil
-    end
+    -- Remember the previous dialog; it is closed after the new one is shown
+    local old_dialog = self.fonts_dialog
+    local old_region = old_dialog and old_dialog.frame_rect
+        and old_dialog.frame_rect:copy()
+    self.fonts_dialog = nil
 
     local fonts, names = FontList.getFontArgFunc()
     local current = ui.document._document:getFontFace()
@@ -5639,6 +5634,14 @@ function PageTextInfo:onShowFonts(page)
         frame,
     }
 
+    local fsize = frame:getSize()
+    local frame_rect = Geom:new{
+        x = math.floor((screen.w - fsize.w) / 2),
+        y = math.floor((screen.h - fsize.h) / 2),
+        w = fsize.w,
+        h = fsize.h,
+    }
+
     -- Tap handling
     function dialog:onTap(arg, ges)
         -- Font cells
@@ -5649,13 +5652,13 @@ function PageTextInfo:onShowFonts(page)
             end
         end
 
-        if frame.dimen and ges.pos:intersectWith(frame.dimen) then
-            -- Navigation row: hit area computed from the window frame
-            local nav_top = frame.dimen.y + frame.dimen.h
+        if ges.pos:intersectWith(frame_rect) then
+            -- Navigation row
+            local nav_top = frame_rect.y + frame_rect.h
                             - Size.border.window - Size.padding.small - nav_h
             if ges.pos.y >= nav_top then
-                local third = frame.dimen.w / 3
-                local rel_x = ges.pos.x - frame.dimen.x
+                local third = frame_rect.w / 3
+                local rel_x = ges.pos.x - frame_rect.x
                 if rel_x < third then
                     if has_prev then
                         UIManager:nextTick(function() self.plugin:onShowFonts(page - 1) end)
@@ -5666,7 +5669,6 @@ function PageTextInfo:onShowFonts(page)
                     end
                 end
             end
-            -- Tap inside the window: never close
             return true
         end
 
@@ -5681,8 +5683,17 @@ function PageTextInfo:onShowFonts(page)
     end
 
     dialog.plugin = self
+    dialog.frame_ref = frame
+    dialog.frame_rect = frame_rect
     self.fonts_dialog = dialog
-    UIManager:show(self.fonts_dialog)
+
+    local region = frame_rect
+    if old_region then region = region:combine(old_region) end
+
+    UIManager:show(dialog, "ui", region)
+    if old_dialog then
+        UIManager:close(old_dialog, "ui", region)
+    end
     return true
 end
 
