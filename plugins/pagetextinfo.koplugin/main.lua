@@ -3824,17 +3824,51 @@ local function showFbinkMessage(paths, text)
     if f then f:read("*a"); f:close() end
 end
 
+-- Show a full-screen "Restarting..." page using KOReader's own widgets
+local function showMessage(paths, text)
+    local Blitbuffer = require("ffi/blitbuffer")
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local FrameContainer = require("ui/widget/container/framecontainer")
+    local TextBoxWidget = require("ui/widget/textboxwidget")
+    local Geom = require("ui/geometry")
+    local Screen = Device.screen
+
+    local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
+    local face = Font:getFace("myfont2") or Font:getFace("infofont", 32)
+
+    local page = FrameContainer:new{
+        width = screen_w,
+        height = screen_h,
+        padding = 0,
+        margin = 0,
+        bordersize = 0,
+        background = Blitbuffer.COLOR_WHITE,
+        CenterContainer:new{
+            dimen = Geom:new{ w = screen_w, h = screen_h },
+            TextBoxWidget:new{
+                text = text,
+                face = face,
+                width = math.floor(screen_w * 0.8),
+                alignment = "center",
+            },
+        },
+    }
+    -- "full" makes it a flashing refresh, so the page really lands on the e-ink
+    UIManager:show(page, "full")
+    UIManager:forceRePaint()
+end
+
 -- Show a "Restarting..." message with fbink, then restart (or quit) KOReader
-local function restartKOReader(paths)
-    showFbinkMessage(paths, "Restarting...")
-    if Device:canRestart() then
-        UIManager:restartKOReader()
-        -- The new Clara BW closes so quickly that pressing Restart doesn't flash
-        -- the screen, so add a small delay on all devices
-        require("ffi/util").usleep(100000)
-    else
-        UIManager:quit()
-    end
+local function restartKOReader(paths, widget)
+    UIManager:nextTick(function()
+        UIManager:close(widget, "full")
+        showMessage(paths, "Restarting...")
+        if Device:canRestart() then
+            UIManager:restartKOReader()
+        else
+            UIManager:quit()
+        end
+    end)
 end
 
 -- Refresh file list, history and stats after books changed on disk
@@ -3932,21 +3966,25 @@ local function runSyncScript(script_name, opts)
     if opts.ask_restart then
         -- Show the output and the restart question in a single dialog
         -- so they can't cover each other
-        UIManager:show(ConfirmBox:new{
+        local confirm_box = ConfirmBox:new{
             dismissable = false,
             text = clean .. "\n\n" .. _("KOReader needs to be restarted."),
             ok_text = Device:canRestart() and _("Restart") or _("Quit"),
             cancel_text = _("No need to restart"),
             flash_yes = true,
             flash_no = opts.flash_no,
-            ok_callback = function() restartKOReader(paths) end,
+            ok_callback = function()
+                restartKOReader(paths, confirm_box)
+            end,
             cancel_callback = function()
                 -- Optional hook, e.g. refresh the library instead of restarting
                 if opts.on_no_restart then
                     opts.on_no_restart(paths)
                 end
             end,
-        })
+        }
+
+        UIManager:show(confirm_box)
     else
         -- Nothing to restart: just show the script output
         UIManager:show(InfoMessage:new{
