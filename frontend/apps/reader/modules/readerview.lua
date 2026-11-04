@@ -206,6 +206,14 @@ end
 function ReaderView:paintTo(bb, x, y)
     local start = time.now()
     local is_new_page = (self.state.drawn == false)
+    local marks = {}
+    local t = time.now()
+    local profiling = G_reader_settings:isTrue("show_page_turn_time")
+    local function mark(name)
+        if not profiling then return end
+        marks[#marks + 1] = name .. "=" .. time.to_ms(time.since(t))
+        t = time.now()
+    end
     -- local start = os.clock()
     dbg:v("readerview painting", self.visible_area, "to", x, y)
     if self.page_scroll then
@@ -236,7 +244,7 @@ function ReaderView:paintTo(bb, x, y)
             return
         end
     end
-
+    mark("content")
     -- mark last read area of overlapped pages
     if not self.dim_area:isEmpty() and self:isOverlapAllowed() then
         if self.page_overlap_style == "dim" then
@@ -263,6 +271,7 @@ function ReaderView:paintTo(bb, x, y)
     if self.highlight_visible then
         colorful = self:drawSavedHighlight(bb, x, y)
     end
+    mark("highlights")
     -- draw temporary highlight
     if self.highlight.temp and next(self.highlight.temp) then
         self:drawTempHighlight(bb, x, y)
@@ -341,7 +350,6 @@ function ReaderView:paintTo(bb, x, y)
             -- if not self.footer._show_just_toptextcontainer then
             --     y_coordinate_top = -Screen:getHeight() + Screen:scaleBySize(self.footer.height)
             -- end
-
             local top_padding = 0
             if self.footer.settings.top_padding then
                 top_padding = self.footer.settings.top_padding
@@ -357,19 +365,33 @@ function ReaderView:paintTo(bb, x, y)
             self.y_coordinate_top = -Screen:getHeight() + self.footer:getHeight() + Screen:scaleBySize(top_padding)
             self.footer:paintTo(bb, x, self.y_coordinate_top)
         end
-
+        mark("footer")
     end
 
-    for _, m in pairs(self.view_modules) do
-        m:paintTo(bb, x, y)
+    for name, m in pairs(self.view_modules) do
+        if profiling then
+            local tm = time.now()
+            m:paintTo(bb, x, y)
+            local mod_ms = time.to_ms(time.since(tm))
+            if name == "bookends" then
+                -- Siempre se registra, incluso con 0 ms
+                marks[#marks + 1] = "bookends=" .. mod_ms
+                -- print("view_module", name, mod_ms, "ms")
+            elseif mod_ms >= 1 then
+                -- print("view_module", name, mod_ms, "ms")
+            end
+        else
+            m:paintTo(bb, x, y)
+        end
     end
-
+    mark("modules")
     if util.getFileNameSuffix(self.document.file) == "epub" then
         if self.topbar.settings:isTrue("show_top_bar") and not (self.ui.bookends and self.ui.bookends.enabled) then
             self.topbar:paintTo(bb, x, y)
         else
             self.topbar:paintToDisabled(bb, x, y)
         end
+        mark("topbar")
         if G_reader_settings:isTrue("show_double_bar") then
             self.doublebar:paintTo(bb, x, y)
         end
@@ -389,8 +411,8 @@ function ReaderView:paintTo(bb, x, y)
     -- There is a reference in the ui for every plugin we can use
     if self.ui.pagetextinfo then
         self.ui.pagetextinfo:paintTo(bb, x, y)
+        mark("pagetextinfo")
     end
-
     -- if G_reader_settings:isTrue("show_wpm") and not G_reader_settings:isTrue("show_time") then
     --     local left_container = require("ui/widget/container/leftcontainer")
 
@@ -493,6 +515,7 @@ function ReaderView:paintTo(bb, x, y)
             end
         end
     end
+    mark("dither")
     -- local elapsed = os.clock() - start
     -- print("Paso: ", elapsed, "segundos")
     self.state.drawn = true
@@ -501,15 +524,27 @@ function ReaderView:paintTo(bb, x, y)
     end
     if self._turn_start then
         local ms = time.to_ms(time.since(self._turn_start))
-        logger.info("page update -> painted ms:", ms)
+        -- print("page update -> painted ms:", ms, "| paintTo:", time.to_ms(time.since(start)), "|", table.concat(marks, " "))
         self._turn_start = nil
-        if G_reader_settings:isTrue("show_page_turn_time") then
-            UIManager:nextTick(function()
-                UIManager:show(Notification:new{
-                    text = string.format("Page turn: %.0f ms", ms),
-                    timeout = 2,
-                })
-            end)
+        if profiling then
+            local TextBoxWidget = require("ui/widget/textboxwidget")
+            local FrameContainer = require("ui/widget/container/framecontainer")
+            local text = string.format("Page turn: %dms | paintTo: %dms\n%s",
+                ms, time.to_ms(time.since(start)), table.concat(marks, " "))
+            local tw = TextBoxWidget:new{
+                text = text,
+                face = Font:getFace("infofont", 14),
+                width = Screen:getWidth() - Screen:scaleBySize(20),
+            }
+            local frame = FrameContainer:new{
+                background = Blitbuffer.COLOR_WHITE,
+                bordersize = Size.border.thin,
+                padding = Size.padding.small,
+                margin = 0,
+                tw,
+            }
+            frame:paintTo(bb, x + Screen:scaleBySize(10), y + Screen:scaleBySize(10))
+            frame:free()
         end
     end
 end
