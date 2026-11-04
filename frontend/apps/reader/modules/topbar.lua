@@ -634,6 +634,9 @@ function TopBar:init()
         self:toggleBar()
         UIManager:nextTick(function()
             self.onPageUpdate = function(this, pageno)
+                if self.ui.bookends and self.ui.bookends.enabled then
+                    return
+                end
                 self:toggleBar()
                 return
             end
