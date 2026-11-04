@@ -3980,7 +3980,7 @@ function Editor:_openSort(draft, on_change, on_arranged, on_back)
                 add(c)
             end
             add({ type = "heading", text = _("Book") })
-            add(chips({ "title", "author_name", "author_surname", "filename", "published" }))
+            add(chips({ "title", "author_name", "author_surname", "filename", "published", "modified_date" }))
             add({ type = "heading", text = _("Series") })
             add(chips({ "series_name", "series_index", "series_combined", "series_or_title" }))
             -- Added/opened first: Home's own sort (maintainer).
@@ -3990,9 +3990,8 @@ function Editor:_openSort(draft, on_change, on_arranged, on_back)
             add(chips({ "read_status", "read_status_active", "favorites_first" }))
             add({ type = "heading", text = _("Size") })
             add(chips({ "page_count", "size", "book_count" }))
-            add(chips({ "pub_date", "modified_date" }))
             add({ type = "heading", text = _("Calibre") })
-            add(chips({ "words", "grrating", "grvotes" }))
+            add(chips({ "pub_date", "words", "grrating", "grvotes" }))
         end
         return { strip = strip, blocks = blocks }
     end
