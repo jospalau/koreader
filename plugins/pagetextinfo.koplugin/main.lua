@@ -1746,6 +1746,18 @@ This is to be active only if the option flash buttons and menu items or the opti
                     end,
                 },
                 {
+                    text = _("Show page turn time"),
+                    checked_func = function() return G_reader_settings:isTrue("show_page_turn_time") end,
+                    help_text = _([[Show a notification with the time (in ms) it took to turn the page. The time is also always written to the log.]]),
+                    callback = function()
+                        local show = not G_reader_settings:isTrue("show_page_turn_time")
+                        G_reader_settings:saveSetting("show_page_turn_time", show)
+                        G_reader_settings:flush()
+
+                        return true
+                    end,
+                },
+                {
                     text = _("Python server configuration"),
                     sub_item_table = {
                         {

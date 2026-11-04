@@ -28,7 +28,10 @@ local Screen = Device.screen
 local T = require("ffi/util").template
 local Topbar = require("apps/reader/modules/topbar")
 local Doublebar = require("apps/reader/modules/doublebar")
-
+local Notification = require("ui/widget/notification")
+local UIManager = require("ui/uimanager")
+local time = require("ui/time")
+local logger = require("logger")
 
 local ReaderView = OverlapGroup:extend{
     document = nil,
@@ -201,6 +204,8 @@ function ReaderView:resetLayout()
 end
 
 function ReaderView:paintTo(bb, x, y)
+    local start = time.now()
+    local is_new_page = (self.state.drawn == false)
     -- local start = os.clock()
     dbg:v("readerview painting", self.visible_area, "to", x, y)
     if self.page_scroll then
@@ -491,6 +496,22 @@ function ReaderView:paintTo(bb, x, y)
     -- local elapsed = os.clock() - start
     -- print("Paso: ", elapsed, "segundos")
     self.state.drawn = true
+    if is_new_page then
+        logger.info("new page paint ms:", time.to_ms(time.since(start)))
+    end
+    if self._turn_start then
+        local ms = time.to_ms(time.since(self._turn_start))
+        logger.info("page update -> painted ms:", ms)
+        self._turn_start = nil
+        if G_reader_settings:isTrue("show_page_turn_time") then
+            UIManager:nextTick(function()
+                UIManager:show(Notification:new{
+                    text = string.format("Page turn: %.0f ms", ms),
+                    timeout = 2,
+                })
+            end)
+        end
+    end
 end
 
 --[[
@@ -1234,6 +1255,7 @@ function ReaderView:onToggleUILayoutMiroring(toggle)
 end
 
 function ReaderView:onPageUpdate(new_page_no)
+    self._turn_start = time.now()
     self.state.page = new_page_no
     self.state.drawn = false
     self:recalculate()
@@ -1242,6 +1264,7 @@ function ReaderView:onPageUpdate(new_page_no)
 end
 
 function ReaderView:onPosUpdate(new_pos)
+    self._turn_start = time.now()
     self.state.pos = new_pos
     self:recalculate()
     self.highlight.temp = {}
