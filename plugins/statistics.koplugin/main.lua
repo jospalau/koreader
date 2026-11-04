@@ -3280,10 +3280,19 @@ function ReaderStatistics:onPageUpdate(pageno)
     -- Not using this anymore, affects when searching text turning pages, highlight is lost
     -- I modified readersearch.lua to set self.ui.searching so if the search windows is open I want count words
     -- Count always if not searchin
-    if not self.ui.searching then
-        local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
-        self._last_nbwords = nbwords
+
+    if self._nbwords_task then
+        UIManager:unschedule(self._nbwords_task)
     end
+
+    self._nbwords_task = function()
+        self._nbwords_task = nil
+        if not self.ui.searching then
+            self._last_nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
+        end
+    end
+
+    UIManager:scheduleIn(1.5, self._nbwords_task)
 
     if closing then
         return -- current page data updated, nothing more needed
