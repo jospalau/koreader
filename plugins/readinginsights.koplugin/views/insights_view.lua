@@ -2345,7 +2345,7 @@ function ReadingInsightsPopup:_schedulePrefetchOtherModes()
     if self._sleep_sync then return end
     if self._prefetch_scheduled then return end
     self._prefetch_scheduled = true
-    UIManager:scheduleIn(0.3, function()
+    ;(function()
         self._prefetch_scheduled = false
         if self._closed then return end
         local year         = self.selected_year
@@ -2362,7 +2362,7 @@ function ReadingInsightsPopup:_schedulePrefetchOtherModes()
         end)
         if self._closed then return end
         Cache.saveDiskCache()
-    end)
+    end)()
 end
 
 -- Set self._yearly/_monthly for the current selected_year+mode ahead of a
@@ -2552,7 +2552,7 @@ function ReadingInsightsPopup:_scheduleAchievementsRefresh()
     if not VS.Opt.readShowAchievements() then return end
     if self._ach_refresh_scheduled then return end
     self._ach_refresh_scheduled = true
-    UIManager:scheduleIn(0.1, function()
+    ;(function()
         self._ach_refresh_scheduled = false
         if self._closed then return end
         local before = self._ach_count or 0
@@ -2565,7 +2565,7 @@ function ReadingInsightsPopup:_scheduleAchievementsRefresh()
         UIManager:setDirty(self, function()
             return "ui", self.popup_frame.dimen
         end)
-    end)
+    end)()
 end
 
 -- init() shows cached/stale data immediately, then _loadAndRebuild() refreshes in the background.
