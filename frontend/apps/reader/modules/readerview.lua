@@ -210,7 +210,6 @@ function ReaderView:paintTo(bb, x, y)
     local t = time.now()
     local profiling = G_reader_settings:isTrue("show_page_turn_time")
     local function mark(name)
-        if not profiling then return end
         marks[#marks + 1] = name .. "=" .. time.to_ms(time.since(t))
         t = time.now()
     end
@@ -369,20 +368,13 @@ function ReaderView:paintTo(bb, x, y)
     end
 
     for name, m in pairs(self.view_modules) do
-        if profiling then
-            local tm = time.now()
-            m:paintTo(bb, x, y)
-            local mod_ms = time.to_ms(time.since(tm))
-            if name == "bookends" then
-                -- Siempre se registra, incluso con 0 ms
-                marks[#marks + 1] = "bookends=" .. mod_ms
-                -- print("view_module", name, mod_ms, "ms")
-            elseif mod_ms >= 1 then
-                -- print("view_module", name, mod_ms, "ms")
-            end
-        else
-            m:paintTo(bb, x, y)
+        local tm = time.now()
+        m:paintTo(bb, x, y)
+        local mod_ms = time.to_ms(time.since(tm))
+        if name == "bookends" then
+            marks[#marks + 1] = "bookends=" .. mod_ms
         end
+         -- print("view_module", name, mod_ms, "ms")
     end
     mark("modules")
     if util.getFileNameSuffix(self.document.file) == "epub" then
@@ -522,7 +514,7 @@ function ReaderView:paintTo(bb, x, y)
     if self._turn_start then
         table.insert(marks, 1, "prep=" .. prep)
         local ms = time.to_ms(time.since(self._turn_start))
-        -- print("page update -> painted ms:", ms, "| paintTo:", time.to_ms(time.since(start)), "|", table.concat(marks, " "))
+        --print("page update -> painted ms:", ms, "| paintTo:", time.to_ms(time.since(start)), "|", table.concat(marks, " "))
         self._turn_start = nil
         if profiling then
             self._timing_text = string.format("Page turn: %dms | paintTo: %dms\n%s",
@@ -1789,5 +1781,59 @@ function ReaderView:getCurrentPageLineWordCounts()
     end
     return lines_nb, words_nb
 end
+
+-- local WidgetContainer = require("ui/widget/container/widgetcontainer")
+-- local orig = WidgetContainer.handleEvent
+
+-- Prep time happens in the onPageUpdate() function in ReaderUI
+-- function WidgetContainer:handleEvent(event)
+--     local t = time.now()
+--     local r = orig(self, event)
+--     local ms = time.to_ms(time.since(t))
+--     if ms >= 1 and (event.handler == "onPageUpdate" or event.handler == "onPosUpdate") then
+--         print("handler painted", event.handler, tostring(self.name or self), ms, "ms")
+--     end
+--     return r
+-- end
+
+-- There is no onPageUpdate() function in ReaderUI,
+-- so one of its widget children when the event is propagated.
+-- It seems to be the statistics plugin:
+-- local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
+-- Wrapping it in a nextTick() call does not fix it
+-- local EL = require("ui/widget/eventlistener")
+-- local function timedPropagate(self, event, label, thresh_ms)
+--     local t0 = time.now()
+--     local lines = {}
+--     for i, w in ipairs(self) do
+--         local t = time.now()
+--         local consumed = w:handleEvent(event)
+--         local ms = time.to_us(time.since(t)) / 1000
+--         if ms >= 0.2 then
+--             lines[#lines + 1] = string.format("%s=%.1f", tostring(w.name or i), ms)
+--         end
+--         if consumed then break end
+--     end
+--     local r = EL.handleEvent(self, event)
+--     local total = time.to_us(time.since(t0)) / 1000
+--     if total >= thresh_ms then
+--         print(string.format("%s total=%.1f ms | %s", label, total, table.concat(lines, " ")))
+--     end
+--     return r
+-- end
+
+-- function WidgetContainer:handleEvent(event)
+--     if event.handler == "onPageUpdate" and self.name == "ReaderUI" then
+--         local m0 = collectgarbage("count")
+--         local r = timedPropagate(self, event, "RUI", 3)
+--         local m1 = collectgarbage("count")
+--         if m1 < m0 then print(string.format("GC? memoria bajó %.0f KB", m0 - m1)) end
+--         return r
+--     elseif event.handler == "onPageUpdate" and self.name == "readerview" then
+--         return timedPropagate(self, event, "  RV", 1)
+--     end
+--     return orig(self, event)
+-- end
+
 
 return ReaderView
