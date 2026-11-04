@@ -3396,6 +3396,10 @@ function ReaderStatistics:onCloseDocument()
     local DataStorage = require("datastorage")
     local path = DataStorage:getSettingsDir() .. "/wpm_session.json"
     os.remove(path)
+    if self._nbwords_task then
+        UIManager:unschedule(self._nbwords_task)
+        self._nbwords_task = nil
+    end
 end
 
 function ReaderStatistics:onAnnotationsModified(annotations)
