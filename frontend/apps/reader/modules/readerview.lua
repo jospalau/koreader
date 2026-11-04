@@ -205,7 +205,7 @@ end
 
 function ReaderView:paintTo(bb, x, y)
     local start = time.now()
-    local is_new_page = (self.state.drawn == false)
+    local prep = self._turn_start and time.to_ms(time.since(self._turn_start)) or 0
     local marks = {}
     local t = time.now()
     local profiling = G_reader_settings:isTrue("show_page_turn_time")
@@ -519,33 +519,34 @@ function ReaderView:paintTo(bb, x, y)
     -- local elapsed = os.clock() - start
     -- print("Paso: ", elapsed, "segundos")
     self.state.drawn = true
-    if is_new_page then
-        logger.info("new page paint ms:", time.to_ms(time.since(start)))
-    end
     if self._turn_start then
+        table.insert(marks, 1, "prep=" .. prep)
         local ms = time.to_ms(time.since(self._turn_start))
         -- print("page update -> painted ms:", ms, "| paintTo:", time.to_ms(time.since(start)), "|", table.concat(marks, " "))
         self._turn_start = nil
         if profiling then
-            local TextBoxWidget = require("ui/widget/textboxwidget")
-            local FrameContainer = require("ui/widget/container/framecontainer")
-            local text = string.format("Page turn: %dms | paintTo: %dms\n%s",
+            self._timing_text = string.format("Page turn: %dms | paintTo: %dms\n%s",
                 ms, time.to_ms(time.since(start)), table.concat(marks, " "))
-            local tw = TextBoxWidget:new{
-                text = text,
-                face = Font:getFace("infofont", 14),
-                width = Screen:getWidth() - Screen:scaleBySize(20),
-            }
-            local frame = FrameContainer:new{
-                background = Blitbuffer.COLOR_WHITE,
-                bordersize = Size.border.thin,
-                padding = Size.padding.small,
-                margin = 0,
-                tw,
-            }
-            frame:paintTo(bb, x + Screen:scaleBySize(10), y + Screen:scaleBySize(10))
-            frame:free()
         end
+    end
+
+    if profiling and self._timing_text then
+        local TextBoxWidget = require("ui/widget/textboxwidget")
+        local FrameContainer = require("ui/widget/container/framecontainer")
+        local tw = TextBoxWidget:new{
+            text = self._timing_text,
+            face = Font:getFace("infofont", 14),
+            width = Screen:getWidth() - Screen:scaleBySize(20),
+        }
+        local frame = FrameContainer:new{
+            background = Blitbuffer.COLOR_WHITE,
+            bordersize = Size.border.thin,
+            padding = Size.padding.small,
+            margin = 0,
+            tw,
+        }
+        frame:paintTo(bb, x + Screen:scaleBySize(10), y + Screen:scaleBySize(10))
+        frame:free()
     end
 end
 
@@ -1296,14 +1297,15 @@ function ReaderView:onPageUpdate(new_page_no)
     self:recalculate()
     self.highlight.temp = {}
     self:checkAutoSaveSettings()
+    self._pos_done = time.now()
 end
 
 function ReaderView:onPosUpdate(new_pos)
-    self._turn_start = time.now()
     self.state.pos = new_pos
     self:recalculate()
     self.highlight.temp = {}
     self:checkAutoSaveSettings()
+    self._pos_done = time.now()
 end
 
 function ReaderView:onZoomUpdate(zoom)
