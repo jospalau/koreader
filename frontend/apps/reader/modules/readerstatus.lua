@@ -228,8 +228,17 @@ function ReaderStatus:markBook(mark_read)
             util.generateStats()
     end
     require("readhistory"):removeItemByPath(self.document.file)
+    self.ui.doc_settings:saveSetting("summary", summary)
+    self.ui.doc_settings:flush()
+
     local Repo = require("lib/bookshelf_book_repository")
-    if Repo.invalidateLightMeta then Repo.invalidateLightMeta() end
+    if Repo.invalidateProgressCache then Repo.invalidateProgressCache() end
+    if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
+    local FileManager = require("apps/filemanager/filemanager")
+    local bs = self.ui.bookshelf
+        or (FileManager.instance and FileManager.instance.bookshelf)
+
+    if bs and bs.refreshLiveShelves then bs:markMetadataDirty() end
 end
 
 local end_actions = {
