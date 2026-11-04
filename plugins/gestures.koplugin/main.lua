@@ -525,7 +525,6 @@ function Gestures:multiswipeRecorder(touchmenu_instance)
     UIManager:show(multiswipe_recorder)
 end
 
-
 function Gestures:genCustomMultiswipeSubmenu()
     local submenu = {
         {
@@ -642,10 +641,14 @@ function Gestures:onShowGestureOverview()
         end
     end
     UIManager:show(KeyValuePage:new{
-        title = self.is_docless and _("Gestures in file browser") or _("Gestures in reader"),
+        title = self:getMenuTitle(),
         value_overflow_align = "right",
         kv_pairs = kv_pairs,
     })
+end
+
+function Gestures:getMenuTitle()
+    return self.is_docless and _("Gestures in file browser") or _("Gestures in reader")
 end
 
 function Gestures:addIntervals(menu_items)
@@ -849,7 +852,7 @@ end
 
 function Gestures:addToMainMenu(menu_items)
     menu_items.gesture_manager = {
-        text = _("Gesture manager"),
+        text = self:getMenuTitle(),
         sub_item_table = {
             max_per_page = 11,
             {
