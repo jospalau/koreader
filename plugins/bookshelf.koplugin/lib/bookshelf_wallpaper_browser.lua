@@ -106,17 +106,57 @@ end
 -- so the cache never frees a preview still on screen.
 local _previews, _order = {}, {}
 local PREVIEW_KEEP = 8
-local function preview(path, w, h)
-    local key = path .. "|" .. w .. "x" .. h
-    if _previews[key] then return _previews[key] end
+-- decodePreview(path, w, h, mode) -> a w x h buffer: the picture as the
+-- shelf lays it on a screen this shape (w x h is the screen's shape, scaled
+-- down): stretched to it, or cropped or fitted by the same arithmetic the
+-- wallpaper itself uses (fitLayout). Decoded at the size it is shown at,
+-- the picture's own size read from its header: on a PW5 a pack's
+-- 1440x1920 PNG costs 400-850 ms to decode whatever the size asked for, and
+-- asking for the small one skips a full-size copy and a separate scale.
+local function decodePreview(path, w, h, mode)
     local RenderImage = require("ui/renderimage")
-    local ok, bb = pcall(function() return RenderImage:renderImageFile(path, false) end)
-    if not ok or not bb then return nil end
-    local iw, ih = bb:getWidth(), bb:getHeight()
-    local s = math.min(w / iw, h / ih)
-    local tw, th = math.max(1, math.floor(iw * s)), math.max(1, math.floor(ih * s))
-    local ok_s, sc = pcall(function() return RenderImage:scaleBlitBuffer(bb, tw, th) end)
-    if not ok_s or not sc then return nil end
+    local dw, dh, ox, oy
+    if mode == "fill" or mode == "fit" then
+        local ok, iw, ih = pcall(function()
+            return require("lib/bookshelf_image_source").probeSize(path)
+        end)
+        if ok and iw and ih then dw, dh, ox, oy = WP().fitLayout(iw, ih, w, h, mode) end
+        if not dw then
+            -- No size in the header (WebP, GIF, SVG): decode it to learn it.
+            local ok_f, full = pcall(function() return RenderImage:renderImageFile(path, false) end)
+            if not ok_f or not full then return nil end
+            dw, dh, ox, oy = WP().fitLayout(full:getWidth(), full:getHeight(), w, h, mode)
+            pcall(function() full:free() end)
+        end
+    end
+    if not dw then dw, dh, ox, oy = w, h, 0, 0 end
+    local ok, sc = pcall(function() return RenderImage:renderImageFile(path, false, dw, dh) end)
+    if not ok or not sc then return nil end
+    if dw ~= w or dh ~= h then
+        local Blitbuffer = require("ffi/blitbuffer")
+        local out = Blitbuffer.new(w, h, sc:getType())
+        out:fill(Blitbuffer.COLOR_WHITE)
+        if ox < 0 or oy < 0 then
+            out:blitFrom(sc, 0, 0, math.max(0, -ox), math.max(0, -oy), w, h)
+        else
+            out:blitFrom(sc, ox, oy, 0, 0, dw, dh)
+        end
+        sc:free()
+        sc = out
+    end
+    -- In the screen's own type (grey on a greyscale panel): a third of the
+    -- memory and of the disk, and a straight blit when it is drawn.
+    return WP().toScreenType(sc)
+end
+
+-- preview(path, w, h, mode): from memory (a few pages' worth), else
+-- decoded. Not kept on disk: the picker is opened rarely, and a later
+-- session's second look was the only view a disk copy made faster.
+local function preview(path, w, h, mode)
+    local key = path .. "|" .. w .. "x" .. h .. "|" .. (mode or "stretch")
+    if _previews[key] then return _previews[key] end
+    local sc = decodePreview(path, w, h, mode)
+    if not sc then return nil end
     _previews[key] = sc
     _order[#_order + 1] = key
     while #_order > PREVIEW_KEEP do
@@ -126,18 +166,28 @@ local function preview(path, w, h)
     end
     return sc
 end
+-- Test seams.
+WB._preview = preview
+function WB._previewReset() _previews, _order = {}, {} end
+
+-- screenFrame(w, h) -> the largest rectangle of the screen's own shape that
+-- fits w x h: what every card shows a picture in, so the preview is the
+-- screen in miniature.
+function WB.screenFrame(w, h)
+    local Screen = require("device").screen
+    local sw, sh = Screen:getWidth(), Screen:getHeight()
+    local fw = w
+    local fh = math.floor(fw * sh / sw)
+    if fh > h then fh = h; fw = math.floor(fh * sw / sh) end
+    return math.max(1, fw), math.max(1, fh)
+end
 
 local function renderCell(key, item, dimen)
     local Blitbuffer      = require("ffi/blitbuffer")
     local CenterContainer = require("ui/widget/container/centercontainer")
-    local Font            = require("ui/font")
     local FrameContainer  = require("ui/widget/container/framecontainer")
     local Geom            = require("ui/geometry")
-    local HorizontalGroup = require("ui/widget/horizontalgroup")
-    local HorizontalSpan  = require("ui/widget/horizontalspan")
     local ImageWidget     = require("ui/widget/imagewidget")
-    local LeftContainer   = require("ui/widget/container/leftcontainer")
-    local Marks           = require("lib/bookshelf_marks")
     local Size            = require("ui/size")
     local Space           = require("lib/bookshelf_space")
     local TextWidget      = require("lib/bookshelf_colour_text")
@@ -150,49 +200,55 @@ local function renderCell(key, item, dimen)
     local inner_w, inner_h = dimen.w - 2 * pad, dimen.h - 2 * pad
     local name = item.label
     if item.kind == "pack" then name = T(_("%1 pack"), item.label) end
-    -- The title row, aligned left as the plank picker's: the radio mark
-    -- (filled for the one in use) and the name. The same height on every
-    -- card, so the pictures above are all one size whichever is chosen.
-    local radio = Marks.Radio:new{ checked = WB.inUse(key, item) }
-    local gap = Space.padding.small
-    local name_w = inner_w - radio:getSize().w - gap
-    local row = HorizontalGroup:new{ align = "center", radio, HorizontalSpan:new{ width = gap },
-        TextWidget:new{ text = name, face = require("lib/bookshelf_fonts"):getFace("cfont", 15), bold = true, max_width = math.max(1, name_w) } }
-    local lines = LeftContainer:new{ dimen = Geom:new{ w = inner_w, h = row:getSize().h }, row }
-    local box_h = math.max(1, inner_h - lines:getSize().h - Space.padding.small)
-    local pic
+    -- With several a page (landscape) the one in use has the card's heavy
+    -- outline (STYLE.md: black would hide the picture), painted over the
+    -- card's edge, so every card and picture stays the same size.
+    local several = WB.perPage() > 1
+    local in_use = several and WB.inUse(key, item)
+    local border = Size.border.thin
+    -- The name, centred under the picture. No radio: in portrait the
+    -- picture on screen IS the choice (one a page, see show()); with several
+    -- a page (landscape) the one in use has the card's outline.
+    local face = require("lib/bookshelf_fonts"):getFace("cfont", 15)
+    local text = TextWidget:new{ text = name, face = face, bold = true, max_width = math.max(1, inner_w) }
+    local label_h = text:getSize().h + Space.padding.small
+    local box_h = math.max(1, inner_h - label_h - Space.padding.small)
+    -- The screen in miniature: a frame of the screen's shape, the picture in
+    -- it as the current Scaling lays it (the margins of Fit show white).
+    local fw, fh = WB.screenFrame(inner_w - 2 * border, box_h - 2 * border)
+    local inside
     if item.path then
-        local bb = preview(item.path, inner_w, box_h)
+        local bb = preview(item.path, fw, fh, WP().fitMode())
         if bb then
-            pic = ImageWidget:new{ image = bb, image_disposable = false, original_in_nightmode = true }
+            inside = ImageWidget:new{ image = bb, image_disposable = false, original_in_nightmode = true }
         end
     end
-    if not pic then
-        -- A picture that would not decode: a plain frame the size of one,
-        -- portrait as the wallpapers are, in either orientation.
-        local Screen = require("device").screen
-        local sw = math.min(Screen:getWidth(), Screen:getHeight())
-        local sh = math.max(Screen:getWidth(), Screen:getHeight())
-        local fw = inner_w
-        local fh = math.min(box_h, math.floor(fw * sh / sw))
-        if fh == box_h then fw = math.floor(fh * sw / sh) end
-        pic = FrameContainer:new{
-            bordersize = Size.border.thin, padding = 0, margin = 0,
-            background = Blitbuffer.COLOR_WHITE,
-            CenterContainer:new{ dimen = Geom:new{ w = math.max(1, fw - 2 * Size.border.thin),
-                                                   h = math.max(1, fh - 2 * Size.border.thin) },
-                                 VerticalSpan:new{ width = 1 } },
-        }
-    end
-    return require("lib/bookshelf_popup_kit").cardify(FrameContainer:new{
+    -- A picture that would not decode: the empty frame.
+    inside = inside or CenterContainer:new{ dimen = Geom:new{ w = fw, h = fh }, VerticalSpan:new{ width = 1 } }
+    local pic = FrameContainer:new{
+        bordersize = border, padding = 0, margin = 0,
+        background = Blitbuffer.COLOR_WHITE,
+        inside,
+    }
+    -- The card hugs the frame and the name, centred in its slot: spare card
+    -- round the frame read as the margins of Fit (maintainer, 2026-11-03),
+    -- so the only bands to be seen are the ones the scaling makes.
+    local frame_w = fw + 2 * border
+    -- One line, cut with an ellipsis, kept a step in from the card's edges
+    -- so a long name never meets the edge or the in-use outline.
+    local label = CenterContainer:new{ dimen = Geom:new{ w = frame_w, h = label_h },
+        TextWidget:new{ text = name, face = face, bold = true,
+                        max_width = math.max(1, frame_w - 2 * Space.padding.default) } }
+    local card = Kit.cardify(FrameContainer:new{
         bordersize = 0, radius = Kit.RADIUS, padding = pad, margin = 0,
         background = Blitbuffer.COLOR_WHITE,
-        VerticalGroup:new{ align = "left",
-            lines,
+        VerticalGroup:new{ align = "center",
+            pic,
             VerticalSpan:new{ width = Space.padding.small },
-            CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = box_h }, pic },
+            label,
         },
-    })
+    }, { outline = in_use })
+    return CenterContainer:new{ dimen = Geom:new{ w = dimen.w, h = dimen.h }, card }
 end
 
 -- NONE, SAME: the two choices that are not a picture, as the footer's
@@ -213,6 +269,37 @@ function WB.headerActions(key, pick)
     choice("none", _("No wallpaper"), WB.NONE)
     return row
 end
+
+-- Scaling: the footer button's label, and what a tap moves it to.
+local SCALING_LABELS = {
+    stretch = function() return _("Stretch") end,
+    fill    = function() return _("Crop to fill") end,
+    fit     = function() return _("Fit to screen") end,
+}
+function WB.scalingLabel()
+    local T = require("ffi/util").template
+    return T(_("Scaling: %1"), SCALING_LABELS[WP().fitMode()]())
+end
+
+function WB.nextScaling()
+    local modes, cur = WP().FIT_MODES, WP().fitMode()
+    local nxt = modes[1]
+    for i, m in ipairs(modes) do
+        if m == cur then nxt = modes[i % #modes + 1] end
+    end
+    local Store = require("lib/bookshelf_settings_store")
+    -- Stretch, the default, is stored as no setting at all.
+    Store.save(WP().FIT_SETTING, nxt ~= "stretch" and nxt or nil)
+    return nxt
+end
+
+-- The grid's share of the screen's height. A card is the screen in
+-- miniature, so it needs height more than width; the shelf still shows to
+-- either side and below, where a tap can be seen at once.
+WB.GRID_SHARE = 0.55
+
+-- How long a page must stay on screen before its picture is used.
+WB.SETTLE_S = 0.6
 
 -- show(key, on_change, on_closed): the picker for that setting. on_change()
 -- runs after each choice, so the shelf behind can catch up; on_closed() once,
@@ -250,11 +337,24 @@ function WB.show(key, on_change, on_closed)
         -- each marked by its radio, so choosing one does not resize it.
         grid_cols = function() return WB.perPage() end,
         cells_per_page = function() return WB.perPage() end,
-        -- Short, so the shelf shows around it and a tap can be seen there:
-        -- the grid about 45% of the screen's height, whatever its DPI.
-        rows_per_page = function() return LibraryModal.rowsForShare(0.45) end,
+        -- Short enough that the shelf shows around it and a tap can be seen
+        -- there (WB.GRID_SHARE of the screen's height, whatever its DPI).
+        rows_per_page = function() return LibraryModal.rowsForShare(WB.GRID_SHARE) end,
         chip_strip = chips,
         on_chip_tap = function(k) self.chip = k; self.items = items() end,
+        -- One picture a page (portrait): the page on screen is the choice,
+        -- used once the pages stop turning, so flicking through decodes
+        -- only the picture landed on, not each one passed.
+        on_page_shown = function(page)
+            if WB.perPage() ~= 1 then return end
+            if self.settle then UIManager:unschedule(self.settle) end
+            self.settle = function()
+                self.settle = nil
+                local item = modal and self.items[page]
+                if item and not WB.inUse(key, item) then pick(item) end
+            end
+            UIManager:scheduleIn(WB.SETTLE_S, self.settle)
+        end,
         cell_renderer = function(item, dimen) return renderCell(key, item, dimen) end,
         -- A tap uses the picture at once, behind the picker, which stays open
         -- for the next (Close, or a tap outside it, when done).
@@ -265,13 +365,26 @@ function WB.show(key, on_change, on_closed)
         -- However it closes: one full refresh if the picture changed, to
         -- clear what the quick per-tap updates leave on e-ink.
         on_closed = function()
+            -- A page still settling when the picker closes is not chosen.
+            if self.settle then UIManager:unschedule(self.settle); self.settle = nil end
             if self.changed then UIManager:setDirty("all", "full") end
             if on_closed then pcall(on_closed) end
         end,
         item_count = function() return #self.items end,
         item_at = function(i) return self.items[i] end,
         header_actions = function() return WB.headerActions(key, function(item) pick(item) end) end,
-        footer_rows = { { { key = "close", label = _("Close"), on_tap = close } } },
+        -- Scaling (issue 578): each tap the next way of laying a picture of
+        -- another shape on the screen, shown at once behind the picker.
+        footer_rows = { {
+            { key = "scaling", label_func = function() return WB.scalingLabel() end,
+              on_tap = function()
+                  WB.nextScaling()
+                  self.changed = true
+                  if on_change then pcall(on_change) end
+                  if modal then modal:refresh() end
+              end },
+            { key = "close", label = _("Close"), on_tap = close },
+        } },
         -- No pictures on this tab: where they come from, the one place the
         -- picker names the folder.
         empty_state = function(w, h)

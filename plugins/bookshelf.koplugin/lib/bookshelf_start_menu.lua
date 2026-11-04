@@ -978,7 +978,7 @@ function StartMenu:_buildPanel(entries, w, folder_id)
     end
     for _i, entry in ipairs(entries) do
         -- local t_row = require("socket").gettime()
-        local is_focused = self._focus and self._focus.entry_id == entry.id
+        local is_focused = self._focus and self._cursor_shown and self._focus.entry_id == entry.id
         local row
         if entry.type == "divider" then
             row = self:_buildDividerRow(entry, w)
