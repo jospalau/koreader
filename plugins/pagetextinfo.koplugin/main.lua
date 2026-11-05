@@ -5709,17 +5709,59 @@ function PageTextInfo:onShowFonts(page)
     return true
 end
 
+-- Last book read (skips the one currently open)
+function PageTextInfo:getLastBook()
+    local ok, ReadHistory = pcall(require, "readhistory")
+    if not ok or not ReadHistory or not ReadHistory.hist then return nil end
+    local lfs = require("libs/libkoreader-lfs")
+    local current = self.ui and self.ui.document and self.ui.document.file
+    for _, item in ipairs(ReadHistory.hist) do
+        if item.file ~= current and lfs.attributes(item.file, "mode") == "file" then
+            local title
+            local ok2, DocSettings = pcall(require, "docsettings")
+            if ok2 then
+                local ok3, props = pcall(function()
+                    return DocSettings:open(item.file):readSetting("doc_props")
+                end)
+                if ok3 and props and props.title and props.title ~= "" then
+                    title = props.title
+                end
+            end
+            title = title or item.file:match("([^/]+)%.[^.]+$") or item.file
+            return { file = item.file, title = title }
+        end
+    end
+end
+
 -- Menu actions: { label, callback }
 function PageTextInfo:getMenuActions()
     local Event = require("ui/event")
-    return {
-        { label = "Sync code",  callback = function() self:onSynchronizeCode() end },
+    local actions = {
+        { header = "KOReader sync", label = "Sync code",  callback = function() self:onSynchronizeCode() end },
         { label = "Sync books", callback = function() self:onSyncBooks() end },
         { label = "Pull conf",  callback = function() self:onPullConfig() end },
         { label = "Push conf",  callback = function() self:onPushConfig() end },
-        { label = "Restart",    callback = function() self.ui:handleEvent(Event:new("Restart")) end },
-        { label = "Exit",       callback = function() self.ui:handleEvent(Event:new("Exit")) end },
     }
+
+    local last = self:getLastBook()
+    if last then
+        table.insert(actions, {
+            header = "Continue reading...",
+            label = last.title,
+            full_width = true,
+            callback = function()
+                if self.ui and self.ui.switchDocument then
+                    self.ui:switchDocument(last.file)
+                else
+                    require("apps/reader/readerui"):showReader(last.file)
+                end
+            end,
+        })
+    end
+
+    table.insert(actions, { header = "Restart or Exit", label = "Restart", callback = function() self.ui:handleEvent(Event:new("Restart")) end })
+    table.insert(actions, { label = "Exit", callback = function() self.ui:handleEvent(Event:new("Exit")) end })
+    return actions
 end
 
 -- Close the menu and repaint the area underneath
@@ -5730,6 +5772,28 @@ function PageTextInfo:closeActionsMenu()
     if d then
         UIManager:close(d, "ui", d.frame_rect)
     end
+end
+
+-- Face using the font configured in the reader (falls back to the UI font)
+function PageTextInfo:getMenuFace(size)
+    local Font = require("ui/font")
+    local face_name = self.ui and self.ui.font and self.ui.font.font_face
+    if not face_name then
+        face_name = G_reader_settings and G_reader_settings:readSetting("cre_font")
+    end
+    if face_name then
+        local ok, FontList = pcall(require, "fontlist")
+        if ok and FontList and FontList.fontinfo then
+            for path, info in pairs(FontList.fontinfo) do
+                local f = info and info[1]
+                if f and f.name == face_name and not f.bold and not f.italic then
+                    local ok2, face = pcall(Font.getFace, Font, path, size)
+                    if ok2 and face then return face end
+                end
+            end
+        end
+    end
+    return Font:getFace("cfont", size)
 end
 
 function PageTextInfo:onShowActionsMenu()
@@ -5765,7 +5829,7 @@ function PageTextInfo:onShowActionsMenu()
     local text_h = math.floor(font_px * 1.6)
     local baseline = math.floor(font_px * 1.15)
     local thin = Screen:scaleBySize(1)
-
+    local header_h = math.floor(font_px * 2.0)
     local cells = {}  -- { frame, callback }
 
     local dialog = InputContainer:new{
@@ -5794,13 +5858,42 @@ function PageTextInfo:onShowActionsMenu()
     local grid = VerticalGroup:new{ align = "center" }
     local row = HorizontalGroup:new{}
 
-    for _, action in ipairs(actions) do
+      for _, action in ipairs(actions) do
+        -- Section header (full width, above the row that starts here)
+        if action.header then
+            if #row > 0 then
+                table.insert(grid, row)
+                row = HorizontalGroup:new{}
+            end
+            table.insert(grid, FrameContainer:new{
+                bordersize = thin,
+                color = Blitbuffer.COLOR_BLACK,
+                background = Blitbuffer.COLOR_LIGHT_GRAY,
+                margin = 0,
+                padding = 0,
+                CenterContainer:new{
+                    dimen = Geom:new{ w = cell_w * COLUMNS - 2 * thin, h = header_h - 2 * thin },
+                    TextWidget:new{
+                        text = action.header,
+                        face = self:getMenuFace(FONT_SIZE - 3),
+                        bold = true,
+                        max_width = cell_w * COLUMNS - 2 * Size.padding.small,
+                    },
+                },
+            })
+        end
+
+        if action.full_width and #row > 0 then
+            table.insert(grid, row)
+            row = HorizontalGroup:new{}
+        end
+        local this_w = action.full_width and (cell_w * COLUMNS) or cell_w
         local text_widget = TextWidget:new{
             text = action.label,
-            face = Font:getFace("cfont", FONT_SIZE),
+            face = self:getMenuFace(FONT_SIZE),
             forced_height = text_h,
             forced_baseline = baseline,
-            max_width = cell_w - 2 * Size.padding.small,
+            max_width = this_w - 2 * Size.padding.small,
         }
         local cell_frame = FrameContainer:new{
             bordersize = thin,
@@ -5809,14 +5902,17 @@ function PageTextInfo:onShowActionsMenu()
             margin = 0,
             padding = 0,
             CenterContainer:new{
-                dimen = Geom:new{ w = cell_w - 2 * thin, h = cell_h - 2 * thin },
+                dimen = Geom:new{ w = this_w - 2 * thin, h = cell_h - 2 * thin },
                 text_widget,
             },
         }
         table.insert(row, cell_frame)
         table.insert(cells, { frame = cell_frame, callback = action.callback })
 
-        if #row == COLUMNS then
+        if action.full_width then
+            table.insert(grid, row)
+            row = HorizontalGroup:new{}
+        elseif #row == COLUMNS then
             table.insert(grid, row)
             row = HorizontalGroup:new{}
         end
