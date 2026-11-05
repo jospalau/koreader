@@ -1861,6 +1861,10 @@ local function _paintLevelText(bb, x, y, box_w, text, face, night)
 end
 
 local function _statusGlyph(book)
+    local live = _G.all_files and book and _G.all_files[book.filepath]
+    if live and live.status and book.status ~= live.status then
+        book.status = live.status
+    end
     if book and book._spine_status_checked and (book.status == nil and not require("readhistory"):getIndexByFile(book.filepath)) then
         -- Checked at plan time and genuinely never opened: nothing for
         -- decide() to say, and its lazy fallback would re-open the sidecar.
@@ -2094,6 +2098,8 @@ function SpineBookSlot:_renderKey(night)
         -- The fill colour: Image contrast's boost changes it with nothing
         -- else about the book changing.
         e.look and string.format("%d,%d,%d", e.look.r or 0, e.look.g or 0, e.look.b or 0) or "-",
+        -- Glifo de estado (para TBR es el número): si cambia, el render cacheado deja de valer
+        "g:" .. tostring((_statusGlyph(self.book))),
     }, "|")
 end
 
