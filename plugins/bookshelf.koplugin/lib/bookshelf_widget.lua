@@ -17746,6 +17746,10 @@ function BookshelfWidget:_refreshLibrary()
     UIManager:show(msg)
     UIManager:setDirty(msg, function() return "partial", msg.dimen end)
     UIManager:forceRePaint()
+    -- Let the panel take the notice before the rebuilt shelf is painted:
+    -- on a MediaTek Kindle (Paperwhite 6, issue 584) the shelf got into the
+    -- notice's refresh, which then showed cut in half or not at all.
+    require("lib/bookshelf_popup_kit").waitForPanel()
     UIManager:nextTick(function()
         if Repo.invalidateWalkCache then Repo.invalidateWalkCache() end
         self:_rebuild()
@@ -23936,8 +23940,6 @@ function BookshelfWidget:_buildBookEditTab(book, modal, avail_w, avail_h)
             vg[#vg + 1] = heading(_("Publish date"))
             vg[#vg + 1] = infoRow(from and (d .. " \xC2\xB7 " .. from) or d, _("Edit"), pubdate_btn.callback)
         end
-
-
 
         -- 5. Hardcover link (brand name -> heading not translated). Edition text
         -- + inline Edit/Link button, below File & metadata. (Collections live on
