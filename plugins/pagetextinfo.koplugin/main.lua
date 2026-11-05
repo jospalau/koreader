@@ -500,6 +500,8 @@ function PageTextInfo:onDispatcherRegisterActions()
     Dispatcher:registerAction("toggle_double_bar", {category="none", event="ToggleDoubleBar", title=_("Toggle double bar"), reader=true, separator=true,})
     Dispatcher:registerAction("notebook_file_render", {category="none", event="ShowNotebookFileRender", title=_("Notebook file render"), general=true,})
     Dispatcher:registerAction("toggle_debug_verbose", {category="none", event="ToggleDebugVerbose", title=_("Toggle verbose logging"), general=true,})
+    Dispatcher:registerAction("show_fonts_menu", {category="none", event="ShowFonts", title=_("Show fonts menu"), reader=true, separator=true,})
+    Dispatcher:registerAction("show_style_tweaks_menu", {category="none", event="ShowTweaks", title=_("Show style tweaks menu"), reader=true, separator=true,})
 end
 
 function PageTextInfo:onPageTextInfo()
@@ -5970,6 +5972,311 @@ function PageTextInfo:onShowActionsMenu()
     self.actions_dialog = dialog
 
     UIManager:show(dialog, "ui", frame_rect)
+    return true
+end
+
+-- Collects the leaf tweaks (with category headers) from the style tweaks menu table
+local function collectTweaks(items, out)
+    for __, item in ipairs(items) do
+        local title = item.text or (item.text_func and item.text_func())
+        if type(item.sub_item_table) == "table" then
+            if title then table.insert(out, { header = title }) end
+            collectTweaks(item.sub_item_table, out)
+        elseif item.checked_func and item.callback then
+            table.insert(out, { item = item, label = title or "?" })
+        end
+    end
+end
+
+local function buildTweakEntries(ui)
+    local raw = {}
+    local tweaks_table = ui.styletweak and ui.styletweak.tweaks_table
+    if type(tweaks_table) ~= "table" then return raw end
+    collectTweaks(tweaks_table, raw)
+    -- Drop headers with no tweaks under them
+    local out = {}
+    for i, e in ipairs(raw) do
+        if not e.header or (raw[i + 1] and not raw[i + 1].header) then
+            table.insert(out, e)
+        end
+    end
+    return out
+end
+
+function PageTextInfo:closeTweaksMenu()
+    local UIManager = require("ui/uimanager")
+    local d = self.tweaks_dialog
+    self.tweaks_dialog = nil
+    if d then
+        UIManager:close(d, "ui", d.frame_rect)
+    end
+end
+
+-- Toggle a tweak (the menu item's own callback applies/removes it), then reopen
+function PageTextInfo:toggleTweakAndReopen(item)
+    local UIManager = require("ui/uimanager")
+    local page = self.tweaks_page
+
+    local ok, err = pcall(item.callback)
+    if not ok then
+        require("logger").warn("toggle tweak failed:", err)
+    end
+
+    UIManager:nextTick(function()
+        self:onShowTweaks(page)
+    end)
+end
+
+function PageTextInfo:onShowTweaks(page)
+    local Blitbuffer = require("ffi/blitbuffer")
+    local Device = require("device")
+    local Font = require("ui/font")
+    local Geom = require("ui/geometry")
+    local GestureRange = require("ui/gesturerange")
+    local Size = require("ui/size")
+    local UIManager = require("ui/uimanager")
+    local TextWidget = require("ui/widget/textwidget")
+    local FrameContainer = require("ui/widget/container/framecontainer")
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local LeftContainer = require("ui/widget/container/leftcontainer")
+    local InputContainer = require("ui/widget/container/inputcontainer")
+    local HorizontalGroup = require("ui/widget/horizontalgroup")
+    local VerticalGroup = require("ui/widget/verticalgroup")
+    local Screen = Device.screen
+
+    local ROWS_PER_PAGE = 8
+    local FONT_SIZE = 18
+
+    local ui = self.ui
+    -- Only reflowable documents
+    if not ui or not ui.document or ui.paging or not ui.styletweak then
+        return true
+    end
+
+    local old_dialog = self.tweaks_dialog
+    local old_region = old_dialog and old_dialog.frame_rect
+        and old_dialog.frame_rect:copy()
+    self.tweaks_dialog = nil
+
+    local entries = buildTweakEntries(ui)
+    if #entries == 0 then return true end
+
+    local total_pages = math.max(1, math.ceil(#entries / ROWS_PER_PAGE))
+    page = math.min(math.max(page or 1, 1), total_pages)
+    self.tweaks_page = page
+
+    local has_prev = page > 1
+    local has_next = page < total_pages
+    local first = (page - 1) * ROWS_PER_PAGE + 1
+    local last = math.min(first + ROWS_PER_PAGE - 1, #entries)
+
+    -- Sizes
+    local screen = Screen:getSize()
+    local dialog_w = math.floor(screen.w * 0.85)
+    local font_px = Screen:scaleBySize(FONT_SIZE)
+    local row_h = math.floor(font_px * 2.2)
+    local text_h = math.floor(font_px * 1.6)
+    local baseline = math.floor(font_px * 1.15)
+    local thin = Screen:scaleBySize(1)
+    local thick = Screen:scaleBySize(3)
+    local pad_x = Screen:scaleBySize(8)
+    local cells = {}
+
+    local dialog = InputContainer:new{
+        dimen = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
+        ges_events = {
+            Tap = { GestureRange:new{
+                ges = "tap",
+                range = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
+            } },
+            Swipe = { GestureRange:new{
+                ges = "swipe",
+                range = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
+            } },
+            Hold = { GestureRange:new{
+                ges = "hold",
+                range = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
+            } },
+        },
+        key_events = Device:hasKeys() and { Close = { { Device.input.group.Back } } } or {},
+    }
+
+    function dialog:onSwipe(arg, ges)
+        local dir = ges.direction
+        if dir == "west" and has_next then
+            UIManager:nextTick(function() self.plugin:onShowTweaks(page + 1) end)
+        elseif dir == "east" and has_prev then
+            UIManager:nextTick(function() self.plugin:onShowTweaks(page - 1) end)
+        end
+        return true
+    end
+
+    -- Long press: the tweak's own description (if the item defines hold_callback)
+    function dialog:onHold(arg, ges)
+        for __, cell in ipairs(cells) do
+            if cell.frame.dimen and ges.pos:intersectWith(cell.frame.dimen)
+                    and cell.item.hold_callback then
+                pcall(cell.item.hold_callback)
+                break
+            end
+        end
+        return true
+    end
+
+    local grid = VerticalGroup:new{ align = "center" }
+
+    for i = first, last do
+        local e = entries[i]
+        if e.header then
+            -- Category header (not tappable)
+            table.insert(grid, FrameContainer:new{
+                bordersize = 0, margin = 0, padding = 0,
+                LeftContainer:new{
+                    dimen = Geom:new{ w = dialog_w, h = row_h },
+                    FrameContainer:new{
+                        bordersize = 0, margin = 0, padding = 0,
+                        padding_left = pad_x,
+                        TextWidget:new{
+                            text = e.header,
+                            face = Font:getFace("smallinfofontbold", FONT_SIZE),
+                            fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+                            forced_height = text_h,
+                            forced_baseline = baseline,
+                            max_width = dialog_w - 2 * pad_x,
+                        },
+                    },
+                },
+            })
+        else
+            local ok, checked = pcall(e.item.checked_func)
+            checked = ok and checked and true or false
+
+            local cell_frame = FrameContainer:new{
+                bordersize = thin,
+                color = Blitbuffer.COLOR_BLACK,
+                margin = 0,
+                padding = 0,
+                FrameContainer:new{
+                    -- Thick border only on enabled tweaks
+                    bordersize = thick - thin,
+                    color = checked and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
+                    background = Blitbuffer.COLOR_WHITE,
+                    margin = 0,
+                    padding = 0,
+                    LeftContainer:new{
+                        dimen = Geom:new{
+                            w = dialog_w - 2 * thick,
+                            h = row_h - 2 * thick,
+                        },
+                        FrameContainer:new{
+                            bordersize = 0, margin = 0, padding = 0,
+                            padding_left = pad_x,
+                            TextWidget:new{
+                                text = (checked and "✓ " or "    ") .. e.label,
+                                face = Font:getFace("cfont", FONT_SIZE),
+                                forced_height = text_h,
+                                forced_baseline = baseline,
+                                max_width = dialog_w - 2 * thick - 2 * pad_x,
+                            },
+                        },
+                    },
+                },
+            }
+            table.insert(grid, cell_frame)
+            table.insert(cells, { frame = cell_frame, item = e.item })
+        end
+    end
+
+    -- Navigation row
+    local nav_w = math.floor(dialog_w / 3)
+    local nav_h = math.floor(font_px * 2)
+
+    local function navCell(text, enabled)
+        return FrameContainer:new{
+            bordersize = 0, padding = 0, margin = 0,
+            CenterContainer:new{
+                dimen = Geom:new{ w = nav_w, h = nav_h },
+                TextWidget:new{
+                    text = text,
+                    face = Font:getFace("cfont", 26),
+                    fgcolor = enabled and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_LIGHT_GRAY,
+                },
+            },
+        }
+    end
+    table.insert(grid, HorizontalGroup:new{
+        navCell("‹", has_prev),
+        navCell(string.format("%d / %d", page, total_pages), true),
+        navCell("›", has_next),
+    })
+
+    local frame = FrameContainer:new{
+        background = Blitbuffer.COLOR_WHITE,
+        bordersize = Size.border.window,
+        radius = Size.radius.window,
+        padding = Size.padding.small,
+        grid,
+    }
+    dialog[1] = CenterContainer:new{
+        dimen = Geom:new{ w = screen.w, h = screen.h },
+        frame,
+    }
+
+    local fsize = frame:getSize()
+    local frame_rect = Geom:new{
+        x = math.floor((screen.w - fsize.w) / 2),
+        y = math.floor((screen.h - fsize.h) / 2),
+        w = fsize.w,
+        h = fsize.h,
+    }
+
+    function dialog:onTap(arg, ges)
+        for __, cell in ipairs(cells) do
+            if cell.frame.dimen and ges.pos:intersectWith(cell.frame.dimen) then
+                self.plugin:toggleTweakAndReopen(cell.item)
+                return true
+            end
+        end
+
+        if ges.pos:intersectWith(frame_rect) then
+            local nav_top = frame_rect.y + frame_rect.h
+                            - Size.border.window - Size.padding.small - nav_h
+            if ges.pos.y >= nav_top then
+                local third = frame_rect.w / 3
+                local rel_x = ges.pos.x - frame_rect.x
+                if rel_x < third then
+                    if has_prev then
+                        UIManager:nextTick(function() self.plugin:onShowTweaks(page - 1) end)
+                    end
+                elseif rel_x > 2 * third then
+                    if has_next then
+                        UIManager:nextTick(function() self.plugin:onShowTweaks(page + 1) end)
+                    end
+                end
+            end
+            return true
+        end
+
+        self.plugin:closeTweaksMenu()
+        return true
+    end
+
+    function dialog:onClose()
+        self.plugin:closeTweaksMenu()
+        return true
+    end
+
+    dialog.plugin = self
+    dialog.frame_rect = frame_rect
+    self.tweaks_dialog = dialog
+
+    local region = frame_rect
+    if old_region then region = region:combine(old_region) end
+
+    UIManager:show(dialog, "ui", region)
+    if old_dialog then
+        UIManager:close(old_dialog, "ui", region)
+    end
     return true
 end
 
