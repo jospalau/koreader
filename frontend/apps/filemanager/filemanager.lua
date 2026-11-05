@@ -128,7 +128,34 @@ function FileManager:initGesListener()
             },
             handler = function(ges) return self:onDoubleTapBottonRight(nil, ges) end,
         },
+        {
+            id = "filemanager_actions_multiswipe",
+            ges = "multiswipe",
+            screen_zone = {
+                ratio_x = 0, ratio_y = 0,
+                ratio_w = 1, ratio_h = 1,
+            },
+            overrides = {
+                "multiswipe",
+                "filemanager_livelight_multiswipe",
+            },
+            handler = function(ges)
+                local d = ges.multiswipe_directions
+                if type(d) == "string" and d:find("^west south") then
+                    self:handleEvent(require("ui/event"):new("ShowActionsMenu"))
+                    return true
+                end
+                return false
+            end,
+        },
     })
+    -- UIManager:scheduleIn(3, function()
+    --     for i, z in ipairs(self._ordered_touch_zones or {}) do
+    --         if z.def and z.def.ges == "multiswipe" then
+    --             print("zone", i, z.def.id)
+    --         end
+    --     end
+    -- end)
 end
 
 function FileManager:onSetDimensions(dimen)
