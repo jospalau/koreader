@@ -6470,6 +6470,7 @@ function PageTextInfo:onShowTweaks(page)
     end
     return true
 end
+
 -- Quick settings menu: rows of buttons (font size, line spacing, margins, weight...)
 -- Same look and gesture handling as the fonts menu.
 
@@ -6477,15 +6478,21 @@ end
 local FONT_PRESETS = { small = 8.5, normal = 9.5, big = 11 }
 local FONT_STEP    = 0.5
 local WEIGHT_STEP  = 0.5
-local LINE_SPACINGS = { 1.1, 1.2, 1.3, 1.4 }          -- em
+local LINE_SPACINGS = {
+    { percent = 92,  label = "1.1em" },
+    { percent = 100, label = "1.2em" },
+    { percent = 109, label = "1.3em" },
+    { percent = 117, label = "1.4em" },
+}
+
 -- {left, top, right, bottom}: use the same units your margins option uses
 local MARGIN_PRESETS = {
-    { label = "Default (small)",    value = { 10, 10, 10, 10 } },
-    { label = "Slightly bigger",    value = { 20, 20, 20, 20 } },
-    { label = "Big",                value = { 30, 30, 30, 30 } },
-    { label = "Bigger",             value = { 45, 45, 45, 45 } },
+    { label = "Default (small)", value = { 15, 15, 15, 10 } },
+    { label = "Slightly bigger", value = { 20, 40, 20, 35 } },
+    { label = "Big",             value = { 50, 50, 50, 50 } },
+    { label = "Bigger",          value = { 70, 70, 70, 70 } },
 }
-local DEFAULTS = { font_size = 9.5, line_spacing = 1.2, font_base_weight = 0,
+local DEFAULTS = { font_face = "Capita", font_size = 9.5, line_spacing = 100, font_base_weight = 0,
                    margins = MARGIN_PRESETS[1].value }
 
 local function close(self)
@@ -6497,6 +6504,13 @@ end
 
 -- Actions ---------------------------------------------------------------
 
+local function setFontFace(ui, face)
+    if not face or face == "" then return end
+    if ui.rolling then  -- only reflowable (CRE) documents support font faces
+        ui.font:onSetFont(face)
+    end
+end
+
 local function setFontSize(ui, pt)
     pt = math.max(4, math.min(pt, 255))
     ui.font:onSetFontSize(pt, true)
@@ -6505,17 +6519,9 @@ local function setFontSize(ui, pt)
     ui.font.configurable.font_size = pt
 end
 
-local function setLineSpacing(ui, em)
-    local conf = ui.document.configurable
-    local percent = math.floor(em * 100 + 0.5)
+local function setLineSpacing(ui, percent)
     ui.document:setInterlineSpacePercent(percent)
-    -- Store it in the same scale the existing setting already uses
-    -- (em like 1.2, or percent like 120)
-    if conf.line_spacing and conf.line_spacing <= 10 then
-        conf.line_spacing = em
-    else
-        conf.line_spacing = percent
-    end
+    ui.document.configurable.line_spacing = percent
     ui:handleEvent(require("ui/event"):new("UpdatePos"))
 end
 
@@ -6535,6 +6541,7 @@ local function setWeight(ui, w)
 end
 
 local function resetDefaults(ui)
+    setFontFace(ui, DEFAULTS.font_face)
     setFontSize(ui, DEFAULTS.font_size)
     setLineSpacing(ui, DEFAULTS.line_spacing)
     setMargins(ui, DEFAULTS.margins)
@@ -6593,11 +6600,11 @@ local function buildRows(ui)
     }
 
     local ls = conf.line_spacing
-    for __, em in ipairs(LINE_SPACINGS) do
+    for __, spacing in ipairs(LINE_SPACINGS) do
         table.insert(rows[4], {
-            text = em .. "em",
-            callback = function(u) setLineSpacing(u, em) end,
-            active = approx(ls, em) or approx(ls, em * 100),
+            text = spacing.label,
+            callback = function(u) setLineSpacing(u, spacing.percent) end,
+            active = approx(ls, spacing.percent),
         })
     end
     for __, p in ipairs(MARGIN_PRESETS) do
