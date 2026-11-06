@@ -5546,6 +5546,69 @@ function PageTextInfo:showFontInfo(face, label)
     return true
 end
 
+-- Fonts shown first in the fonts menu, in this order.
+-- Matching ignores case and spaces ("Chare Ink 7SP" == "chareink7sp").
+local PINNED_FONTS = {
+    "Alegreya",
+    "AmasisMTW1G",
+    "AndadaPro",
+    "Average",
+    "BitterPro",
+    "Bookerly",
+    "PMNCaeciliaLT",
+    "CanelaText",
+    "Capita",
+    "ChareInk7SP",
+    "Constantia",
+    "CrimsonPro",
+    "EBGaramond",
+    "GentiumBookPlus",
+    "Georgia",
+    "GoudyOldStyle",
+    "IBMPlexSerif",
+    "IowanOldStBT",
+    "LexiaDaMa",
+    "LiberationSerif",
+    "LibreBaskerville",
+    "Literata7pt",
+    "Luciole",
+    "Merriweather",
+    "Palatino",
+    "Souvenir",
+    "Spectral",
+    "Vollkorn",
+}
+
+-- Marker shown before pinned fonts. "*" exists in every font; "★" usually
+-- renders through KOReader's fallback fonts, but "📌" often won't on e-ink.
+local PIN_MARK = "★ "
+
+local function pinFonts(fonts, names)
+    local function norm(s) return (s:gsub("%s+", ""):lower()) end
+
+    local index = {}
+    for i, face in ipairs(fonts) do index[norm(face)] = i end
+
+    local used, new_fonts, new_names = {}, {}, {}
+    local function add(i, pinned)
+        used[i] = true
+        local label = (names and names[i]) or fonts[i]
+        new_fonts[#new_fonts + 1] = fonts[i]
+        new_names[#new_names + 1] = pinned and (PIN_MARK .. label) or label
+    end
+
+    -- Pinned ones first, in the configured order (skip those not installed)
+    for __, pinned in ipairs(PINNED_FONTS) do
+        local i = index[norm(pinned)]
+        if i and not used[i] then add(i, true) end
+    end
+    -- Then everything else, keeping the original (alphabetical) order
+    for i = 1, #fonts do
+        if not used[i] then add(i, false) end
+    end
+    return new_fonts, new_names
+end
+
 function PageTextInfo:onShowFonts(page)
     local FontList = require("fontlist")
     local Blitbuffer = require("ffi/blitbuffer")
@@ -5582,6 +5645,7 @@ function PageTextInfo:onShowFonts(page)
     self.fonts_dialog = nil
 
     local fonts, names = FontList.getFontArgFunc()
+    fonts, names = pinFonts(fonts, names)
     local current = ui.document._document:getFontFace()
     self.font_paths = self.font_paths or buildFacePathMap()
 
@@ -5635,13 +5699,17 @@ function PageTextInfo:onShowFonts(page)
         },
         key_events = Device:hasKeys() and { Close = { { Device.input.group.Back } } } or {},
     }
-    -- Swipe left/right: next / previous page
+    -- Swipe left/right: next / previous page (wraps around)
     function dialog:onSwipe(arg, ges)
         local dir = ges.direction
-        if dir == "west" and has_next then
-            UIManager:nextTick(function() self.plugin:onShowFonts(page + 1) end)
-        elseif dir == "east" and has_prev then
-            UIManager:nextTick(function() self.plugin:onShowFonts(page - 1) end)
+        local target
+        if dir == "west" then
+            target = has_next and page + 1 or 1              -- last -> first
+        elseif dir == "east" then
+            target = has_prev and page - 1 or total_pages    -- first -> last
+        end
+        if target and target ~= page then
+            UIManager:nextTick(function() self.plugin:onShowFonts(target) end)
         end
         -- Always consume the gesture so it doesn't reach the reader underneath
         return true
