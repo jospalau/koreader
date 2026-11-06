@@ -773,6 +773,11 @@ function PageTextInfo:onMultiSwipe(arg, ges)
         self:onShowFonts()
         return true
     end
+    if ges and ges.multiswipe_directions == "south east" then
+        -- Open the fonts menu (change this to whatever action you want)
+        self:onShowSettingsMenu()
+        return true
+    end
     -- Not our gesture: let other handlers deal with it
     return false
 end
@@ -6137,7 +6142,7 @@ function PageTextInfo:toggleTweakAndReopen(item)
 
     local ok, err = pcall(item.callback)
     if not ok then
-        require("logger").warn("toggle tweak failed:", err)
+        require("logger").dbg("toggle tweak failed:", err)
     end
 
     UIManager:nextTick(function()
@@ -6395,6 +6400,271 @@ function PageTextInfo:onShowTweaks(page)
     if old_dialog then
         UIManager:close(old_dialog, "ui", region)
     end
+    return true
+end
+-- Quick settings menu: rows of buttons (font size, line spacing, margins, weight...)
+-- Same look and gesture handling as the fonts menu.
+
+-- Presets (edit to taste). Font sizes are PostScript points.
+local FONT_PRESETS = { small = 8.5, normal = 9.5, big = 11 }
+local FONT_STEP    = 0.5
+local WEIGHT_STEP  = 0.5
+local LINE_SPACINGS = { 1.1, 1.2, 1.3, 1.4 }          -- em
+-- {left, top, right, bottom}: use the same units your margins option uses
+local MARGIN_PRESETS = {
+    { label = "Default (small)",    value = { 10, 10, 10, 10 } },
+    { label = "Slightly bigger",    value = { 20, 20, 20, 20 } },
+    { label = "Big",                value = { 30, 30, 30, 30 } },
+    { label = "Bigger",             value = { 45, 45, 45, 45 } },
+}
+local DEFAULTS = { font_size = 9.5, line_spacing = 1.2, font_base_weight = 0,
+                   margins = MARGIN_PRESETS[1].value }
+
+local function close(self)
+    local UIManager = require("ui/uimanager")
+    local d = self.settings_dialog
+    self.settings_dialog = nil
+    if d then UIManager:close(d, "ui", d.frame_rect) end
+end
+
+-- Actions ---------------------------------------------------------------
+
+local function setFontSize(ui, pt)
+    pt = math.max(4, math.min(pt, 255))
+    ui.font:onSetFontSize(pt, true)
+    -- Keep both configurables in sync (harmless if they are the same table)
+    ui.document.configurable.font_size = pt
+    ui.font.configurable.font_size = pt
+end
+
+local function setLineSpacing(ui, em)
+    local conf = ui.document.configurable
+    local percent = math.floor(em * 100 + 0.5)
+    ui.document:setInterlineSpacePercent(percent)
+    -- Store it in the same scale the existing setting already uses
+    -- (em like 1.2, or percent like 120)
+    if conf.line_spacing and conf.line_spacing <= 10 then
+        conf.line_spacing = em
+    else
+        conf.line_spacing = percent
+    end
+    ui:handleEvent(require("ui/event"):new("UpdatePos"))
+end
+
+local function setMargins(ui, m)
+    -- m = {left, top, right, bottom}. The event does not store them, so do it here
+    local conf = ui.document.configurable
+    conf.h_page_margins = { m[1], m[3] }
+    conf.t_page_margin  = m[2]
+    conf.b_page_margin  = m[4]
+    ui.typeset:onSetPageMargins(m)
+end
+
+local function setWeight(ui, w)
+    w = math.max(-3, math.min(w, 5))
+    ui.document.configurable.font_base_weight = w
+    ui.font:onSetFontBaseWeight(w)
+end
+
+local function resetDefaults(ui)
+    setFontSize(ui, DEFAULTS.font_size)
+    setLineSpacing(ui, DEFAULTS.line_spacing)
+    setMargins(ui, DEFAULTS.margins)
+    setWeight(ui, DEFAULTS.font_base_weight)
+end
+
+-- ASSUMPTION: "toggle screen layout" = swap portrait/landscape. Change it to
+-- whatever you meant (e.g. footer toggle) in this one function.
+local function toggleLayout(ui)
+    local Event = require("ui/event")
+    ui:handleEvent(Event:new("SwapRotation"))
+end
+
+-- Menu definition -------------------------------------------------------
+-- Each button: text, callback(ui), active(ui) (optional, draws thick border)
+
+local function approx(a, b) return a and b and math.abs(a - b) < 0.001 end
+
+local function marginsMatch(conf, m)
+    local h = conf.h_page_margins
+    return h and approx(h[1], m[1]) and approx(h[2], m[3])
+        and approx(conf.t_page_margin, m[2]) and approx(conf.b_page_margin, m[4])
+end
+
+local function buildRows(ui)
+    local conf = ui.document.configurable
+    local fs = ui.font.configurable.font_size
+    require("logger").dbg("settings menu state: font_size=", fs,
+        "line_spacing=", conf.line_spacing, "weight=", conf.font_base_weight,
+        "h_margins=", conf.h_page_margins and (conf.h_page_margins[1] .. "," .. conf.h_page_margins[2]) or "nil",
+        "t=", conf.t_page_margin, "b=", conf.b_page_margin)
+
+    local rows = {
+        { -- 1
+            { text = "Reset defaults",      callback = resetDefaults },
+            { text = "Toggle screen layout", callback = toggleLayout },
+        },
+        { -- 2
+            { text = "Font small",  callback = function(u) setFontSize(u, FONT_PRESETS.small) end,
+              active = approx(fs, FONT_PRESETS.small) },
+            { text = "Font default", callback = function(u) setFontSize(u, FONT_PRESETS.normal) end,
+              active = approx(fs, FONT_PRESETS.normal) },
+            { text = "Font big",    callback = function(u) setFontSize(u, FONT_PRESETS.big) end,
+              active = approx(fs, FONT_PRESETS.big) },
+        },
+        { -- 3
+            { text = "Increase font 0.5", callback = function(u) setFontSize(u, u.font.configurable.font_size + FONT_STEP) end },
+            { text = "Decrease font 0.5", callback = function(u) setFontSize(u, u.font.configurable.font_size - FONT_STEP) end },
+        },
+        {}, -- 4: line spacing (filled below)
+        {}, -- 5: margins (filled below)
+        { -- 6
+            { text = "Increase weight", callback = function(u) setWeight(u, u.document.configurable.font_base_weight + WEIGHT_STEP) end },
+            { text = "Decrease weight", callback = function(u) setWeight(u, u.document.configurable.font_base_weight - WEIGHT_STEP) end },
+        },
+    }
+
+    local ls = conf.line_spacing
+    for __, em in ipairs(LINE_SPACINGS) do
+        table.insert(rows[4], {
+            text = em .. "em",
+            callback = function(u) setLineSpacing(u, em) end,
+            active = approx(ls, em) or approx(ls, em * 100),
+        })
+    end
+    for __, p in ipairs(MARGIN_PRESETS) do
+        table.insert(rows[5], {
+            text = p.label,
+            callback = function(u) setMargins(u, p.value) end,
+            active = marginsMatch(conf, p.value) and true or false,
+        })
+    end
+    return rows
+end
+
+-- Dialog ----------------------------------------------------------------
+
+function PageTextInfo:onShowSettingsMenu()
+    local Blitbuffer = require("ffi/blitbuffer")
+    local Device = require("device")
+    local Font = require("ui/font")
+    local Geom = require("ui/geometry")
+    local GestureRange = require("ui/gesturerange")
+    local Size = require("ui/size")
+    local UIManager = require("ui/uimanager")
+    local TextWidget = require("ui/widget/textwidget")
+    local FrameContainer = require("ui/widget/container/framecontainer")
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local InputContainer = require("ui/widget/container/inputcontainer")
+    local HorizontalGroup = require("ui/widget/horizontalgroup")
+    local VerticalGroup = require("ui/widget/verticalgroup")
+    local Screen = Device.screen
+
+    local ui = self.ui
+    if not ui or not ui.document or ui.paging or not ui.font or not ui.typeset then
+        return true
+    end
+
+    local old_dialog = self.settings_dialog
+    local old_region = old_dialog and old_dialog.frame_rect and old_dialog.frame_rect:copy()
+    self.settings_dialog = nil
+
+    local screen = Screen:getSize()
+    local dialog_w = math.floor(screen.w * 0.9)
+    local font_px = Screen:scaleBySize(18)
+    local cell_h = math.floor(font_px * 2.4)
+    local thin  = Screen:scaleBySize(1)
+    local thick = Screen:scaleBySize(3)
+    local buttons = {}
+
+    local dialog = InputContainer:new{
+        dimen = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
+        ges_events = {
+            Tap = { GestureRange:new{ ges = "tap",
+                range = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h } } },
+        },
+        key_events = Device:hasKeys() and { Close = { { Device.input.group.Back } } } or {},
+    }
+
+    local grid = VerticalGroup:new{ align = "center" }
+    for __, row_def in ipairs(buildRows(ui)) do
+        local n = #row_def
+        if n > 0 then
+            local cell_w = math.floor(dialog_w / n)
+            local row = HorizontalGroup:new{}
+            for __, b in ipairs(row_def) do
+                local frame = FrameContainer:new{
+                    bordersize = thin,
+                    color = Blitbuffer.COLOR_BLACK,
+                    margin = 0,
+                    padding = 0,
+                    FrameContainer:new{
+                        bordersize = thick - thin,
+                        color = b.active and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
+                        background = Blitbuffer.COLOR_WHITE,
+                        margin = 0,
+                        padding = 0,
+                        CenterContainer:new{
+                            dimen = Geom:new{ w = cell_w - 2 * thick, h = cell_h - 2 * thick },
+                            TextWidget:new{
+                                text = b.text,
+                                face = Font:getFace("cfont", 18),
+                                max_width = cell_w - 2 * Size.padding.small,
+                            },
+                        },
+                    },
+                }
+                table.insert(row, frame)
+                table.insert(buttons, { frame = frame, callback = b.callback })
+            end
+            table.insert(grid, row)
+        end
+    end
+
+    local frame = FrameContainer:new{
+        background = Blitbuffer.COLOR_WHITE,
+        bordersize = Size.border.window,
+        radius = Size.radius.window,
+        padding = Size.padding.small,
+        grid,
+    }
+    dialog[1] = CenterContainer:new{
+        dimen = Geom:new{ w = screen.w, h = screen.h },
+        frame,
+    }
+
+    local fsize = frame:getSize()
+    local frame_rect = Geom:new{
+        x = math.floor((screen.w - fsize.w) / 2),
+        y = math.floor((screen.h - fsize.h) / 2),
+        w = fsize.w, h = fsize.h,
+    }
+
+    function dialog:onTap(arg, ges)
+        for __, b in ipairs(buttons) do
+            if b.frame.dimen and ges.pos:intersectWith(b.frame.dimen) then
+                local ok, err = pcall(b.callback, self.plugin.ui)
+                require("logger").dbg("settings menu tap:", b.text, ok and "OK" or err)
+                -- Reopen after the reflow so the active state is refreshed
+                UIManager:nextTick(function() self.plugin:onShowSettingsMenu() end)
+                return true
+            end
+        end
+        if not ges.pos:intersectWith(frame_rect) then
+            close(self.plugin)
+        end
+        return true
+    end
+    function dialog:onClose() close(self.plugin) return true end
+
+    dialog.plugin = self
+    dialog.frame_rect = frame_rect
+    self.settings_dialog = dialog
+
+    local region = frame_rect
+    if old_region then region = region:combine(old_region) end
+    UIManager:show(dialog, "ui", region)
+    if old_dialog then UIManager:close(old_dialog, "ui", region) end
     return true
 end
 
