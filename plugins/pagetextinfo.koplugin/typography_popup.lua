@@ -1,44 +1,44 @@
 --[[
-Typography Info Popup
-Replaces the plain InfoMessage from onGetTextPage with a structured
-sectioned popup: font metrics, x-height, display info, CSS properties,
-applied tweaks, and reading speed history.
+Typography Info Popup (table layout)
+Replaces the plain InfoMessage from onGetTextPage with a structured popup.
+Every section is rendered as a bordered table:
 
-Sections:
-  - FONT        face, size, weight, readability
-  - DISPLAY     device, resolution, DPI, frontlight
-  - CSS         tag, line-height, indent, margin, alignment (two columns: p vs body)
-  - TWEAKS      count + list of applied tweaks
-  - WPM         avg wpm, sessions, recent averages
+  - FONT        face, size, didot, px, mm, weight
+  - X-HEIGHT    px, mm, visual angle
+  - DISPLAY     device, ppi, resolution, frontlight
+  - CSS         3-column table: property | <p tag> | <body tag>
+  - TWEAKS      one row per applied tweak
+  - READING     avg wpm, wph, sessions, recent averages
 ]]--
 
-local Blitbuffer   = require("ffi/blitbuffer")
-local Device       = require("device")
-local Dispatcher   = require("dispatcher")
-local Font         = require("ui/font")
-local FrameContainer = require("ui/widget/container/framecontainer")
-local Geom         = require("ui/geometry")
-local GestureRange = require("ui/gesturerange")
+local Blitbuffer      = require("ffi/blitbuffer")
+local Device          = require("device")
+local Dispatcher      = require("dispatcher")
+local Font            = require("ui/font")
+local FrameContainer  = require("ui/widget/container/framecontainer")
+local Geom            = require("ui/geometry")
+local GestureRange    = require("ui/gesturerange")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
 local HorizontalSpan  = require("ui/widget/horizontalspan")
 local InputContainer  = require("ui/widget/container/inputcontainer")
 local LeftContainer   = require("ui/widget/container/leftcontainer")
 local LineWidget      = require("ui/widget/linewidget")
-local Math         = require("optmath")
-local Size         = require("ui/size")
-local TextBoxWidget = require("ui/widget/textboxwidget")
-local TextWidget   = require("ui/widget/textwidget")
-local UIManager    = require("ui/uimanager")
-local VerticalGroup = require("ui/widget/verticalgroup")
-local VerticalSpan  = require("ui/widget/verticalspan")
-local Screen       = Device.screen
+local Math            = require("optmath")
+local Size            = require("ui/size")
+local TextBoxWidget   = require("ui/widget/textboxwidget")
+local TextWidget      = require("ui/widget/textwidget")
+local UIManager       = require("ui/uimanager")
+local VerticalGroup   = require("ui/widget/verticalgroup")
+local VerticalSpan    = require("ui/widget/verticalspan")
+local Screen          = Device.screen
 
 -- ── Fonts ────────────────────────────────────────────────────────────────────
 
 local function buildFonts()
     return {
         section = Font:getFace("NotoSans-Bold.ttf",    20) or Font:getFace("tfont", 20),
-        value   = Font:getFace("NotoSans-Bold.ttf",    26) or Font:getFace("tfont", 26),
+        head    = Font:getFace("NotoSans-Bold.ttf",    16) or Font:getFace("tfont", 16),
+        value   = Font:getFace("NotoSans-Bold.ttf",    18) or Font:getFace("tfont", 18),
         label   = Font:getFace("NotoSans-Regular.ttf", 16) or Font:getFace("x_smallinfofont", 16),
         mono    = Font:getFace("myfont3",              14) or Font:getFace("cfont", 14),
     }
@@ -53,16 +53,8 @@ local function ptToPx(pt, dpi)
     return math.floor(dpi * pt / 72 + 0.5)
 end
 
-local function buildLayout(screen_w, padding_h, column_gap)
-    local sep_w   = 2 * column_gap + Size.line.medium
-    local col_w   = math.floor((screen_w - 2 * padding_h - sep_w) / 2)
-    return {
-        full_width     = screen_w,
-        padding_h      = padding_h,
-        column_gap     = column_gap,
-        separator_width = sep_w,
-        col_width      = col_w,
-    }
+local function buildLayout(screen_w, padding_h)
+    return { full_width = screen_w, padding_h = padding_h }
 end
 
 local function padded(padding_h, widget)
@@ -70,39 +62,6 @@ local function padded(padding_h, widget)
         HorizontalSpan:new{ width = padding_h },
         widget,
     }
-end
-
-local function fixedCol(widget, width, height)
-    height = height or widget:getSize().h
-    return LeftContainer:new{
-        dimen  = Geom:new{ w = width, h = height },
-        widget,
-    }
-end
-
-local function buildSep(column_gap, height)
-    local vp = Size.padding.default
-    return HorizontalGroup:new{
-        HorizontalSpan:new{ width = column_gap },
-        VerticalGroup:new{
-            align = "center",
-            VerticalSpan:new{ height = vp },
-            LineWidget:new{
-                dimen      = Geom:new{ w = Size.line.medium, h = height - 2 * vp },
-                background = Blitbuffer.COLOR_GRAY,
-            },
-            VerticalSpan:new{ height = vp },
-        },
-        HorizontalSpan:new{ width = column_gap },
-    }
-end
-
-local function hline(layout, thick)
-    return padded(layout.padding_h, LineWidget:new{
-        dimen      = Geom:new{ w = layout.full_width - 2 * layout.padding_h,
-                               h = thick and Size.line.thick or Size.line.thin },
-        background = Blitbuffer.COLOR_GRAY,
-    })
 end
 
 local function sectionHeader(fonts, text, width)
@@ -121,83 +80,170 @@ local function sectionHeader(fonts, text, width)
     }
 end
 
--- A value+label pair in a single column.
-local function valueLine(fonts, col_width, value_str, label_str)
-    if not value_str or value_str == "" then
-        return TextBoxWidget:new{
-            text      = label_str or "",
-            face      = fonts.label,
-            width     = col_width,
-            alignment = "left",
-        }
-    end
-    local vw        = TextWidget:new{ text = value_str, face = fonts.value }
-    local vw_width  = vw:getSize().w
-    local lbl_width = col_width - vw_width - Size.padding.large
-    if lbl_width <= 0 then
-        return VerticalGroup:new{
-            align = "left",
-            vw,
-            TextBoxWidget:new{ text = label_str or "", face = fonts.label,
-                               width = col_width, alignment = "left" },
-        }
-    end
-    return HorizontalGroup:new{
-        align = "center",
-        vw,
-        HorizontalSpan:new{ width = Size.padding.large },
-        TextBoxWidget:new{ text = label_str or "", face = fonts.label,
-                           width = lbl_width, alignment = "left" },
-    }
+-- ── Table builder ─────────────────────────────────────────────────────────────
+-- A row is { header = bool, cells = { {text=, kind=, align=, span=}, ... } }
+--   kind:  "label" | "value" | "head" | "mono"   (maps to a font)
+--   align: "left" | "center" | "right"
+--   span:  number of columns the cell covers (default 1)
+
+local function spanWidth(cols, start, span, sep_w)
+    local w = 0
+    for i = start, start + span - 1 do w = w + (cols[i] or 0) end
+    return w + (span - 1) * sep_w
 end
 
--- Full-width mono text line (for tweaks list, etc.)
-local function monoLine(fonts, layout, text)
-    return padded(layout.padding_h, TextBoxWidget:new{
-        text      = text,
-        face      = fonts.mono,
-        width     = layout.full_width - 2 * layout.padding_h,
-        alignment = "left",
+local function buildRow(fonts, cols, row, sep_w)
+    local pad = Size.padding.small
+    local built, max_h, ci = {}, 0, 1
+
+    for _, cell in ipairs(row.cells) do
+        local span = cell.span or 1
+        local w    = spanWidth(cols, ci, span, sep_w)
+        local text = tostring(cell.text or "")
+        if text == "" then text = " " end
+        local tb = TextBoxWidget:new{
+            text      = text,
+            face      = fonts[cell.kind or "label"],
+            width     = w - 2 * pad,
+            alignment = cell.align or "left",
+        }
+        max_h = math.max(max_h, tb:getSize().h)
+        table.insert(built, { widget = tb, w = w })
+        ci = ci + span
+    end
+
+    local row_h = max_h + 2 * pad
+    local group = HorizontalGroup:new{ align = "center" }
+    for i, b in ipairs(built) do
+        if i > 1 then
+            table.insert(group, LineWidget:new{
+                dimen      = Geom:new{ w = sep_w, h = row_h },
+                background = Blitbuffer.COLOR_GRAY,
+            })
+        end
+        table.insert(group, LeftContainer:new{
+            dimen = Geom:new{ w = b.w, h = row_h },
+            HorizontalGroup:new{
+                HorizontalSpan:new{ width = pad },
+                b.widget,
+            },
+        })
+    end
+
+    if row.header then
+        return FrameContainer:new{
+            background = Blitbuffer.COLOR_LIGHT_GRAY,
+            bordersize = 0, padding = 0, margin = 0,
+            group,
+        }
+    end
+    return group
+end
+
+local function buildTable(fonts, layout, col_fracs, rows)
+    local border  = Size.border.thin
+    local table_w = layout.full_width - 2 * layout.padding_h
+    local inner_w = table_w - 2 * border
+    local sep_w   = Size.line.thin
+    local n       = #col_fracs
+    local avail   = inner_w - (n - 1) * sep_w
+
+    local cols, used = {}, 0
+    for i, f in ipairs(col_fracs) do
+        if i < n then
+            cols[i] = math.floor(avail * f)
+            used = used + cols[i]
+        else
+            cols[i] = avail - used   -- last column takes the remainder
+        end
+    end
+
+    local vg = VerticalGroup:new{ align = "left" }
+    for i, row in ipairs(rows) do
+        if i > 1 then
+            table.insert(vg, LineWidget:new{
+                dimen      = Geom:new{ w = inner_w, h = Size.line.thin },
+                background = Blitbuffer.COLOR_GRAY,
+            })
+        end
+        table.insert(vg, buildRow(fonts, cols, row, sep_w))
+    end
+
+    return padded(layout.padding_h, FrameContainer:new{
+        bordersize = border,
+        color      = Blitbuffer.COLOR_GRAY,
+        padding    = 0,
+        margin     = 0,
+        radius     = 0,
+        vg,
     })
 end
 
-local function twoColRow(fonts, layout, left_val, left_lbl, right_val, right_lbl)
-    local lw = valueLine(fonts, layout.col_width, left_val,  left_lbl)
-    local rw = valueLine(fonts, layout.col_width, right_val, right_lbl)
-    local lh = lw:getSize().h
-    local rh = rw:getSize().h
-    local h  = math.max(lh, rh)
-    return HorizontalGroup:new{
-        align = "center",
-        fixedCol(lw, layout.col_width, h),
-        buildSep(layout.column_gap, h),
-        fixedCol(rw, layout.col_width, h),
-    }
+-- Key/value table: two label|value pairs per row (4 columns).
+-- Items: { "Label", "Value" }            → half-width pair
+--        { "Label", "Value", wide=true } → label + value spanning the row
+--        { note = "text" }               → full-width mono note row
+local KV_COLS = { 0.20, 0.30, 0.20, 0.30 }
+
+local function kvRows(items)
+    local rows, pending = {}, nil
+
+    local function flush()
+        if pending then
+            table.insert(rows, { cells = {
+                { text = pending[1], kind = "label" },
+                { text = pending[2], kind = "value" },
+                { text = "",         kind = "label" },
+                { text = "",         kind = "value" },
+            } })
+            pending = nil
+        end
+    end
+
+    for _, it in ipairs(items) do
+        if it.note then
+            flush()
+            table.insert(rows, { cells = { { text = it.note, kind = "mono", span = 4 } } })
+        elseif it.wide then
+            flush()
+            table.insert(rows, { cells = {
+                { text = it[1], kind = "label" },
+                { text = it[2], kind = "value", span = 3 },
+            } })
+        elseif pending then
+            table.insert(rows, { cells = {
+                { text = pending[1], kind = "label" },
+                { text = pending[2], kind = "value" },
+                { text = it[1],      kind = "label" },
+                { text = it[2],      kind = "value" },
+            } })
+            pending = nil
+        else
+            pending = it
+        end
+    end
+    flush()
+    return rows
 end
 
-local function addSection(sections, header, rows, layout)
-    table.insert(sections, header)
-    table.insert(sections, VerticalSpan:new{ height = Size.padding.default })
-    table.insert(sections, hline(layout, false))
-    for _, row in ipairs(rows) do
-        table.insert(sections, row)
-    end
+local function addSection(sections, fonts, layout, title, tbl)
+    table.insert(sections, sectionHeader(fonts, title, layout.full_width))
+    table.insert(sections, tbl)
     table.insert(sections, VerticalSpan:new{ height = Size.padding.large })
 end
 
 -- ── Data gathering ────────────────────────────────────────────────────────────
 
 local function arcminutes_from_mm(size_mm, distance_mm)
-    local angle_rad  = 2 * math.atan(size_mm / (2 * distance_mm))
-    local angle_arcmin = math.deg(angle_rad) * 60
-    return angle_arcmin
+    local angle_rad    = 2 * math.atan(size_mm / (2 * distance_mm))
+    return math.deg(angle_rad) * 60
 end
 
 local function gatherData(ui)
     local data = {}
     if not ui or not ui.document then return data end
 
-    local doc        = ui.document
+    local doc          = ui.document
     local configurable = doc.configurable
     local display_dpi  = Device:getDeviceScreenDPI() or Screen:getDPI()
 
@@ -218,7 +264,7 @@ local function gatherData(ui)
     local face_base = Font:getFace(data.font_face_clean, data.font_size_px, 0, true)
     if face_base then
         local xh = face_base.ftsize:getXHeight()
-        -- Verifícalo con un print: si xh < 1 es un ratio, si es > 1 ya son px
+        -- If xh < 1 it is a ratio, otherwise it is already in px
         local xh_px = (xh < 1) and Math.round(xh * px) or Math.round(xh)
         local xh_mm = Math.round(xh_px * 25.4 / display_dpi * 100) / 100
         data.x_height_px     = xh_px .. "px"
@@ -227,15 +273,13 @@ local function gatherData(ui)
     else
         data.x_height_px, data.x_height_mm, data.x_height_arcmin = "N/A", "N/A", "N/A"
     end
+
     -- Readability table (from pagetextinfo if available)
     if ui.pagetextinfo and ui.pagetextinfo.readability_table then
         data.readability = ui.pagetextinfo.readability_table[data.font_face_clean] or "N/A"
     else
         data.readability = "N/A"
     end
-
-    -- Didot size
-    data.font_size_didot = string.format("%.2fp", configurable.font_size * 0.94)
 
     -- Device
     data.device_model = Device.model
@@ -302,7 +346,7 @@ local function gatherData(ui)
         unitfontsize, unitfontsize2 = tweaked("Ignore publisher font sizes", unitfontsize, unitfontsize2)
 
         if name ~= "" then
-            data.css_tag        = { p = name,  body = name2 }
+            data.css_tag        = { p = name, body = name2 }
             data.css_lineheight = {
                 p    = Math.round(height  * 100) / 100 .. unitheight,
                 body = Math.round(height2 * 100) / 100 .. unitheight2,
@@ -327,7 +371,6 @@ local function gatherData(ui)
     if ui.pagetextinfo and ui.view and ui.view.footer then
         local ok, sessions, avg_wpm,
               avg7, avg30, avg60, avg90, avg180 = pcall(function()
-            -- getSessionsInfo is defined in pagetextinfo main.lua
             return ui.pagetextinfo.getSessionsInfo
                 and ui.pagetextinfo:getSessionsInfo(ui.view.footer)
                 or nil
@@ -336,10 +379,10 @@ local function gatherData(ui)
             data.avg_wpm   = math.floor(avg_wpm)
             data.avg_wph   = math.floor(avg_wpm * 60)
             data.sessions  = sessions
-            data.avg7      = avg7  and math.floor(avg7)  or nil
-            data.avg30     = avg30 and math.floor(avg30) or nil
-            data.avg60     = avg60 and math.floor(avg60) or nil
-            data.avg90     = avg90 and math.floor(avg90) or nil
+            data.avg7      = avg7   and math.floor(avg7)   or nil
+            data.avg30     = avg30  and math.floor(avg30)  or nil
+            data.avg60     = avg60  and math.floor(avg60)  or nil
+            data.avg90     = avg90  and math.floor(avg90)  or nil
             data.avg180    = avg180 and math.floor(avg180) or nil
         end
     end
@@ -353,118 +396,89 @@ local function buildSections(data, fonts, layout)
     local sections = VerticalGroup:new{ align = "left" }
     local L = layout
 
-    local function row2(lv, ll, rv, rl)
-        return padded(L.padding_h, twoColRow(fonts, L, lv, ll, rv, rl))
+    local function kvTable(items)
+        return buildTable(fonts, L, KV_COLS, kvRows(items))
     end
-    local function row1(v, l)
-        return padded(L.padding_h, valueLine(fonts, L.full_width - 2*L.padding_h, v, l))
-    end
-    local function sp() return VerticalSpan:new{ height = Size.padding.default } end
+    local function wpm(v) return v and (v .. " wpm") or "–" end
 
-    -- ── FONT ─────────────────────────────────────────────────────────────────
-    addSection(sections,
-        sectionHeader(fonts, "FONT", L.full_width),
-        {
-            row1(data.font_face or "?", "face  (" .. (data.readability or "N/A") .. ")"),
-            sp(),
-            row2(
-                string.format("%.1fpt", data.font_size_pt or 0), "size",
-                (data.font_size_didot or "?"), "didot"
-            ),
-            sp(),
-            row2(
-                tostring(data.font_size_px or "?") .. "px", "pixels",
-                string.format("%.2fmm", data.font_size_mm or 0), "mm"
-            ),
-            sp(),
-            row1(tostring(data.font_weight or "?"), "weight"),
-        }, L)
+    -- FONT
+    addSection(sections, fonts, L, "FONT", kvTable{
+        { "Face",   (data.font_face or "?") .. "  (" .. (data.readability or "N/A") .. ")", wide = true },
+        { "Size",   string.format("%.1f pt", data.font_size_pt or 0) },
+        { "Didot",  data.font_size_didot or "?" },
+        { "Pixels", tostring(data.font_size_px or "?") .. " px" },
+        { "Metric", tostring(data.font_size_mm or "?") .. " mm" },
+        { "Weight", tostring(data.font_weight or "?") },
+    })
 
-    -- ── X-HEIGHT ─────────────────────────────────────────────────────────────
-    table.insert(sections, hline(L, true))
-    addSection(sections,
-        sectionHeader(fonts, "X-HEIGHT", L.full_width),
-        {
-            row2(data.x_height_px or "?", "pixels",
-                 data.x_height_mm or "?", "mm"),
-            sp(),
-            row1(data.x_height_arcmin or "?", "visual angle at 40 cm"),
-            sp(),
-            padded(L.padding_h, TextBoxWidget:new{
-                text = "• ~20′ ideal · 17–19′ comfortable · <15′ demanding · >25′ oversized",
-                face = fonts.mono,
-                width = L.full_width - 2*L.padding_h,
-                alignment = "left",
-            }),
-        }, L)
+    -- X-HEIGHT
+    addSection(sections, fonts, L, "X-HEIGHT", kvTable{
+        { "Pixels", data.x_height_px or "?" },
+        { "Metric", data.x_height_mm or "?" },
+        { "Angle",  data.x_height_arcmin or "?", wide = true },
+        { note = "~20′ ideal · 17–19′ comfortable · <15′ demanding · >25′ oversized" },
+    })
 
-    -- ── DISPLAY ──────────────────────────────────────────────────────────────
-    table.insert(sections, hline(L, true))
-    addSection(sections,
-        sectionHeader(fonts, "DISPLAY", L.full_width),
-        {
-            row2(data.device_model or "?", "model",
-                 tostring(data.display_dpi or "?") .. " ppi", "resolution"),
-            sp(),
-            row2(data.screen_res or "?", "pixels",
-                 data.frontlight or "Off", "frontlight"),
-        }, L)
+    -- DISPLAY
+    addSection(sections, fonts, L, "DISPLAY", kvTable{
+        { "Model",      data.device_model or "?" },
+        { "Density",    tostring(data.display_dpi or "?") .. " ppi" },
+        { "Resolution", data.screen_res or "?" },
+        { "Frontlight", data.frontlight or "Off" },
+    })
 
-    -- ── CSS ───────────────────────────────────────────────────────────────────
+    -- CSS: property | p | body
     if data.css_tag then
-        table.insert(sections, hline(L, true))
-        -- Two-column header: p | body
-        local hdr_left_w = L.padding_h + L.col_width + math.floor(L.separator_width / 2)
-        local hdr_right_w = L.full_width - hdr_left_w
-        local hdr = HorizontalGroup:new{
-            align = "center",
-            sectionHeader(fonts, "CSS  —  " .. (data.css_tag.p or "p"), hdr_left_w),
-            sectionHeader(fonts, data.css_tag.body or "body", hdr_right_w, math.ceil(L.separator_width / 2)),
+        local function r(label, t)
+            return { cells = {
+                { text = label, kind = "label" },
+                { text = t.p,   kind = "value" },
+                { text = t.body, kind = "value" },
+            } }
+        end
+        local rows = {
+            { header = true, cells = {
+                { text = "Property",                kind = "head" },
+                { text = "<" .. (data.css_tag.p    or "p")    .. ">", kind = "head" },
+                { text = "<" .. (data.css_tag.body or "body") .. ">", kind = "head" },
+            } },
+            r("line-height", data.css_lineheight),
+            r("text-indent", data.css_indent),
+            r("margin",      data.css_margin),
+            r("text-align",  data.css_align),
         }
-        addSection(sections, hdr, {
-            row2(data.css_lineheight.p,  "line-height",
-                 data.css_lineheight.body, ""),
-            sp(),
-            row2(data.css_indent.p,      "text-indent",
-                 data.css_indent.body,    ""),
-            sp(),
-            row2(data.css_margin.p,      "margin",
-                 data.css_margin.body,    ""),
-            sp(),
-            row2(data.css_align.p,       "text-align",
-                 data.css_align.body,     ""),
-        }, L)
+        addSection(sections, fonts, L, "CSS",
+            buildTable(fonts, L, { 0.28, 0.36, 0.36 }, rows))
     end
 
-    -- ── TWEAKS ────────────────────────────────────────────────────────────────
-    table.insert(sections, hline(L, true))
-    addSection(sections,
-        sectionHeader(fonts, "TWEAKS  (" .. tostring(data.tweaks_count) .. " applied)", L.full_width),
-        {
-            monoLine(fonts, L, data.tweaks_text ~= "" and data.tweaks_text or "None"),
-        }, L)
+    -- TWEAKS: one row per line
+    do
+        local rows = {}
+        local text = data.tweaks_text or ""
+        if text == "" then
+            table.insert(rows, { cells = { { text = "None", kind = "mono" } } })
+        else
+            for line in text:gmatch("[^\n]+") do
+                table.insert(rows, { cells = { { text = line, kind = "mono" } } })
+            end
+        end
+        addSection(sections, fonts, L,
+            "TWEAKS  (" .. tostring(data.tweaks_count) .. " applied)",
+            buildTable(fonts, L, { 1 }, rows))
+    end
 
-    -- ── WPM ──────────────────────────────────────────────────────────────────
+    -- READING SPEED
     if data.avg_wpm then
-        table.insert(sections, hline(L, true))
-        addSection(sections,
-            sectionHeader(fonts, "READING SPEED", L.full_width),
-            {
-                row2(tostring(data.avg_wpm) .. " wpm", "average",
-                     tostring(data.avg_wph) .. " wph", ""),
-                sp(),
-                row2(tostring(data.sessions or 0), "sessions",
-                     "", ""),
-                sp(),
-                row2(data.avg7  and (data.avg7  .. " wpm") or "–", "last 7 d",
-                     data.avg30 and (data.avg30 .. " wpm") or "–", "last 30 d"),
-                sp(),
-                row2(data.avg60  and (data.avg60  .. " wpm") or "–", "last 60 d",
-                     data.avg90  and (data.avg90  .. " wpm") or "–", "last 90 d"),
-                sp(),
-                row2(data.avg180 and (data.avg180 .. " wpm") or "–", "last 180 d",
-                     "", ""),
-            }, L)
+        addSection(sections, fonts, L, "READING SPEED", kvTable{
+            { "Average",  data.avg_wpm .. " wpm" },
+            { "Per hour", data.avg_wph .. " wph" },
+            { "Sessions", tostring(data.sessions or 0) },
+            { "7 days",   wpm(data.avg7) },
+            { "30 days",  wpm(data.avg30) },
+            { "60 days",  wpm(data.avg60) },
+            { "90 days",  wpm(data.avg90) },
+            { "180 days", wpm(data.avg180) },
+        })
     end
 
     -- Bottom rule
@@ -486,7 +500,7 @@ local TextInfoPopup = InputContainer:extend{
 function TextInfoPopup:init()
     local fonts    = buildFonts()
     local screen_w = Screen:getWidth()
-    local layout   = buildLayout(screen_w, Size.padding.large, Screen:scaleBySize(20))
+    local layout   = buildLayout(screen_w, Size.padding.large)
     local data     = gatherData(self.ui)
     local sections = buildSections(data, fonts, layout)
 
@@ -503,20 +517,9 @@ function TextInfoPopup:init()
     self.dimen = Geom:new{ w = screen_w, h = Screen:getHeight() }
 
     if Device:isTouchDevice() then
-        self.ges_events.TapClose = {
-            GestureRange:new{ ges = "tap", range = self.dimen }
-        }
-    end
-
-   if Device:isTouchDevice() then
-        local range = GestureRange:new{ ges = "tap",   range = self.dimen }
-        self.ges_events.TapClose   = { range }
-        self.ges_events.SwipeClose = {
-            GestureRange:new{ ges = "swipe", range = self.dimen }
-        }
-        self.ges_events.HoldClose  = {
-            GestureRange:new{ ges = "hold",  range = self.dimen }
-        }
+        self.ges_events.TapClose   = { GestureRange:new{ ges = "tap",   range = self.dimen } }
+        self.ges_events.SwipeClose = { GestureRange:new{ ges = "swipe", range = self.dimen } }
+        self.ges_events.HoldClose  = { GestureRange:new{ ges = "hold",  range = self.dimen } }
     end
 
     if Device:hasKeys() then
@@ -531,20 +534,10 @@ function TextInfoPopup:onShow()
     return true
 end
 
-function TextInfoPopup:onTapClose()
-    UIManager:close(self)
-    return true
-end
-
-function TextInfoPopup:onClose()
-    UIManager:close(self)
-    return true
-end
-
-function TextInfoPopup:onTapClose()   return UIManager:close(self) end
-function TextInfoPopup:onSwipeClose() return UIManager:close(self) end
-function TextInfoPopup:onHoldClose()  return UIManager:close(self) end
-function TextInfoPopup:onClose()      return UIManager:close(self) end
+function TextInfoPopup:onTapClose()   UIManager:close(self); return true end
+function TextInfoPopup:onSwipeClose() UIManager:close(self); return true end
+function TextInfoPopup:onHoldClose()  UIManager:close(self); return true end
+function TextInfoPopup:onClose()      UIManager:close(self); return true end
 
 function TextInfoPopup:onCloseWidget()
     UIManager:setDirty(nil, "ui")
@@ -573,4 +566,3 @@ ReaderUI.registerKeyEvents = function(self)
         return true
     end
 end
-
