@@ -239,6 +239,83 @@ local function arcminutes_from_mm(size_mm, distance_mm)
     return math.deg(angle_rad) * 60
 end
 
+-- Drop-in replacement for gatherData in the typography popup.
+-- Same output fields as before (css_tag, css_lineheight, css_indent,
+-- css_margin, css_align) plus css_fontsize. Needs the same locals as the
+-- popup file: Device, Screen, Font, Math, ptToPx, PT_TO_MM, PT_TO_DIDOT,
+-- arcminutes_from_mm.
+
+-- true  = the C++ getHeight already multiplies EVERY line-height branch
+--         (including "Font") by KOReader's line spacing factor (my rewrite).
+-- false = original C++, which only scaled "em"/"unesp": then "Font" must be
+--         scaled here.
+local CPP_SCALES_LINE_HEIGHT = true
+
+-- Tweak detection by menu text (breaks if KOReader is translated or the menu
+-- text changes). Kept in one table so it is easy to swap for ids later.
+local TWEAK_PATTERNS = {
+    line_height = "Spacing between lines %(1.2em%%)",
+    indent      = "Indentation on first paragraph line",
+    margin      = "Ignore publisher page margins",
+    font_size   = "Ignore publisher font sizes",
+    align       = { "Left align most text", "Justify most text" },
+}
+
+local function hasTweak(tweaks, pattern)
+    if type(pattern) == "table" then
+        for _, p in ipairs(pattern) do
+            if tweaks:find(p) then return true end
+        end
+        return false
+    end
+    return tweaks:find(pattern) ~= nil
+end
+
+-- Indices of the 20 values returned by doc:getHeight(xpointer)
+local IDX = {
+    tag = 1, body_tag = 2,
+    line_height = 3, body_line_height = 5,   -- value at i, unit at i+1
+    indent = 7,      body_indent = 9,
+    margin = 11,     body_margin = 13,
+    align = 15,      body_align = 16,
+    font_size = 17,  body_font_size = 19,
+}
+
+-- Looks for a representative paragraph in the middle of the page instead of
+-- using the last position (which may be a title or a footnote).
+-- Returns the table of 20 values, preferring a <p>.
+local function sampleCSS(doc)
+    local W, H = Screen:getWidth(), Screen:getHeight()
+    local fallback
+    for _, frac in ipairs({ 0.5, 0.4, 0.6, 0.3, 0.7 }) do
+        local y = math.floor(H * frac)
+        local res = doc._document:getTextFromPositions(0, y, W, y + 10, false, false)
+        if res then
+            for _, pos in ipairs({ res.pos0, res.pos1 }) do
+                if pos and pos ~= ".0" then
+                    local ok, r = pcall(function() return { doc:getHeight(pos) } end)
+                    if ok and r and r[IDX.tag] and r[IDX.tag] ~= "" then
+                        if r[IDX.tag] == "p" then return r end
+                        fallback = fallback or r
+                    end
+                end
+            end
+        end
+    end
+    return fallback
+end
+
+-- Formats (value, unit) for display. Absent values come as -2 with an empty
+-- or "unesp" unit; a real "-2em" hanging indent is kept.
+local function fmtLength(value, unit, tweaked)
+    if type(value) ~= "number" then
+        return (value == nil or value == "") and "—" or tostring(value)
+    end
+    unit = unit or ""
+    if value == -2 and (unit == "" or unit == "unesp") then return "—" end
+    return (Math.round(value * 100) / 100) .. unit .. (tweaked and "*" or "")
+end
+
 local function gatherData(ui)
     local data = {}
     if not ui or not ui.document then return data end
@@ -248,7 +325,7 @@ local function gatherData(ui)
     local display_dpi  = Device:getDeviceScreenDPI() or Screen:getDPI()
 
     -- Font
-    data.font_face = doc._document:getFontFace()
+    data.font_face = doc._document:getFontFace() or "?"
     data.font_face_clean = data.font_face:gsub("%s+", "") .. "-Regular"
     local pt = configurable.font_size
     local px = ptToPx(pt, display_dpi)
@@ -261,7 +338,7 @@ local function gatherData(ui)
     data.display_dpi     = display_dpi
 
     -- x-height
-    local face_base = Font:getFace(data.font_face_clean, data.font_size_px, 0, true)
+    local face_base = Font:getFace(data.font_face_clean, px, 0, true)
     if face_base then
         local xh = face_base.ftsize:getXHeight()
         -- If xh < 1 it is a ratio, otherwise it is already in px
@@ -301,66 +378,47 @@ local function gatherData(ui)
         data.frontlight = "Off"
     end
 
-    -- CSS properties from page
-    local res = doc._document:getTextFromPositions(
-        0, 0, Screen:getWidth(), Screen:getHeight(), false, false)
-    if res and res.pos1 ~= ".0" then
-        local name, name2, height, unitheight, height2, unitheight2,
-              indent, unitindent, indent2, unitindent2,
-              margin, unitmargin, margin2, unitmargin2,
-              alignment, alignment2, fontsize, unitfontsize, fontsize2, unitfontsize2
-
-        name, name2, height, unitheight, height2, unitheight2,
-        indent, unitindent, indent2, unitindent2,
-        margin, unitmargin, margin2, unitmargin2,
-        alignment, alignment2, fontsize, unitfontsize, fontsize2, unitfontsize2
-            = doc:getHeight(res.pos1)
-
-        if name == "" and res.pos0 ~= ".0" then
-            name, name2, height, unitheight, height2, unitheight2,
-            indent, unitindent, indent2, unitindent2,
-            margin, unitmargin, margin2, unitmargin2,
-            alignment, alignment2, fontsize, unitfontsize, fontsize2, unitfontsize2
-                = doc:getHeight(res.pos0)
-        end
-
-        if unitheight == "Font" then
-            height  = height  * configurable.line_spacing / 100
-            height2 = height2 * configurable.line_spacing / 100
-        end
-
+    -- CSS properties of a representative paragraph
+    local r = sampleCSS(doc)
+    if r then
         local tweaks = ui.tweaks or ""
-        local function tweaked(pattern, unit, unit2)
-            if tweaks:find(pattern) then
-                return unit .. "*", unit2 .. "*"
+        local tw = {
+            line_height = hasTweak(tweaks, TWEAK_PATTERNS.line_height),
+            indent      = hasTweak(tweaks, TWEAK_PATTERNS.indent),
+            margin      = hasTweak(tweaks, TWEAK_PATTERNS.margin),
+            font_size   = hasTweak(tweaks, TWEAK_PATTERNS.font_size),
+            align       = hasTweak(tweaks, TWEAK_PATTERNS.align),
+        }
+
+        local function lengths(i_p, i_b, tweaked)
+            return fmtLength(r[i_p],     r[i_p + 1], tweaked),
+                   fmtLength(r[i_b],     r[i_b + 1], tweaked)
+        end
+
+        -- line-height: only scale "Font" here if the C++ does not do it
+        local function lineHeight(i)
+            local v, u = r[i], r[i + 1]
+            if not CPP_SCALES_LINE_HEIGHT and u == "Font" and type(v) == "number" then
+                v = v * configurable.line_spacing / 100
             end
-            return unit, unit2
+            return fmtLength(v, u, tw.line_height)
         end
 
-        unitheight,  unitheight2  = tweaked("Spacing between lines %(1.2em%%)", unitheight,  unitheight2)
-        unitindent,  unitindent2  = tweaked("Indentation on first paragraph line", unitindent, unitindent2)
-        unitmargin,  unitmargin2  = tweaked("Ignore publisher page margins", unitmargin, unitmargin2)
-        if tweaks:find("Left align most text") or tweaks:find("Justify most text") then
-            alignment = alignment .. "*"; alignment2 = alignment2 .. "*"
+        local function align(a)
+            if a == nil or a == "" then return "—" end
+            return a .. (tw.align and "*" or "")
         end
-        unitfontsize, unitfontsize2 = tweaked("Ignore publisher font sizes", unitfontsize, unitfontsize2)
 
-        if name ~= "" then
-            data.css_tag        = { p = name, body = name2 }
-            data.css_lineheight = {
-                p    = Math.round(height  * 100) / 100 .. unitheight,
-                body = Math.round(height2 * 100) / 100 .. unitheight2,
-            }
-            data.css_indent = {
-                p    = Math.round(indent  * 100) / 100 .. unitindent,
-                body = Math.round(indent2 * 100) / 100 .. unitindent2,
-            }
-            data.css_margin = {
-                p    = Math.round(margin  * 100) / 100 .. unitmargin,
-                body = Math.round(margin2 * 100) / 100 .. unitmargin2,
-            }
-            data.css_align = { p = alignment, body = alignment2 }
-        end
+        data.css_tag = { p = r[IDX.tag], body = r[IDX.body_tag] }
+        data.css_lineheight = { p = lineHeight(IDX.line_height), body = lineHeight(IDX.body_line_height) }
+        local ip, ib
+        ip, ib = lengths(IDX.indent, IDX.body_indent, tw.indent)
+        data.css_indent = { p = ip, body = ib }
+        ip, ib = lengths(IDX.margin, IDX.body_margin, tw.margin)
+        data.css_margin = { p = ip, body = ib }
+        ip, ib = lengths(IDX.font_size, IDX.body_font_size, tw.font_size)
+        data.css_fontsize = { p = ip, body = ib }
+        data.css_align = { p = align(r[IDX.align]), body = align(r[IDX.body_align]) }
     end
 
     -- Tweaks
