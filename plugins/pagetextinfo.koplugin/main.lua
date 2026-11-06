@@ -2756,103 +2756,221 @@ end
 
 -- ─────────────────────────────────────────────────────────────────────────────
 
-function PageTextInfo:drawXPointerVocabulary(bb, x, y)
-    -- Determine the vertical extent of the current view in document positions.
-    local cur_view_top = self.document:getCurrentPos()
-    local cur_view_bottom
-    if self.view_mode == "page" and self.document:getVisiblePageCount() > 1 then
-        cur_view_bottom = cur_view_top + 2 * self.ui.dimen.h
-    else
-        cur_view_bottom = cur_view_top + self.ui.dimen.h
+-- Estilo del subrayado (ajusta aquí)
+local VOCAB_UNDERLINE_COLOR = Blitbuffer.COLOR_DARK_GRAY -- necesitas: local Blitbuffer = require("ffi/blitbuffer")
+local VOCAB_UNDERLINE_THICK = Size.line.medium
+local VOCAB_MIN_TRANSLATION_SIZE = 7
+
+-- Deja solo la última palabra del texto devuelto por el motor, normalizando el apóstrofo tipográfico.
+local function lastWord(text)
+    text = (text:gsub("’", "'"):gsub("%s+$", ""))
+    return text:match("[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+$") or text
+end
+
+
+
+local RenderText = require("ui/rendertext")
+local Blitbuffer = require("ffi/blitbuffer")
+
+-- Style constants
+local VOCAB_MIN_TRANSLATION_SIZE = 7   -- minimum font size for the gloss
+local GLOSS_MAX_CHARS = 14             -- max visible characters before truncating with "…"
+local GLOSS_SCALE = 0.75   -- gloss size relative to the book text (lower = smaller)
+local GLOSS_MIN_GAP   = Screen:scaleBySize(3)  -- min horizontal gap between two glosses on the same line
+local GLOSS_INVERTED  = false          -- true = black background, white text
+local GLOSS_PAD_X     = Screen:scaleBySize(4)  -- horizontal padding inside the chip
+local GLOSS_PAD_Y     = Screen:scaleBySize(1)  -- vertical padding inside the chip
+
+-- Keep only the last word of the text returned by the engine.
+-- Also normalizes the typographic apostrophe to a plain one.
+local function lastWord(text)
+    text = (text:gsub("’", "'"):gsub("%s+$", ""))
+    return text:match("[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+$") or text
+end
+
+-- Always use the generic UI font: it always exists, so no missing-font crash.
+-- Bold is simulated through the `bold` flag of renderUtf8Text.
+local function getGlossFace(self, size)
+    local ckey = tostring(size)
+    if self._gloss_face_key == ckey and self._gloss_face then
+        return self._gloss_face
+    end
+    local face = Font:getFace("cfont", size)
+    self._gloss_face_key = ckey
+    self._gloss_face = face
+    return face
+end
+
+-- Keep only the first meaning of a translation and truncate it with "…".
+-- Uses utf8.len so accented characters are never cut in half.
+local function shortGloss(text)
+    text = text:gsub("%s+", " ")                -- collapse whitespace
+    text = text:match("^[^;,/\n]+") or text     -- first meaning only
+    text = text:gsub("^%s+", ""):gsub("%s+$", "")  -- trim
+    if utf8 and utf8.len(text) and utf8.len(text) > GLOSS_MAX_CHARS then
+        local cut = utf8.offset(text, GLOSS_MAX_CHARS + 1)
+        if cut then text = text:sub(1, cut - 1) .. "…" end
+    elseif #text > GLOSS_MAX_CHARS then
+        text = text:sub(1, GLOSS_MAX_CHARS) .. "…"
+    end
+    return text
+end
+
+-- Dotted underline: black, thick, longer dashes so it is visible on e-ink.
+local function paintDotted(bb, x, y, w, thick)
+    local dash = Screen:scaleBySize(5)
+    local gap  = Screen:scaleBySize(2)
+    local x1 = x + w
+    while x < x1 do
+        bb:paintRect(x, y, math.min(dash, x1 - x), thick, Blitbuffer.COLOR_BLACK)
+        x = x + dash + gap
+    end
+end
+
+-- Paint a gloss as a "chip" (background + optional border) above the word.
+-- It is centered on the word, clamped to the screen, and shifted right
+-- (or skipped) if it would overlap the previous gloss on the same line.
+-- `line_end` maps a line's y position to the right edge of the last gloss painted there.
+local function paintGloss(bb, box, gloss, face, line_end)
+    -- Measure the text and the font height/ascender
+    local size = RenderText:sizeUtf8Text(0, Screen:getWidth(), face, gloss, true, true)
+    local text_w = size.x
+    local height, ascender = face.ftsize:getHeightAndAscender()
+    height, ascender = math.ceil(height), math.ceil(ascender)
+
+    local chip_w = text_w + 2 * GLOSS_PAD_X
+    local chip_h = height + 2 * GLOSS_PAD_Y
+    local margin = Screen:scaleBySize(2)
+
+    -- Center over the word and keep inside the screen
+    local x = box.x + math.floor((box.w - chip_w) / 2)
+    x = math.max(margin, math.min(x, Screen:getWidth() - chip_w - margin))
+
+    -- Anti-overlap: push right of the previous gloss, or skip if it doesn't fit
+    local prev_end = line_end[box.y]
+    if prev_end and x < prev_end + GLOSS_MIN_GAP then
+        x = prev_end + GLOSS_MIN_GAP
+        if x + chip_w > Screen:getWidth() - margin then return end
+    end
+    line_end[box.y] = x + chip_w
+
+    -- Place the chip just above the word; skip if it would go off the top
+    local y = box.y - chip_h - Screen:scaleBySize(1)
+    if y < 0 then return end
+
+    local bg = GLOSS_INVERTED and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE
+    local fg = GLOSS_INVERTED and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
+
+    -- Background and border (border only in the non-inverted style)
+    bb:paintRect(x, y, chip_w, chip_h, bg)
+    if not GLOSS_INVERTED then
+        bb:paintBorder(x, y, chip_w, chip_h, Size.border.thin, Blitbuffer.COLOR_BLACK, Size.radius.default)
     end
 
+    -- Text, vertically aligned using the font ascender
+    RenderText:renderUtf8Text(bb, x + GLOSS_PAD_X, y + GLOSS_PAD_Y + ascender,
+        face, gloss, true, true, fg)
+end
+
+function PageTextInfo:drawXPointerVocabulary(bb, x, y)
     local page_words = self.words[self.ui.view.state.page]
     if not page_words then return end
 
-    -- Compute font metrics once, outside the per-word loop.
-    local Device       = require("device")
-    local display_dpi  = Device:getDeviceScreenDPI() or Screen:getDPI()
-    local font_size_px = (display_dpi * self.ui.document.configurable.font_size) / 72
+    local cur_view_top = self.document:getCurrentPos()
     local current_font = self.ui.document:getFontFace():gsub(" ", "")
+    local font_size    = self.ui.document.configurable.font_size
+    local show_defs    = self.settings:isTrue("show_definitions")
 
-    local show_defs         = self.settings:isTrue("show_definitions")
-    local translation_size  = self.ui.document.configurable.font_size * 0.60
-    local translation_face  = Font:getFace(current_font .. "-Regular", translation_size, 0, true)
+    -- Gloss font: larger and bold so it stands out
+    -- pt -> px of the book text, then -> getFace units
+    local book_px = font_size * Screen:getDPI() / 72
+    local translation_size = math.max(
+        book_px * GLOSS_SCALE / Screen:scaleBySize(1),
+        VOCAB_MIN_TRANSLATION_SIZE)
+    local translation_face = show_defs
+        and getGlossFace(self, translation_size)
+        or nil
 
-    for _, item in ipairs(page_words) do
-        -- Cheap position check before the expensive getScreenBoxesFromPositions().
-        local start_pos = self.document:getPosFromXPointer(item.start)
-        local end_pos   = self.document:getPosFromXPointer(item["end"])
+    self._tr_cache = self._tr_cache or {}
 
-        if end_pos < cur_view_top then
-            -- Word is above the viewport; skip.
-        else
-            local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true)
-            if boxes then
-                -- Sample from the centre of the first box rather than its top-left corner.
-                -- getTextFromPositions() returns whichever word falls under the given point;
-                -- if we use (box.x, box.y) the point can land on the trailing edge of the
-                -- previous word (or the inter-word space), returning "have" when the box
-                -- actually belongs to "Antaup".
-                local mid_x = boxes[1].x + math.floor(boxes[1].w / 2)
-                local mid_y = boxes[1].y + math.floor(boxes[1].h / 2)
-                local word = self.ui.document._document:getTextFromPositions(
-                    mid_x, mid_y,
-                    mid_x, mid_y,
-                    false, false
-                )
+    -- Geometry cache: only recomputed when page, position, font or layout change
+    local key = table.concat({
+        self.ui.view.state.page, cur_view_top, current_font, font_size,
+        self.document:getPageCount(),
+    }, ":")
+    if not self._draw_cache
+        or self._draw_cache.key ~= key
+        or self._draw_cache.words ~= self.words then
+        local entries = {}
+        for _, item in ipairs(page_words) do
+            -- Cheap check: skip words above the viewport
+            local end_pos = self.document:getPosFromXPointer(item["end"])
+            if end_pos >= cur_view_top then
+                local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true)
+                if boxes and boxes[1] then
+                    -- Sample from the center of the first box so we don't land on a neighbor word
+                    local mid_x = boxes[1].x + math.floor(boxes[1].w / 2)
+                    local mid_y = boxes[1].y + math.floor(boxes[1].h / 2)
+                    local word = self.ui.document._document:getTextFromPositions(
+                        mid_x, mid_y, mid_x, mid_y, false, false)
 
-                -- Strip leading punctuation / quotes; keep only the trailing word.
-                -- This handles cases where bounding boxes bleed into adjacent tags
-                -- (e.g. <em>, <b>) and the engine returns more text than expected.
-                word.text = word.text:match("[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+$") or word.text
-                word.text = word.text:match("^%s*(.-)%s*$")  -- trim espacios
-                word.text = word.text:match("[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+$") or word.text
-                local text_matches = word.text:upper() == item.text:upper()
-
-                dbg_vocab("check word: got=%q item=%q match=%s",
-                    word.text, item.text, tostring(text_matches))
-                if not text_matches then
-                    dbg_vocab("  MISMATCH — got bytes: %s",
-                        word.text:gsub(".", function(c) return string.format("%02X ", c:byte()) end))
-                    dbg_vocab("  MISMATCH — item bytes: %s",
-                        item.text:gsub(".", function(c) return string.format("%02X ", c:byte()) end))
-                    dbg_vocab("  MISMATCH — got=%q item=%q", word.text, item.text)
-                end
-                if text_matches then
-                    -- Recompute boxes from precise positions now that we have pos1.
-                    local precise_boxes
-                    if item.hyphenated then
-                        precise_boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
-                    else
-                        precise_boxes = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
-                    end
-
-                    if precise_boxes then
-                        for _, box in ipairs(precise_boxes) do
-                            if box.h ~= 0 then
-                                -- Optionally render inline translation above the word.
-                                if show_defs then
-                                    local translation = getTranslation(self, word.text)
-                                    paintTranslationLabel(
-                                        bb, box,
-                                        translation, translation_face,
-                                        translation_size,
-                                        self.bottom_padding
-                                    )
-                                end
-
-                                -- Draw baseline underline.
-                                local y_baseline = getBaseline(box, current_font)
-                                bb:paintRect(box.x, y_baseline, box.w, Size.line.thick, nil)
+                    if word and word.text then
+                        local got  = lastWord(word.text)
+                        local want = item.text:gsub("’", "'")
+                        if got:upper() == want:upper() then
+                            -- Text matches: recompute precise boxes for the word
+                            local precise
+                            if item.hyphenated then
+                                precise = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
+                            else
+                                precise = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
                             end
+                            if precise then
+                                entries[#entries + 1] = { boxes = precise, text = got }
+                            end
+                        elseif item.hyphenated then
+                            -- No match but hyphenated: still underline with the rough boxes
+                            entries[#entries + 1] = { fallback = boxes }
+                        end
+                    elseif item.hyphenated then
+                        entries[#entries + 1] = { fallback = boxes }
+                    end
+                end
+            end
+        end
+        self._draw_cache = { key = key, entries = entries, words = self.words }
+    end
+
+    -- Painting (cheap: only uses already computed data)
+    local line_end = {}   -- reset on every paint
+
+    for _, entry in ipairs(self._draw_cache.entries) do
+        if entry.fallback then
+            paintBaselines(bb, entry.fallback, current_font)
+        else
+            local labeled = false
+            for _, box in ipairs(entry.boxes) do
+                if box.h ~= 0 then
+                    -- Gloss: only on the first box of the word
+                    if show_defs and not labeled then
+                        labeled = true
+                        local lkey = entry.text:lower()
+                        local gloss = self._tr_cache[lkey]
+                        if not gloss then
+                            local tr = getTranslation(self, entry.text)
+                            if tr then
+                                gloss = shortGloss(tr)
+                                self._tr_cache[lkey] = gloss   -- cache only valid results
+                            end
+                        end
+                        if gloss then
+                            paintGloss(bb, box, gloss, translation_face, line_end)
                         end
                     end
 
-                elseif item.hyphenated then
-                    -- Text didn't match but the item is hyphenated: still underline
-                    -- using the original (less precise) boxes.
-                    paintBaselines(bb, boxes, current_font)
+                    -- Dotted underline slightly below the baseline
+                    local y_line = getBaseline(box, current_font) + Screen:scaleBySize(1)
+                    paintDotted(bb, box.x, y_line, box.w, Size.line.thick)
                 end
             end
         end
