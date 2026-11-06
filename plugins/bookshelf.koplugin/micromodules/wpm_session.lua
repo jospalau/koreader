@@ -57,7 +57,9 @@ local function fitFontSize(Fonts, text, max_sz, min_sz, max_w, bold)
         local face, b = Fonts:getFace("cfont", sz, bold and {bold=true} or nil)
         local tw = require("ui/widget/textwidget"):new{
             text = text, face = face, bold = b }
-        if tw:getSize().w <= max_w then return sz end
+        local w = tw:getSize().w
+        tw:free()
+        if w <= max_w then return sz end
         sz = sz - 2
     end
     return min_sz

@@ -72,6 +72,7 @@ local ReaderStatistics = Widget:extend{
     preserved_total_words = nil,
     preserved_start_current_period = nil,
     preserved_initial_read_today = nil,
+    preserved_total_read_time = nil,
     curr_page = 0,
     id_curr_book = nil,
     is_enabled = nil,
@@ -149,6 +150,7 @@ function ReaderStatistics:init()
     self._total_words = 0
     self._total_chars = 0
     self._total_pages = 0
+    self._total_read_time = 0
     self._initial_read_today = nil
     self.devices = {
         ["Kobo_io"] = 1, -- Kobo Libra 2
@@ -247,6 +249,11 @@ function ReaderStatistics:init()
         ReaderStatistics.preserved_initial_read_today = nil
     end
 
+    if ReaderStatistics.preserved_total_read_time then
+        self._total_read_time = ReaderStatistics.preserved_total_read_time
+        ReaderStatistics.preserved_total_read_time = nil
+    end
+
     if self.ui.view and self.start_current_period then
         local duration_raw =  math.floor((os.time() - self.start_current_period))
         if duration_raw < self.min_time_valid_session or self._total_pages < self.min_pages_valid_session then
@@ -254,6 +261,7 @@ function ReaderStatistics:init()
             self._pages_turned = 0
             self._total_pages = 0
             self._total_words = 0
+            self._total_read_time = 0
             local res = nil
             local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
             self._last_nbwords = nbwords
@@ -376,6 +384,7 @@ function ReaderStatistics:onPreserveCurrentSession()
     ReaderStatistics.preserved_total_pages = self._total_pages
     ReaderStatistics.preserved_total_words = self._total_words
     ReaderStatistics.preserved_initial_read_today = self._initial_read_today
+    ReaderStatistics.preserved_total_read_time = self._total_read_time
 end
 
 function ReaderStatistics:resetVolatileStats(now_ts)
@@ -1071,6 +1080,7 @@ function ReaderStatistics:checkNewDay()
         self._pages_turned = 0
         self._total_pages = 0
         self._total_words  = 0
+        self._total_read_time = 0
         return true
     end
     return false
@@ -1095,6 +1105,8 @@ function ReaderStatistics:insertDBSessionStats()
     if duration_raw < self.min_time_valid_session or self._total_pages < self.min_pages_valid_session then
         return false
     end
+    local read_mins = self._total_read_time / 60
+    local wpm_session = read_mins > 0 and math.floor(self._total_words / read_mins) or 0
     logger.info("Session starting " .. self.start_current_period .. " " .. os.date("%Y-%m-%d %H:%M:%S", self.start_current_period))
     logger.info("Session ending " .. now_ts .. " " .. os.date("%Y-%m-%d %H:%M:%S", now_ts))
     logger.info("Session duration " .. duration_raw)
@@ -3221,10 +3233,12 @@ function ReaderStatistics:onPageUpdate(pageno)
             -- This to be done only when computing a page obviously
             self._total_words = self._last_nbwords + self._total_words
             self._total_pages = self._total_pages + 1
-            local duration_raw = math.floor(((os.time() - self.start_current_period) / 60) * 100) / 100
+            self._total_read_time = self._total_read_time + diff_time
+            -- local duration_raw = math.floor(((os.time() - self.start_current_period) / 60) * 100) / 100
+            local read_mins = self._total_read_time / 60
             local wpm = 0
-            if self._total_words > 0 and duration_raw > 0 then
-                wpm = math.floor(self._total_words / duration_raw)
+            if self._total_words > 0 and read_mins > 0 then
+                wpm = math.floor(self._total_words / read_mins)
             end
             local words  = self._total_words
             local pages  = self._total_pages
@@ -3253,10 +3267,12 @@ function ReaderStatistics:onPageUpdate(pageno)
         if not closing and not self.ui.searching then -- don't count statistics when closing the book and when searching
             self._total_words = self._last_nbwords + self._total_words
             self._total_pages = self._total_pages + 1
-            local duration_raw = math.floor(((os.time() - self.start_current_period) / 60) * 100) / 100
+            self._total_read_time = self._total_read_time + self.settings.max_sec
+            -- local duration_raw = math.floor(((os.time() - self.start_current_period) / 60) * 100) / 100
+            local read_mins = self._total_read_time / 60
             local wpm = 0
-            if self._total_words > 0 and duration_raw > 0 then
-                wpm = math.floor(self._total_words / duration_raw)
+            if self._total_words > 0 and read_mins > 0 then
+                wpm = math.floor(self._total_words / read_mins)
             end
             local words  = self._total_words
             local pages  = self._total_pages
@@ -3438,6 +3454,7 @@ function ReaderStatistics:onResume()
         --self:onReadingResumed() --Not interested in this, since I don't call onReadingPaused() en onSuspend()
         self._last_nbwords = 0
         self._total_words = 0
+        self._total_read_time = 0
         local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
         self._last_nbwords = nbwords
         self._total_pages = 0
