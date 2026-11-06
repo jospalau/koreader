@@ -281,6 +281,13 @@ end
 -- @int size optional size
 -- @int faceindex optional index of font face in font file
 -- @treturn table @{FontFaceObj}
+-- * `noscale` truthy **and** the currently open document is an EPUB: `size` is
+--   interpreted as DTP/PostScript points (1 pt = 1/72 in, not Didot or TeX
+--   points) and converted with the device DPI: `px = dpi * size / 72`.
+--   Note on units: a PostScript point is 0.3528 mm, while a Didot point is
+--   about 0.3760 mm (1 Didot ≈ 1.066 pt, i.e. 1 pt ≈ 0.938 Didot). Didot
+--   values are only for display (e.g. in the options dialog) and must never
+--   be passed here; always store and compute in PostScript points..
 function Font:getFace(font, size, faceindex, noscale)
     -- default to content font
     if not font then font = self.fontmap.cfont end

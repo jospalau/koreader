@@ -46,6 +46,13 @@ end
 
 -- ── Layout helpers ────────────────────────────────────────────────────────────
 
+local PT_TO_MM    = 25.4 / 72   -- 0.3528
+local PT_TO_DIDOT = 0.938       -- 1 pt PostScript ≈ 0.938 Didot
+
+local function ptToPx(pt, dpi)
+    return math.floor(dpi * pt / 72 + 0.5)
+end
+
 local function buildLayout(screen_w, padding_h, column_gap)
     local sep_w   = 2 * column_gap + Size.line.medium
     local col_w   = math.floor((screen_w - 2 * padding_h - sep_w) / 2)
@@ -197,27 +204,29 @@ local function gatherData(ui)
     -- Font
     data.font_face = doc._document:getFontFace()
     data.font_face_clean = data.font_face:gsub("%s+", "") .. "-Regular"
-    data.font_size_pt  = configurable.font_size
-    data.font_size_mm  = configurable.font_size * 0.35
-    data.font_size_px  = math.floor((display_dpi * configurable.font_size) / 72)
-    data.font_weight   = 400 + configurable.font_base_weight * 100
-    data.display_dpi   = display_dpi
+    local pt = configurable.font_size
+    local px = ptToPx(pt, display_dpi)
+
+    data.font_size_pt    = pt
+    data.font_size_mm    = string.format("%.2f", pt * PT_TO_MM)
+    data.font_size_px    = px
+    data.font_size_didot = string.format("%.2fp", pt * PT_TO_DIDOT)
+    data.font_weight     = 400 + configurable.font_base_weight * 100
+    data.display_dpi     = display_dpi
 
     -- x-height
-    local face_base = Font:getFace(data.font_face_clean, data.font_size_px, 0, false)
+    local face_base = Font:getFace(data.font_face_clean, data.font_size_px, 0, true)
     if face_base then
-        local xh_px = Math.round(face_base.ftsize:getXHeight() * data.font_size_px)
-        data.x_height_px  = xh_px .. "px"
-        local xh_mm = Math.round((xh_px * (25.4 / display_dpi)) * 100) / 100
-        data.x_height_mm  = xh_mm .. "mm"
-        data.x_height_arcmin = string.format("%.1f′ @40cm",
-            arcminutes_from_mm(xh_mm, 400))
+        local xh = face_base.ftsize:getXHeight()
+        -- Verifícalo con un print: si xh < 1 es un ratio, si es > 1 ya son px
+        local xh_px = (xh < 1) and Math.round(xh * px) or Math.round(xh)
+        local xh_mm = Math.round(xh_px * 25.4 / display_dpi * 100) / 100
+        data.x_height_px     = xh_px .. "px"
+        data.x_height_mm     = xh_mm .. "mm"
+        data.x_height_arcmin = string.format("%.1f′ @40cm", arcminutes_from_mm(xh_mm, 400))
     else
-        data.x_height_px     = "N/A"
-        data.x_height_mm     = "N/A"
-        data.x_height_arcmin = "N/A"
+        data.x_height_px, data.x_height_mm, data.x_height_arcmin = "N/A", "N/A", "N/A"
     end
-
     -- Readability table (from pagetextinfo if available)
     if ui.pagetextinfo and ui.pagetextinfo.readability_table then
         data.readability = ui.pagetextinfo.readability_table[data.font_face_clean] or "N/A"
