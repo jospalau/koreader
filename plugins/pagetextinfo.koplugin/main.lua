@@ -6478,6 +6478,14 @@ end
 local FONT_PRESETS = { small = 8.5, normal = 9.5, big = 11 }
 local FONT_STEP    = 0.5
 local WEIGHT_STEP  = 0.5
+
+-- Line spacing presets. All my Calibre books were converted so every
+-- line-height is a unitless 1.2 (see the Calibre "Transform styles" rules).
+-- KOReader's percentage multiplies on top of that, so 100% = the 1.2em
+-- baseline, and the other steps are ~1.1em / 1.3em / 1.4em
+-- (e.g. 1.1/1.2 = 92%, 1.3/1.2 = 109%, 1.4/1.2 = 117%).
+-- Labels are only accurate with "Book styles" enabled in KOReader and for
+-- books that went through that conversion.
 local LINE_SPACINGS = {
     { percent = 92,  label = "1.1em" },
     { percent = 100, label = "1.2em" },
