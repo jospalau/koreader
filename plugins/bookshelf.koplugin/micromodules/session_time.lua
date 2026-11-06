@@ -1,7 +1,7 @@
- --[[
+--[[
 Start-menu / hero micro-module: current session reading time.
 Shows how long you have been reading in the current session,
-plus total reading time today from the statistics DB.
+total reading time today from the statistics DB, and total time on this book.
 Uses topbar.start_session_time from the active ReaderUI instance.
 Works offline.
 ]]
@@ -11,11 +11,23 @@ local function getSessionSecs()
     local ok, ui = pcall(function()
         return require("apps/reader/readerui").instance
     end)
+    if not ok or not ui then return 0 end
+    local topbar = ui.view and ui.view.topbar
+    if not topbar or not topbar.start_session_time then return 0 end
+    local secs = os.time() - topbar.start_session_time
+    return secs > 0 and secs or 0
+end
+
+local function getBookSecs()
+    local ok, ui = pcall(function()
+        return require("apps/reader/readerui").instance
+    end)
     if not ok or not ui then return nil end
     local topbar = ui.view and ui.view.topbar
     if not topbar or not topbar.start_session_time then return nil end
-    local secs = os.time() - topbar.start_session_time
-    return secs > 0 and secs or nil
+    local session_secs = os.time() - topbar.start_session_time
+    local total_secs = (topbar.initial_total_time_book or 0) + session_secs
+    return total_secs > 0 and total_secs or nil
 end
 
 local function fmtTime(secs)
@@ -82,10 +94,6 @@ local function getTodaySecs()
         local ReaderUI = require("apps/reader/readerui")
         local sp = ReaderUI.instance and ReaderUI.instance.statistics
         if sp and sp.start_current_period and sp.start_current_period > 0 then
-            -- Clamp the effective start to today's midnight, matching how
-            -- db_secs is already bounded by day_start in the SQL query,
-            -- so a session spanning midnight doesn't leak yesterday's
-            -- minutes into "Today".
             local effective_start = math.max(sp.start_current_period, day_start)
             live = math.max(0, now - effective_start)
         end
@@ -100,7 +108,9 @@ local function fitFontSize(Fonts, text, max_sz, min_sz, max_w, bold)
         local face, b = Fonts:getFace("cfont", sz, bold and {bold=true} or nil)
         local tw = require("ui/widget/textwidget"):new{
             text = text, face = face, bold = b }
-        if tw:getSize().w <= max_w then return sz end
+        local w = tw:getSize().w
+        tw:free()
+        if w <= max_w then return sz end
         sz = sz - 2
     end
     return min_sz
@@ -109,7 +119,7 @@ end
 return {
     key     = "session_time",
     title   = _("Session time"),
-    summary = _("Time read in the current session. Works offline."),
+    summary = _("Time read in the current session, today and on this book. Works offline."),
 
     render = function(ctx)
         local width, scale_pct = ctx.width, ctx.scale
@@ -128,82 +138,57 @@ return {
 
         local secs = getSessionSecs()
 
-        if secs == nil then
-            return TextWidget:new{
-                text      = _("Not reading"),
-                face      = Fonts:getFace("cfont", sc(15)),
-                fgcolor   = SM.COLOR_MUTED,
-                max_width = mw,
-            }
-        end
-
-        local today_secs = getTodaySecs()
-
         local session_str = fmtTime(secs)
-        local today_str   = fmtTime(today_secs)
+        local today_str   = fmtTime(getTodaySecs())
+        local book_str    = fmtTime(getBookSecs())
 
-        local gap    = sc(24)
-        local col_w  = math.floor((mw - gap) / 2)
-        local col_w2 = mw - gap - col_w
+        local gap    = sc(16)
+        local col_w1 = math.floor((mw - 2 * gap) / 3)
+        local col_w2 = col_w1
+        local col_w3 = mw - 2 * gap - col_w1 - col_w2
 
-        local session_sz_fit = fitFontSize(Fonts, session_str, sc(40), sc(18), col_w,  true)
-        local today_sz_fit   = fitFontSize(Fonts, today_str,   sc(40), sc(18), col_w2, true)
-        local big_sz         = math.min(session_sz_fit, today_sz_fit)
+        local big_sz = math.min(
+            fitFontSize(Fonts, session_str, sc(40), sc(18), col_w1, true),
+            fitFontSize(Fonts, today_str,   sc(40), sc(18), col_w2, true),
+            fitFontSize(Fonts, book_str,    sc(40), sc(18), col_w3, true)
+        )
         local big_face, big_bold     = Fonts:getFace("cfont", big_sz, {bold=true})
         local label_face, label_bold = Fonts:getFace("cfont", sc(20), {bold=true})
 
-        local session_col = VerticalGroup:new{
-            align = "center",
-            TextWidget:new{
-                text      = session_str,
-                face      = big_face,
-                bold      = big_bold,
-                fgcolor   = BLACK,
-                max_width = col_w,
-            },
-            VerticalSpan:new{ width = sc(2) },
-            TextWidget:new{
-                text      = _("Session"),
-                face      = label_face,
-                bold      = label_bold,
-                fgcolor   = SM.COLOR_MUTED,
-                max_width = col_w,
-            },
-        }
+        local function makeCol(value, label, w)
+            return VerticalGroup:new{
+                align = "center",
+                TextWidget:new{
+                    text      = value,
+                    face      = big_face,
+                    bold      = big_bold,
+                    fgcolor   = BLACK,
+                    max_width = w,
+                },
+                VerticalSpan:new{ width = sc(2) },
+                TextWidget:new{
+                    text      = label,
+                    face      = label_face,
+                    bold      = label_bold,
+                    fgcolor   = SM.COLOR_MUTED,
+                    max_width = w,
+                },
+            }
+        end
 
-        local today_col = VerticalGroup:new{
-            align = "center",
-            TextWidget:new{
-                text      = today_str,
-                face      = big_face,
-                bold      = big_bold,
-                fgcolor   = BLACK,
-                max_width = col_w2,
-            },
-            VerticalSpan:new{ width = sc(2) },
-            TextWidget:new{
-                text      = _("Today"),
-                face      = label_face,
-                bold      = label_bold,
-                fgcolor   = SM.COLOR_MUTED,
-                max_width = col_w2,
-            },
-        }
+        local session_col = makeCol(session_str, _("Session"),   col_w1)
+        local today_col   = makeCol(today_str,   _("Today"),     col_w2)
+        local book_col    = makeCol(book_str,    _("This book"), col_w3)
 
-        local max_h = math.max(session_col:getSize().h, today_col:getSize().h)
+        local max_h = math.max(session_col:getSize().h, today_col:getSize().h, book_col:getSize().h)
 
         return HorizontalGroup:new{
             align = "top",
-            CenterContainer:new{
-                dimen = Geom:new{ w = col_w, h = max_h },
-                session_col,
-            },
+            CenterContainer:new{ dimen = Geom:new{ w = col_w1, h = max_h }, session_col },
             HorizontalSpan:new{ width = gap },
-            CenterContainer:new{
-                dimen = Geom:new{ w = col_w2, h = max_h },
-                today_col,
-            },
+            CenterContainer:new{ dimen = Geom:new{ w = col_w2, h = max_h }, today_col },
+            HorizontalSpan:new{ width = gap },
+            CenterContainer:new{ dimen = Geom:new{ w = col_w3, h = max_h }, book_col },
         }
     end,
 }
-
