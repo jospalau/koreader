@@ -7,6 +7,9 @@ as monospaced text in a TextViewer (scroll, search and close come for free).
 Output:
   Source: <stylesheet path>
 
+  Text
+  <start of the page text, truncated>
+
   Elements
   <p class="tx">  x12
   ...
@@ -39,6 +42,9 @@ local Screen     = Device.screen
 -- false = keep each rule exactly as written in the stylesheet
 local PRETTY_CSS = true
 
+-- Max characters of page text shown at the top of the output (0 = hide)
+local SNIPPET_CHARS = 150
+
 -- Stylesheet locations to try, in order.
 local CSS_PATHS = {
     "OPS/styles/stylesheet.css",
@@ -57,6 +63,33 @@ local TRACKED_TAGS = {
 
 local function trim(s)
     return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+-- xpointer of a position -> xpointer of its enclosing <p> element (or nil)
+local function paragraphStart(pos)
+    local last_end, init = nil, 1
+    while true do
+        local s, e = pos:find("/p%f[%W]%[?%d*%]?", init)
+        if not s then break end
+        last_end, init = e, e + 1
+    end
+    return last_end and pos:sub(1, last_end) or nil
+end
+
+-- HTML fragment → plain text, truncated to `max_chars` characters (UTF-8 safe).
+local function extractSnippet(html, max_chars)
+    local text = html
+    text = text:gsub("<[sS][tT][yY][lL][eE].-</[sS][tT][yY][lL][eE]>", " ")
+    text = text:gsub("<[^>]*>", " ")
+    text = text:gsub("&nbsp;", " "):gsub("&#160;", " "):gsub("&#[xX][aA]0;", " ")
+    text = text:gsub("&lt;", "<"):gsub("&gt;", ">"):gsub("&quot;", '"')
+    text = text:gsub("&apos;", "'"):gsub("&#39;", "'"):gsub("&amp;", "&")
+    text = text:gsub("\194\160", " ")   -- literal NBSP
+    text = trim((text:gsub("%s+", " ")))
+
+    local chars = util.splitToChars(text)
+    if #chars <= max_chars then return text end
+    return table.concat(chars, "", 1, max_chars) .. "…"
 end
 
 -- Opening tags with a class attribute → ordered elements {tag, class, count}
@@ -202,7 +235,19 @@ local function buildText(ui)
 
     local first = doc._document:getTextFromPositions(0, 0, 10, Screen:getHeight(), false, false)
     if not first or not first.pos0 or not first.pos1 then return nil end
-    local html = doc._document:getHTMLFromXPointers(first.pos0, first.pos1, 0xE830, true)
+
+    -- Start at the beginning of the paragraph that contains the page start
+    local html
+    local p0 = paragraphStart(first.pos0)
+    if p0 then
+        local ok, res = pcall(function()
+            return doc._document:getHTMLFromXPointers(p0, first.pos1, 0xE830, true)
+        end)
+        if ok and type(res) == "string" and res ~= "" then html = res end
+    end
+    if html == nil then   -- fallback: original behaviour
+        html = doc._document:getHTMLFromXPointers(first.pos0, first.pos1, 0xE830, true)
+    end
     if html == nil then return nil end
 
     local elements, classes = collectElements(html)
@@ -225,6 +270,13 @@ local function buildText(ui)
 
     local out = {}
     table.insert(out, "Source: " .. (css_path or "stylesheet not found"))
+
+    if SNIPPET_CHARS > 0 then
+        local snippet = extractSnippet(html, SNIPPET_CHARS)
+        table.insert(out, "")
+        table.insert(out, "Text  (start of page)")
+        table.insert(out, snippet ~= "" and snippet or "(no text)")
+    end
 
     table.insert(out, "")
     table.insert(out, "Elements")

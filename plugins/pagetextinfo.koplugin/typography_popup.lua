@@ -3,13 +3,14 @@ Typography Info Popup (table layout)
 Replaces the plain InfoMessage from onGetTextPage with a structured popup.
 Every section is rendered as a bordered table:
 
+  - TEXT        start of the text the CSS is sampled from (truncated)
   - FONT        face, size, didot, px, mm, weight
   - X-HEIGHT    px, mm, visual angle
   - DISPLAY     device, ppi, resolution, frontlight
   - CSS         3-column table: property | <p tag> | <body tag>
   - TWEAKS      one row per applied tweak
   - READING     avg wpm, wph, sessions, recent averages
-]]--
+]]
 
 local Blitbuffer      = require("ffi/blitbuffer")
 local Device          = require("device")
@@ -30,7 +31,11 @@ local TextWidget      = require("ui/widget/textwidget")
 local UIManager       = require("ui/uimanager")
 local VerticalGroup   = require("ui/widget/verticalgroup")
 local VerticalSpan    = require("ui/widget/verticalspan")
+local util            = require("util")
 local Screen          = Device.screen
+
+-- Max characters of page text shown in the TEXT section (0 = hide)
+local SNIPPET_CHARS = 150
 
 -- ── Fonts ────────────────────────────────────────────────────────────────────
 
@@ -239,12 +244,6 @@ local function arcminutes_from_mm(size_mm, distance_mm)
     return math.deg(angle_rad) * 60
 end
 
--- Drop-in replacement for gatherData in the typography popup.
--- Same output fields as before (css_tag, css_lineheight, css_indent,
--- css_margin, css_align) plus css_fontsize. Needs the same locals as the
--- popup file: Device, Screen, Font, Math, ptToPx, PT_TO_MM, PT_TO_DIDOT,
--- arcminutes_from_mm.
-
 -- true  = the C++ getHeight already multiplies EVERY line-height branch
 --         (including "Font") by KOReader's line spacing factor (my rewrite).
 -- false = original C++, which only scaled "em"/"unesp": then "Font" must be
@@ -281,12 +280,63 @@ local IDX = {
     font_size = 17,  body_font_size = 19,
 }
 
+-- Plain text → collapsed whitespace, NBSP as normal spaces, truncated to
+-- `max_chars` characters (UTF-8 safe).
+local function makeSnippet(text, max_chars)
+    if not text or text == "" then return "" end
+    text = text:gsub("\194\160", " ")
+    text = text:gsub("%s+", " ")
+    text = text:gsub("^%s+", ""):gsub("%s+$", "")
+    local chars = util.splitToChars(text)
+    if #chars <= max_chars then return text end
+    return table.concat(chars, "", 1, max_chars) .. "…"
+end
+
+-- xpointer of a position -> xpointer of its enclosing <p> element (or nil)
+local function paragraphStart(pos)
+    local last_end, init = nil, 1
+    while true do
+        local s, e = pos:find("/p%f[%W]%[?%d*%]?", init)
+        if not s then break end
+        last_end, init = e, e + 1
+    end
+    return last_end and pos:sub(1, last_end) or nil
+end
+
+-- Text from the start of the paragraph containing `pos` to the bottom of the
+-- page. Falls back to the text from line `y`, then to `fallback`.
+local function textFromLine(doc, y, fallback, pos)
+    local ok, res = pcall(function()
+        return doc._document:getTextFromPositions(0, y, Screen:getWidth(),
+                                                  Screen:getHeight(), false, false)
+    end)
+    if not ok then
+        logger.warn("TextInfoPopup getTextFromPositions error:", res)
+        return fallback
+    end
+
+    local p0 = pos and paragraphStart(pos)
+    if p0 and res and res.pos1 then
+        local ok2, txt = pcall(function()
+            return doc._document:getTextFromXPointers(p0, res.pos1)
+        end)
+        if ok2 and type(txt) == "string" and txt ~= "" then return txt end
+        if not ok2 then
+            logger.warn("TextInfoPopup getTextFromXPointers error:", txt)
+        end
+    end
+
+    if res and res.text and res.text ~= "" then return res.text end
+    return fallback
+end
+
 -- Looks for a representative paragraph in the middle of the page instead of
 -- using the last position (which may be a title or a footnote).
--- Returns the table of 20 values, preferring a <p>.
+-- Returns the table of 20 values (preferring a <p>) and the text that starts
+-- at the sampled line.
 local function sampleCSS(doc)
     local W, H = Screen:getWidth(), Screen:getHeight()
-    local fallback
+    local fallback, fallback_text
     for _, frac in ipairs({ 0.5, 0.4, 0.6, 0.3, 0.7 }) do
         local y = math.floor(H * frac)
         local res = doc._document:getTextFromPositions(0, y, W, y + 10, false, false)
@@ -295,14 +345,19 @@ local function sampleCSS(doc)
                 if pos and pos ~= ".0" then
                     local ok, r = pcall(function() return { doc:getHeight(pos) } end)
                     if ok and r and r[IDX.tag] and r[IDX.tag] ~= "" then
-                        if r[IDX.tag] == "p" then return r end
-                        fallback = fallback or r
+                        if r[IDX.tag] == "p" then
+                            return r, textFromLine(doc, y, res.text, pos)
+                        end
+                        if not fallback then
+                            fallback = r
+                            fallback_text = textFromLine(doc, y, res.text, pos)
+                        end
                     end
                 end
             end
         end
     end
-    return fallback
+    return fallback, fallback_text
 end
 
 -- Formats (value, unit) for display. Absent values come as -2 with an empty
@@ -378,8 +433,11 @@ local function gatherData(ui)
         data.frontlight = "Off"
     end
 
-    -- CSS properties of a representative paragraph
-    local r = sampleCSS(doc)
+    -- CSS properties of a representative paragraph (+ the text it starts with)
+    local r, sample_text = sampleCSS(doc)
+    if SNIPPET_CHARS > 0 then
+        data.snippet = makeSnippet(sample_text, SNIPPET_CHARS)
+    end
     if r then
         local tweaks = ui.tweaks or ""
         local tw = {
@@ -458,6 +516,15 @@ local function buildSections(data, fonts, layout)
         return buildTable(fonts, L, KV_COLS, kvRows(items))
     end
     local function wpm(v) return v and (v .. " wpm") or "–" end
+
+    -- TEXT: start of the text the CSS was sampled from
+    if SNIPPET_CHARS > 0 then
+        local snippet = data.snippet
+        if not snippet or snippet == "" then snippet = "(no text)" end
+        addSection(sections, fonts, L, "TEXT  (sampled paragraph)",
+            buildTable(fonts, L, { 1 },
+                { { cells = { { text = snippet, kind = "mono" } } } }))
+    end
 
     -- FONT
     addSection(sections, fonts, L, "FONT", kvTable{
@@ -616,7 +683,6 @@ local _orig    = ReaderUI.registerKeyEvents
 
 ReaderUI.registerKeyEvents = function(self)
     if _orig then _orig(self) end
-    local util = require("util")
     local is_pdf = self.document and util.getFileNameSuffix(self.document.file) == "pdf"
     if is_pdf then return end
     self.onGetTextPage = function(this)
