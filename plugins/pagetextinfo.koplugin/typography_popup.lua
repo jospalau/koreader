@@ -528,7 +528,7 @@ local function buildSections(data, fonts, layout)
 
     -- FONT
     addSection(sections, fonts, L, "FONT", kvTable{
-        { "Face",   (data.font_face or "?") .. "  (" .. (data.readability or "N/A") .. ")", wide = true },
+        { "Face",   (data.font_face or "?") .. " (" .. (data.readability or "N/A") .. ")", wide = true },
         { "Size",   string.format("%.1f pt", data.font_size_pt or 0) },
         { "Didot",  data.font_size_didot or "?" },
         { "Pixels", tostring(data.font_size_px or "?") .. " px" },
