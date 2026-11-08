@@ -138,17 +138,13 @@ function CoverMenu:updateItems(select_number, no_recalculate_dimen)
                 if item.bookinfo_found then
                     logger.dbg("  found", item.text)
                     self.show_parent.dithered = item._has_cover_image
-                    local refreshtype = "ui"
-                    if item._has_cover_image and BookInfoManager:getSetting("flash_ui_cover_images") then
-                        refreshtype = "flashui"
-                    end
                     local refreshfunc = function()
                         if item.refresh_dimen then
                             -- MosaicMenuItem may exceed its own dimen in its paintTo
                             -- with its "description" hint
-                            return refreshtype, item.refresh_dimen, self.show_parent.dithered
+                            return "ui", item.refresh_dimen, self.show_parent.dithered
                         else
-                            return refreshtype, item[1].dimen, self.show_parent.dithered
+                            return "ui", item[1].dimen, self.show_parent.dithered
                         end
                     end
                     UIManager:setDirty(self.show_parent, refreshfunc)
