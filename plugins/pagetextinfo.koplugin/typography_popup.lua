@@ -41,10 +41,10 @@ local SNIPPET_CHARS = 150
 
 local function buildFonts()
     return {
-        section = Font:getFace("NotoSans-Bold.ttf",    20) or Font:getFace("tfont", 20),
+        section = Font:getFace("NotoSans-Bold.ttf",    16) or Font:getFace("tfont", 16),
         head    = Font:getFace("NotoSans-Bold.ttf",    16) or Font:getFace("tfont", 16),
-        value   = Font:getFace("NotoSans-Bold.ttf",    18) or Font:getFace("tfont", 18),
-        label   = Font:getFace("NotoSans-Regular.ttf", 16) or Font:getFace("x_smallinfofont", 16),
+        value   = Font:getFace("NotoSans-Bold.ttf",    14) or Font:getFace("tfont", 14),
+        label   = Font:getFace("NotoSans-Regular.ttf", 12) or Font:getFace("x_smallinfofont", 12),
         mono    = Font:getFace("myfont3",              14) or Font:getFace("cfont", 14),
     }
 end
@@ -237,6 +237,26 @@ local function addSection(sections, fonts, layout, title, tbl)
     table.insert(sections, VerticalSpan:new{ height = Size.padding.large })
 end
 
+local function classifyLeading(lf, x_height, ascender, descender)
+    if not x_height or x_height == 0 then
+        return "invalid", "Invalid"
+    end
+
+    local safe_min = (ascender + descender) / x_height
+
+    if lf < safe_min then
+        return "collision", "Collision"
+    elseif lf < safe_min + 0.15 then
+        return "compact", "Compact"
+    elseif lf < safe_min + 0.4 then
+        return "balanced", "Balanced"
+    elseif lf < safe_min + 0.6 then
+        return "airy", "Airy"
+    else
+        return "very_airy", "Very airy"
+    end
+end
+
 -- ── Data gathering ────────────────────────────────────────────────────────────
 
 local function arcminutes_from_mm(size_mm, distance_mm)
@@ -398,10 +418,40 @@ local function gatherData(ui)
         local xh = face_base.ftsize:getXHeight()
         -- If xh < 1 it is a ratio, otherwise it is already in px
         local xh_px = (xh < 1) and Math.round(xh * px) or Math.round(xh)
+        -- leading factor (line spacing relative to x-height)
+        if xh_px > 0 then
+            local line_spacing_factor = (configurable.line_spacing or 100) / 100
+            local ok, xh2, ascender, descender = pcall(function()
+                return face_base.ftsize:getAscDesc()
+            end)
+
+            if ok and xh2 and ascender and descender then
+                data.leading_factor = math.floor(((1.2 * px * line_spacing_factor) / xh_px) * 100) / 100
+                data.leading_key, data.leading_text =
+                    classifyLeading(data.leading_factor, xh2, ascender, descender)
+            else
+                logger.warn("TextInfoPopup getAscDesc error:", xh2)
+            end
+        end
         local xh_mm = Math.round(xh_px * 25.4 / display_dpi * 100) / 100
         data.x_height_px     = xh_px .. "px"
         data.x_height_mm     = xh_mm .. "mm"
-        data.x_height_arcmin = string.format("%.1f′ @40cm", arcminutes_from_mm(xh_mm, 400))
+        local angle = arcminutes_from_mm(xh_mm, 400)
+
+        local status
+        if angle < 15 then
+            status = "Demanding"
+        elseif angle < 17 then
+            status = "Small"
+        elseif angle <= 19 then
+            status = "Comfortable"
+        elseif angle <= 20 then
+            status = "Ideal"
+        else
+            status = "Large"
+        end
+
+        data.x_height_arcmin = string.format("%.1f′ (%.2fmm) [%s]", angle, xh_mm, status)
     else
         data.x_height_px, data.x_height_mm, data.x_height_arcmin = "N/A", "N/A", "N/A"
     end
@@ -540,8 +590,10 @@ local function buildSections(data, fonts, layout)
     addSection(sections, fonts, L, "X-HEIGHT", kvTable{
         { "Pixels", data.x_height_px or "?" },
         { "Metric", data.x_height_mm or "?" },
-        { "Angle",  data.x_height_arcmin or "?", wide = true },
-        { note = "~20′ ideal · 17–19′ comfortable · <15′ demanding · >25′ oversized" },
+        { "Leading", data.leading_text and
+            string.format("%.2f [%s]", data.leading_factor, data.leading_text) or "N/A"},
+        { "Visual angle (x-height in mm) @40cm", data.x_height_arcmin or "?" },
+        { note = "Reference at 40cm (elbow-to-knuckles distance): ~20′ (2.33mm) ideal · 17–19′ (1.98–2.21mm) comfortable · 15–17′ (1.75–1.98mm) small · <15′ (<1.75mm) demanding · >25′ (>2.91mm) oversized" },
     })
 
     -- DISPLAY

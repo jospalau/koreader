@@ -36,10 +36,10 @@ local datetime        = require("datetime")
 
 local function buildFonts()
     return {
-        section = Font:getFace("NotoSans-Bold.ttf",    20) or Font:getFace("tfont", 20),
+        section = Font:getFace("NotoSans-Bold.ttf",    16) or Font:getFace("tfont", 16),
         head    = Font:getFace("NotoSans-Bold.ttf",    16) or Font:getFace("tfont", 16),
-        value   = Font:getFace("NotoSans-Bold.ttf",    18) or Font:getFace("tfont", 18),
-        label   = Font:getFace("NotoSans-Regular.ttf", 16) or Font:getFace("x_smallinfofont", 16),
+        value   = Font:getFace("NotoSans-Bold.ttf",    14) or Font:getFace("tfont", 14),
+        label   = Font:getFace("NotoSans-Regular.ttf", 12) or Font:getFace("x_smallinfofont", 12),
         mono    = Font:getFace("myfont3",              14) or Font:getFace("cfont", 14),
     }
 end
