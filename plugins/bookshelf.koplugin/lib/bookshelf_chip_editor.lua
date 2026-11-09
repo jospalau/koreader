@@ -3899,7 +3899,8 @@ local function _dirLabels(key)
     if key == "rating" then return _("Lowest first"), _("Highest first") end
     if key == "size" then return _("Smallest first"), _("Largest first") end
     if key == "page_count" then return _("Shortest first"), _("Longest first") end
-    if key == "book_count" then return _("Fewest first"), _("Most first") end
+    if key == "book_count" or key == "words" or key == "grrating" or key == "grvotes"
+        then return _("Fewest first"), _("Most first") end
     -- Named for what leads: "First" / "Last" read "Favorites first: Last".
     if key == "read_status" then return _("Unread first"), _("Finished first") end
     if key == "read_status_active" then return _("Reading first"), _("Finished first") end
