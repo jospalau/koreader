@@ -24295,6 +24295,12 @@ function BookshelfWidget:_commitBookStatus(book, status)
         ds:delSetting("percent_finished")
         ds:delSetting("last_xp")
         ds:delSetting("last_page")
+        local ReadHistory = require("readhistory")
+        if ReadHistory:getIndexByFile(book.filepath) then
+            ReadHistory:removeItemByPath(book.filepath)
+            ReadHistory:fileSettingsPurged(book.filepath)
+            _G.history_status_changed = true
+        end
     end
     ds:flush()
 
