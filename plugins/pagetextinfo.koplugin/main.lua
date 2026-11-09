@@ -3861,12 +3861,18 @@ local function getPlatformPaths()
             font        = "/mnt/us/fonts/Capita-Regular.otf",
             font_size   = ",size=14",
         }
-    else -- PocketBook
+    elseif Device:isPocketBook() then
         return {
             scripts_dir = "/mnt/ext1/scripts",
             fbink       = "/mnt/ext1/applications/koreader/fbink",
             font        = "/mnt/ext1/applications/koreader/fonts/fonts/Capita-Regular.otf",
             font_size   = "", -- The original code did not pass a size on PocketBook
+        }
+    else -- Emulator
+        return {
+            scripts_dir = "~/.local/scripts",
+            fbink       = "~/koreader/koreader-emulator-x86_64-pc-linux-gnu-debug/koreader/fbink",
+            font        = "~/fontsFinal/Capita-Regular.otf",
         }
     end
 end
