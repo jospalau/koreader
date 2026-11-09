@@ -504,6 +504,7 @@ ReaderFooter.default_settings = {
     text_font_size = 14, -- unscaled_size_check: ignore
     text_font_bold = false,
     text_font_face = "./fonts/noto/NotoSans-Regular.ttf",
+    text_font_face_index = 0,
     container_height = G_defaults:readSetting("DMINIBAR_CONTAINER_HEIGHT"),
     container_bottom_padding = 1, -- unscaled_size_check: ignore
     progress_margin_width = Device:isAndroid() and Screen:scaleByDPI(16) or 10, -- android: guidelines for rounded corner margins
@@ -531,6 +532,7 @@ ReaderFooter.default_settings = {
 
 function ReaderFooter:init()
     self.settings = G_reader_settings:readSetting("footer", self.default_settings)
+    self.settings.text_font_face_index = self.settings.text_font_face_index or self.default_settings.text_font_face_index
 
     self.additional_footer_content = {} -- array, where additional header content can be inserted.
 
@@ -572,8 +574,9 @@ function ReaderFooter:init()
 
     if not FontChooser.isFontRegistered(self.settings.text_font_face) then
         self.settings.text_font_face = self.default_settings.text_font_face
+        self.settings.text_font_face_index = self.default_settings.text_font_face_index
     end
-    self.footer_text_face = Font:getFace(self.settings.text_font_face, self.settings.text_font_size)
+    self.footer_text_face = Font:getFace(self.settings.text_font_face, self.settings.text_font_size, self.settings.text_font_face_index)
     self.footer_text = TextWidget:new{
         text = "",
         face = self.footer_text_face,
@@ -1644,9 +1647,7 @@ With this feature enabled, the current page is factored in, resulting in the cou
             },
             {
                 text_func = function()
-                    local text = self.settings.text_font_face == self.default_settings.text_font_face
-                        and _("default") or FontChooser.getFontNameText(self.settings.text_font_face)
-                    text = text .. ", " .. self.settings.text_font_size
+                    local text = self:getFontNameText() .. ", " .. self.settings.text_font_size
                     if self.settings.text_font_bold then
                         text = text .. ", " .. _("bold")
                     end
@@ -1677,20 +1678,22 @@ With this feature enabled, the current page is factored in, resulting in the cou
                     },
                     {
                         text_func = function()
-                            local text = self.settings.text_font_face == self.default_settings.text_font_face
-                                and _("default") or FontChooser.getFontNameText(self.settings.text_font_face)
-                            return T(_("Item font: %1"), text)
+                            return T(_("Item font: %1"), self:getFontNameText())
                         end,
                         keep_menu_open = true,
                         callback = function(touchmenu_instance)
                             UIManager:show(FontChooser:new{
                                 title = _("Item font"),
                                 font_file = self.settings.text_font_face,
+                                font_file_index = self.settings.text_font_face_index,
                                 default_font_file = self.default_settings.text_font_face,
+                                default_font_file_index = self.default_settings.text_font_face_index,
                                 keep_shown_on_apply = true,
-                                callback = function(file)
-                                    if self.settings.text_font_face ~= file then
+                                callback = function(file, file_index)
+                                    if self.settings.text_font_face ~= file
+                                            or self.settings.text_font_face_index ~= file_index then
                                         self.settings.text_font_face = file
+                                        self.settings.text_font_face_index = file_index
                                         self:updateFooterFont()
                                         self:refreshFooter(true, true)
                                         touchmenu_instance:updateItems()
@@ -1699,8 +1702,10 @@ With this feature enabled, the current page is factored in, resulting in the cou
                             })
                         end,
                         hold_callback = function(touchmenu_instance)
-                            if self.settings.text_font_face ~= self.default_settings.text_font_face then
+                            if self.settings.text_font_face ~= self.default_settings.text_font_face
+                                    or self.settings.text_font_face_index ~= self.default_settings.text_font_face_index then
                                 self.settings.text_font_face = self.default_settings.text_font_face
+                                self.settings.text_font_face_index = self.default_settings.text_font_face_index
                                 self:updateFooterFont()
                                 self:refreshFooter(true, true)
                                 touchmenu_instance:updateItems()
@@ -2114,6 +2119,13 @@ function ReaderFooter:genAlignmentMenuItems(value)
     }
 end
 
+function ReaderFooter:getFontNameText()
+    return self.settings.text_font_face == self.default_settings.text_font_face
+        and self.settings.text_font_face_index == self.default_settings.text_font_face_index
+        and _("default")
+        or FontChooser.getFontNameText(self.settings.text_font_face, self.settings.text_font_face_index)
+end
+
 function ReaderFooter:buildPreset()
     local mode = self.mode
     if mode == self.mode_list.off and not self.settings.disable_progress_bar then
@@ -2130,6 +2142,7 @@ end
 function ReaderFooter:loadPreset(preset)
     local old_text_font_size = self.settings.text_font_size
     local old_text_font_face = self.settings.text_font_face
+    local old_text_font_face_index = self.settings.text_font_face_index
     local old_text_font_bold = self.settings.text_font_bold
     G_reader_settings:saveSetting("footer", util.tableDeepCopy(preset.footer))
     G_reader_settings:saveSetting("reader_footer_mode", preset.reader_footer_mode)
@@ -2147,7 +2160,9 @@ function ReaderFooter:loadPreset(preset)
     end
     self:applyFooterMode(preset.reader_footer_mode)
     self:updateFooterTextGenerator()
-    if old_text_font_size ~= self.settings.text_font_size or old_text_font_face ~= self.settings.text_font_face
+    if old_text_font_size ~= self.settings.text_font_size
+            or old_text_font_face ~= self.settings.text_font_face
+            or old_text_font_face_index ~= self.settings.text_font_face_index
             or old_text_font_bold ~= self.settings.text_font_bold then
         self:updateFooterFont()
     else
@@ -2404,8 +2419,9 @@ function ReaderFooter:updateFooterFont()
     self.filler_space_width = nil
     if not FontChooser.isFontRegistered(self.settings.text_font_face) then
         self.settings.text_font_face = self.default_settings.text_font_face
+        self.settings.text_font_face_index = self.default_settings.text_font_face_index
     end
-    self.footer_text_face = Font:getFace(self.settings.text_font_face, self.settings.text_font_size)
+    self.footer_text_face = Font:getFace(self.settings.text_font_face, self.settings.text_font_size, self.settings.text_font_face_index)
     self.footer_text:free()
     local footer_text_face = Font:getFace("NotoSans-Regular.ttf", self.settings.text_font_size)
     local w = TextWidget:new{ text = "", face = footer_text_face, }

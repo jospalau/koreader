@@ -85,21 +85,16 @@ function ReaderFont:setupFaceMenuTable()
         table.insert(self.face_table, {
             text_func = function()
                 -- defaults are hardcoded in credocument.lua
-                local default_font = G_reader_settings:readSetting("cre_font") or self.ui.document.default_font
                 local fallback_font = G_reader_settings:readSetting("fallback_font") or self.ui.document.fallback_fonts[1]
                 local monospace_font = G_reader_settings:readSetting("monospace_font") or self.ui.document.monospace_font
                 local text = v
                 if font_filename and font_faceindex then
                     text = FontList:getLocalizedFontName(font_filename, font_faceindex) or text
                 end
-
                 if v == monospace_font then
                     text = text .. " \u{1F13C}" -- Squared Latin Capital Letter M
                 elseif is_monospace then
                     text = text .. " \u{1D39}" -- Modified Letter Capital M
-                end
-                if v == default_font then
-                    text = text .. "   ★"
                 end
                 if v == fallback_font then
                     text = text .. "   �"
@@ -108,6 +103,10 @@ function ReaderFont:setupFaceMenuTable()
                     text = text .. "  \u{EA93}" -- "NEW" in a black square, from nerdfont
                 end
                 return text
+            end,
+            text_star_func = function()
+                local default_font = G_reader_settings:readSetting("cre_font") or self.ui.document.default_font
+                return v == default_font
             end,
             font_func = function(size)
                 if G_reader_settings:nilOrTrue("font_menu_use_font_face") then
@@ -214,6 +213,11 @@ function ReaderFont:onReadSettings(config)
     table.insert(self.ui.postInitCallback, function()
         self.ui:handleEvent(Event:new("UpdatePos"))
     end)
+end
+
+function ReaderFont:onSaveSettings()
+    self.ui.doc_settings:saveSetting("font_face", self.font_face)
+    self.ui.doc_settings:saveSetting("font_family_fonts", self.font_family_fonts)
 end
 
 --[[
@@ -324,73 +328,21 @@ function ReaderFont:onSetFontGamma(gamma)
     return true
 end
 
-function ReaderFont:onSaveSettings()
-    self.ui.doc_settings:saveSetting("font_face", self.font_face)
-    self.ui.doc_settings:saveSetting("font_family_fonts", self.font_family_fonts)
-end
-
 function ReaderFont:onSetFont(face)
-    if face and self.font_face ~= face then
-        local current_face = self.font_face:gsub("%s+", "") .. "-Regular"
-        if G_reader_settings:isTrue("scale_font_to_current_font") then
-            local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-            local size_px = (display_dpi * self.configurable.font_size)/72
-            local Math = require("optmath")
-            -- We need this in the renderGlyph() function in freetype.lua source
-            -- h = tonumber((self.face.size.metrics.ascender - self.face.size.metrics.descender) / 64)
-            -- h = tonumber(self.face.bbox.yMax / 64)
-            -- h = tonumber(glyph.metrics.height / 64)
-            -- Finally like getXHeight() function in lvfntman.cpp CREngine source
-            -- h = tonumber(glyph.metrics.horiBearingY / 64)
-            local RenderText = require("ui/rendertext")
-            -- local face_base = Font:getFace("Capita-Regular", size_px, 0, false);
-            -- 120 decimal value x character
-            local face_base = Font:getFace(current_face, size_px, 0, false);
-            -- local glyph = RenderText:getGlyph(face_base, 120)
-            local x_height = face_base.ftsize:getXHeight() * size_px
-            local line_height = face_base.ftsize:getLineHeight() * size_px
-
-            -- local fonts = FontList:getFontList()
-            -- local escaped_realname = self.font_face:gsub("[-]", "%%-"):gsub("%s+", ""):gsub("_", ""):gsub("-", "")
-            -- local font_name = ""
-            -- for _k, _v in ipairs(fonts) do
-            --     if _v:find(escaped_realname) and (_v:find("Regular") or _v:find("Medium") or _v:find("Normal")) then
-            --         print("encuentra " .. _v)
-            --         break
-            --     end
-            -- end
-
-            local face_base2 = Font:getFace(face:gsub("%s+", "") .. "-Regular", size_px, 0, false);
-            -- local glyph2 = RenderText:getGlyph(face2,  120)
-            local x_height2 = face_base2.ftsize:getXHeight() * size_px
-            local line_height2 = face_base2.ftsize:getLineHeight() * size_px
-
-            -- Do the same as getXHeight() function in lvfntman.cpp CREngine source
-            -- local other_adjusted_size = (size_px *  glyph.xheight + size_px/2) / glyph2.xheight
-
-            local other_adjusted_size = size_px * ((x_height/size_px)/(x_height2/size_px))
-            self.configurable.line_spacing = self.configurable.line_spacing * (line_height2/line_height)
-
-            self.ui.document:setInterlineSpacePercent(self.configurable.line_spacing)
-
-            local Math = require("optmath")
-            -- print("Original" .. size_px.. ", Aspect ratio " .. glyph.xheight/size_px .. ", Aspect ratio2 " ..  glyph2.xheight/size_px .. ", New " .. Math.round(other_adjusted_size) .. "\n")
-            self.ui.document:setFontSize(other_adjusted_size)
-            self.ui.document:setOriginalFontSize(size_px)
-            -- The desktop publishing point (DTP point) or PostScript point is defined as 1/72 or 0.0138 of the international inch
-            -- self.configurable.font_size = Math.round(other_adjusted_size*100)/100
-            self.configurable.font_size = Math.round((((other_adjusted_size * 72)/display_dpi) *100))/100 -- Convert back to pt
-        end
-        for _, fontinfo in pairs(FontList.fontinfo) do
-            if fontinfo[1].name == face then
-                self.font_face = face
-                self.ui.document:setFontFace(face)
-                -- signal readerrolling to update pos in new height
-                self.ui:handleEvent(Event:new("UpdatePos"))
-                return
+    if self.font_face ~= face then
+        for _, fontinfos in pairs(FontList.fontinfo) do
+            for _, fontinfo in ipairs(fontinfos) do -- several faces in TTC/OTC font collections
+                if fontinfo.name == face then
+                    self.font_face = face
+                    self.ui.document:setFontFace(face)
+                    -- signal readerrolling to update pos in new height
+                    self.ui:handleEvent(Event:new("UpdatePos"))
+                    return true
+                end
             end
         end
     end
+    return true
 end
 
 function ReaderFont:makeDefault(face, is_monospace, touchmenu_instance)
@@ -663,12 +615,9 @@ Enabling this will ignore such font names and make sure your preferred family fo
                     separator = true,
                 },
                 {
-                    text_func = function()
-                        local text = unset_font_choice_text
-                        if not g_font_family_fonts[family_tag] then
-                            text = text .. "   ★"
-                        end
-                        return text
+                    text = unset_font_choice_text,
+                    text_star_func = function()
+                        return not g_font_family_fonts[family_tag]
                     end,
                     callback = function()
                         self.font_family_fonts[family_tag] = false
@@ -712,15 +661,9 @@ Enabling this will ignore such font names and make sure your preferred family fo
             end
             if not ignore then
                 table.insert(family_table.sub_item_table, {
-                    text_func = function()
-                        local text = v
-                        if font_filename and font_faceindex then
-                            text = FontList:getLocalizedFontName(font_filename, font_faceindex) or text
-                        end
-                        if g_font_family_fonts[family_tag] == v then
-                            text = text .. "   ★"
-                        end
-                        return text
+                    text = font_filename and font_faceindex and FontList:getLocalizedFontName(font_filename, font_faceindex) or v,
+                    text_star_func = function()
+                        return g_font_family_fonts[family_tag] == v
                     end,
                     font_func = function(size)
                         if G_reader_settings:nilOrTrue("font_menu_use_font_face") then
