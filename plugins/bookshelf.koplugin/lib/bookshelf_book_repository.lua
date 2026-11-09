@@ -332,6 +332,11 @@ local function genreData(filepath, cb, info, cp)
     local resolved
     if pref == "calibre"  and calibre  then resolved = calibre
     elseif pref == "embedded" and embedded then resolved = embedded
+    elseif cb and BookshelfSettings.isTrue("calibre_genres_only") then
+        -- Genres from calibre only (issue 583): a book calibre knows takes
+        -- its tags from calibre alone, none included. Falling back to the
+        -- file's own put a retagged library's old names back on the shelf.
+        resolved = calibre
     else resolved = calibre or embedded end
     return resolved, { calibre = calibre, embedded = embedded }
 end
@@ -677,6 +682,54 @@ local function _bimGetBookInfo(bim, filepath, want_cover, what)
     return nil, res
 end
 
+-- Repo.bimStatus(bim, filepath) -> the book's extraction state (nil when BIM
+-- has no row), and on failure the error. The columns whether and how to
+-- extract a book is decided from (in_progress, has_meta, has_cover,
+-- cover_fetched, cover_w, cover_h, cover_sizetag), without the cover blob
+-- getBookInfo reads with every row: the extraction poll asks this of each
+-- book it watches, every 0.4-3 s, and the kickoff of each book on a page.
+-- Falls back to getBookInfo when the light read is not possible.
+-- Unlike getBookInfo, a row still being extracted is returned too, with its
+-- in_progress (the tries so far): getBookInfo answers nil for one, so a
+-- book BIM had given up on read as never tried, and was queued again on
+-- every page it showed on.
+-- (The statement is kept on Repo: this module is at Lua's 200-locals limit.)
+Repo._status_sql = "SELECT in_progress, has_meta, has_cover, cover_fetched, cover_w, cover_h, "
+    .. "cover_sizetag FROM bookinfo WHERE directory=? AND filename=?;"
+function Repo.bimStatus(bim, filepath)
+    if not bim or type(filepath) ~= "string" then return nil end
+    -- Split as BIM splits (util.splitFilePathName), or the row is not found.
+    local directory, filename = filepath:match("(.*/)(.*)")
+    local ok, res = pcall(function()
+        if not directory then error("no directory") end
+        bim:openDbConnection()
+        local conn = bim.db_conn
+        if not conn then error("no connection") end
+        if Repo._status_conn ~= conn then
+            Repo._status_stmt, Repo._status_conn = conn:prepare(Repo._status_sql), conn
+        end
+        local stmt = Repo._status_stmt
+        stmt:reset()
+        stmt:bind(directory, filename)
+        local row = stmt:step()
+        if not row then stmt:clearbind(); stmt:reset(); return false end
+        local out = {
+            in_progress   = tonumber(row[1]) or 0,
+            has_meta      = row[2],
+            has_cover     = row[3],
+            cover_fetched = row[4],
+            cover_w       = tonumber(row[5]),
+            cover_h       = tonumber(row[6]),
+            cover_sizetag = row[7],
+        }
+        stmt:clearbind(); stmt:reset()
+        return out
+    end)
+    if ok then return res or nil end
+    Repo._status_stmt, Repo._status_conn = nil, nil
+    return _bimGetBookInfo(bim, filepath, false, "getBookInfo (status)")
+end
+
 -- ─── Covers supplied by a getBookInfo wrapper (issue 500) ───────────────────
 -- A user patch can wrap BIM:getBookInfo and hand back a cover the database
 -- does not have -- 2-fallbackcover.lua draws one for every book without an
@@ -863,10 +916,29 @@ Repo._applyCoverOverrides = _applyCoverOverrides
 -- Invalidation mirrors the progress cache (Repo.invalidateProgressCache):
 -- closing a book is the only in-app way a sidecar appears.
 local _sidecar_memo = {}
+function Repo._historyDirAbsent()
+    if Repo._history_absent == nil then
+        local ok_dst, DataStorage = pcall(require, "datastorage")
+        local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
+        local d = ok_dst and DataStorage and DataStorage.getHistoryDir and DataStorage:getHistoryDir()
+        Repo._history_absent = (d and ok_lfs and lfs and lfs.attributes(d, "mode") ~= "directory") and true or false
+    end
+    return Repo._history_absent
+end
 local function _hasSidecar(filepath)
     if not filepath then return false end
     local memo = _sidecar_memo[filepath]
     if memo ~= nil then return memo end
+    -- A definite no from the folder listings the walk already read
+    -- (_customMetaPossible: no sibling .sdr, none in the mirrored tree, no
+    -- hash location), without DocSettings' stat of each location: two per
+    -- book never opened, ~12,000 for a status filter over a 6,000-book
+    -- library (issue 590). Not while KOReader's legacy history folder
+    -- exists, which hasSidecarFile also looks in.
+    if Repo._historyDirAbsent() and not _customMetaPossible(filepath) then
+        _sidecar_memo[filepath] = false
+        return false
+    end
     local res = false
     local ds = getDocSettings()
     if ds and ds.hasSidecarFile then
@@ -1035,6 +1107,7 @@ local _SORT_DEFAULT = {
     tags       = "latest_read",
     formats    = "name",
     languages  = "book_count",
+    decades    = "published",
 }
 
 local _SORT_VALID = {
@@ -1053,6 +1126,7 @@ local _SORT_VALID = {
     tags       = { name = true, latest_read = true, book_count = true },
     formats    = { name = true, latest_read = true, book_count = true },
     languages  = { name = true, latest_read = true, book_count = true },
+    decades    = { published = true, name = true, latest_read = true, book_count = true },
 }
 
 -- getSortPriority(tab_id): returns the priority list for a tab, falling back
@@ -1086,6 +1160,7 @@ function Repo.getSortPriority(tab_id)
         percent_natural        = { key = "percent_read", reverse = true  },
         name                   = { key = "filename",     reverse = false },
         book_count             = { key = "book_count",   reverse = true  },
+        published              = { key = "published",    reverse = true  },
     }
     return { map[legacy] or { key = "title", reverse = false } }
 end
@@ -1467,8 +1542,21 @@ end
 -- it to ImageWidget with image_disposable=true or free() it explicitly
 -- after use. Same pcall guard as buildBookMeta for the import-window
 -- crash path.
+-- fp -> { spec, rec } for records a Spines fetch left without a cover:
+-- their source's cover hook, asked by getCoverBB on demand. A Repo field,
+-- not a local: this file is at Lua's 200-local limit.
+Repo._source_covers = {}
+
 function Repo.getCoverBB(filepath)
     if not filepath then return nil end
+    -- A source's own cover (Kobo: BIM cannot read a DRM'd kepub), before the
+    -- remote-path guard, since a source's paths may count as remote. The
+    -- hook hands back a fresh blitbuffer the caller owns, as BIM's is.
+    local lazy = Repo._source_covers[filepath]
+    if lazy then
+        local ok_c, bb = require("lib/bookshelf_sources").call(lazy.spec, "cover", lazy.rec)
+        if ok_c and bb then return bb end
+    end
     -- Remote catalog records have no local file and no BIM row: their cover is
     -- a cached image file the OPDS branch attaches as cover_image_path, which
     -- SpineWidget's external-cover branch renders before this lazy path is
@@ -2206,6 +2294,9 @@ local _genres_cache    = {}
 local _formats_cache   = {}
 local _ratings_cache   = {}
 local _languages_cache = {}
+-- The Decades shelf's groups. A field, not a local: this file is at Lua's
+-- 200-local limit. Cleared wherever _languages_cache is.
+Repo._decades_cache = {}
 -- SHAPE_CACHE_MAX: LRU cap for the two per-folder x per-sort "shape" caches
 -- below. Left unbounded, one entry accumulates per folder visited times each
 -- sort/filter combination for the life of the process; entries are cheap
@@ -2554,6 +2645,7 @@ function Repo.invalidateWalkCache()
     _formats_cache    = {}
     _ratings_cache    = {}
     _languages_cache  = {}
+    Repo._decades_cache = {}
     _all_cache        = {}
     _all_cache_order  = {}
     _bySource_cache   = {}
@@ -2609,6 +2701,7 @@ function Repo.invalidateSeriesCache()
     _formats_cache    = {}
     _ratings_cache    = {}
     _languages_cache  = {}
+    Repo._decades_cache = {}
     _light_meta_cache = {}
 end
 
@@ -2788,6 +2881,17 @@ function Repo.invalidateProgressCache(filepath)
     if filepath then
         _progress_cache[filepath] = nil
         _sidecar_memo[filepath] = nil
+        -- Its folder's listing too, which _hasSidecar answers "never opened"
+        -- from: a book opened for the first time has just gained its .sdr.
+        local parent = filepath:match("^(.*/)")
+        if parent then
+            _dir_entry_cache[parent] = nil
+            local ok_dst, DataStorage = pcall(require, "datastorage")
+            if ok_dst and DataStorage and DataStorage.getDocSettingsDir then
+                local root = DataStorage:getDocSettingsDir()
+                if root then _dir_entry_cache[root .. parent] = nil end
+            end
+        end
         _finished_on[filepath] = nil
         for _key, entry in pairs(_light_meta_cache) do
             if entry and entry.map then
@@ -2829,6 +2933,7 @@ function Repo.invalidateBookCache(reason)
     _formats_cache    = {}
     _ratings_cache    = {}
     _languages_cache  = {}
+    Repo._decades_cache = {}
     _all_cache        = {}
     _all_cache_order  = {}
     _bySource_cache   = {}
@@ -3201,6 +3306,40 @@ end
 -- to detect "did anything in the library change since we cached?" with a
 -- single stat() per dir on subsequent reads, far cheaper than re-walking
 -- the entire tree on each chip tap.
+-- What a walk need not stat to know it holds no book (issue 590). With the
+-- home folder at the top of the device (a PocketBook's /mnt/ext1, a Kindle's
+-- /mnt/us), the walk reached every file of KOReader's own installation, the
+-- system's folders and every book's .sdr, one stat each: ~9,000 on a
+-- 6,000-book library, minutes on slow storage. Worse, KOReader keeps its
+-- settings in its own folder there, so every settings save (Bookshelf saves
+-- its place on each page turn) moved a walked folder's mtime and the next
+-- shelf walked the whole device again.
+--   * KOReader's own data folder (DataStorage:getFullDataDir()) is never
+--     walked into: no books live there, and it changes all the time.
+--   * A ".sdr" sidecar folder, or a file whose extension says it is no book
+--     and no folder (pictures, fonts, dictionaries, code), is passed over
+--     by name, without a stat. A book's own extension is tested first.
+-- (Kept on Repo: this module is at Lua's 200-locals limit.)
+Repo._NOT_BOOK_EXT = {
+    jpg = true, jpeg = true, png = true, gif = true, bmp = true, webp = true, svg = true, ico = true,
+    tif = true, tiff = true, heic = true,
+    opf = true, ncx = true, xml = true, json = true, ini = true, cfg = true, conf = true, log = true,
+    lua = true, so = true, sh = true, py = true, js = true, css = true, o = true, a = true, ko = true,
+    ttf = true, otf = true, ttc = true, woff = true, woff2 = true, pfb = true,
+    mo = true, po = true, pot = true, dat = true, db = true, sqlite = true, sqlite3 = true, bak = true,
+    dic = true, dict = true, dz = true, idx = true, ifo = true, syn = true, aff = true,
+    mp3 = true, m4a = true, m4b = true, ogg = true, wav = true, flac = true, mp4 = true, avi = true, mkv = true,
+    tmp = true, old = true, lock = true,
+}
+function Repo._koreaderDataDir()
+    if Repo._ko_data_dir == nil then
+        local ok, DataStorage = pcall(require, "datastorage")
+        local d = ok and DataStorage and DataStorage.getFullDataDir and DataStorage:getFullDataDir()
+        Repo._ko_data_dir = type(d) == "string" and d ~= "" and d:gsub("/+$", "") or false
+    end
+    return Repo._ko_data_dir or nil
+end
+
 local function walkBooks(root, depth, out, current_depth, dirs, listings)
     current_depth = current_depth or 0
     if current_depth > depth then return end
@@ -3249,7 +3388,14 @@ local function walkBooks(root, depth, out, current_depth, dirs, listings)
         -- never contain real books. The other walkers in this file
         -- (around lines 1222, 1269, 1406) already do this; walkBooks
         -- was the odd one out.
-        if entry:sub(1, 1) ~= "." and not SYSTEM_DIR_NAMES[entry] then
+        local skip = false
+        if entry:sub(-4) == ".sdr" then
+            skip = true
+        elseif not _supportedExt(entry) then
+            local ext = entry:match("%.([^%.]+)$")
+            skip = ext ~= nil and Repo._NOT_BOOK_EXT[ext:lower()] == true
+        end
+        if not skip and entry:sub(1, 1) ~= "." and not SYSTEM_DIR_NAMES[entry] then
             local fp = _joinPath(root, entry)
             -- One stat call instead of two on real lfs (which returns a
             -- table from attributes(fp) with no key). Falls back to two
@@ -3264,6 +3410,8 @@ local function walkBooks(root, depth, out, current_depth, dirs, listings)
                 }
             end
             local mode = attr.mode
+            local ko_dir = mode == "directory" and Repo._koreaderDataDir()
+            if ko_dir and fp:gsub("/+$", "") == ko_dir then mode = nil end
             if mode == "directory" then
                 -- Skip .sdr sidecar dirs. They contain KOReader's per-book
                 -- metadata (cover, progress, etc.) and no actual books -- so
@@ -4128,12 +4276,29 @@ end
 -- SELECT has run, nil when the batch doesn't know the file -- the caller
 -- falls back to a full build. Returns the SHARED cached record: read from
 -- it, never mutate it (see _resetLightMetaProgress for why).
+--
+-- The map is remembered between calls while it is still the one cached and
+-- no setting has been written (home folder and walk depth name it): a Spines
+-- list's series boxes ask this for every member, and resolving the home
+-- folder, reading the depth and formatting the cache's debug line each time
+-- was most of a 220-490 ms refetch of a 1,300-book Home on a PW5.
 function Repo.lightMetaFor(filepath)
     if type(filepath) ~= "string" then return nil end
+    local m = Repo._lm_memo
+    local sgen = Repo._storeGeneration()
+    if m and m.sgen == sgen and _light_meta_cache[m.key] == m.entry and m.entry then
+        return m.entry.map and m.entry.map[filepath] or nil
+    end
     local home  = HomeDir.get() or "/"
     local depth = BookshelfSettings.read("latest_walk_depth") or 3
     local cache = _getLightMetaCache(home, depth)
+    local key = (home or "/") .. ":" .. tostring(depth or 0)
+    Repo._lm_memo = { key = key, entry = _light_meta_cache[key], sgen = sgen }
     return cache and cache[filepath] or nil
+end
+function Repo._storeGeneration()
+    local ok, Store = pcall(require, "lib/bookshelf_settings_store")
+    return ok and Store and Store.generation and Store.generation() or 0
 end
 
 -- Flat list of every book filepath in the library: the same depth-capped
@@ -5983,6 +6148,10 @@ function Repo.getSeriesGroups(limit, offset, sort_priority_override, filter, opt
                     -- beyond the two slots.
                     author      = book.author,
                     author_sort = book.author_sort,
+                    -- The title, so books with no series number order by it
+                    -- (587) rather than tying in hash order.
+                    title       = book.title,
+                    title_sort  = book.title_sort,
                 }
             end
             -- latest: the most recent READ TIME among the members, as on the
@@ -6046,12 +6215,17 @@ function Repo.getSeriesGroups(limit, offset, sort_priority_override, filter, opt
     -- without a re-walk.
     local list = {}
     for _i, k in ipairs(order) do list[#list + 1] = groups[k] end
-    -- Within each group, sort books by series_num ascending. Also remove _seen helper.
+    -- Within each group, sort books by series number, then title. A book with
+    -- no number goes after the numbered ones (SORT_TO_END), and the title
+    -- orders those among themselves: read as 0, they all tied ahead of #1
+    -- and came out in whatever order the sort left them (587).
+    local series_cmp = SortEngine.chainedComparator{
+        { key = "series_index", reverse = false },
+        { key = "title",        reverse = false },
+    }
     for _i, g in ipairs(list) do
         g._seen = nil
-        table.sort(g.books, function(a, b)
-            return (tonumber(a.series_num) or 0) < (tonumber(b.series_num) or 0)
-        end)
+        table.sort(g.books, series_cmp)
     end
 
     -- Stash the SHAPE (filepaths + sort metadata) — never the Book
@@ -6084,6 +6258,8 @@ function Repo.getSeriesGroups(limit, offset, sort_priority_override, filter, opt
                 -- sort went on reading the series TITLE as a person's name.
                 author      = b.author,
                 author_sort = b.author_sort,
+                title       = b.title,
+                title_sort  = b.title_sort,
             }
         end
         shapes[#shapes + 1] = {
@@ -6140,7 +6316,19 @@ _shapeHasFilteredBook = function(shape, filter)
     if not Filter.isActive(filter) then return true end
     local meta = shape.books_meta
     if not meta then return true end  -- transition-compat: nothing to test against
-    local compiled = Filter.compile(filter, Repo.filterOpts())
+    -- One compile per filter per pass, not per shape: a grouped shelf asks
+    -- this of every group, and the compile (with its options) was ~7% of a
+    -- shelf of shelves' first open on a PW5. Kept a second, for that filter
+    -- table only, so a collection changed meanwhile is read again next pass.
+    local memo = Repo._shape_compiled
+    local now = os.time()
+    local compiled
+    if memo and memo.filter == filter and now - memo.at <= 1 then
+        compiled = memo.compiled
+    else
+        compiled = Filter.compile(filter, Repo.filterOpts())
+        Repo._shape_compiled = { filter = filter, compiled = compiled, at = now }
+    end
     for i = 1, #meta do
         if _recordMatches(meta[i], compiled) then return true end
     end
@@ -6332,6 +6520,7 @@ local function _hydrateGroupShape(shape, within_priority, filter, light_only)
         books_meta   = meta,  -- carried for drill-time re-sort
         latest       = shape.latest,
         latest_added = shape.latest_added,
+        decade_year  = shape.decade_year,
     }
 end
 
@@ -6588,6 +6777,8 @@ local function _buildGroups(group_kind, key_fn, multi, records)
                                 if fmt ~= "auto" then
                                     display_name = _AuthorName_mod.formatted(raw_k, fmt)
                                 end
+                            elseif group_kind == "decade" then
+                                display_name = Repo._decadeLabel(raw_k)
                             elseif group_kind == "language" then
                                 if raw_k == _LANG_UNKNOWN_KEY then
                                     display_name = tr("Unknown")
@@ -6605,6 +6796,9 @@ local function _buildGroups(group_kind, key_fn, multi, records)
                                 books       = {},
                                 latest      = 0,
                                 _seen       = {},
+                                -- A decade card sorts by its own year (the
+                                -- Published sort key, SortEngine.publishedOf).
+                                decade_year = group_kind == "decade" and tonumber(raw_k) or nil,
                             }
                             groups[lookup_k] = g
                             order[#order + 1] = lookup_k
@@ -6642,6 +6836,11 @@ local function _buildGroups(group_kind, key_fn, multi, records)
                                 authors      = book.authors,
                                 genres       = book.genres,
                                 lang         = book.lang,
+                                -- What Published.info reads ahead of the
+                                -- file, so a Decades card's books sort by
+                                -- the year that filed them.
+                                calibre      = book.calibre,
+                                hardcover_published = book.hardcover_published,
                                 _last_read   = rt,
                                 -- Walk candidates carry mtime; catalogue
                                 -- records carry date_added.
@@ -6724,6 +6923,8 @@ local function _cacheGroupShapes(list, kind)
                 authors      = b.authors,
                 genres       = b.genres,
                 lang         = b.lang,
+                calibre      = b.calibre,
+                hardcover_published = b.hardcover_published,
                 _last_read   = b._last_read,
                 date_added   = b.date_added,
                 size         = b.size,
@@ -6746,6 +6947,7 @@ local function _cacheGroupShapes(list, kind)
             books_meta   = books_meta,
             latest       = group.latest,
             latest_added = group.latest_added or 0,
+            decade_year  = group.decade_year,
         }
     end
     return shapes
@@ -7139,6 +7341,7 @@ function Repo.getGroupChoices(kind)
         format   = _formats_cache,
         rating   = _ratings_cache,
         language = _languages_cache,
+        decade   = Repo._decades_cache,
     }
     local store = cache_for_kind[kind]
     if not store then return {} end
@@ -7152,6 +7355,7 @@ function Repo.getGroupChoices(kind)
         elseif kind == "format"   then Repo.getFormats(0, 0)
         elseif kind == "rating"   then Repo.getRatings(0, 0)
         elseif kind == "language" then Repo.getLanguages(0, 0)
+        elseif kind == "decade"   then Repo.getDecades(0, 0)
         end
     end
 
@@ -7185,6 +7389,7 @@ function Repo.getGroupFilepaths(kind)
         format   = _formats_cache,
         rating   = _ratings_cache,
         language = _languages_cache,
+        decade   = Repo._decades_cache,
     }
     local store = cache_for_kind[kind]
     if not store then return {} end
@@ -7197,6 +7402,7 @@ function Repo.getGroupFilepaths(kind)
         elseif kind == "format"   then Repo.getFormats(0, 0)
         elseif kind == "rating"   then Repo.getRatings(0, 0)
         elseif kind == "language" then Repo.getLanguages(0, 0)
+        elseif kind == "decade"   then Repo.getDecades(0, 0)
         end
     end
 
@@ -7621,6 +7827,67 @@ function Repo.getLanguages(limit, offset, sort_priority_override, filter, opts)
     return out, total
 end
 
+-- getDecades: the Decades shelf. One card per decade of the year %published
+-- shows (lib/bookshelf_published: the reader's own date, Hardcover, calibre,
+-- an OPDS catalogue, else the book file), so the shelf, the token and the
+-- Published sort agree. A book whose file has not been read yet goes in
+-- Unknown and is queued for the background read; the shelf regroups as the
+-- dates arrive (BookshelfWidget:_refreshPublished). Cards carry decade_year,
+-- so the Published sort key orders them and sends Unknown to the end.
+Repo.DECADE_UNKNOWN = "__bookshelf_unknown_decade__"
+
+-- _decadeKey(book) -> "1850", or DECADE_UNKNOWN.
+function Repo._decadeKey(book)
+    local ok, Published = pcall(require, "lib/bookshelf_published")
+    local date = ok and Published.info and Published.info(book) or nil
+    local d = require("lib/bookshelf_pubdate_format").decade(date)
+    return d and tostring(d) or Repo.DECADE_UNKNOWN
+end
+
+-- _decadeLabel("1850") -> "1850s"; the Unknown key -> "Unknown".
+function Repo._decadeLabel(key)
+    local n = tonumber(key)
+    if not n then return tr("Unknown") end
+    return require("lib/bookshelf_pubdate_format").decadeLabel(n)
+end
+
+function Repo.getDecades(limit, offset, sort_priority_override, filter, opts)
+    local _t0 = _gettime()
+    local home  = HomeDir.get() or "/"
+    local depth = BookshelfSettings.read("latest_walk_depth") or 3
+    local key   = (home or "/") .. ":" .. tostring(depth or 0)
+    local now   = os.time()
+    local cached = Repo._decades_cache[key]
+    local _hit = cached
+    if not _hit then
+        local list = _buildGroups("decade", Repo._decadeKey, false)
+        Repo._decades_cache[key] = {
+            groups     = _cacheGroupShapes(list, "decade"),
+            expires_at = now + SERIES_CACHE_TTL,
+        }
+        cached = Repo._decades_cache[key]
+    end
+    local sk = sort_priority_override or Repo.getSortPriority("decades")
+    local within = _withinPriority(sk)
+    local sorted = {}
+    for _i, s in ipairs(cached.groups) do
+        if _shapeHasFilteredBook(s, filter) then sorted[#sorted + 1] = s end
+    end
+    table.sort(sorted, _groupShapeCmp(sk))
+    local total = #sorted
+    local out   = {}
+    offset      = offset or 0
+    _attachFlattenedCounts(out, sorted, offset)
+    local stop  = _hydrationStop(offset, limit, total, 8, "getDecades",
+                                 (opts and opts.light_only) or Repo.spine_light)
+    for i = offset + 1, stop do
+        out[#out + 1] = _hydrateGroupShape(sorted[i], within, filter, opts and opts.light_only)
+    end
+    logger.dbg(string.format("[bookshelf perf] getDecades: %s %.0fms groups=%d/%d",
+        _hit and "HIT" or "MISS", (_gettime() - _t0) * 1000, #out, total))
+    return out, total
+end
+
 -- UTF-8 star characters for the rating group display labels. Used as
 -- the group's series_name so chip + breadcrumb render '★★★★★' etc.
 local _STAR_REPEAT = {
@@ -7848,6 +8115,7 @@ function Repo.findGroup(kind, name, shelf)
     elseif kind == "format"   then cache = _formats_cache[key]
     elseif kind == "rating"   then cache = _ratings_cache[key]
     elseif kind == "language" then cache = _languages_cache[key]
+    elseif kind == "decade"   then cache = Repo._decades_cache[key]
     else return nil end
     if not cache then
         if     kind == "author"   then Repo.getAuthors(0, 0);      cache = _authors_cache[key]
@@ -7856,6 +8124,7 @@ function Repo.findGroup(kind, name, shelf)
         elseif kind == "format"   then Repo.getFormats(0, 0);      cache = _formats_cache[key]
         elseif kind == "rating"   then Repo.getRatings(0, 0);      cache = _ratings_cache[key]
         elseif kind == "language" then Repo.getLanguages(0, 0);    cache = _languages_cache[key]
+        elseif kind == "decade"   then Repo.getDecades(0, 0);      cache = Repo._decades_cache[key]
         end
         if not cache then return nil end
     end
@@ -8410,7 +8679,15 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
         for i = off + 1, math.min(off + lim, total) do
             local rec = books[i]
             if not light_only then
-                if src_spec.cover then
+                if src_spec.cover and Repo.spine_light then
+                    -- A Spines shelf takes the WHOLE list, and its spines
+                    -- read a cover once, for a colour the facts DB keeps.
+                    -- Asking here copied every book's cover on every
+                    -- rebuild; instead getCoverBB asks the source when a
+                    -- spine with no kept colour, or a face-out, wants one.
+                    Repo._source_covers[rec.filepath] = { spec = src_spec, rec = rec }
+                    if rec.has_cover == nil then rec.has_cover = true end
+                elseif src_spec.cover then
                     -- The source hands back a fresh blitbuffer the grid frees
                     -- after paint (Kobo: BIM cannot read a DRM'd kepub). Asked
                     -- again every rebuild, so a freed bb is never reused. nil
@@ -8656,6 +8933,7 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
     if kind == "formats"   then return Repo.getFormats(limit, offset, sort_priority, filter, opts) end
     if kind == "ratings"   then return Repo.getRatings(limit, offset, sort_priority, filter, opts) end
     if kind == "languages" then return Repo.getLanguages(limit, offset, sort_priority, filter, opts) end
+    if kind == "decades"   then return Repo.getDecades(limit, offset, sort_priority, filter, opts) end
 
     -- Custom kinds: walk the library and apply a predicate filter.
     -- Results are cached by (source, filter, sort_priority) so pagination
@@ -8858,7 +9136,55 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
             return matched
         end
 
-        if kind == "library" or kind == "all" or kind == "latest" then
+        -- Stub candidates: when neither the filter nor the sort reads a
+        -- book's metadata -- a status / format / collection / folder filter,
+        -- sorted by date added, status, progress, opened or size -- every
+        -- answer comes from the path, the walk's own stat and the sidecar.
+        -- Building a light record per book for those (BIM row decode, author
+        -- split, custom-metadata stat) is then the whole cost of the fetch and
+        -- scales with the library, not with the page: discussion 590, a
+        -- 5,900-book "Latest added" shelf filtered to unread + reading. The
+        -- visible slice is hydrated from the paths below as it always was.
+        local STUB_FILTER_KEYS = { statuses = true, formats = true, collections = true,
+            collections_not = true, folders = true }
+        local STUB_SORT_KEYS = { date_added = true, read_status = true,
+            read_status_active = true, last_opened = true, added_or_opened = true,
+            size = true, percent_read = true }
+        local function stubbable()
+            if (opts and opts.light_only) or Repo.spine_light then return false end
+            for k, v in pairs(filter or {}) do
+                if not STUB_FILTER_KEYS[k] then
+                    -- an inactive dimension (empty table, series "both") is harmless
+                    if type(v) == "table" and next(v) ~= nil then return false end
+                    if k == "series_membership" and (v == "standalone" or v == "in_series") then
+                        return false
+                    end
+                end
+            end
+            for _i, lv in ipairs(sort_priority or {}) do
+                if not STUB_SORT_KEYS[lv.key] then return false end
+            end
+            return true
+        end
+        local function loadStubCandidates()
+            local home  = HomeDir.get() or "/"
+            local depth = BookshelfSettings.read("latest_walk_depth") or 3
+            local read_time = {}
+            for _i, entry in ipairs(getReadHistory().hist) do
+                local t = entry.time or 0
+                if t > (read_time[entry.file] or 0) then read_time[entry.file] = t end
+            end
+            local out = {}
+            for _i, c in ipairs(cachedWalk(home, depth)) do
+                out[#out + 1] = { filepath = c.fp, date_added = c.mtime or 0,
+                                  size = c.size or 0, _last_read = read_time[c.fp] or 0 }
+            end
+            return out
+        end
+
+        if (kind == "library" or kind == "all" or kind == "latest") and stubbable() then
+            candidates = loadStubCandidates()
+        elseif kind == "library" or kind == "all" or kind == "latest" then
             -- Library walk + tautological predicate. 'all' (Home folders)
             -- and 'latest' (Latest added) reach this branch only when a
             -- filter is active -- otherwise their early-returns above
@@ -9021,6 +9347,13 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
             local target = (source.id or ""):upper()
             candidates = loadCandidatesByPredicate(function(b)
                 return _formatKey(b.filepath) == target
+            end)
+        elseif kind == "decade" then
+            -- source.id is the decade card's key: "1850", or DECADE_UNKNOWN.
+            -- A card's label ("1850s") is accepted too.
+            local target = tostring(source.id or ""):match("^(%d+)s?$") or Repo.DECADE_UNKNOWN
+            candidates = loadCandidatesByPredicate(function(b)
+                return Repo._decadeKey(b) == target
             end)
         elseif kind == "language" then
             -- The chip's id is the language card's display label (e.g.

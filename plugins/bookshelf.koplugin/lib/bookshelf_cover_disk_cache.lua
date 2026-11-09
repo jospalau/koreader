@@ -302,6 +302,30 @@ local function maybeSweep()
     end
 end
 
+-- C stdio through the ffi, for the pixels: read and written straight
+-- between the file and the buffer. Through Lua they went via a string the
+-- size of the image (a cover ~260 KB, an ornament ~480 KB on a PW5): garbage
+-- on every load and store, and a full collect walks everything in use. nil
+-- when it cannot be had; the Lua way then stands.
+function M._cstdio()
+    if M._stdio ~= nil then return M._stdio or nil end
+    local ok_ffi, ffi = pcall(require, "ffi")
+    if not ok_ffi then M._stdio = false; return nil end
+    pcall(require, "ffi/posix_h")
+    pcall(ffi.cdef, "typedef struct _IO_FILE FILE;")
+    pcall(ffi.cdef, "FILE *fopen(const char *, const char *);")
+    pcall(ffi.cdef, "size_t fread(void *, size_t, size_t, FILE *);")
+    pcall(ffi.cdef, "size_t fwrite(const void *, size_t, size_t, FILE *);")
+    pcall(ffi.cdef, "int fclose(FILE *);")
+    pcall(ffi.cdef, "int fseek(FILE *, long, int);")
+    local ok = pcall(function()
+        local C = ffi.C
+        assert(C.fopen and C.fread and C.fwrite and C.fclose and C.fseek)
+    end)
+    M._stdio = ok and ffi or false
+    return M._stdio or nil
+end
+
 --- Write a scaled cover. Returns true when it landed on disk.
 function M.store(filepath, bb)
     if type(filepath) ~= "string" or filepath == "" or not bb then return false end
@@ -338,13 +362,34 @@ function M.store(filepath, bb)
         if (bb.getInverse  and bb:getInverse()  or 0) ~= 0 then error("inverted") end
         -- Write to a sibling and rename, so a crash mid-write cannot leave a
         -- truncated file that later reads as a valid header with short data.
+        -- Every write and the close checked: on a full disk a short file
+        -- renamed over a good one would be re-decoded and rewritten every
+        -- session. A failure keeps the good copy and removes the temp file.
         local tmp = p .. ".tmp"
         local f = assert(io.open(tmp, "wb"))
         local header = string.format("%s %d %d %d %d %d\n%s\n",
             MAGIC, w, h, stride, btype, #filepath, filepath)
-        f:write(header)
-        f:write(ffi.string(bb.data, stride * h))
-        f:close()
+        local ok_w, ok_c
+        local cs = M._cstdio()
+        if cs then
+            ok_w = f:write(header)
+            ok_c = f:close()
+            if ok_w and ok_c then
+                local fp = cs.C.fopen(tmp, "ab")
+                if fp == nil then ok_w = false
+                else
+                    ok_w = tonumber(cs.C.fwrite(bb.data, 1, stride * h, fp)) == stride * h
+                    ok_c = cs.C.fclose(fp) == 0
+                end
+            end
+        else
+            ok_w = f:write(header) and f:write(ffi.string(bb.data, stride * h))
+            ok_c = f:close()
+        end
+        if not (ok_w and ok_c) then
+            os.remove(tmp)
+            error("write failed")
+        end
         local was = lfs.attributes(p, "size") or 0
         os.remove(p)
         assert(os.rename(tmp, p))
@@ -375,13 +420,31 @@ function M.load(filepath)
         f:read(1)  -- the newline after the path
         if stored_fp ~= filepath then f:close(); return nil end   -- hash collision
         local want = stride * h
-        local data = f:read(want)
-        f:close()
-        if not data or #data ~= want then return nil end           -- truncated
-        local out = Blitbuffer.new(w, h, btype, nil, stride)
-        if not out then return nil end
-        local ffi = require("ffi")
-        ffi.copy(out.data, data, want)
+        local cs = M._cstdio()
+        local out
+        if cs then
+            local off = f:seek()
+            f:close()
+            out = Blitbuffer.new(w, h, btype, nil, stride)
+            if not out then return nil end
+            local fp = cs.C.fopen(p, "rb")
+            local got = 0
+            if fp ~= nil then
+                if cs.C.fseek(fp, off, 0) == 0 then
+                    got = tonumber(cs.C.fread(out.data, 1, want, fp))
+                end
+                cs.C.fclose(fp)
+            end
+            if got ~= want then out:free(); return nil end         -- truncated
+        else
+            local data = f:read(want)
+            f:close()
+            if not data or #data ~= want then return nil end       -- truncated
+            out = Blitbuffer.new(w, h, btype, nil, stride)
+            if not out then return nil end
+            local ffi = require("ffi")
+            ffi.copy(out.data, data, want)
+        end
         -- Used: the sweep goes by last use, so a cover read every day is
         -- not the first to go because it was written long ago.
         local mt = lfs.attributes(p, "modification")

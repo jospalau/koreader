@@ -201,6 +201,13 @@ local SOURCE_SORT_DEFAULTS = {
     languages     = { { key = "book_count",      reverse = true  },
                       { key = "series_name",     reverse = false },
                       { key = "series_index",    reverse = false } },
+    -- Decades: newest decade first, the books in each newest first, by the
+    -- year %published shows. Unknown stays last either way.
+    decades       = { { key = "published",        reverse = true  },
+                      { key = "published",        reverse = true  } },
+    -- Specific decade: a book list of one decade, newest first.
+    decade        = { { key = "published",        reverse = true  },
+                      { key = "title",            reverse = false } },
     -- Ratings group: highest rating first, books within each star
     -- bucket sorted series_name -> series_index -> title.
     ratings       = { { key = "rating",           reverse = true  },
@@ -322,6 +329,7 @@ end
 local GROUP_KINDS = {
     series  = true, authors = true, genres = true,
     tags    = true, formats = true, languages = true,
+    decades = true,
 }
 
 -- Level-1 (group order) labels for group tabs. The engine's labels
@@ -358,6 +366,8 @@ local GROUP_LEVEL1_LABEL = {
     last_opened    = function() return _("Most recently read") end,
     date_added     = function() return _("Most recently added") end,
     book_count     = function() return _("Book count") end,
+    -- Offered on a Decades shelf only: its cards ARE years.
+    published      = function() return _("Decade") end,
 }
 
 -- Friendly source labels shown on the "Source:" button in the editor.
@@ -376,6 +386,7 @@ SOURCE_LABEL = {
     formats       = function() return _("Formats")            end,
     ratings       = function() return _("Ratings")            end,
     languages     = function() return _("Languages")          end,
+    decades       = function() return _("Decades")            end,
     favorites     = function() return _("Favorites")          end,
     -- "Specific X" kinds carry an id; the resolver appends it.
     folder        = function() return _("Folder")             end,
@@ -389,6 +400,7 @@ SOURCE_LABEL = {
     format        = function() return _("Format")             end,
     rating        = function() return _("Rating")             end,
     language      = function() return _("Language")           end,
+    decade        = function() return _("Decade")             end,
     -- No id yet (picker not used, or the source table was hand-built):
     -- generic fallback. Once an id is present _resolveSourceLabel takes
     -- the "OPDS: <title>" branch instead of this one.
@@ -1333,6 +1345,13 @@ function Editor:editTab(tab_id, opts)
         -- the same way.
         local is_paged_src = draft.source
             and require("lib/bookshelf_sources").isPaged(draft.source.kind) or false
+        -- A paged source has no spines unless it opted in (issue 588).
+        local no_spines_src = false
+        do
+            local Sources = require("lib/bookshelf_sources")
+            no_spines_src = (is_paged_src and draft.source
+                and not Sources.spinesOk(draft.source.kind)) and true or false
+        end
         -- ...unless it offers editor buttons of its own (its list, sort and
         -- filters: SOURCE_API.md "Editor rows"), which take that row's place.
         -- A button edits draft.source and calls done(), which saves it; the
@@ -1481,7 +1500,7 @@ function Editor:editTab(tab_id, opts)
                 -- The mode, as the card's icon shows it: no mode of its own is
                 -- Covers, the default. A tile style named here ("View mode:
                 -- Ribbon") read as a mode of its own; the page shows both.
-                local shown = Editor._shownMode(draft[ViewMode.CHIP_KEY], is_opds_src or is_paged_src)
+                local shown = Editor._shownMode(draft[ViewMode.CHIP_KEY], is_opds_src or no_spines_src)
                 local mode = Editor._chipModeLabel(shown)
                 -- Spines with books face out read as covers on the shelf
                 -- behind, so the card says both (a fresh Home said "Spines"
@@ -1495,7 +1514,7 @@ function Editor:editTab(tab_id, opts)
                 return T(_("View mode: %1"), mode or _("Covers"))
             end,
             icon_func = function()
-                return Editor._modeIcon(draft[ViewMode.CHIP_KEY], is_opds_src or is_paged_src)
+                return Editor._modeIcon(draft[ViewMode.CHIP_KEY], is_opds_src or no_spines_src)
             end,
             callback = function()
                 -- now: the shelf behind rebuilt at once, not on the
@@ -1520,7 +1539,7 @@ function Editor:editTab(tab_id, opts)
                     -- Over its own box (editorRefresh), not the whole screen.
 
                     -- A catalogue gets Default and List only; see above.
-                    is_opds = is_opds_src or is_paged_src,
+                    is_opds = is_opds_src or no_spines_src,
                     -- The live shelf, so the density nudges can seed from the
                     -- numbers actually on screen instead of from a constant.
                     bw = opts.bw,
@@ -2339,6 +2358,17 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
             active = on and true or false,
             on_pick = function(v) pick(function() set(v) end)() end }
     end
+    -- Series boxes for Covers and List (issue 503): On or Off over the same
+    -- setting the Spines page styles, so On keeps a style chosen there.
+    local function seriesBoxesRow(pick, add)
+        if no_spines then return end
+        add(onOff(pick, _("Series boxes"), draft.series_boxes, function(v)
+            if v then draft.series_boxes = draft.series_boxes or true
+            else draft.series_boxes = nil end
+        end))
+        add({ type = "hint",
+            text = _("On a shelf of books, and inside an author or other group, a series' books share one tile.") })
+    end
     -- A number: nil is Auto, the automatic count. The first step seeds from
     -- live(), the number on screen, so + from Auto shows one more of what the
     -- reader sees; below lo goes back to Auto. inherit_key: unset shows that
@@ -2389,6 +2419,7 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
         else
             listRows("")
         end
+        seriesBoxesRow(pick, add)
     end
     local function listSummary(level)
         local function one(sfx, inherit)
@@ -2398,10 +2429,14 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
             -- "columns: Auto", not "Auto columns".
             return T(_("columns: %1, rows: %2"), numText(c), numText(r))
         end
+        local text
         if ViewMode.listLevelsSplit(draft) and level == 2 then
-            return Editor._capFirst(one(ViewMode.LEVEL2_SUFFIX, true))
+            text = one(ViewMode.LEVEL2_SUFFIX, true)
+        else
+            text = one("")
         end
-        return Editor._capFirst(one(""))
+        if draft.series_boxes and not no_spines then text = text .. ", " .. _("series boxes") end
+        return Editor._capFirst(text)
     end
 
     -- Ornaments: only ever on a spine shelf. Four stops picked for what they
@@ -2450,6 +2485,20 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
         add({ type = "stepper", label = _("Thickness"),
             value = tostring(draft.spine_thickness_pct or 100) .. "%",
             on_dec = thick(-1), on_inc = thick(1) })
+        -- Book sizes: Varied (height from the cover's shape, thickness from
+        -- the page count), Equal height (every book one height, its own
+        -- cover shape and thickness: comic strip collections stand as tall
+        -- as novels) or Same (every book the default size, face-outs too).
+        -- Stored as "height" or true; Varied is nil.
+        add({ type = "segmented", label = _("Book sizes"),
+            items = { { key = "varied", label = _("Varied") },
+                      { key = "height", label = _("Equal height") },
+                      { key = "same",   label = _("Same") } },
+            active = (draft.spine_same_size == "height" and "height")
+                or (draft.spine_same_size and "same") or "varied",
+            on_pick = function(v) pick(function()
+                draft.spine_same_size = (v == "height" and "height") or (v == "same") or nil
+            end)() end })
         add({ type = "segmented", label = _("Book binding"),
             items = { { key = "hardcover", label = Binding.label("hardcover") },
                       { key = "paperback", label = Binding.label("paperback") } },
@@ -2457,9 +2506,22 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
             on_pick = function(v) pick(function()
                 draft.book_binding = (v == "paperback") and "paperback" or nil
             end)() end })
-        add(onOff(pick, _("Series boxes"), draft.series_boxes, function(v)
-            draft.series_boxes = v or nil
-        end))
+        -- Series boxes: off, with the first cover (or the series' own image)
+        -- on the front, Plain, a bare front with the name (issue 577), or
+        -- Spines, the books spine-out with the cover across them. Stored as
+        -- true, "plain" or "spines"; any other old value is with a cover.
+        add({ type = "segmented", label = _("Series boxes"),
+            items = { { key = "off",    label = _("Off") },
+                      { key = "cover",  label = _("Cover") },
+                      { key = "plain",  label = _("Plain") },
+                      { key = "spines", label = _("Spines") } },
+            active = (not draft.series_boxes and "off")
+                or ((draft.series_boxes == "plain" or draft.series_boxes == "spines")
+                    and draft.series_boxes) or "cover",
+            on_pick = function(v) pick(function()
+                draft.series_boxes = ((v == "plain" or v == "spines") and v)
+                    or (v == "cover") or nil
+            end)() end })
         -- Stored as false only, nil meaning the default (on). Not
         -- `on and false or nil`: in Lua that is always nil (#439).
         add(onOff(pick, _("Author on spine"), authorOn(), function(v)
@@ -2485,8 +2547,12 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
         local parts = { T(_("face out: %1"), Editor._faceOutText(draft)),
             T(_("rows: %1"), numText(draft.spine_rows)) }
         if draft.spine_thickness_pct then parts[#parts + 1] = T(_("%1% thick"), draft.spine_thickness_pct) end
+        if draft.spine_same_size == "height" then parts[#parts + 1] = _("equal height books")
+        elseif draft.spine_same_size then parts[#parts + 1] = _("same size books") end
         if draft.book_binding == "paperback" then parts[#parts + 1] = _("paperbacks") end
-        if draft.series_boxes then parts[#parts + 1] = _("series boxes") end
+        if draft.series_boxes == "plain" then parts[#parts + 1] = _("plain series boxes")
+        elseif draft.series_boxes == "spines" then parts[#parts + 1] = _("series boxes of spines")
+        elseif draft.series_boxes then parts[#parts + 1] = _("series boxes") end
         if not authorOn() then parts[#parts + 1] = _("no author on spines") end
         local ORN_STOPS, best = ornamentStop()
         parts[#parts + 1] = T(_("ornaments: %1"), ORN_STOPS[best][2])
@@ -2524,6 +2590,7 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
                     if on_change then on_change() end
                 end, function() end, bw)
             end })
+        seriesBoxesRow(pick, add)
     end
     local function coversSummary()
         local parts = {}
@@ -2535,6 +2602,7 @@ function Editor:_pickGroupDisplay(draft, on_change, chrome)
             parts[#parts + 1] = T(_("folder tiles: %1"), label)
         end
         parts[#parts + 1] = T(_("captions: %1"), Editor._coverTextLabel(draft, draft.cover_text))
+        if draft.series_boxes and not no_spines then parts[#parts + 1] = _("series boxes") end
         return Editor._capFirst(table.concat(parts, ", "))
     end
 
@@ -3407,6 +3475,7 @@ function Editor:_pickSource(draft, on_close)
             add(one("format", _("Format"), group_pick("format")))
             add(one("rating", _("Rating"), open_rating_picker))
             add(one("language", _("Language"), group_pick("language")))
+            add(one("decade", _("Decade"), group_pick("decade")))
         else
             -- Grouped: what readers looked for and did not find under
             -- "Source" (maintainer). Stacks and a shelf of one of them are
@@ -3420,6 +3489,7 @@ function Editor:_pickSource(draft, on_close)
                 stackChip("formats", _("Formats"), "\u{E918}"),
                 stackChip("ratings", _("Ratings"), "\u{EBCD}"),
                 stackChip("languages", _("Languages"), "\u{ECC9}"),
+                stackChip("decades", _("Decades"), "\u{ED77}"),
             } })
             add({ type = "heading", text = _("Just one") })
             add({ type = "chips", items = {
@@ -3430,6 +3500,7 @@ function Editor:_pickSource(draft, on_close)
                 oneChip("format", _("A format"), group_pick("format")),
                 oneChip("rating", _("A rating"), open_rating_picker),
                 oneChip("language", _("A language"), group_pick("language")),
+                oneChip("decade", _("A decade"), group_pick("decade")),
             } })
             add({ type = "heading", text = _("More") })
             -- Shelf of shelves (5.4): tiles that are shelves of their own.
@@ -3860,6 +3931,7 @@ local SOURCE_ICONS = {
     formats = "\u{E918}", format = "\u{E918}",
     ratings = "\u{EBCD}", rating = "\u{EBCD}",                  -- star
     languages = "\u{ECC9}", language = "\u{ECC9}",
+    decades = "\u{ED77}", decade = "\u{ED77}",                  -- calendar-range
     shelves = "\u{EC6F}", opds = "\u{EC9E}",                    -- view-grid, web
 }
 function Editor._sourceIcon(source)
@@ -3955,8 +4027,10 @@ function Editor:_openSort(draft, on_change, on_arranged, on_back)
         local function add(b) blocks[#blocks + 1] = b end
         if is_group and sel == 1 then
             add({ type = "heading", text = _("Order the groups by") })
-            add(chips({ "series_name", "author_surname", "book_count",
-                        "last_opened", "date_added", "added_or_opened", "pub_date", "modified_date", "words", "grrating", "grvotes" }))
+            local keys = { "series_name", "author_surname", "book_count",
+                           "last_opened", "date_added", "added_or_opened", "pub_date", "modified_date", "words", "grrating", "grvotes" }
+            if kind == "decades" then table.insert(keys, 1, "published") end
+            add(chips(keys))
         else
             -- A collection is the only book source carrying an order of its
             -- own: the one the reader arranged by hand in KOReader. It

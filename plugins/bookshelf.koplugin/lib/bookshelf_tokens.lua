@@ -88,6 +88,7 @@ Tokens.CATALOGUE = {
     { category = "Book",     token = "%calibre{name}",     description = _("A calibre column by name, like %calibre{pubdate} or a custom column; dates show the year (needs Read calibre metadata.calibre, except a book's pubdate in an OPDS catalog)") },
     { category = "Book",     token = "%size",             description = _("File size on disk") },
     { category = "Book",     token = "%published",        description = _("Publication year, from calibre, the OPDS catalog or the book file") },
+    { category = "Book",     token = "%published{format}", description = _("Publication date in your own layout, like %published{%d %B %Y}; shows less when the book's date has no month or day") },
     { category = "Book",     token = "%added",            description = _("Date added (the file's own date)") },
     { category = "Book",     token = "%description",      description = _("Book blurb (HTML stripped)") },
     { category = "Book",     token = "%quote",            description = _("A random highlight from this book") },
@@ -1519,6 +1520,20 @@ end
 local function expandDatetimeBraces(format, state)
     return (format:gsub("%%datetime{(.-)}", function(spec)
         return LocalDate.localize(os.date(spec, timeNow(state)))
+    end))
+end
+
+-- %published{format}: the publication date %published resolves, in a
+-- strftime-style layout (lib/bookshelf_pubdate_format; not os.date, which
+-- cannot reach before 1901 on a Kindle). Runs before the name loop, which
+-- would otherwise take "%published" and strand the braces.
+local function expandPublishedBraces(text, book)
+    if not text:find("%published{", 1, true) then return text end
+    return (text:gsub("%%published{(.-)}", function(spec)
+        if not book then return "" end
+        local ok, Published = pcall(require, "lib/bookshelf_published")
+        local date = ok and Published.info and Published.info(book) or nil
+        return require("lib/bookshelf_pubdate_format").format(date, spec)
     end))
 end
 

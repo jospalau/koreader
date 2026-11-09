@@ -13,6 +13,10 @@ local BD              = require("ui/bidi")
 local Blitbuffer      = require("ffi/blitbuffer")
 local BookshelfSettings = require("lib/bookshelf_settings_store")
 local ScaledCoverCache = require("lib/bookshelf_scaled_cover_cache")
+-- The cheaper scaler for each cover (MuPDF or the Lua loop): bookshelf_scale.
+local _scaleCover = require("lib/bookshelf_scale").cover
+-- A pause point for work run in steps (bookshelf_slice): before a decode.
+local _sliceCheck = require("lib/bookshelf_slice").check
 local HeroTier         = require("lib/bookshelf_hero_tier")
 local BFont           = require("lib/bookshelf_fonts")
 local FrameContainer  = require("ui/widget/container/framecontainer")
@@ -370,10 +374,10 @@ end
 local function _coverFillBB(bb, img_w, img_h)
     local sw, sh = bb:getWidth(), bb:getHeight()
     if sw < sh then
-        return bb:scale(img_w, img_h)
+        return _scaleCover(bb, img_w, img_h)
     end
     local scaled_w = math.max(img_w, math.floor(sw * img_h / sh))
-    local filled   = bb:scale(scaled_w, img_h)
+    local filled   = _scaleCover(bb, scaled_w, img_h)
     if scaled_w <= img_w then
         return filled
     end
@@ -1125,30 +1129,40 @@ end
 -- The copy is exactly what ImageWidget would make (the same scaleBlitBuffer
 -- to the same width and height), so nothing changes on screen.
 --
--- Each entry remembers the cached bitmap it was made from: a cover replaced
--- in the cache (a larger copy, a refresh) is a different bitmap, so the copy
--- is remade rather than served stale. A small LRU by count: the copies are
--- thumbnail-sized, and a page holds a few dozen at most.
-local THUMB_CAP = 96
-local _thumbs, _thumb_order = {}, {}
+-- Kept as sized entries of the cover cache (getSized), by book and size:
+-- dropped with the book's cover (drop) or a change of Image contrast
+-- (dropMemory), counted against its budget, and found BEFORE the cover they
+-- are made from (see the cache-first block of _renderCover). Kept 96 at
+-- most and valid only while their exact source bitmap stayed cached, a
+-- Decades list page's ~90 were made again on nearly every visit, pulling
+-- each source cover in from disk and pushing other shelves' covers out
+-- (0.7 s of a 1.4 s shelf switch on a PW5).
+-- _sameShape(bb, w, h) -> whether a cached copy can stand in for a w x h
+-- slot: its shape (h/w) within SAME_SHAPE_TOL of the slot's. The cover cache
+-- keeps one copy per book, made for whichever slot asked first, and a fill
+-- copy is cropped or stretched to that slot's shape: a cover-grid cell's
+-- copy of a landscape strip collection is a portrait crop of it. Reused for
+-- a slot of another shape (a spine shelf's face-out of that book) it was
+-- stretched across. The tolerance keeps ordinary covers sharing as before:
+-- a face-out box follows its own cover's shape, 1.46 beside 1.50.
+local SAME_SHAPE_TOL = 0.04
+local function _sameShape(bb, w, h)
+    local bw, bh = bb:getWidth(), bb:getHeight()
+    if not (bw and bh and bw > 0 and w > 0 and h > 0) then return false end
+    local a, b = bh / bw, h / w
+    return math.abs(a - b) <= SAME_SHAPE_TOL * b
+end
+SpineWidget._sameShape = _sameShape
+
 local function _thumbFor(fp, src, w, h)
-    local key = fp .. "|" .. w .. "x" .. h
-    local e = _thumbs[key]
-    if e and e.src == src then return e.bb end
+    local kept = ScaledCoverCache:getSized(fp, w, h)
+    if kept then return kept end
     local ok, scaled = pcall(function()
         return require("ui/renderimage"):scaleBlitBuffer(src, w, h, false)
     end)
     if not (ok and scaled) then return nil end
-    if not e then
-        _thumb_order[#_thumb_order + 1] = key
-        if #_thumb_order > THUMB_CAP then
-            -- Dropped, not freed: a widget on screen may still paint it, and
-            -- the FFI finaliser frees it once nothing does.
-            _thumbs[table.remove(_thumb_order, 1)] = nil
-        end
-    end
-    _thumbs[key] = { src = src, bb = scaled }
-    return scaled
+    -- Marked as boosted when the source was, or put() would boost it again.
+    return ScaledCoverCache:putSized(fp, w, h, _derived(src, scaled))
 end
 SpineWidget._thumbFor = _thumbFor
 
@@ -2417,8 +2431,27 @@ function SpineWidget:_renderCover(bb)
     -- fallback below grows it rather than show a placeholder when BIM has
     -- nothing to decode.
     local cached_any
+    -- A thumbnail already made at this size (_thumbFor): no need for the
+    -- cover it was made from, which may have to come in from disk.
+    local kept = fp and self.cover_fill and ScaledCoverCache:getSized(fp, img_w, img_h)
+    if kept then
+        if bb and ((self.cover_bb == nil) or self.cover_bb_disposable) then
+            bb:free()
+        end
+        return self:_wrapCoverInCard(ImageWidget:new{
+            image            = kept,
+            image_disposable = false,    -- cache owns lifetime
+            width            = img_w,
+            height           = img_h,
+        }, card_w, card_h, border)
+    end
     if fp then
         local cached = ScaledCoverCache:get(fp)
+        -- A copy made for a slot of another shape is no use here, at any
+        -- size (_sameShape): this slot is made from the cover itself.
+        if cached and self.cover_fill and not _sameShape(cached, img_w, img_h) then
+            cached = nil
+        end
         cached_any = cached
         if cached
                 and cached:getWidth()  >= img_w
@@ -2489,6 +2522,9 @@ function SpineWidget:_renderCover(bb)
             bb = HeroTier:take(fp)
         end
         if not bb then
+            -- A decode is a natural pause for a page built in steps
+            -- (bookshelf_slice); anywhere else this does nothing.
+            _sliceCheck()
             bb = fp and _getRepo().getCoverBB(fp)
         end
         if not bb and cached_any then
@@ -2574,6 +2610,12 @@ function SpineWidget:_renderCover(bb)
             -- disposable on the ImageWidget below ONLY when we use it
             -- (we never do — we always use the return value).
             local effective = ScaledCoverCache:put(fp, scaled_bb)
+            -- put() keeps a larger copy it already holds, and that one may
+            -- be another slot's shape: then this slot's copy is kept on its
+            -- own, by size (getSized above finds it next time).
+            if effective ~= scaled_bb and not _sameShape(effective, img_w, img_h) then
+                effective = ScaledCoverCache:putSized(fp, img_w, img_h, scaled_bb)
+            end
             local img_args = {
                 image            = effective,
                 image_disposable = false,  -- cache owns lifetime
@@ -2764,19 +2806,42 @@ function SpineWidget:_renderCoverAlignTop(card_w, card_h, border, img_w, img_h)
             _draft_total = _draft_total + 1
             return self:_renderFallback()
         else
-            bb, owned = fp and _getRepo().getCoverBB(fp), true
+            -- Kept at this size from an earlier paint (getSized): cache-owned,
+            -- never freed. Without it every paint decoded and Lua-scaled the
+            -- cover again, most of a Series shelf's page turn.
+            local kept = fp and ScaledCoverCache:getSized(fp, img_w, nat_h, "top")
+            if kept then
+                cover_widget = ImageWidget:new{
+                    image            = kept,
+                    image_disposable = false,
+                    scale_factor     = 1,
+                }
+            else
+                _sliceCheck()   -- see the grid decode
+                bb, owned = fp and _getRepo().getCoverBB(fp), true
+            end
         end
-        if not bb then return self:_renderFallback() end
-        local scaled_bb = _derived(bb, bb:scale(img_w, nat_h))   -- new bb; leaves bb intact
-        if owned then bb:free() end
-        -- A copy of a boosted picture (a collage) is marked by _derived and
-        -- left alone.
-        _boostCover(scaled_bb)
-        cover_widget = ImageWidget:new{
-            image            = scaled_bb,
-            image_disposable = true,
-            scale_factor     = 1,
-        }
+        if not cover_widget then
+            if not bb then return self:_renderFallback() end
+            local scaled_bb = _derived(bb, _scaleCover(bb, img_w, nat_h))   -- new bb; leaves bb intact
+            if owned then bb:free() end
+            local disposable = true
+            if fp and not self.cover_bb then
+                -- BIM's own cover for this book: keep it at this size. put()
+                -- boosts it (once) and owns it from here.
+                scaled_bb = ScaledCoverCache:putSized(fp, img_w, nat_h, scaled_bb, "top")
+                disposable = false
+            else
+                -- A copy of a boosted picture (a collage) is marked by
+                -- _derived and left alone.
+                _boostCover(scaled_bb)
+            end
+            cover_widget = ImageWidget:new{
+                image            = scaled_bb,
+                image_disposable = disposable,
+                scale_factor     = 1,
+            }
+        end
     end
 
     return self:_wrapCoverInCard(

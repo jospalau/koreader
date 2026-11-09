@@ -5182,6 +5182,35 @@ function Settings:_advancedSubItems()
                 end
             end,
         },
+        {
+            text = _("Genres from calibre only"),
+            help_text = _("For a book that is in your calibre library, use "
+                .. "only calibre's tags as its genres, even when calibre has "
+                .. "none for it, never the tags stored in the book file. "
+                .. "Useful after retagging in calibre, so the file's old tags "
+                .. "don't come back as genres of their own. A book set to "
+                .. "Embedded in its own Tags section still uses those."),
+            enabled_func = function()
+                return BookshelfSettings.read("calibre_metadata") == true
+            end,
+            checked_func = function()
+                return BookshelfSettings.isTrue("calibre_genres_only")
+            end,
+            keep_menu_open = true,
+            callback = function()
+                BookshelfSettings.save("calibre_genres_only",
+                    not BookshelfSettings.isTrue("calibre_genres_only") or nil)
+                BookshelfSettings.flush()
+                local ok, Repo = pcall(require, "lib/bookshelf_book_repository")
+                if ok and Repo and Repo.invalidateWalkCache then
+                    Repo.invalidateWalkCache()
+                end
+                if self._bw and self._bw._rebuild then
+                    self._bw:_rebuild()
+                    UIManager:setDirty(self._bw, "ui")
+                end
+            end,
+        },
     }
 
     return items
@@ -5457,6 +5486,15 @@ end
 function Settings:_pickStackLabelFontScale(touchmenu_instance)
     self:_showScaleNudge(touchmenu_instance, {
         key = "stack_label_font_scale", title = _("Stack & folder label scale"), max = 300, fine = 5,
+    })
+end
+
+-- Spine text: the titles and authors on spine-out books
+-- (SpineShelf.titleFaceSize). 50-200%: past double a title rarely fits a
+-- spine's run, and the face already shrinks to fit across a thin one.
+function Settings:_pickSpineFontScale(touchmenu_instance)
+    self:_showScaleNudge(touchmenu_instance, {
+        key = "spine_font_scale", title = _("Spine text size"), max = 200, fine = 5,
     })
 end
 
@@ -5808,6 +5846,7 @@ function Settings:_textSizeSubItems()
         row(_("Cover captions"),        "expanded_shelf_font_scale", 100, "_pickExpandedShelfFontScale"),
         row(_("Cover badges"),          "cover_badge_font_scale",    100, "_pickCoverBadgeFontScale"),
         row(_("Stack & folder labels"), "stack_label_font_scale",    100, "_pickStackLabelFontScale"),
+        row(_("Spine text"),            "spine_font_scale",          100, "_pickSpineFontScale"),
         row(_("Shelf menu"),              "chip_font_scale",           100, "_pickChipFontScale"),
         -- Adjacent to the chip bar because a list row is built to the same
         -- shape -- same face, same base size, same band arithmetic

@@ -648,6 +648,31 @@ function SpineShelf.thicknessPages(c)
     return c.stable or c.scan or c.filename or c.bim or c.rendered
 end
 
+-- bookShape(look, pages, same_size) -> aspect, look, pages, height_aspect
+--
+-- The shape the planner sizes a book from, and the shape whose height it
+-- stands at. A shelf's Book sizes is Varied by default: height from the
+-- cover's shape, thickness from the page count. Equal height ("height")
+-- keeps the cover's shape and the page count, so a face-out is as wide as
+-- its cover and a spine as thick as its book, but stands every book at the
+-- default height: a landscape strip collection as tall as the novels beside
+-- it, and wide. Same stands every book at the default shape and thickness
+-- (the shelf's Thickness % still applies on top), face-outs included.
+--
+-- Both give back the look as a COPY with the default aspect: the painter
+-- reads a spine's top edge from it (the cover's width seen from above), and
+-- the front face is what is left below that, so the default's edge is what
+-- gives every book one front height. The cached look is shared with every
+-- other view, so it is never changed.
+function SpineShelf.bookShape(look, pages, same_size)
+    if not same_size then return look.aspect, look, pages, look.aspect end
+    local copy = {}
+    for k, v in pairs(look) do copy[k] = v end
+    copy.aspect = SpineLayout.DEFAULT_ASPECT
+    if same_size == "height" then return look.aspect, copy, pages, copy.aspect end
+    return copy.aspect, copy, nil, copy.aspect
+end
+
 local function _sampleAverage(bb)
     local n, r, g, b = 0, 0, 0, 0
     local w, h = bb:getWidth(), bb:getHeight()
@@ -717,6 +742,36 @@ function SpineShelf.shownLook(book)
     return require("lib/bookshelf_image_contrast").spineLook(SpineShelf.bookLook(book), MAX_FILL_LUMA)
 end
 
+-- lookFromRegion(bb, x, y, w, h, night) -> the look a spine takes from that
+-- region of a picture, as shownLook gives a book's: its average colour, held
+-- dark enough for the light lettering (MAX_FILL_LUMA), with Image contrast's
+-- boost; nil for an empty region. A spine-out series box gives each spine
+-- the strip of the first cover it stands behind, so the band behind its
+-- title matches the picture. night: the picture is stored inverted (as
+-- painted in night mode), so its samples are turned back to day colours.
+function SpineShelf.lookFromRegion(bb, x, y, w, h, night)
+    if not (bb and w and h and w >= 1 and h >= 1) then return nil end
+    local n, r, g, b = 0, 0, 0, 0
+    for sy = 0, SAMPLE_STEPS - 1 do
+        for sx = 0, SAMPLE_STEPS - 1 do
+            local px = x + math.floor((sx + 0.5) * w / SAMPLE_STEPS)
+            local py = y + math.floor((sy + 0.5) * h / SAMPLE_STEPS)
+            local p = bb:getPixel(px, py)
+            local c = p and p.getColorRGB32 and p:getColorRGB32() or nil
+            if c then
+                n = n + 1
+                r = r + c.r; g = g + c.g; b = b + c.b
+            end
+        end
+    end
+    if n == 0 then return nil end
+    r, g, b = r / n, g / n, b / n
+    if night then r, g, b = 255 - r, 255 - g, 255 - b end
+    r, g, b = _contrastClamp(r, g, b)
+    return require("lib/bookshelf_image_contrast").spineLook(
+        { r = r, g = g, b = b, sampled = true }, MAX_FILL_LUMA)
+end
+
 -- bookLook(book) -> { r, g, b, aspect|nil, sampled }
 -- Day-mode colour values; painters apply the night pre-invert.
 function SpineShelf.bookLook(book)
@@ -747,7 +802,7 @@ function SpineShelf.bookLook(book)
     -- The fallback below is NOT kept, because it usually means "not
     -- extracted yet"; this one is settled. invalidateBook drops it (a
     -- custom cover).
-    if not book.cover_bb then
+    if not book.cover_bb and not book.cover_image_path then
         local ok_r, Repo = pcall(require, "lib/bookshelf_book_repository")
         if ok_r and Repo and Repo.coverKnownAbsent and Repo.coverKnownAbsent(fp) then
             local look = _fallbackLook(label)
@@ -763,10 +818,25 @@ function SpineShelf.bookLook(book)
 
     local look
     local ok = pcall(function()
-        local bb, owned = nil, false
+        local bb, owned, ext_aspect = nil, false, nil
         if book.cover_bb then
             bb = book.cover_bb
-        else
+        elseif type(book.cover_image_path) == "string" and book.cover_image_path ~= "" then
+            -- A cover on disk the shelf shows in place of the book's own (a
+            -- source's download, issue 588; a Hardcover or picked cover): the
+            -- spine takes its colour from what is shown. Decoded small, and
+            -- held by ImageSource's cache, so not ours to free.
+            local ok_i, ImageSource = pcall(require, "lib/bookshelf_image_source")
+            if ok_i and ImageSource and ImageSource.loadImage then
+                bb = ImageSource.loadImage(book.cover_image_path, 40, 60)
+                -- Its shape from the file, not the small decode.
+                if ImageSource.probeSize then
+                    local nw, nh = ImageSource.probeSize(book.cover_image_path)
+                    if nw and nh and nw > 0 then ext_aspect = nh / nw end
+                end
+            end
+        end
+        if not bb and not book.cover_bb then
             local ok_repo, Repo = pcall(require, "lib/bookshelf_book_repository")
             if ok_repo and Repo and Repo.getCoverBB then
                 bb = Repo.getCoverBB(fp)
@@ -776,9 +846,9 @@ function SpineShelf.bookLook(book)
         if bb then
             SpineShelf._samples = (SpineShelf._samples or 0) + 1
             local r, g, b = _sampleAverage(bb)
-            local aspect
+            local aspect = ext_aspect
             local w, h = bb:getWidth(), bb:getHeight()
-            if w and h and w > 0 then aspect = h / w end
+            if not aspect and w and h and w > 0 then aspect = h / w end
             if owned and bb.free then bb:free() end
             if r then
                 r, g, b = _contrastClamp(r, g, b)
@@ -1676,7 +1746,11 @@ end
 -- with the spine colour (so glyph anti-aliasing blends into the right
 -- ground), rotate the buffer, blit. Rotation cost is one copy of a
 -- text-sized buffer.
-local function _paintRotatedTitle(bb, x, y, run_len, band_w, text, face_size, look, night, author)
+local function _paintRotatedTitle(bb, x, y, run_len, band_w, text, face_size, look, night, author, inset)
+    -- inset: the spine's border, which the title and the band of the
+    -- spine's colour behind it must stay inside.
+    inset = math.max(0, inset or 0)
+    local inner = math.max(1, band_w - 2 * inset)
     if run_len < Screen:scaleBySize(14) or band_w < 8 then return end
 
     -- CJK-dominant titles: paint upright in a vertical column instead of
@@ -1717,7 +1791,7 @@ local function _paintRotatedTitle(bb, x, y, run_len, band_w, text, face_size, lo
                 padding   = 0,
             }
             sz = tw:getSize()
-            if sz.h <= band_w then break end
+            if sz.h <= inner then break end
             tw:free()
             tw = nil
             size = size - 2
@@ -1738,7 +1812,7 @@ local function _paintRotatedTitle(bb, x, y, run_len, band_w, text, face_size, lo
         local face_px = tonumber(BFont:getFace(face_name, size).size) or line_h
         local pitch = math.min(line_h, math.floor(face_px * 1.05 + 0.5))
         local lines = { tw }
-        if tw.isTruncated and tw:isTruncated() and pitch + line_h <= band_w then
+        if tw.isTruncated and tw:isTruncated() and pitch + line_h <= inner then
             local l1, l2 = SpineShelf._splitTitle(text, run_len, function(str)
                 local m = TextWidget:new{ text = str,
                     face = BFont:getFace(face_name, size), padding = 0 }
@@ -1801,7 +1875,30 @@ local function _paintRotatedTitle(bb, x, y, run_len, band_w, text, face_size, lo
         -- luminance via getColor8. Each scratch ROW becomes a screen COLUMN
         -- after rotation, so the prefill carries the body's gradient ramp
         -- row-by-row -- a flat band would sit as a stripe on the gradient.
-        local band_off = math.floor((band_w - sh) / 2)
+        -- Where the block sits across the spine: centred on its LETTERS,
+        -- not its box. A line's box runs from the ascender to the
+        -- descender, so the letters sit nearer its top, and centring the
+        -- box put them visibly off centre at larger sizes. The letters'
+        -- middle is taken as halfway up a capital (0.35 em above the
+        -- baseline); the block then moves by the difference, kept inside
+        -- the border. "Top" is the side the letters' tops face after the
+        -- rotation (scratch row 0; see below).
+        local ink_shift = 0
+        do
+            local base = lines[1].getBaseline and lines[1]:getBaseline() or nil
+            if base and #lines == 1 then
+                local ink_mid = base - 0.35 * face_px
+                ink_shift = math.floor(sh / 2 - ink_mid + 0.5)
+            end
+        end
+        local slack = inner - sh
+        local pos = math.floor(slack / 2)
+        -- Moving the block toward its letters' BOTTOM side centres them.
+        local rot_top_left = (SpineShelf.titleRotation() == 270)
+        pos = pos + (rot_top_left and ink_shift or -ink_shift)
+        if pos > slack then pos = slack end
+        if pos < 0 then pos = 0 end
+        local band_off = inset + pos
         -- Read ONCE, outside the row loop: this runs per scratch row.
         local rot_deg   = SpineShelf.titleRotation()
         local band_flip = (rot_deg == 270)
@@ -1828,8 +1925,9 @@ local function _paintRotatedTitle(bb, x, y, run_len, band_w, text, face_size, lo
         local rot = scratch:rotatedCopy(rot_deg)
         scratch:free()
         local rw, rh = rot:getWidth(), rot:getHeight()
-        -- Centre across the spine, centre along the run.
-        local dx = x + math.floor((band_w - rw) / 2)
+        -- Across the spine where band_off put it (inside the border, the
+        -- letters centred); centred along the run.
+        local dx = x + band_off
         local dy = y + math.floor((run_len - rh) / 2)
         bb:blitFrom(rot, dx, dy, 0, 0, rw, rh)
         rot:free()
@@ -1934,6 +2032,9 @@ local SpineBookSlot = InputContainer:extend{
 -- lookup because every spine paints the same either way.
 local function _itemCallback(cbs, item, gesture)
     if not (cbs and item) then return nil end
+    -- A source's folder record (issue 588) carries a pseudo-path; it is a
+    -- folder for all that, so it is asked before "has a path, so a book".
+    if item.is_opds_nav or item.kind == "opds_nav" then return cbs["on_opds_nav_" .. gesture] end
     if item.filepath then return cbs["on_book_" .. gesture] end
     local kind = item.kind
     if kind == "folder"   then return cbs["on_folder_" .. gesture] end
@@ -1981,8 +2082,9 @@ function SpineBookSlot:onHold()
 end
 
 function SpineBookSlot:onDoubleTap()
-    -- Books only: double tap opens directly (#271); groups have no "open".
-    if self.book and self.book.filepath and self.callbacks
+    -- Books only: double tap opens directly (#271); groups have no "open",
+    -- nor has a source's folder record, path or not.
+    if self.book and self.book.filepath and not self.book.is_opds_nav and self.callbacks
             and self.callbacks.on_book_open then
         SpineShelf.last_tapped_slot = self
         self.callbacks.on_book_open(self.book)
@@ -2095,6 +2197,8 @@ function SpineBookSlot:_renderKey(night)
         -- keeps painting the old rotation until something else evicts it.
         SpineShelf.titleRotation(),
         e.binding or "hardcover",
+        -- Text size > Spine text: the lettering is baked in.
+        SpineShelf.spineTextScale(),
         -- The fill colour: Image contrast's boost changes it with nothing
         -- else about the book changing.
         e.look and string.format("%d,%d,%d", e.look.r or 0, e.look.g or 0, e.look.b or 0) or "-",
@@ -2279,7 +2383,9 @@ function SpineBookSlot:_renderIntoAt(bb, x, y, night)
     if tilt then
         -- Sized above with the face, from the same tip angles.
         edge_h = tilt_edge
-    elseif spine_h >= Screen:scaleBySize(60) then
+    elseif spine_h >= Screen:scaleBySize(60) and not e.no_top_edge then
+        -- (no_top_edge: a book standing in a spine-out series box, whose lid
+        -- is the depth.)
         -- The spine-out book's depth into the shelf is its COVER WIDTH
         -- (height over aspect), foreshortened by the camera's pitch (see
         -- VIEW_SIN) -- not a fraction of its height, which made every spine
@@ -2294,12 +2400,19 @@ function SpineBookSlot:_renderIntoAt(bb, x, y, night)
                                 edge = edge_h }
     local body_top = top + edge_h
     local body_h = spine_h - edge_h
-    for i = 0, spine_w - 1 do
-        bb:paintRectRGB32(x + i, body_top, 1, body_h,
-                          _tintColor(look, _rampF(i, spine_w), night))
+    -- A spine-out series box paints its spines in two passes with the first
+    -- cover between them: the body (marks = false), then the lettering
+    -- (body = false), so the cover tints the spines without dimming what is
+    -- written on them.
+    if e.body ~= false then
+        for i = 0, spine_w - 1 do
+            bb:paintRectRGB32(x + i, body_top, 1, body_h,
+                              _tintColor(look, _rampF(i, spine_w), night))
+        end
+        _paintBorderRGB32(bb, x, body_top, spine_w, spine_h - edge_h, hairline,
+                          skin and _tintColor(e.look, 0.8, night) or _boardColor(e.look, night))
     end
-    _paintBorderRGB32(bb, x, body_top, spine_w, spine_h - edge_h, hairline,
-                      skin and _tintColor(e.look, 0.8, night) or _boardColor(e.look, night))
+    if e.marks == false then return end
     -- The FOOT NICK -- a pixel square off each bottom corner, the softening
     -- where a book meets the shelf -- is not cut here. It takes the colour of
     -- the shelf directly BELOW the foot (maintainer's rule: "with or without
@@ -2413,16 +2526,22 @@ function SpineBookSlot:_renderIntoAt(bb, x, y, night)
 
     -- Status glyph (reading / finished / on hold), level, at the head.
     local glyph = _statusGlyph(self.book)
-    local w_dp = e.w_dp or 20
+    -- Lettering is sized from the spine as it was before Spine text
+    -- thickened it (textThicken), and titleFaceSize then scales the title
+    -- once: from the thickened width it would grow twice, and the marks
+    -- with it.
+    local thick = SpineShelf.textThicken(SpineShelf.spineTextScale())
+    local w_dp = (e.w_dp or 20) / thick
+    local txt_ref_w_dp = e.ref_w_dp and (e.ref_w_dp / thick) or nil
     if glyph then
-        local gsize = _glyphSizeDp(w_dp, e.ref_w_dp, GLYPH_STATUS)
+        local gsize = _glyphSizeDp(w_dp, txt_ref_w_dp, GLYPH_STATUS)
         local face = BFont:getFace("symbols", gsize)
         local used = _paintLevelText(bb, x, cur_top, spine_w, glyph, face, night)
         if used > 0 then cur_top = cur_top + used + math.floor(pad / 2) end
     end
     -- Favourite star under it (face-out favourites show the cover instead).
-    if false and e.favourite and not e.face_out then
-        local gsize = _glyphSizeDp(w_dp, e.ref_w_dp, GLYPH_FAV)
+    if e.favourite and not e.face_out then
+        local gsize = _glyphSizeDp(w_dp, txt_ref_w_dp, GLYPH_FAV)
         local face = BFont:getFace("symbols", gsize)
         -- The favourite icon the reader chose (heart unless set to star),
         -- as the cover grid and list draw it; this was always the star.
@@ -2463,11 +2582,10 @@ function SpineBookSlot:_renderIntoAt(bb, x, y, night)
     -- Thin spines still shrink below the cap as before.
     local run = bottom - cur_top
     if run > 0 and e.label and e.label ~= "" then
-        local tcap  = SpineShelf.titleSize(e.ref_w_dp)
-        local tsize = math.max(8, math.min(tcap, math.floor(w_dp * 0.5)))
+        local tsize = SpineShelf.titleFaceSize(w_dp, txt_ref_w_dp)
         local author = (self.show_author ~= false) and e.author or nil
         _paintRotatedTitle(bb, x, cur_top, run, spine_w, e.label, tsize,
-                           look, night, author)
+                           look, night, author, hairline)
     end
 
     -- Bulk selection: the cover grid's corner flag at FULL spine width,
@@ -2954,6 +3072,39 @@ end
 -- spines stop at); a series box's name strip uses it too.
 function SpineShelf.titleSize(ref_w_dp)
     return math.max(8, math.min(18, math.floor((ref_w_dp or 22) * 0.5)))
+end
+
+-- spineTextScale() -> Text size > Spine text, a percentage (50-200).
+-- Asked for every visible spine on every paint (the render key and the
+-- painter), so read once per settings change, as _themeChar is.
+local _text_scale_memo = nil
+function SpineShelf.spineTextScale()
+    local gen = BookshelfSettings.generation and BookshelfSettings.generation() or 0
+    local m = _text_scale_memo
+    if m and m.gen == gen then return m.v end
+    local v = tonumber(BookshelfSettings.read("spine_font_scale", 100)) or 100
+    _text_scale_memo = { gen = gen, v = v }
+    return v
+end
+
+-- textThicken(scale) -> how much thicker spines stand for Spine text at
+-- scale%: the same factor past 100 (to 2), so the bigger face has room
+-- across them; 1 at or below 100 (smaller text needs no thinner books).
+function SpineShelf.textThicken(scale)
+    local k = (tonumber(scale) or 100) / 100
+    if k <= 1 then return 1 end
+    return math.min(2, k)
+end
+
+-- titleFaceSize(w_dp, ref_w_dp) -> the title's face size on a spine w_dp
+-- wide: it follows the spine's width but caps at what an AVERAGE book on the
+-- shelf gets (titleSize), then Spine text scales it. The author is set a
+-- little smaller than this, and _paintRotatedTitle still steps the face
+-- down until a line fits across the spine, so a large scale cannot spill
+-- over a thin one.
+function SpineShelf.titleFaceSize(w_dp, ref_w_dp)
+    local base = math.max(8, math.min(SpineShelf.titleSize(ref_w_dp), math.floor((w_dp or 20) * 0.5)))
+    return math.max(6, math.floor(base * SpineShelf.spineTextScale() / 100 + 0.5))
 end
 
 function SpineShelf.badgeDrop(row_h)
@@ -3975,7 +4126,9 @@ end
 function SpineShelf.plan(items, opts)
     -- The ornament scan's window: see Ornaments.allowRecent. Only if the
     -- module is already loaded (a shelf with ornaments off never loads it).
-    local OrnScan = package.loaded["lib/bookshelf_ornaments"]
+    -- A table only: after a failed require LuaJIT leaves its loading
+    -- sentinel in package.loaded, where Lua 5.4 leaves nothing.
+    local OrnScan = (type(package.loaded["lib/bookshelf_ornaments"]) == "table" and package.loaded["lib/bookshelf_ornaments"] or nil)
     local orn_scan_was_open = false
     if OrnScan and OrnScan.allowRecent then orn_scan_was_open = OrnScan.allowRecent(true) end
     local entries = {}
@@ -4000,6 +4153,10 @@ function SpineShelf.plan(items, opts)
             ref_w_dp = ref_w_dp * t / 100
         end
     end
+    -- Spine text past 100%: every spine-out book thicker by its factor, so
+    -- the bigger lettering fits across it (opts.text_scale, both passes).
+    local text_k = SpineShelf.textThicken(opts.text_scale)
+    ref_w_dp = ref_w_dp * text_k
     -- Face-out policy: which books stand cover-forward. Mode string from
     -- the chip editor's picker; the old boolean pins normalise onto it
     -- (true/nil were "favourites face out: yes", false was "no").
@@ -4351,7 +4508,10 @@ function SpineShelf.plan(items, opts)
         -- the sidecar knows better and CoverProgress.decide reads it at
         -- paint time anyway for the glyphs, through the same TTL cache,
         -- so this backfill costs the page ONE sidecar read per book.
-        local pages = src.page_count
+        -- Not a count a paint left on the record (CoverProgress marks those
+        -- "paint"): the plan reads its own, or a page built again plans
+        -- differently from its first build.
+        local pages = (src._page_src ~= "paint") and src.page_count or nil
         -- BIM's own count, before this block writes others onto the record: a
         -- fixed-layout book's page count, which is layout-free (thickness).
         local bim_pages = (src._page_src == nil) and src.page_count or nil
@@ -4397,7 +4557,7 @@ function SpineShelf.plan(items, opts)
                     -- hero and the rows show, and a spine whose width came
                     -- from the sidecar's last-render figure instead read a few
                     -- pixels narrower than the same book everywhere else.
-                    if pc and not src.page_count then
+                    if pc and (not src.page_count or src._page_src == "paint") then
                         pages = pc
                         src.page_count = pc
                         src._page_src = pc_src or "render"
@@ -4469,8 +4629,10 @@ function SpineShelf.plan(items, opts)
             end
         end
         -- A shelf of shelves' "+ Add shelf" takes a face-out cover's place
-        -- and size, as a dashed outline (see the tile branch below).
-        if bk.add_subshelf or bk._series_box then face_out = true end
+        -- and size, as a dashed outline (see the tile branch below). A
+        -- source's folder record (issue 588: a fetch-mode source on Spines)
+        -- stands as its folder tile too, not as a book's spine.
+        if bk.add_subshelf or bk._series_box or bk.is_opds_nav then face_out = true end
         if face_out and src.has_cover == nil and not src._cover_meta_tried
                 and src.filepath and ok_repo and Repo and Repo.buildBookMeta then
             -- Light page records carry no has_cover, and the cover tile
@@ -4497,14 +4659,19 @@ function SpineShelf.plan(items, opts)
                 end
             end)
         end
+        -- The shape the book is sized from: its own, or the default on a
+        -- shelf whose Book sizes is Same (bookShape).
+        local aspect, shape_pages, height_aspect
+        aspect, look, shape_pages, height_aspect = SpineShelf.bookShape(look,
+            SpineShelf.thicknessPages(thick), opts.same_size)
+        local h = SpineLayout.spineHeight(budget, height_aspect)
         local w_dp, w, depth, face_h, true_thick
         if face_out then
             -- The page block above a face-out cover is the book's THICKNESS:
             -- the same page-count width its spine would have had (auto scale
             -- and the chip's thickness % included), capped so the cover
             -- stays the point.
-            local depth_dp = SpineLayout.spineWidthDp(
-                                 SpineShelf.thicknessPages(thick)) * auto_thick
+            local depth_dp = SpineLayout.spineWidthDp(shape_pages) * auto_thick
             local t = tonumber(opts.thickness_pct)
             if t and t >= 40 and t <= 300 and t ~= 100 then
                 depth_dp = depth_dp * t / 100
@@ -4527,14 +4694,13 @@ function SpineShelf.plan(items, opts)
             -- left the cover a whole spine's top edge taller than its
             -- neighbours, because a book's thickness is far smaller than its
             -- cover width.
-            face_h = h - SpineLayout.topEdgeHeight(h, aspect, Screen:scaleBySize(5))
+            face_h = h - SpineLayout.topEdgeHeight(h, height_aspect, Screen:scaleBySize(5))
             if face_h < Screen:scaleBySize(24) then face_h = Screen:scaleBySize(24) end
             -- Width from the COVER height, so the cover stays aspect-true.
             w = SpineLayout.faceOutWidth(face_h, aspect)
             w_dp = math.floor(w / (Screen:scaleBySize(100) / 100) + 0.5)
         else
-            w_dp = SpineLayout.spineWidthDp(
-                       SpineShelf.thicknessPages(thick)) * auto_thick
+            w_dp = SpineLayout.spineWidthDp(shape_pages) * auto_thick
             -- Per-chip thickness: a straight multiplier on top of the
             -- height-scaled width. Face-out covers are aspect-true and
             -- stay out of both.
@@ -4542,7 +4708,7 @@ function SpineShelf.plan(items, opts)
             if t and t >= 40 and t <= 300 and t ~= 100 then
                 w_dp = w_dp * t / 100
             end
-            w_dp = math.max(8, w_dp)
+            w_dp = math.max(8, w_dp * text_k)
             w = Screen:scaleBySize(w_dp)
         end
         local series_box
@@ -5500,13 +5666,18 @@ function SpineShelf.rowWidget(opts)
                     -- clamped terms, and a second copy of that arithmetic is
                     -- exactly what drifts.
                     e._drawn_h = cover_h + depth
+                    -- A source's folder record (issue 588) is a folder tile:
+                    -- its taps drill in, as in covers view, and a double tap
+                    -- does not "open" it as a book.
+                    local cbs_fo = opts.callbacks or {}
+                    local nav = e.book and e.book.is_opds_nav
                     local cover = CoverTile:new{
                         book          = e.book,
                         width         = e.w,
                         height        = cover_h,
-                        on_tap        = opts.callbacks and opts.callbacks.on_book_tap,
-                        on_hold       = opts.callbacks and opts.callbacks.on_book_hold,
-                        on_double_tap = opts.callbacks and opts.callbacks.on_book_open,
+                        on_tap        = nav and cbs_fo.on_opds_nav_tap or cbs_fo.on_book_tap,
+                        on_hold       = nav and cbs_fo.on_opds_nav_hold or cbs_fo.on_book_hold,
+                        on_double_tap = (not nav) and cbs_fo.on_book_open or nil,
                         show_progress = true,
                         -- The page block replaces the drop shadow: a shelved
                         -- book doesn't float. flat_thumb drops the shadow AND
@@ -6593,9 +6764,12 @@ function SpineShelf.paintFaceOutTilt(tile)
         return Blitbuffer.ColorRGB32(v, v, v, 0xFF)
     end
     local foot   -- the rect behind the book that step 2 puts back
+    local src    -- the cover's copy, freed however the pose ends
+    -- Every span on the screen: a lifted book can reach past its edge.
+    local clip = { w = bb:getWidth(), h = bb:getHeight() }
     local ok, err = pcall(function()
         -- 1. The cover alone.
-        local src = Blitbuffer.new(W, H, bb:getType())
+        src = Blitbuffer.new(W, H, bb:getType())
         src:blitFrom(require("lib/bookshelf_clip_bb").real(bb), 0, 0, rect.x, rect.y, W, H)
         local cx0, cy0 = card.dimen.x, card.dimen.y
         pcall(function() card:paintTo(src, 0, 0) end)
@@ -6688,7 +6862,7 @@ function SpineShelf.paintFaceOutTilt(tile)
                         run_y, run_c = y, c
                     end
                 end
-            end)
+            end, clip)
         end
         local tones = {}
         local function cached(v)
@@ -6741,9 +6915,9 @@ function SpineShelf.paintFaceOutTilt(tile)
                     _shadeRect(bb, x, by0, 1, by1 - by0, 0.10 + 0.22 * ((k + 0.5) / 4), night)
                 end
             end
-        end)
-        src:free()
+        end, clip)
     end)
+    if src then src:free() end
     if not ok then
         logger.dbg("[bookshelf] face-out opening pose failed, tipping instead:", err)
         return SpineShelf._paintFaceOutTip(tile)
