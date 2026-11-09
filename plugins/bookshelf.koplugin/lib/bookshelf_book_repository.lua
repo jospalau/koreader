@@ -2016,8 +2016,15 @@ function Repo.buildBook(filepath, opts)
     -- belongs to Repo.pageCountFor. This value also seeds the progress cache
     -- below, so it must match what readProgress would compute for this file,
     -- which is why it starts from the SIDECAR count and not from BIM's.
-    local fallback_page_count = ds_page_count or Repo._calibreField(filepath, "pages") -- Repo.pageCountFor(filepath, ds_page_count)
-    if not book.page_count then
+    local cal_pages = tonumber(Repo._calibreField(filepath, "pages"))
+    local fallback_page_count
+    if ds_page_src == "stable" then
+        fallback_page_count = ds_page_count
+    else
+        fallback_page_count = (cal_pages and cal_pages > 0 and cal_pages)
+                              or Repo.pageCountFor(filepath, ds_page_count)
+    end
+    if fallback_page_count then
         book.page_count = fallback_page_count
     end
     -- page_num precedence mirrors page_count:
@@ -2774,13 +2781,13 @@ end
 -- touched by reading, so chips sorted on them keep their cache.
 local READ_STATE_SORT_TOKENS = {
     "s:last_opened:", "s:percent_read:", "s:read_status", "s:rating:",
-    "s:added_or_opened:",
+    "s:added_or_opened:", "s:page_count",
 }
 -- The same sorts by key, for caches that spell the priority differently.
 local READ_STATE_SORT_KEYS = {
     last_opened = true, percent_read = true, read_status = true,
     read_status_active = true, rating = true, added_or_opened = true,
-    percent_natural = true,
+    percent_natural = true, page_count = true,
 }
 function Repo.invalidateReadStateCache()
     for k in pairs(_bySource_cache) do
@@ -3144,10 +3151,13 @@ function Repo.readProgress(filepath)
     end
     -- #159: last-resort filename fallback (see pageCountFromFilename), matching
     -- buildBook's progress-cache seed so the sort key / badge agree.
-    if not page_count then
-        -- page_count = pageCountFromFilename(filepath)
-        -- if page_count then page_src = "filename" end
-        page_count = Repo._calibreField(filepath, "pages")
+    if page_src ~= "stable" then
+        local cal = tonumber(Repo._calibreField(filepath, "pages"))
+        if cal and cal > 0 then
+            if page_count ~= cal then page_num = nil end  -- se recalcula abajo con el %
+            page_count = cal
+            page_src = "calibre"
+        end
     end
     pub_date = Repo._calibreField(filepath, "pubdate", function(v)
         return tonumber(tostring(v):sub(1, 4))
@@ -6370,7 +6380,7 @@ _recordMatches = function(b, compiled)
             if b._status == nil then b._status = _normalizeStatus(status) end
             if b.rating  == nil then b.rating  = rating end
             if b._pct    == nil then b._pct    = pct end
-            if b.page_count == nil then b.page_count = page_count end
+            if page_count ~= nil then b.page_count = page_count end
         else
             if b._status == nil then b._status = "unread" end
             -- no sidecar => never opened => unrated; leave b.rating nil
