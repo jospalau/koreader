@@ -5859,6 +5859,9 @@ function PageTextInfo:getMenuActions()
         { label = "Push conf",  callback = function() self:onPushConfig() end },
     }
 
+    table.insert(actions, { header = "Various", label = "Toggle SSH server", callback = function() self.ui:handleEvent(Event:new("ToggleSSHServer")) end })
+    table.insert(actions, { label = "Toogle RSync server", callback = function() self.ui:handleEvent(Event:new("ToggleRsyncdService")) end })
+
     local last = self:getLastBook()
     if last then
         table.insert(actions, {
