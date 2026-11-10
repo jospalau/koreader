@@ -31,11 +31,80 @@ local TextWidget      = require("ui/widget/textwidget")
 local UIManager       = require("ui/uimanager")
 local VerticalGroup   = require("ui/widget/verticalgroup")
 local VerticalSpan    = require("ui/widget/verticalspan")
+local logger          = require("logger")
 local util            = require("util")
 local Screen          = Device.screen
 
 -- Max characters of page text shown in the TEXT section (0 = hide)
 local SNIPPET_CHARS = 150
+
+-- Reading distance used for every angular computation. 40 cm is the
+-- conventional "standard" distance of the vision-science literature, which
+-- makes the numbers comparable with published ones. Real e-reader distances
+-- vary (one study cited by Legge & Bigelow found ~50 cm for e-paper), so
+-- change it here if you read from elsewhere.
+local READING_DISTANCE_MM = 400
+
+-- Author's personal x-height preference, in arcminutes at READING_DISTANCE_MM.
+-- This is an individual calibration (found empirically by the author), NOT a
+-- scientific norm: it is shown separately from the evidence-based bands below.
+local PREFERRED_ARCMIN = 20
+
+-- WHY THESE BANDS (evidence-based, edit here only):
+-- Source: Legge & Bigelow (2011), "Does print size matter for reading? A
+-- review of findings from vision science and typography", J. Vision 11(5):8.
+--  * Critical print size (CPS) for normal vision is ~0.2 deg of x-height
+--    (12′; individual range ~0.15-0.3 deg). Below it, reading speed drops
+--    sharply.
+--  * Above the CPS there is a very wide plateau of maximum reading speed,
+--    from 0.2 to ~2 deg (12′-120′). Speed only declines gradually beyond it.
+--  * Real printed books and newspapers cluster at 0.20-0.28 deg (12-17′,
+--    mean ~14′), i.e. just above the CPS.
+-- So there is no single "ideal" angle: only "below the CPS", "typical print",
+-- and a broad fluent range where the choice is personal comfort (contrast,
+-- lighting, e-ink panel, vision, taste). The previous labels (Demanding /
+-- Ideal / Oversized) had no empirical basis, which is why they were replaced.
+-- The classification and the reference note are both generated from this table.
+local ANGLE_BANDS = {
+    { upto = 12,        label = "Below critical size" },
+    { upto = 17,        label = "Typical of print books" },
+    { upto = 120,       label = "Fluent range" },
+    { upto = math.huge, label = "Above fluent range" },
+}
+
+local function classifyAngle(angle)
+    for _, b in ipairs(ANGLE_BANDS) do
+        if angle < b.upto then return b.label end
+    end
+end
+
+local function mmFromArcmin(arcmin, distance_mm)
+    return 2 * distance_mm * math.tan(math.rad(arcmin / 60) / 2)
+end
+
+local function angleNote()
+    local parts, prev = {}, nil
+    for _, b in ipairs(ANGLE_BANDS) do
+        local txt
+        if not prev then
+            txt = string.format("<%d′ (<%.2fmm) %s",
+                b.upto, mmFromArcmin(b.upto, READING_DISTANCE_MM), b.label)
+        elseif b.upto == math.huge then
+            txt = string.format(">%d′ (>%.2fmm) %s",
+                prev, mmFromArcmin(prev, READING_DISTANCE_MM), b.label)
+        else
+            txt = string.format("%d–%d′ (%.2f–%.2fmm) %s", prev, b.upto,
+                mmFromArcmin(prev, READING_DISTANCE_MM),
+                mmFromArcmin(b.upto, READING_DISTANCE_MM), b.label)
+        end
+        table.insert(parts, txt)
+        prev = b.upto
+    end
+    return string.format(
+        "x-height at %dcm (Legge & Bigelow 2011): %s. Personal preference: %d′ (%.2fmm).",
+        READING_DISTANCE_MM / 10, table.concat(parts, " · "),
+        PREFERRED_ARCMIN, mmFromArcmin(PREFERRED_ARCMIN, READING_DISTANCE_MM))
+end
 
 -- ── Fonts ────────────────────────────────────────────────────────────────────
 
@@ -326,7 +395,6 @@ end
 -- Text from the start of the paragraph containing `pos` to the bottom of the
 -- page. Falls back to the text from line `y`, then to `fallback`.
 local function textFromLine(doc, y, fallback, pos)
-    local logger = require("logger")
     local ok, res = pcall(function()
         return doc._document:getTextFromPositions(0, y, Screen:getWidth(),
                                                   Screen:getHeight(), false, false)
@@ -417,8 +485,9 @@ local function gatherData(ui)
     local face_base = Font:getFace(data.font_face_clean, px, 0, true)
     if face_base then
         local xh = face_base.ftsize:getXHeight()
-        -- If xh < 1 it is a ratio, otherwise it is already in px
-        local xh_px = (xh < 1) and Math.round(xh * px) or Math.round(xh)
+        -- If xh < 1 it is a ratio, otherwise it is already in px.
+        -- Kept fractional: no intermediate rounding.
+        local xh_px = (xh < 1) and (xh * px) or xh
         -- leading factor (line spacing relative to x-height)
         if xh_px > 0 then
             local line_spacing_factor = (configurable.line_spacing or 100) / 100
@@ -427,34 +496,26 @@ local function gatherData(ui)
             end)
 
             if ok and xh2 and ascender and descender then
-                data.leading_factor = math.floor(((1.2 * px * line_spacing_factor) / xh_px) * 100) / 100
+                data.leading_factor = (1.2 * px * line_spacing_factor) / xh_px
                 data.leading_key, data.leading_text =
                     classifyLeading(data.leading_factor, xh2, ascender, descender)
             else
                 logger.warn("TextInfoPopup getAscDesc error:", xh2)
             end
         end
-        local xh_mm = Math.round(xh_px * 25.4 / display_dpi * 100) / 100
-        data.x_height_px     = xh_px .. "px"
-        data.x_height_mm     = xh_mm .. "mm"
-        local angle = arcminutes_from_mm(xh_mm, 400)
 
-        local status
-        if angle < 15 then
-            status = "Demanding"
-        elseif angle < 17 then
-            status = "Small"
-        elseif angle <= 19 then
-            status = "Comfortable"
-        elseif angle <= 20 then
-            status = "Ideal"
-        else
-            status = "Large"
-        end
+        local xh_mm = xh_px * 25.4 / display_dpi            -- unrounded
+        local angle = arcminutes_from_mm(xh_mm, READING_DISTANCE_MM)
 
-        data.x_height_arcmin = string.format("%.1f′ (%.2fmm) [%s]", angle, xh_mm, status)
+        data.x_height_px     = string.format("%.1fpx", xh_px)
+        data.x_height_mm     = string.format("%.2fmm", xh_mm)
+        data.x_height_arcmin = string.format("%.1f′ (%.2fmm) [%s]",
+            angle, xh_mm, classifyAngle(angle))
+        -- Difference against the personal preference (not a scientific norm)
+        data.x_height_vs_pref = string.format("%+.1f′ vs %d′", angle - PREFERRED_ARCMIN, PREFERRED_ARCMIN)
     else
         data.x_height_px, data.x_height_mm, data.x_height_arcmin = "N/A", "N/A", "N/A"
+        data.x_height_vs_pref = "N/A"
     end
 
     -- Readability table (from pagetextinfo if available)
@@ -589,12 +650,14 @@ local function buildSections(data, fonts, layout)
 
     -- X-HEIGHT
     addSection(sections, fonts, L, "X-HEIGHT", kvTable{
-        { "Pixels", data.x_height_px or "?" },
-        { "Metric", data.x_height_mm or "?" },
+        { "Pixels",  data.x_height_px or "?" },
+        { "Metric",  data.x_height_mm or "?" },
         { "Leading", data.leading_text and
-            string.format("%.2f [%s]", data.leading_factor, data.leading_text) or "N/A"},
-        { "Visual angle (x-height in mm) @40cm", data.x_height_arcmin or "?" },
-        { note = "Reference at 40cm (elbow-to-knuckles distance): ~20′ (2.33mm) ideal · 17–19′ (1.98–2.21mm) comfortable · 15–17′ (1.75–1.98mm) small · <15′ (<1.75mm) demanding · >25′ (>2.91mm) oversized" },
+            string.format("%.2f× [%s]", data.leading_factor, data.leading_text) or "N/A" },
+        { "Preferred", data.x_height_vs_pref or "?" },
+        { string.format("Angle @%dcm (x-height in mm)", READING_DISTANCE_MM / 10),
+          data.x_height_arcmin or "?", wide = true },
+        { note = angleNote() },
     })
 
     -- DISPLAY
