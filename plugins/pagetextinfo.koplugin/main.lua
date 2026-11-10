@@ -6601,7 +6601,67 @@ local function buildRows(ui)
     return rows
 end
 
--- Dialog ----------------------------------------------------------------
+local function buildTitleSegments(ui)
+    local doc = ui.document
+    local configurable = doc.configurable
+    local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+    local reading_distance_mm = 400
+
+    local na = { { text = "Angle @40cm: N/A  |  Leading: N/A" } }
+
+    local pt = configurable.font_size
+    local px = math.floor(display_dpi * pt / 72 + 0.5)
+    local face_name = (doc._document:getFontFace() or "?"):gsub("%s+", "") .. "-Regular"
+    local face_base = Font:getFace(face_name, px, 0, true)
+
+    if not face_base or not face_base.ftsize then return na end
+
+    local xh = face_base.ftsize:getXHeight()
+    local xh_px = (xh < 1) and (xh * px) or xh
+    if xh_px <= 0 then return na end
+
+    local xh_mm = xh_px * 25.4 / display_dpi
+    local angle_rad = 2 * math.atan(xh_mm / (2 * reading_distance_mm))
+    local angle = math.deg(angle_rad) * 60
+
+    local angle_class = angle < 12 and "Below critical size" or "Fluent range"
+
+    local segments = {
+        { text = string.format("Angle @40cm: %.1f′, %.2f mm ", angle, xh_mm) },
+        { text = "[" .. angle_class .. "]", bold = true },
+        { text = "  |  Leading: " },
+    }
+
+    local line_spacing_factor = (configurable.line_spacing or 100) / 100
+    local ok, xh2, ascender, descender = pcall(function()
+        return face_base.ftsize:getAscDesc()
+    end)
+
+    if ok and xh2 and ascender and descender then
+        local leading_factor = (1.2 * px * line_spacing_factor) / xh_px
+        local safe_min = (ascender + descender) / xh2
+        local leading_class
+
+        if leading_factor < safe_min then
+            leading_class = "Collision"
+        elseif leading_factor < safe_min + 0.15 then
+            leading_class = "Compact"
+        elseif leading_factor < safe_min + 0.4 then
+            leading_class = "Balanced"
+        elseif leading_factor < safe_min + 0.6 then
+            leading_class = "Airy"
+        else
+            leading_class = "Very airy"
+        end
+
+        table.insert(segments, { text = string.format("%.2f× ", leading_factor) })
+        table.insert(segments, { text = "[" .. leading_class .. "]", bold = true })
+    else
+        table.insert(segments, { text = "N/A" })
+    end
+
+    return segments
+end
 
 function PageTextInfo:onShowSettingsMenu()
     local Blitbuffer = require("ffi/blitbuffer")
@@ -6635,6 +6695,67 @@ function PageTextInfo:onShowSettingsMenu()
     local thin  = Screen:scaleBySize(1)
     local thick = Screen:scaleBySize(3)
     local buttons = {}
+
+    -- Calculate the current x-height angle and leading, using the same
+    -- formulas and classifications as typography_popup.lua.
+    local function buildTitleText()
+        local doc = ui.document
+        local configurable = doc.configurable
+        local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+        local reading_distance_mm = 400
+
+        local pt = configurable.font_size
+        local px = math.floor(display_dpi * pt / 72 + 0.5)
+        local face_name = (doc._document:getFontFace() or "?"):gsub("%s+", "") .. "-Regular"
+        local face_base = Font:getFace(face_name, px, 0, true)
+
+        if not face_base or not face_base.ftsize then
+            return "Angle @40cm: N/A  |  Leading: N/A"
+        end
+
+        local xh = face_base.ftsize:getXHeight()
+        local xh_px = (xh < 1) and (xh * px) or xh
+
+        if xh_px <= 0 then
+            return "Angle @40cm: N/A  |  Leading: N/A"
+        end
+
+        local xh_mm = xh_px * 25.4 / display_dpi
+        local angle_rad = 2 * math.atan(xh_mm / (2 * reading_distance_mm))
+        local angle = math.deg(angle_rad) * 60
+
+        local angle_class = angle < 12 and "Below critical size" or "Fluent range"
+        local angle_text = string.format("%.1f′, %.2f mm [%s]", angle, xh_mm, angle_class)
+
+        local leading_text = "N/A"
+        local line_spacing_factor = (configurable.line_spacing or 100) / 100
+        local ok, xh2, ascender, descender = pcall(function()
+            return face_base.ftsize:getAscDesc()
+        end)
+
+        if ok and xh2 and ascender and descender then
+            local leading_factor = (1.2 * px * line_spacing_factor) / xh_px
+            local safe_min = (ascender + descender) / xh2
+            local leading_class
+
+            if leading_factor < safe_min then
+                leading_class = "Collision"
+            elseif leading_factor < safe_min + 0.15 then
+                leading_class = "Compact"
+            elseif leading_factor < safe_min + 0.4 then
+                leading_class = "Balanced"
+            elseif leading_factor < safe_min + 0.6 then
+                leading_class = "Airy"
+            else
+                leading_class = "Very airy"
+            end
+
+            leading_text = string.format("%.2f× [%s]", leading_factor, leading_class)
+        end
+
+        return string.format("Angle @40cm: %s  |  Leading: %s",
+            angle_text, leading_text)
+    end
 
     local dialog = InputContainer:new{
         dimen = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
@@ -6680,12 +6801,31 @@ function PageTextInfo:onShowSettingsMenu()
         end
     end
 
+    local title_face = Font:getFace("cfont", 14)
+    local title_group = HorizontalGroup:new{}
+    for __, seg in ipairs(buildTitleSegments(self.ui)) do
+        table.insert(title_group, TextWidget:new{
+            text = seg.text,
+            face = title_face,
+            bold = seg.bold or false,
+        })
+    end
+
+    local title = CenterContainer:new{
+        dimen = Geom:new{ w = dialog_w, h = cell_h },
+        title_group,
+    }
+
     local frame = FrameContainer:new{
         background = Blitbuffer.COLOR_WHITE,
         bordersize = Size.border.window,
         radius = Size.radius.window,
         padding = Size.padding.small,
-        grid,
+        VerticalGroup:new{
+            align = "center",
+            title,
+            grid,
+        },
     }
     dialog[1] = CenterContainer:new{
         dimen = Geom:new{ w = screen.w, h = screen.h },
