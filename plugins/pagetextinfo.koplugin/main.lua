@@ -5878,7 +5878,7 @@ function PageTextInfo:getMenuActions()
         })
     end
 
-    table.insert(actions, { header = "Restart or Exit", label = "Restart", callback = function() self.ui:handleEvent(Event:new("Restart")) end })
+    table.insert(actions, { header = "Restart or Exit", label = "Restart", callback = function() restartKOReader() end })
     table.insert(actions, { label = "Exit", callback = function() self.ui:handleEvent(Event:new("Exit")) end })
     return actions
 end
