@@ -593,9 +593,8 @@ function RulerOverlay:init()
     local widget_settings = {
         width = Screen:getWidth(),
         height = Screen:getHeight(),
-        x = 1000,
-        y = 1000,
-        alpha = 0 -- transparency (0.0 = fully transparent, 1.0 = opaque)
+        alpha = true,
+        file_do_cache = false,
     }
 
     self.ges_events = {
@@ -614,9 +613,11 @@ function RulerOverlay:init()
     }
     -- widget_settings.image_disposable = true
     if Device.model == "Kobo_spaBW" or Device.model == "Kobo_goldfinch" or Device.model == "Kobo_spaColour" then
-        widget_settings.file = "resources/rulerKoboClaraBW.png" -- 1072x1448
+        widget_settings.file = "resources/rulerKoboClaraBW.png"
+    elseif Device.model == "KindlePaperWhite6" then
+        widget_settings.file = "resources/rulerKindlePW6.png"
     else
-        widget_settings.file = "resources/rulerEmulator.png" -- 1040x1190
+        widget_settings.file = "resources/rulerEmulator.png"
     end
 
 
@@ -630,32 +631,65 @@ function RulerOverlay:init()
     self.last_pos_x = -1
 end
 
-function RulerOverlay:onTapRuler(arg, ges_ev)
-    -- UIManager:close(self.ruler_widget)
-    -- UIManager:close(self)
-    -- local ruler_overlay = RulerOverlay:new()
-    -- UIManager:show(ruler_overlay.ruler_widget)
-    if self.tapped == nil or self.tapped == false then
-        local ruler = self.ruler_widget
-        UIManager:setDirty(require("apps/reader/readerui").instance.view.dialog, "ui")
-        -- UIManager:show(ruler_overlay)
-        self.tapped = true
-        self.pos_x = ges_ev.pos.x
-        self.pos_y = ges_ev.pos.y
-        UIManager:scheduleIn(0.5, function()
-            ruler:paintTo(Screen.bb, ges_ev.pos.x - Screen:getWidth() / 2, ges_ev.pos.y)
-            UIManager:setDirty(nil, "ui")
-            self.tapped = false
-        end)
-    end
+-- Fraction of the line box height, measured from its top, where the top of
+-- a lowercase letter (x-height) sits. Roughly 0.25-0.35 for most fonts.
+-- Tune it until the 0 mark touches the top of an "x".
+local X_HEIGHT_TOP_RATIO = 0.30
 
-    return true -- event handled
+-- Row of the 0 mark inside the ruler PNG (the script draws it at y = 2).
+local ZERO_MARK_Y = 2
+
+-- Returns the screen box (x, y, w, h) of the word under the tap, or nil.
+function RulerOverlay:wordBox(pos)
+    local ui = require("apps/reader/readerui").instance
+    local doc = ui and ui.document
+    if not (doc and doc.getWordFromPosition) then return nil end
+    local ok, word = pcall(doc.getWordFromPosition, doc, pos)
+    if ok and word and word.sbox then
+        return word.sbox
+    end
+end
+
+-- Removes any temporary selection that the reader left on the tapped word.
+local function clearWordHighlight()
+    local ui = require("apps/reader/readerui").instance
+    if ui and ui.highlight and ui.highlight.clear then
+        ui.highlight:clear()
+    end
+end
+
+function RulerOverlay:onTapRuler(arg, ges_ev)
+    if self.tapped then return true end
+    local x, y = ges_ev.pos.x, ges_ev.pos.y
+    local box = self:wordBox(ges_ev.pos)
+    if box then
+        -- Center the ruler on the word and put the 0 mark at the
+        -- estimated top of the lowercase letters.
+        x = box.x + math.floor(box.w / 2)
+        y = box.y + math.floor(box.h * X_HEIGHT_TOP_RATIO)
+    end
+    -- No highlight clearing here: the word stays highlighted while the
+    -- ruler is shown.
+    self.tapped = true
+    self.pos_x, self.pos_y = x, y
+    local ruler = self.ruler_widget
+    UIManager:setDirty(require("apps/reader/readerui").instance.view.dialog, "ui")
+    UIManager:scheduleIn(0.5, function()
+        ruler:paintTo(Screen.bb, x - Screen:getWidth() / 2, y - ZERO_MARK_Y)
+        UIManager:setDirty(nil, "ui")
+        self.tapped = false
+    end)
+    return true
 end
 
 function RulerOverlay:onSwipeRuler(arg, ges_ev)
-    UIManager:close(self.ruler_widget)
+    -- Toggle off: remove the highlight and repaint the page so the ruler
+    -- (drawn straight into the screen buffer) disappears too.
+    clearWordHighlight()
+    self.ruler_widget:free()
     UIManager:close(self)
-    return true -- event handled
+    UIManager:setDirty(require("apps/reader/readerui").instance.view.dialog, "ui")
+    return true
 end
 
 function RulerOverlay:onSuspend()
@@ -730,7 +764,7 @@ function PageTextInfo:onSwipe(_, ges)
     elseif direction == "south" then
 
         if self.settings:isTrue("enable_ruler") and
-            (Device:isEmulator() or Device.model == "Kobo_spaBW" or Device.model == "Kobo_goldfinch" or Device.model == "Kobo_spaColour") then
+            (Device:isEmulator() or Device.model == "Kobo_spaBW" or Device.model == "Kobo_goldfinch" or Device.model == "Kobo_spaColour" or Device.model == "KindlePaperWhite6") then
             local ruler_overlay = RulerOverlay:new()
             -- UIManager:show(ruler_overlay.ruler_widget)
             ruler_overlay.ruler_widget:paintTo(Screen.bb, 0, 0)
