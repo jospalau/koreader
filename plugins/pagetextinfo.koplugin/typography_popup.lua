@@ -10,12 +10,20 @@ Every section is rendered as a bordered table:
                 (tap this section to open the REFERENCE popup)
   - DISPLAY     device, ppi, resolution, frontlight
   - CSS         3-column table: property | <p tag> | <body tag>
+                (tap this section to open the STYLE popup)
   - TWEAKS      one row per applied tweak
   - READING     avg wpm, wph, sessions, recent averages
 
 REFERENCE popup (opened by tapping X-HEIGHT):
   - ANGLE → SIZE  x-height in mm and font size in pt for each reference angle
   - REFERENCE     sources, CPS definition, bands, print books, preference
+
+STYLE popup (opened by tapping CSS):
+  - TEXT             the sampled paragraph
+  - ELEMENT          tag, class, element chain and stylesheet used
+  - PARAGRAPH STYLE  line-height, text-align, text-indent of that paragraph
+                     with the origin of each value (inline, selector,
+                     inherited from an ancestor, !important, overridden)
 ]]
 
 local Blitbuffer      = require("ffi/blitbuffer")
@@ -473,6 +481,8 @@ end
 
 -- Text from the start of the paragraph containing `pos` to the bottom of the
 -- page. Falls back to the text from line `y`, then to `fallback`.
+-- Second return value: the HTML of that same range (used by the STYLE popup
+-- to resolve the paragraph's classes), or nil if it could not be obtained.
 local function textFromLine(doc, y, fallback, pos)
     local ok, res = pcall(function()
         return doc._document:getTextFromPositions(0, y, Screen:getWidth(),
@@ -488,7 +498,11 @@ local function textFromLine(doc, y, fallback, pos)
         local ok2, txt = pcall(function()
             return doc._document:getTextFromXPointers(p0, res.pos1)
         end)
-        if ok2 and type(txt) == "string" and txt ~= "" then return txt end
+        local okh, html = pcall(function()
+            return doc._document:getHTMLFromXPointers(p0, res.pos1, 0xE830, true)
+        end)
+        if not (okh and type(html) == "string" and html ~= "") then html = nil end
+        if ok2 and type(txt) == "string" and txt ~= "" then return txt, html end
         if not ok2 then
             logger.warn("TextInfoPopup getTextFromXPointers error:", txt)
         end
@@ -500,11 +514,11 @@ end
 
 -- Looks for a representative paragraph in the middle of the page instead of
 -- using the last position (which may be a title or a footnote).
--- Returns the table of 20 values (preferring a <p>) and the text that starts
--- at the sampled line.
+-- Returns the table of 20 values (preferring a <p>), the text that starts
+-- at the sampled line and the HTML of that same range.
 local function sampleCSS(doc)
     local W, H = Screen:getWidth(), Screen:getHeight()
-    local fallback, fallback_text
+    local fallback, fallback_text, fallback_html
     for _, frac in ipairs({ 0.5, 0.4, 0.6, 0.3, 0.7 }) do
         local y = math.floor(H * frac)
         local res = doc._document:getTextFromPositions(0, y, W, y + 10, false, false)
@@ -514,18 +528,19 @@ local function sampleCSS(doc)
                     local ok, r = pcall(function() return { doc:getHeight(pos) } end)
                     if ok and r and r[IDX.tag] and r[IDX.tag] ~= "" then
                         if r[IDX.tag] == "p" then
-                            return r, textFromLine(doc, y, res.text, pos)
+                            local txt, html = textFromLine(doc, y, res.text, pos)
+                            return r, txt, html
                         end
                         if not fallback then
                             fallback = r
-                            fallback_text = textFromLine(doc, y, res.text, pos)
+                            fallback_text, fallback_html = textFromLine(doc, y, res.text, pos)
                         end
                     end
                 end
             end
         end
     end
-    return fallback, fallback_text
+    return fallback, fallback_text, fallback_html
 end
 
 -- Formats (value, unit) for display. Absent values come as -2 with an empty
@@ -646,7 +661,10 @@ local function gatherData(ui)
     end
 
     -- CSS properties of a representative paragraph (+ the text it starts with)
-    local r, sample_text = sampleCSS(doc)
+    -- The document and the paragraph HTML are kept for the STYLE popup.
+    local r, sample_text, sample_html = sampleCSS(doc)
+    data.doc         = doc
+    data.sample_html = sample_html
     if SNIPPET_CHARS > 0 then
         data.snippet = makeSnippet(sample_text, SNIPPET_CHARS)
     end
@@ -774,6 +792,9 @@ local function buildSections(data, fonts, layout)
     })
 
     -- CSS: property | p | body
+    --   Tap on this section opens the STYLE popup (line-height, text-align and
+    --   text-indent of the sampled paragraph, with the origin of each value).
+    local css_header, css_tbl
     if data.css_tag then
         local function r(label, t)
             return { cells = {
@@ -793,7 +814,7 @@ local function buildSections(data, fonts, layout)
             r("margin",      data.css_margin),
             r("text-align",  data.css_align),
         }
-        addSection(sections, fonts, L, "CSS",
+        css_header, css_tbl = addSection(sections, fonts, L, "CSS  (tap for sources)",
             buildTable(fonts, L, { 0.28, 0.36, 0.36 }, rows))
     end
 
@@ -833,8 +854,15 @@ local function buildSections(data, fonts, layout)
         background = Blitbuffer.COLOR_BLACK,
     })
 
-    -- second value: widgets whose tap opens the reference popup
-    return sections, { xh_header, xh_tbl.table_frame }
+    -- second value: widgets whose tap opens a secondary popup
+    --   ref   → REFERENCE popup (X-HEIGHT section)
+    --   style → STYLE popup     (CSS section)
+    local style_targets = {}
+    if css_header then style_targets = { css_header, css_tbl.table_frame } end
+    return sections, {
+        ref   = { xh_header, xh_tbl.table_frame },
+        style = style_targets,
+    }
 end
 
 -- Reference popup content: ANGLE → SIZE table + reference note.
@@ -881,6 +909,377 @@ local function buildReferenceSections(data, fonts, layout)
     addSection(sections, fonts, L, "REFERENCE",
         buildTable(fonts, L, { 1 },
             { { cells = { { text = angleNote(), kind = "mono" } } } }))
+
+    -- Bottom rule
+    table.insert(sections, LineWidget:new{
+        dimen      = Geom:new{ w = L.full_width, h = Size.line.thick },
+        background = Blitbuffer.COLOR_BLACK,
+    })
+
+    return sections
+end
+
+-- ── Paragraph style resolver (origin of line-height / text-align / text-indent)
+-- Standalone resolver used by the STYLE popup. It reads the book's stylesheet,
+-- builds the element chain (body > div > p) of the sampled paragraph from its
+-- HTML and applies a simplified CSS cascade: !important, inline style,
+-- specificity, source order. The three properties are inherited, so when the
+-- paragraph does not declare one, the ancestors are searched.
+-- Limits: selectors with :pseudo-classes, [attributes], + or ~ are ignored.
+-- KOReader tweaks / line spacing are NOT included (see the CSS section).
+
+-- Stylesheet locations to try, in order.
+local STYLE_CSS_PATHS = {
+    "OPS/styles/stylesheet.css",
+    "stylesheet.css",
+    "epub/css/core.css",
+    "OEBPS/styles/stylesheet.css",
+    "OEBPS/stylesheet.css",
+}
+
+-- Properties shown: name, text shown when nobody defines it
+local STYLE_PROPS = {
+    { "line-height", "normal (default)" },
+    { "text-align",  "start/left (default)" },
+    { "text-indent", "0 (default)" },
+}
+local STYLE_WANTED = { ["line-height"] = true, ["text-align"] = true, ["text-indent"] = true }
+
+-- Elements considered a "paragraph"
+local PARA_TAGS = {
+    p = true, h1 = true, h2 = true, h3 = true, h4 = true, h5 = true, h6 = true,
+    blockquote = true, li = true, div = true,
+}
+
+local VOID_TAGS = {
+    br = true, hr = true, img = true, meta = true, link = true, input = true,
+}
+
+local function trim(s)
+    return (s:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+local function getAttr(attrs, name)
+    attrs = " " .. attrs
+    return attrs:match("%s" .. name .. '%s*=%s*"(.-)"')
+        or attrs:match("%s" .. name .. "%s*=%s*'(.-)'")
+end
+
+local function describeEl(el)
+    local s = el.tag
+    if el.id then s = s .. "#" .. el.id end
+    if el.class then s = s .. "." .. el.class:gsub(" ", ".") end
+    return s
+end
+
+-- HTML → chain {root, ..., first paragraph element}
+local function findParagraphChain(html)
+    local stack = {}
+    for closing, tag, attrs in html:gmatch("<(/?)(%a[%w]*)([^>]*)>") do
+        tag = tag:lower()
+        if closing == "/" then
+            for i = #stack, 1, -1 do
+                if stack[i].tag == tag then
+                    for j = #stack, i, -1 do stack[j] = nil end
+                    break
+                end
+            end
+        elseif not VOID_TAGS[tag] and not attrs:match("/%s*$") then
+            local cls = getAttr(attrs, "class")
+            local el = {
+                tag      = tag,
+                id       = getAttr(attrs, "id"),
+                style    = getAttr(attrs, "style"),
+                class    = cls and trim(cls):gsub("%s+", " ") or nil,
+                classset = {},
+            }
+            if cls then
+                for c in cls:gmatch("%S+") do el.classset[c] = true end
+            end
+            table.insert(stack, el)
+            if PARA_TAGS[tag] then
+                -- prefer <p>; any other tag only if there is no <p> later on
+                if tag == "p" or not html:find("<[pP][%s>]") then
+                    local chain = {}
+                    for i = 1, #stack do chain[i] = stack[i] end
+                    return chain
+                end
+            end
+        end
+    end
+    return nil
+end
+
+-- "a: b; c: url(x;y)" → { "a: b", "c: url(x;y)" }  (respects parentheses and quotes)
+local function splitDeclarations(body)
+    local decls, buf, depth, quote = {}, {}, 0, nil
+
+    local function flush()
+        local s = trim((table.concat(buf):gsub("%s+", " ")))
+        buf = {}
+        if s ~= "" then table.insert(decls, s) end
+    end
+
+    for i = 1, #body do
+        local c = body:sub(i, i)
+        if quote then
+            table.insert(buf, c)
+            if c == quote then quote = nil end
+        elseif c == '"' or c == "'" then
+            quote = c
+            table.insert(buf, c)
+        elseif c == "(" then
+            depth = depth + 1
+            table.insert(buf, c)
+        elseif c == ")" then
+            depth = math.max(0, depth - 1)
+            table.insert(buf, c)
+        elseif c == ";" and depth == 0 then
+            flush()
+        else
+            table.insert(buf, c)
+        end
+    end
+    flush()
+    return decls
+end
+
+-- "text-align: center !important" → {["text-align"] = {value=, important=}}
+-- Only the properties we care about are kept. `font: 1em/1.5 serif` is read
+-- for its line-height.
+local function parseDeclarations(body)
+    local map = {}
+    for _, d in ipairs(splitDeclarations(body)) do
+        local prop, value = d:match("^([^:]+):%s*(.*)$")
+        if prop then
+            prop = trim(prop):lower()
+            local important = value:find("!%s*important") ~= nil
+            value = trim((value:gsub("!%s*important", "")))
+            if STYLE_WANTED[prop] then
+                map[prop] = { value = value, important = important }
+            elseif prop == "font" then
+                local lh = value:match("/%s*([%d%.]+%a*%%?)") or value:match("/%s*(normal)")
+                if lh then map["line-height"] = { value = lh, important = important } end
+            end
+        end
+    end
+    return map
+end
+
+local function parseCompound(c)
+    local comp = { classes = {} }
+    comp.tag = c:match("^(%a[%w]*)") or (c:sub(1, 1) == "*" and "*" or nil)
+    if comp.tag then comp.tag = comp.tag:lower() end
+    comp.id = c:match("#([%w_%-]+)")
+    for k in c:gmatch("%.([%w_%-]+)") do table.insert(comp.classes, k) end
+    return comp
+end
+
+local function specificity(compounds)
+    local s = 0
+    for _, c in ipairs(compounds) do
+        if c.id then s = s + 100 end
+        s = s + 10 * #c.classes
+        if c.tag and c.tag ~= "*" then s = s + 1 end
+    end
+    return s
+end
+
+-- Flat stylesheet → { {compounds=, spec=, order=, selector=, decls=}, ... }
+-- Rules inside @media are read too (without their condition).
+local function parseStyleCSS(css_text)
+    local rules, order = {}, 0
+    css_text = css_text:gsub("/%*.-%*/", "")
+    for selector, body in css_text:gmatch("([^{}]+)%{([^{}]*)%}") do
+        selector = trim(selector)
+        if selector:sub(1, 1) ~= "@" then
+            local decls = parseDeclarations(body)
+            if next(decls) then
+                for sel in selector:gmatch("[^,]+") do
+                    sel = trim((sel:gsub("%s+", " ")))
+                    -- pseudo-classes, attributes and siblings can't be evaluated
+                    if not sel:find("[%[:+~]") then
+                        local compounds = {}
+                        for token in sel:gsub(">", " "):gmatch("%S+") do
+                            table.insert(compounds, parseCompound(token))
+                        end
+                        if #compounds > 0 then
+                            order = order + 1
+                            table.insert(rules, {
+                                compounds = compounds,
+                                spec      = specificity(compounds),
+                                order     = order,
+                                selector  = sel,
+                                decls     = decls,
+                            })
+                        end
+                    end
+                end
+            end
+        end
+    end
+    return rules
+end
+
+local function matchCompound(comp, el)
+    if comp.tag and comp.tag ~= "*" and comp.tag ~= el.tag then return false end
+    if comp.id and comp.id ~= el.id then return false end
+    for _, c in ipairs(comp.classes) do
+        if not el.classset[c] then return false end
+    end
+    return true
+end
+
+-- Last compound must match chain[idx]; the previous ones must match ancestors
+-- in order (descendant and child combinators are treated the same).
+local function matchSelector(compounds, chain, idx)
+    if not matchCompound(compounds[#compounds], chain[idx]) then return false end
+    local j, k = #compounds - 1, idx - 1
+    while j >= 1 and k >= 1 do
+        if matchCompound(compounds[j], chain[k]) then j = j - 1 end
+        k = k - 1
+    end
+    return j == 0
+end
+
+-- Value declared directly on chain[idx] for `prop` (simple cascade).
+local function declaredValue(rules, chain, idx, prop)
+    local el = chain[idx]
+    local best, overridden = nil, 0
+
+    local function rank(c)
+        return (c.important and 1e9 or 0) + c.spec * 1e5 + c.order
+    end
+
+    local function consider(cand)
+        if not best then best = cand; return end
+        overridden = overridden + 1
+        if rank(cand) >= rank(best) then best = cand end
+    end
+
+    if el.style then
+        local d = parseDeclarations(el.style)[prop]
+        if d then
+            consider({ value = d.value, important = d.important,
+                       spec = 1000, order = 1e5, origin = "inline style" })
+        end
+    end
+    for _, r in ipairs(rules) do
+        local d = r.decls[prop]
+        if d and matchSelector(r.compounds, chain, idx) then
+            consider({ value = d.value, important = d.important,
+                       spec = r.spec, order = r.order, origin = r.selector })
+        end
+    end
+    return best, overridden
+end
+
+-- Resolves `prop` going up through the ancestors (the three properties inherit).
+-- Returns: found, overridden count, name of the ancestor it was inherited from
+local function resolveProp(rules, chain, prop)
+    for i = #chain, 1, -1 do
+        local found, overridden = declaredValue(rules, chain, i, prop)
+        if found then
+            return found, overridden, (i == #chain) and nil or describeEl(chain[i])
+        end
+    end
+    return nil
+end
+
+-- Returns { css_path, element, chain, rows = { {prop, value, source}, ... } }
+local function computeParaStyle(doc, html)
+    if not doc or not html then return nil end
+    local chain = findParagraphChain(html)
+    if not chain then return nil end
+
+    -- if the HTML does not include body, add it as root so `body {}` applies
+    if chain[1].tag ~= "body" and chain[1].tag ~= "html" then
+        table.insert(chain, 1, { tag = "body", classset = {} })
+    end
+
+    local css_text, css_path
+    for _, path in ipairs(STYLE_CSS_PATHS) do
+        local content = doc:getDocumentFileContent(path)
+        if content then
+            css_text, css_path = content, path
+            break
+        end
+    end
+    local rules = css_text and parseStyleCSS(css_text) or {}
+
+    local names = {}
+    for _, el in ipairs(chain) do table.insert(names, describeEl(el)) end
+
+    local rows = {}
+    for _, p in ipairs(STYLE_PROPS) do
+        local found, overridden, inherited = resolveProp(rules, chain, p[1])
+        if found then
+            local src = found.origin
+            if inherited then src = src .. " (inherited from " .. inherited .. ")" end
+            if found.important then src = src .. " !important" end
+            if overridden > 0 then src = src .. "  [" .. overridden .. " overridden]" end
+            table.insert(rows, { p[1], found.value, src })
+        else
+            table.insert(rows, { p[1], p[2], "—" })
+        end
+    end
+
+    return {
+        css_path = css_path or "stylesheet not found",
+        element  = "<" .. describeEl(chain[#chain]) .. ">",
+        chain    = table.concat(names, " > "),
+        rows     = rows,
+    }
+end
+
+-- Style popup content: TEXT + ELEMENT + PARAGRAPH STYLE.
+local function buildStyleSections(data, fonts, layout)
+    local sections = VerticalGroup:new{ align = "left" }
+    local L = layout
+
+    if SNIPPET_CHARS > 0 and data.snippet and data.snippet ~= "" then
+        addSection(sections, fonts, L, "TEXT  (sampled paragraph)",
+            buildTable(fonts, L, { 1 },
+                { { cells = { { text = data.snippet, kind = "mono" } } } }))
+    end
+
+    local ok, info = pcall(computeParaStyle, data.doc, data.sample_html)
+    if not ok then
+        logger.warn("TextInfoPopup computeParaStyle error:", info)
+        info = nil
+    end
+
+    if not info then
+        addSection(sections, fonts, L, "PARAGRAPH STYLE",
+            buildTable(fonts, L, { 1 },
+                { { cells = { { text = "Could not resolve the paragraph style", kind = "mono" } } } }))
+    else
+        addSection(sections, fonts, L, "ELEMENT",
+            buildTable(fonts, L, { 1 }, {
+                { cells = { { text = info.element,             kind = "value" } } },
+                { cells = { { text = "chain: " .. info.chain,  kind = "mono"  } } },
+                { cells = { { text = "css: " .. info.css_path, kind = "mono"  } } },
+            }))
+
+        local rows = {
+            { header = true, cells = {
+                { text = "Property", kind = "head" },
+                { text = "Value",    kind = "head" },
+                { text = "Source",   kind = "head" },
+            } },
+        }
+        for _, r in ipairs(info.rows) do
+            table.insert(rows, { cells = {
+                { text = r[1], kind = "label" },
+                { text = r[2], kind = "value" },
+                { text = r[3], kind = "mono"  },
+            } })
+        end
+        table.insert(rows, { cells = { { kind = "mono", span = 3,
+            text = "From the book's CSS. KOReader tweaks / line spacing are not included (see TWEAKS). Selectors with :pseudo, [attr], + or ~ are ignored." } } })
+        addSection(sections, fonts, L, "PARAGRAPH STYLE",
+            buildTable(fonts, L, { 0.24, 0.26, 0.50 }, rows))
+    end
 
     -- Bottom rule
     table.insert(sections, LineWidget:new{
@@ -953,6 +1352,16 @@ function ReferencePopup:buildContent(fonts, layout)
     return buildReferenceSections(self.data or {}, fonts, layout)
 end
 
+-- Secondary popup: line-height / text-align / text-indent of the sampled
+-- paragraph and where each value comes from.
+local StylePopup = BasePopup:extend{
+    data = nil,
+}
+
+function StylePopup:buildContent(fonts, layout)
+    return buildStyleSections(self.data or {}, fonts, layout)
+end
+
 -- Main popup.
 local TextInfoPopup = BasePopup:extend{
     ui = nil,
@@ -961,17 +1370,23 @@ local TextInfoPopup = BasePopup:extend{
 function TextInfoPopup:buildContent(fonts, layout)
     self.data = gatherData(self.ui)
     local sections, targets = buildSections(self.data, fonts, layout)
-    self.ref_targets = targets
+    self.targets = targets
     return sections
 end
 
--- A tap on the X-HEIGHT section opens the reference popup; a tap anywhere
--- else closes this one.
+-- A tap on the X-HEIGHT section opens the reference popup, a tap on the CSS
+-- section opens the style popup; a tap anywhere else closes this one.
 function TextInfoPopup:onTapClose(arg, ges)
-    if ges and ges.pos then
-        for _, w in ipairs(self.ref_targets or {}) do
+    if ges and ges.pos and self.targets then
+        for _, w in ipairs(self.targets.ref or {}) do
             if w.dimen and ges.pos:intersectWith(w.dimen) then
                 UIManager:show(ReferencePopup:new{ data = self.data })
+                return true
+            end
+        end
+        for _, w in ipairs(self.targets.style or {}) do
+            if w.dimen and ges.pos:intersectWith(w.dimen) then
+                UIManager:show(StylePopup:new{ data = self.data })
                 return true
             end
         end
