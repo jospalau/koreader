@@ -326,6 +326,7 @@ end
 -- Text from the start of the paragraph containing `pos` to the bottom of the
 -- page. Falls back to the text from line `y`, then to `fallback`.
 local function textFromLine(doc, y, fallback, pos)
+    local logger = require("logger")
     local ok, res = pcall(function()
         return doc._document:getTextFromPositions(0, y, Screen:getWidth(),
                                                   Screen:getHeight(), false, false)
