@@ -5,11 +5,17 @@ Every section is rendered as a bordered table:
 
   - TEXT        start of the text the CSS is sampled from (truncated)
   - FONT        face, size, didot, px, mm, weight
-  - X-HEIGHT    px, mm, visual angle
+  - X-HEIGHT    px, mm, visual angle, multiple of CPS, leading,
+                delta vs personal preference, font size that would hit it
+                (tap this section to open the REFERENCE popup)
   - DISPLAY     device, ppi, resolution, frontlight
   - CSS         3-column table: property | <p tag> | <body tag>
   - TWEAKS      one row per applied tweak
   - READING     avg wpm, wph, sessions, recent averages
+
+REFERENCE popup (opened by tapping X-HEIGHT):
+  - ANGLE → SIZE  x-height in mm and font size in pt for each reference angle
+  - REFERENCE     sources, CPS definition, bands, print books, preference
 ]]
 
 local Blitbuffer      = require("ffi/blitbuffer")
@@ -45,10 +51,63 @@ local SNIPPET_CHARS = 150
 -- change it here if you read from elsewhere.
 local READING_DISTANCE_MM = 400
 
--- Author's personal x-height preference, in arcminutes at READING_DISTANCE_MM.
--- This is an individual calibration (found empirically by the author), NOT a
--- scientific norm: it is shown separately from the evidence-based bands below.
-local PREFERRED_ARCMIN = 20
+-- Critical print size (CPS) in arcminutes of x-height. Evidence-based (see
+-- below); used both as the first band edge and as the unit for "× CPS".
+local CPS_ARCMIN = 12
+
+-- x-height angles of real printed books and newspapers, in arcminutes
+-- (Legge & Bigelow 2011: 0.20-0.28 deg = 12-17′, mean ~14′).
+local PRINT_MIN_ARCMIN  = 12
+local PRINT_MEAN_ARCMIN = 14
+local PRINT_MAX_ARCMIN  = 17
+
+-- Preferred x-height, in arcminutes: the midpoint between the mean and the
+-- maximum of printed books (15.5′ ≈ 1.80mm at 40cm), i.e. the upper half of
+-- the print range, a bit larger than the average book to compensate for the
+-- lower contrast of e-ink. Derived from external data instead of a free
+-- number, but it is still a personal choice of reference, NOT a scientific
+-- norm: it is shown separately from the evidence-based bands below. If you
+-- find your own comfortable value, replace it (stored as an angle).
+local PREFERRED_ARCMIN = (PRINT_MEAN_ARCMIN + PRINT_MAX_ARCMIN) / 2
+
+-- Reader's age, used to estimate how much the critical print size grows.
+local AGE = 50
+
+-- Age dependence of the CPS (Calabrèse et al. 2016, IOVS 57(8):3836-3843;
+-- 645 normally sighted people aged 8-81, MNREAD at 40 cm, CPS = smallest size
+-- giving 90% of max speed). Their piecewise-linear fit, in logMAR:
+--   constant 0.08 up to 23 y, rising to 0.21 at 68 y, then to 0.34 at 81 y.
+-- Values between breakpoints are linearly interpolated (as in their model).
+-- Only the RATIO to a young adult (0.08) is used, applied to CPS_ARCMIN: it
+-- assumes the logMAR scaling carries over to x-height, which is an
+-- approximation. The age effect is weak and individual variation is large.
+local function cpsLogMAR(age)
+    if age <= 23 then return 0.08 end
+    if age <= 68 then return 0.08 + (0.21 - 0.08) * (age - 23) / (68 - 23) end
+    if age <= 81 then return 0.21 + (0.34 - 0.21) * (age - 68) / (81 - 68) end
+    return 0.34
+end
+
+local CPS_AGE_FACTOR = 10 ^ (cpsLogMAR(AGE) - 0.08)
+local CPS_AGE_ARCMIN = CPS_ARCMIN * CPS_AGE_FACTOR   -- ≈14.4′ at 50 years
+
+-- Angle for display: one decimal, trailing ".0" dropped (12, 14.4, 15.5)
+local function fmtArc(v)
+    local s = string.format("%.1f", v)
+    return (s:gsub("%.0$", ""))
+end
+
+-- Angles listed in the ANGLE → SIZE table. Edit freely: for each one the popup
+-- shows the x-height in mm and the font size (pt) that gives it with the
+-- CURRENT font. Everything is recomputed from READING_DISTANCE_MM, so changing
+-- the distance above updates the whole table. Rows are shown in this order.
+local REFERENCE_ANGLES = {
+    { CPS_ARCMIN,       "CPS" },
+    { CPS_AGE_ARCMIN,   string.format("CPS ref. age %d (population reference, not individual)", AGE) },
+    { PREFERRED_ARCMIN, "Preferred" },
+    { PRINT_MAX_ARCMIN, "Print book (max)" },
+    { 25,               "Larger" },
+}
 
 -- WHY THESE BANDS (evidence-based, edit here only):
 -- Source: Legge & Bigelow (2011), "Does print size matter for reading? A
@@ -60,16 +119,19 @@ local PREFERRED_ARCMIN = 20
 --    from 0.2 to ~2 deg (12′-120′). Speed only declines gradually beyond it.
 --  * Real printed books and newspapers cluster at 0.20-0.28 deg (12-17′,
 --    mean ~14′), i.e. just above the CPS.
--- So there is no single "ideal" angle: only "below the CPS", "typical print",
--- and a broad fluent range where the choice is personal comfort (contrast,
--- lighting, e-ink panel, vision, taste). The previous labels (Demanding /
+-- So there is no single "ideal" angle: only "below the CPS" and "fluent
+-- range" (everything from the CPS up), where the choice is personal comfort
+-- (contrast, lighting, e-ink panel, vision, taste). Printed books (12-17′)
+-- are NOT a separate band: they are already inside the fluent range, so they
+-- are only mentioned in the reference note. The previous labels (Demanding /
 -- Ideal / Oversized) had no empirical basis, which is why they were replaced.
+-- The upper edge of the plateau (~120′ ≈ 14 mm of x-height at 40 cm) can never
+-- be reached on an e-reader, so the last band is open-ended. Anything finer
+-- than this is personal (delta vs preference), never inside ANGLE_BANDS.
 -- The classification and the reference note are both generated from this table.
 local ANGLE_BANDS = {
-    { upto = 12,        label = "Below critical size" },
-    { upto = 17,        label = "Typical of print books" },
-    { upto = 120,       label = "Fluent range" },
-    { upto = math.huge, label = "Above fluent range" },
+    { upto = CPS_ARCMIN, label = "Below critical size" },
+    { upto = math.huge,  label = "Fluent range" },
 }
 
 local function classifyAngle(angle)
@@ -90,7 +152,7 @@ local function angleNote()
             txt = string.format("<%d′ (<%.2fmm) %s",
                 b.upto, mmFromArcmin(b.upto, READING_DISTANCE_MM), b.label)
         elseif b.upto == math.huge then
-            txt = string.format(">%d′ (>%.2fmm) %s",
+            txt = string.format("≥%d′ (≥%.2fmm) %s",
                 prev, mmFromArcmin(prev, READING_DISTANCE_MM), b.label)
         else
             txt = string.format("%d–%d′ (%.2f–%.2fmm) %s", prev, b.upto,
@@ -100,10 +162,22 @@ local function angleNote()
         table.insert(parts, txt)
         prev = b.upto
     end
-    return string.format(
-        "x-height at %dcm (Legge & Bigelow 2011): %s. Personal preference: %d′ (%.2fmm).",
-        READING_DISTANCE_MM / 10, table.concat(parts, " · "),
-        PREFERRED_ARCMIN, mmFromArcmin(PREFERRED_ARCMIN, READING_DISTANCE_MM))
+    local lines = {
+        string.format("x-height at %dcm (Legge & Bigelow 2011)", READING_DISTANCE_MM / 10),
+        string.format("Critical print size %d′ (CPS, %.2fmm): below it reading slows down",
+            CPS_ARCMIN, mmFromArcmin(CPS_ARCMIN, READING_DISTANCE_MM)),
+    }
+    for _, part in ipairs(parts) do table.insert(lines, part) end   -- one band per line
+    table.insert(lines, string.format("Printed books: %d–%d′ (mean ~%d′)",
+        PRINT_MIN_ARCMIN, PRINT_MAX_ARCMIN, PRINT_MEAN_ARCMIN))
+    table.insert(lines, string.format("CPS at age %d: %s′ (%.2fmm), ×%.2f vs young adults (Calabrèse et al. 2016)",
+        AGE, fmtArc(CPS_AGE_ARCMIN), mmFromArcmin(CPS_AGE_ARCMIN, READING_DISTANCE_MM), CPS_AGE_FACTOR))
+    table.insert(lines, string.format("Preferred (midpoint of print mean and max, %d–%d′): %g′ (%.2fmm)",
+        PRINT_MEAN_ARCMIN, PRINT_MAX_ARCMIN,
+        PREFERRED_ARCMIN, mmFromArcmin(PREFERRED_ARCMIN, READING_DISTANCE_MM)))
+    table.insert(lines, string.format("Preferred vs CPS at age %d: %+.0f%%",
+        AGE, (PREFERRED_ARCMIN / CPS_AGE_ARCMIN - 1) * 100))
+    return table.concat(lines, "\n")
 end
 
 -- ── Fonts ────────────────────────────────────────────────────────────────────
@@ -243,14 +317,17 @@ local function buildTable(fonts, layout, col_fracs, rows)
         table.insert(vg, buildRow(fonts, cols, row, sep_w))
     end
 
-    return padded(layout.padding_h, FrameContainer:new{
+    local frame = FrameContainer:new{
         bordersize = border,
         color      = Blitbuffer.COLOR_GRAY,
         padding    = 0,
         margin     = 0,
         radius     = 0,
         vg,
-    })
+    }
+    local group = padded(layout.padding_h, frame)
+    group.table_frame = frame   -- its dimen is filled on paint: used for taps
+    return group
 end
 
 -- Key/value table: two label|value pairs per row (4 columns).
@@ -301,9 +378,11 @@ local function kvRows(items)
 end
 
 local function addSection(sections, fonts, layout, title, tbl)
-    table.insert(sections, sectionHeader(fonts, title, layout.full_width))
+    local header = sectionHeader(fonts, title, layout.full_width)
+    table.insert(sections, header)
     table.insert(sections, tbl)
     table.insert(sections, VerticalSpan:new{ height = Size.padding.large })
+    return header, tbl
 end
 
 local function classifyLeading(lf, x_height, ascender, descender)
@@ -507,15 +586,36 @@ local function gatherData(ui)
         local xh_mm = xh_px * 25.4 / display_dpi            -- unrounded
         local angle = arcminutes_from_mm(xh_mm, READING_DISTANCE_MM)
 
+        -- x-height scales linearly with font size: mm of x-height per pt of
+        -- font for the current face (used by the ANGLE → SIZE table)
+        if pt and pt > 0 then data.xh_mm_per_pt = xh_mm / pt end
+
         data.x_height_px     = string.format("%.1fpx", xh_px)
         data.x_height_mm     = string.format("%.2fmm", xh_mm)
-        data.x_height_arcmin = string.format("%.1f′ (%.2fmm) [%s]",
-            angle, xh_mm, classifyAngle(angle))
-        -- Difference against the personal preference (not a scientific norm)
-        data.x_height_vs_pref = string.format("%+.1f′ vs %d′", angle - PREFERRED_ARCMIN, PREFERRED_ARCMIN)
+        -- Evidence-based part: angle + band (Legge & Bigelow)
+        data.x_height_arcmin = string.format("%.1f′  [%s]", angle, classifyAngle(angle))
+        -- Continuous multiple of the critical print size (data, not a verdict)
+        local cps_ratio = angle / CPS_ARCMIN
+        local cps_pct   = (cps_ratio - 1) * 100
+        data.x_height_cps    = string.format("%.2f× (%.0f%% %s than CPS)",
+            cps_ratio, math.abs(cps_pct), cps_pct >= 0 and "bigger" or "smaller")
+        -- Personal part: relative difference against the preference
+        -- (not a scientific norm)
+        local pct = (angle / PREFERRED_ARCMIN - 1) * 100
+        data.x_height_vs_pref = string.format("%+.0f%% vs %g′ preferred", pct, PREFERRED_ARCMIN)
+        -- x-height scales linearly with font size, so the size that would
+        -- give exactly PREFERRED_ARCMIN is a simple ratio.
+        if angle > 0 then
+            local target_pt = pt * PREFERRED_ARCMIN / angle
+            data.x_height_target = string.format("%.1f pt (%+.1f)", target_pt, target_pt - pt)
+        else
+            data.x_height_target = "N/A"
+        end
     else
         data.x_height_px, data.x_height_mm, data.x_height_arcmin = "N/A", "N/A", "N/A"
+        data.x_height_cps    = "N/A"
         data.x_height_vs_pref = "N/A"
+        data.x_height_target = "N/A"
     end
 
     -- Readability table (from pagetextinfo if available)
@@ -649,15 +749,20 @@ local function buildSections(data, fonts, layout)
     })
 
     -- X-HEIGHT
-    addSection(sections, fonts, L, "X-HEIGHT", kvTable{
+    --   Angle / vs CPS : evidence-based (Legge & Bigelow)
+    --   vs Pref / For pref : personal preference, not a norm
+    --   Tap on this section opens the REFERENCE popup (angle → size table
+    --   and the reference note), kept out of the main popup to save space.
+    local xh_header, xh_tbl = addSection(sections, fonts, L, "X-HEIGHT  (tap for reference)", kvTable{
         { "Pixels",  data.x_height_px or "?" },
         { "Metric",  data.x_height_mm or "?" },
+        { string.format("Angle @%dcm", READING_DISTANCE_MM / 10),
+          data.x_height_arcmin or "?", wide = true },
+        { "vs CPS",  data.x_height_cps or "?" },
         { "Leading", data.leading_text and
             string.format("%.2f× [%s]", data.leading_factor, data.leading_text) or "N/A" },
-        { "Preferred", data.x_height_vs_pref or "?" },
-        { string.format("Angle @%dcm (x-height in mm)", READING_DISTANCE_MM / 10),
-          data.x_height_arcmin or "?", wide = true },
-        { note = angleNote() },
+        { "vs Pref", data.x_height_vs_pref or "?", wide = true },
+        { "For pref", data.x_height_target or "?", wide = true },
     })
 
     -- DISPLAY
@@ -728,22 +833,77 @@ local function buildSections(data, fonts, layout)
         background = Blitbuffer.COLOR_BLACK,
     })
 
+    -- second value: widgets whose tap opens the reference popup
+    return sections, { xh_header, xh_tbl.table_frame }
+end
+
+-- Reference popup content: ANGLE → SIZE table + reference note.
+local function buildReferenceSections(data, fonts, layout)
+    local sections = VerticalGroup:new{ align = "left" }
+    local L = layout
+
+    -- ANGLE → SIZE: generic table, depends only on READING_DISTANCE_MM and
+    -- (for the pt column) on the current font's x-height proportion
+    do
+        local rows = {
+            { header = true, cells = {
+                { text = "Angle",  kind = "head" },
+                { text = "Name",   kind = "head" },
+                { text = "x-height", kind = "head" },
+                { text = "Font",   kind = "head" },
+            } },
+        }
+        local refs = {}
+        for _, ra in ipairs(REFERENCE_ANGLES) do table.insert(refs, ra) end
+        table.sort(refs, function(a, b) return a[1] < b[1] end)   -- by angle
+        for _, ra in ipairs(refs) do
+            local mm = mmFromArcmin(ra[1], READING_DISTANCE_MM)
+            local font_txt = data.xh_mm_per_pt
+                and string.format("%.1f pt", mm / data.xh_mm_per_pt) or "N/A"
+            table.insert(rows, { cells = {
+                { text = fmtArc(ra[1]) .. "′", kind = "value" },
+                { text = ra[2],                        kind = "label" },
+                { text = string.format("%.2f mm", mm), kind = "value" },
+                { text = font_txt,                     kind = "value" },
+            } })
+        end
+        -- Note: why going above the preferred range has no measurable benefit.
+        -- (Reasoned from the flat plateau in Legge & Bigelow 2011; personal
+        -- guidance, not a measured result.)
+        table.insert(rows, { cells = { { kind = "mono", span = 4,
+            text = "Above ~22–25′ you lose text per page without any measurable gain in reading speed, since the plateau is flat. If comfort is the goal there is room to go larger, but pages turn more often." } } })
+        addSection(sections, fonts, L,
+            string.format("ANGLE → SIZE  (@%dcm)", READING_DISTANCE_MM / 10),
+            buildTable(fonts, L, { 0.16, 0.38, 0.23, 0.23 }, rows))
+    end
+
+    -- Reference note: sources, CPS definition, bands, print books, preference
+    addSection(sections, fonts, L, "REFERENCE",
+        buildTable(fonts, L, { 1 },
+            { { cells = { { text = angleNote(), kind = "mono" } } } }))
+
+    -- Bottom rule
+    table.insert(sections, LineWidget:new{
+        dimen      = Geom:new{ w = L.full_width, h = Size.line.thick },
+        background = Blitbuffer.COLOR_BLACK,
+    })
+
     return sections
 end
 
 -- ── Popup widget ──────────────────────────────────────────────────────────────
 
-local TextInfoPopup = InputContainer:extend{
+-- Base popup: full-width, closes on tap / swipe / hold / Back. Subclasses
+-- implement :buildContent(fonts, layout) returning the sections widget.
+local BasePopup = InputContainer:extend{
     modal = true,
-    ui    = nil,
 }
 
-function TextInfoPopup:init()
+function BasePopup:init()
     local fonts    = buildFonts()
     local screen_w = Screen:getWidth()
     local layout   = buildLayout(screen_w, Size.padding.large)
-    local data     = gatherData(self.ui)
-    local sections = buildSections(data, fonts, layout)
+    local sections = self:buildContent(fonts, layout)
 
     self.popup_frame = FrameContainer:new{
         background = Blitbuffer.COLOR_WHITE,
@@ -768,20 +928,56 @@ function TextInfoPopup:init()
     end
 end
 
-function TextInfoPopup:onShow()
+function BasePopup:onShow()
     UIManager:setDirty(self, function()
         return "ui", self.popup_frame.dimen
     end)
     return true
 end
 
-function TextInfoPopup:onTapClose()   UIManager:close(self); return true end
-function TextInfoPopup:onSwipeClose() UIManager:close(self); return true end
-function TextInfoPopup:onHoldClose()  UIManager:close(self); return true end
-function TextInfoPopup:onClose()      UIManager:close(self); return true end
+function BasePopup:onTapClose()   UIManager:close(self); return true end
+function BasePopup:onSwipeClose() UIManager:close(self); return true end
+function BasePopup:onHoldClose()  UIManager:close(self); return true end
+function BasePopup:onClose()      UIManager:close(self); return true end
 
-function TextInfoPopup:onCloseWidget()
+function BasePopup:onCloseWidget()
     UIManager:setDirty(nil, "ui")
+end
+
+-- Secondary popup: angle → size table and reference note.
+local ReferencePopup = BasePopup:extend{
+    data = nil,
+}
+
+function ReferencePopup:buildContent(fonts, layout)
+    return buildReferenceSections(self.data or {}, fonts, layout)
+end
+
+-- Main popup.
+local TextInfoPopup = BasePopup:extend{
+    ui = nil,
+}
+
+function TextInfoPopup:buildContent(fonts, layout)
+    self.data = gatherData(self.ui)
+    local sections, targets = buildSections(self.data, fonts, layout)
+    self.ref_targets = targets
+    return sections
+end
+
+-- A tap on the X-HEIGHT section opens the reference popup; a tap anywhere
+-- else closes this one.
+function TextInfoPopup:onTapClose(arg, ges)
+    if ges and ges.pos then
+        for _, w in ipairs(self.ref_targets or {}) do
+            if w.dimen and ges.pos:intersectWith(w.dimen) then
+                UIManager:show(ReferencePopup:new{ data = self.data })
+                return true
+            end
+        end
+    end
+    UIManager:close(self)
+    return true
 end
 
 -- ── Registration ──────────────────────────────────────────────────────────────
