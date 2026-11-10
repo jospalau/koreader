@@ -5820,6 +5820,12 @@ function PageTextInfo:onShowFonts(page)
         h = fsize.h,
     }
 
+    local title_rect = Geom:new{
+        x = frame_rect.x + Size.border.window + Size.padding.small,
+        y = frame_rect.y + Size.border.window + Size.padding.small,
+        w = dialog_w,
+        h = cell_h,
+    }
     -- Tap handling
     function dialog:onTap(arg, ges)
         -- Font cells
@@ -6816,6 +6822,15 @@ function PageTextInfo:onShowSettingsMenu()
         title_group,
     }
 
+    -- Wrapper whose real dimen (filled in when painted) is used to detect
+    -- taps on the title.
+    local title_frame = FrameContainer:new{
+        bordersize = 0,
+        margin = 0,
+        padding = 0,
+        title,
+    }
+
     local frame = FrameContainer:new{
         background = Blitbuffer.COLOR_WHITE,
         bordersize = Size.border.window,
@@ -6823,7 +6838,7 @@ function PageTextInfo:onShowSettingsMenu()
         padding = Size.padding.small,
         VerticalGroup:new{
             align = "center",
-            title,
+            title_frame,
             grid,
         },
     }
@@ -6840,6 +6855,19 @@ function PageTextInfo:onShowSettingsMenu()
     }
 
     function dialog:onTap(arg, ges)
+        require("logger").info("settings tap", ges.pos.x, ges.pos.y)
+
+        -- Tap on the title: open the reference popup from typography_popup.lua
+        if title_frame.dimen and ges.pos:intersectWith(title_frame.dimen) then
+            local plugin_ui = self.plugin.ui
+            if plugin_ui and plugin_ui.onShowTypographyReference then
+                plugin_ui:onShowTypographyReference()
+            else
+                require("logger").warn("onShowTypographyReference not available")
+            end
+            return true
+        end
+
         for __, b in ipairs(buttons) do
             if b.frame.dimen and ges.pos:intersectWith(b.frame.dimen) then
                 local ok, err = pcall(b.callback, self.plugin.ui)

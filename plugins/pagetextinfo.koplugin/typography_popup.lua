@@ -1416,4 +1416,9 @@ ReaderUI.registerKeyEvents = function(self)
         UIManager:show(TextInfoPopup:new{ ui = this })
         return true
     end
+    -- Opens the REFERENCE popup directly (same one as tapping X-HEIGHT)
+    self.onShowTypographyReference = function(this)
+        UIManager:show(ReferencePopup:new{ data = gatherData(this) })
+        return true
+    end
 end
