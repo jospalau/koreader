@@ -1050,33 +1050,6 @@ Tap a book in the search results to open it.]]),
         hold_callback = function()
         end
     }
-    -- self.menu_items.open_random_favorite = {
-    --     text_func = function()
-    --         local random_file = require("readcollection"):OpenRandomFav()
-    --         if not G_reader_settings:isTrue("open_last_menu_show_filename") or not random_file then
-    --             return _("Open random MBR book")
-    --         end
-    --         local path, file_name = util.splitFilePathName(random_file) -- luacheck: no unused
-    --         return T(_("Previous: %1"), BD.filename(file_name))
-    --     end,
-    --     enabled_func = function()
-    --         return require("readcollection"):OpenRandomFav() ~= nil
-    --     end,
-    --     callback = function()
-    --         self:onOpenRandomFav()
-    --     end,
-    --     hold_callback = function()
-    --         local previous_file = self:getRandomFav()
-    --         UIManager:show(ConfirmBox:new{
-    --             text = T(_("Would you like to open the previous document: %1?"), BD.filepath(previous_file)),
-    --             ok_text = _("OK"),
-    --             ok_callback = function()
-    --                 self.ui:switchDocument(previous_file)
-    --             end,
-    --         })
-    --     end
-    -- }
-
    self.menu_items.generate_font_profiles = {
         text_func = function()
             return _("Generate Font Profiles")
@@ -1307,8 +1280,8 @@ Tap a book in the search results to open it.]]),
         hold_callback = function()
         end
     }
-    -- self.menu_items.open_random_favorite = {
-    -- -- insert common info
+
+    -- insert common info
     for id, common_setting in pairs(dofile("frontend/ui/elements/common_info_menu_table.lua")) do
         self.menu_items[id] = common_setting
     end

@@ -73,9 +73,6 @@ local order = {
         "night_mode",
         "show_double_bar",
         "show_top_bar",
-        -- "highlight_all_notes", Page text info plugin
-        -- "highlight_all_words_vocabulary", Page text info plugin
-        "scale_font_to_current_font",
         "----------------------------",
         "network",
         "screen",
@@ -243,7 +240,6 @@ local order = {
         "bookmark_browser",
         "series",
         "generate_favorites",
-        -- "open_random_favorite",
         "----------------------------",
         "book_status",
         "book_info",

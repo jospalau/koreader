@@ -440,8 +440,6 @@ end
 
 function PageTextInfo:onDispatcherRegisterActions()
     Dispatcher:registerAction("pagetextinfo_action", {category="none", event="PageTextInfo", title=_("Page text info widget"), general=true,})
-
-    -- open_random_favorite = {category="none", event="OpenRandomFav", title=_("Open random book MBR"), general=true},
     Dispatcher:registerAction("series", {category="none", event="ShowSeriesList", title=_("Series"), general=true,})
     Dispatcher:registerAction("generate_favorites", {category="none", event="GenerateFavorites", title=_("Generate favorites"), general=true,})
     Dispatcher:registerAction("filemanager_scripts", {category="none", event="Scripts", title=_("File browser scripts"), general=true, separator=true,})
