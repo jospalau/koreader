@@ -35,18 +35,11 @@ local RoundCorner    = require("lib/bookshelf_round_corner")
 
 local SpineShelf = {}
 
-local _gettime
-do
-    local ok, TimeVal = pcall(require, "ui/timeval")
-    if ok and TimeVal and TimeVal.now then
-        _gettime = function()
-            local tv = TimeVal:now()
-            return tv.sec + tv.usec / 1e6
-        end
-    else
-        _gettime = os.clock
-    end
-end
+-- The shared wall clock. This file had its own, trying KOReader's old TimeVal
+-- first: gone, so it fell back to os.clock, CPU time, which leaves out the
+-- waits a cover decode spends reading its data (a page's covers reported at
+-- 158 ms that took 557 ms on a PW5).
+local _gettime = require("lib/bookshelf_gettime")
 
 -- Gap between neighbouring spines, dp. Books on a real shelf TOUCH, and now
 -- so do these: at 2dp a strip of wallpaper showed between every pair and the
@@ -673,6 +666,32 @@ function SpineShelf.bookShape(look, pages, same_size)
     return copy.aspect, copy, nil, copy.aspect
 end
 
+-- faceOutCover(row_h, aspect, height_aspect) -> face_h, w: a face-out's
+-- cover, px. Its height is the book's front face, the height its spine would
+-- show turned the other way: the book's height on this row less the top edge
+-- a spine-out carves (SpineLayout.topEdgeHeight). NOT the book's height less
+-- its page block: that stood a face-out a whole top edge taller than its
+-- neighbours, a book's thickness being far less than its cover width. Its
+-- width from that height, so the cover stays true to its shape. plan() sizes
+-- face-outs with it, and the warm-up of the covers ahead (faceOutSlot), so a
+-- cover is warmed at the size it will be drawn.
+function SpineShelf.faceOutCover(row_h, aspect, height_aspect)
+    local h = SpineLayout.spineHeight(row_h, height_aspect)
+    local face_h = h - SpineLayout.topEdgeHeight(h, height_aspect, Screen:scaleBySize(5))
+    if face_h < Screen:scaleBySize(24) then face_h = Screen:scaleBySize(24) end
+    return face_h, SpineLayout.faceOutWidth(face_h, aspect)
+end
+
+-- faceOutSlot(book, row_h, same_size) -> face_h, w: the cover the book would
+-- stand face out with on this row, from the shape remembered for it
+-- (knownLook: no decode) and the shelf's Book sizes (bookShape), as plan()
+-- comes to it.
+function SpineShelf.faceOutSlot(book, row_h, same_size)
+    local aspect, _look, _pages, height_aspect = SpineShelf.bookShape(
+        SpineShelf.knownLook(book) or {}, nil, same_size)
+    return SpineShelf.faceOutCover(row_h, aspect, height_aspect)
+end
+
 local function _sampleAverage(bb)
     local n, r, g, b = 0, 0, 0, 0
     local w, h = bb:getWidth(), bb:getHeight()
@@ -879,6 +898,21 @@ function SpineShelf.bookLook(book)
         end
     end
     return look
+end
+
+-- knownLook(book) -> { aspect = h/w or nil }: the shape bookLook would give,
+-- from what is already known (this session's looks, the facts store, BIM's
+-- cover size tag) and never a decode. For the warm-up's sizing (faceOutSlot),
+-- which runs for books ahead that may never have been sampled.
+function SpineShelf.knownLook(book)
+    local fp = book and book.filepath
+    if not fp then return nil end
+    local hit = _look_cache[fp]
+    if hit then return hit end
+    local F = _facts()
+    local kept = F and F.get(fp)
+    local a = type(kept) == "table" and kept.r and kept.a or nil
+    return { aspect = a or _aspectFromSizetag(book.cover_sizetag) }
 end
 
 -- The whole-chip plan entries, kept between calls (see plan, where the cache
@@ -1307,9 +1341,18 @@ end
 -- progress store, then the sidecar. For books OFF the screen being planned.
 function SpineShelf.statusUnread(src)
     if type(src) ~= "table" or not src.filepath then return false end
-    if src._spine_status_checked then return SpineShelf.isUnread(src) end
+    local st = SpineShelf.resolvedStatus(src)
+    return st == nil or st == "new" or st == "unread"
+end
+
+-- resolvedStatus(src) -> the book's reading status (nil: never opened), as
+-- plan() comes to it: the record once the plan has checked it, else the
+-- record, the progress store, then the sidecar. Reads only; for books off the
+-- screen being planned (statusUnread, faceOutPaths).
+function SpineShelf.resolvedStatus(src)
+    if src._spine_status_checked then return src.status end
     local st = src.status
-    if st == nil then
+    if st == nil and src.filepath then
         local _p, ps, known = SpineShelf.cachedProgress(src.filepath)
         st = ps
         if st == nil and not known then
@@ -1319,7 +1362,34 @@ function SpineShelf.statusUnread(src)
             end
         end
     end
-    return st == nil or st == "new" or st == "unread"
+    return st
+end
+
+-- facesOut(face_spec, f, src, fav, face_recent) -> true when the book stands
+-- cover-forward. THE decision: plan() asks it for each book it lays out, and
+-- faceOutPaths for the books ahead whose covers are warmed before their turn,
+-- so the two cannot disagree. f: the flattened entry, its series marks set
+-- (markSeriesHeads); src: the record, its status resolved; fav: a favourite;
+-- face_recent: the shelf's newest N ({ [filepath] = true } or nil). ANY
+-- reason is enough; they are not ranked.
+function SpineShelf.facesOut(face_spec, f, src, fav, face_recent)
+    if not src.filepath then return false end
+    if face_spec.all then return true end
+    return (face_spec.favorites and fav)
+        -- Series, run or book alone: see markSeriesHeads.
+        or (face_spec.first and f.series_first == true)
+        or (face_spec.first_unread and f.series_next == true)
+        or (face_spec.reading and src.status == "reading")
+        -- The repository files KOReader's "complete" as
+        -- "finished" and "abandoned" as "on_hold"
+        -- (Repo.readProgress); both spellings are taken.
+        or (face_spec.finished and (src.status == "finished" or src.status == "complete"))
+        or (face_spec.on_hold and (src.status == "on_hold" or src.status == "abandoned"))
+        or (face_spec.unread and SpineShelf.isUnread(src))
+        or (face_spec.standalone and SpineShelf.isUnreadStandalone(src))
+        or (face_spec.collection and _inCollection(face_spec.collection, src.filepath))
+        or (face_recent ~= nil and face_recent[src.filepath] == true)
+        or false
 end
 
 -- seriesClaimedBefore(all_items, first_idx, window_items) -> { [series] = true }
@@ -4018,6 +4088,48 @@ function SpineShelf._flattenItems(items)
     return flat
 end
 
+-- faceOutPaths(items, opts) -> { filepath, ... }, { record, ... } the books among items that
+-- would stand face out, in shelf order: a run of the shelf's list walked as
+-- plan() walks it (groups flattened, series heads marked in order, the
+-- reasons through facesOut). For the warm-up of the covers ahead
+-- (BookshelfWidget:_spineFaceOutJobs). opts: face_out (the stored choice),
+-- face_recent_set and series_next_claimed, as plan() takes them. A status is
+-- only looked up when a reason asks about status.
+function SpineShelf.faceOutPaths(items, opts)
+    opts = opts or {}
+    local face_spec = SpineShelf.faceOutSpec(opts.face_out)
+    local out, books = {}, {}
+    if SpineShelf.faceOutEmpty(face_spec) then return out, books end
+    local by_status = not face_spec.all and (face_spec.first_unread or face_spec.reading
+        or face_spec.finished or face_spec.on_hold or face_spec.unread or face_spec.standalone)
+    local flat = SpineShelf._flattenItems(items or {})
+    local face_recent = opts.face_recent_set
+    if face_recent == nil then face_recent = SpineShelf.recentSet(flat, face_spec.recent) end
+    local st = { run_has_series = {}, run_next = {}, series_first = {}, series_next = {} }
+    for name in pairs(opts.series_next_claimed or {}) do st.series_next[name] = true end
+    for _i, f in ipairs(flat) do
+        local sn = f.book and f.book.series_name
+        if f.in_group and type(sn) == "string" and sn ~= "" then st.run_has_series[f.run_idx] = true end
+    end
+    for _i, f in ipairs(flat) do
+        local bk = f.book
+        if bk and bk.filepath and not bk._series_box and not bk.add_subshelf and not bk.is_opds_nav then
+            -- The record as the plan sees it, its status resolved; the
+            -- record itself is left as it was.
+            local view = setmetatable({
+                status = by_status and SpineShelf.resolvedStatus(bk) or bk.status,
+                _spine_status_checked = true,
+            }, { __index = bk })
+            SpineShelf.markSeriesHeads(f, view, st)
+            if SpineShelf.facesOut(face_spec, f, view, _isFavourite(bk.filepath), face_recent) then
+                out[#out + 1] = bk.filepath
+                books[#books + 1] = bk
+            end
+        end
+    end
+    return out, books
+end
+
 -- ── The entries cache ──────────────────────────────────────────────────────
 --
 -- plan() builds one entry per flattened item -- look, favourite, progress,
@@ -4494,8 +4606,6 @@ function SpineShelf.plan(items, opts)
         local _tl = _gettime()
         local look = SpineShelf.shownLook(rep)
         _t_look = _t_look + (_gettime() - _tl)
-        local aspect = look.aspect
-        local h = SpineLayout.spineHeight(budget, aspect)
         local _tf = _gettime()
         local fav = bk.filepath ~= nil and _isFavourite(bk.filepath)
         _t_fav = _t_fav + (_gettime() - _tf)
@@ -4601,28 +4711,7 @@ function SpineShelf.plan(items, opts)
         -- ANY reason is enough. They are not ranked: a book that is both a
         -- favourite and newly added is not more face-out than one that is
         -- only a favourite, it simply qualifies twice.
-        local face_out = false
-        if src.filepath then
-            if face_spec.all then
-                face_out = true
-            else
-                face_out = (face_spec.favorites and fav)
-                    -- Series, run or book alone: see markSeriesHeads.
-                    or (face_spec.first and f.series_first == true)
-                    or (face_spec.first_unread and f.series_next == true)
-                    or (face_spec.reading and src.status == "reading")
-                    -- The repository files KOReader's "complete" as
-                    -- "finished" and "abandoned" as "on_hold"
-                    -- (Repo.readProgress); both spellings are taken.
-                    or (face_spec.finished and (src.status == "finished" or src.status == "complete"))
-                    or (face_spec.on_hold and (src.status == "on_hold" or src.status == "abandoned"))
-                    or (face_spec.unread and SpineShelf.isUnread(src))
-                    or (face_spec.standalone and SpineShelf.isUnreadStandalone(src))
-                    or (face_spec.collection and _inCollection(face_spec.collection, src.filepath))
-                    or (face_recent ~= nil and face_recent[src.filepath] == true)
-                    or false
-            end
-        end
+        local face_out = SpineShelf.facesOut(face_spec, f, src, fav, face_recent)
         -- A shelf of shelves' "+ Add shelf" takes a face-out cover's place
         -- and size, as a dashed outline (see the tile branch below). A
         -- source's folder record (issue 588: a fetch-mode source on Spines)
@@ -4695,10 +4784,7 @@ function SpineShelf.plan(items, opts)
             -- left the cover a whole spine's top edge taller than its
             -- neighbours, because a book's thickness is far smaller than its
             -- cover width.
-            face_h = h - SpineLayout.topEdgeHeight(h, height_aspect, Screen:scaleBySize(5))
-            if face_h < Screen:scaleBySize(24) then face_h = Screen:scaleBySize(24) end
-            -- Width from the COVER height, so the cover stays aspect-true.
-            w = SpineLayout.faceOutWidth(face_h, aspect)
+            face_h, w = SpineShelf.faceOutCover(budget, aspect, height_aspect)
             w_dp = math.floor(w / (Screen:scaleBySize(100) / 100) + 0.5)
         else
             w_dp = SpineLayout.spineWidthDp(shape_pages) * auto_thick

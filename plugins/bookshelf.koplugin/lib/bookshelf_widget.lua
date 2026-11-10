@@ -249,6 +249,9 @@ function BookshelfWidget:init()
     BookshelfWidget._clip_target = self
     BookshelfWidget.installClipHook()
     require("lib/bookshelf_underlay").install(self)
+    -- A data generation bump makes the pages built ahead stale: build them
+    -- again before the turn (_onDataGeneration).
+    if Repo.onDataGeneration then Repo.onDataGeneration(self, BookshelfWidget._onDataGeneration) end
     -- %published reads book files in the background (lib/bookshelf_published);
     -- the books that gained a date repaint where they show. The newest shelf
     -- is the one listened for, as above.
@@ -10862,6 +10865,10 @@ local CHIP_PRELOAD_QUIET_S = 5
 -- first's state once the first is done, so two quick swipes after a pause
 -- both land on finished pages.
 local PAGE_AHEAD_DEPTH = 2
+-- After a wake: how long the build keeps looking for the shelf to come back
+-- from under the sleep screen, and how often it looks.
+local PAGE_AHEAD_WAKE_WINDOW_S = 120
+local PAGE_AHEAD_WAKE_RETRY_S = 1
 
 -- The shelf's fields as a table, and back: the build sets fields on the
 -- live shelf as a turn does, and every one goes back after each step.
@@ -10890,6 +10897,22 @@ function BookshelfWidget:_pageAheadArm(dir)
     self._page_ahead_dir = (dir and dir < 0) and -1 or 1
     self._page_ahead_fn = function() self:_pageAheadRun() end
     UIManager:scheduleIn(PAGE_AHEAD_DELAY_S, self._page_ahead_fn)
+end
+
+-- _onDataGeneration(): the book data moved (Repo.dataGeneration), so a page
+-- built ahead is keyed by data that is gone, and the turn would find it stale
+-- and build on the spot. Build ahead again. Deferred: the bump can come from
+-- inside a build's own step, which arming now would cancel under itself; and
+-- a burst of bumps (an extraction batch) arms once. The PW5's first turn after
+-- a start missed this way: the light-meta refresh moved the generation a few
+-- seconds after the page was built.
+function BookshelfWidget:_onDataGeneration()
+    if self._closed or self._ahead_regen_fn then return end
+    self._ahead_regen_fn = function()
+        self._ahead_regen_fn = nil
+        if not self._closed then self:_pageAheadArm(self._page_ahead_dir or 1) end
+    end
+    UIManager:scheduleIn(PAGE_AHEAD_DELAY_S, self._ahead_regen_fn)
 end
 
 -- _pageAheadCancel(): no further step; a page half built is freed.
@@ -10965,7 +10988,16 @@ function BookshelfWidget:_pageAheadRun()
             return
         end
     else
-        if not self:_pageAheadSafe() then return end
+        if not self:_pageAheadSafe() then
+            -- Just woken: the sleep screen may still be over the shelf (a
+            -- delay, a tap or a gesture to leave it). Look again shortly.
+            if not self._closed and (self._ahead_wake_until or 0) > _gettime()
+                    and UIManager:getTopmostVisibleWidget() ~= self then
+                self._page_ahead_fn = function() self:_pageAheadRun() end
+                UIManager:scheduleIn(PAGE_AHEAD_WAKE_RETRY_S, self._page_ahead_fn)
+            end
+            return
+        end
         local nxt = self._page_ahead_next
         self._page_ahead_next = nil
         if nxt and nxt.gen ~= self._page_gen then nxt = nil end
@@ -13643,6 +13675,7 @@ end
 -- callback in show().
 function BookshelfWidget:onCloseWidget()
     self._closed = true   -- the registered-source listener (init) stands down
+    if Repo.onDataGeneration then Repo.onDataGeneration(self, nil) end
     self:_heroKeptClear()
     self:_stopStatusTimer()
     -- Invalidate any pending Kobo prepare-poll (_openKoboWhenReady). The poll
@@ -14179,12 +14212,21 @@ local function flushOpenPickers()
     if Orn and Orn._defer then BookshelfSettings.flush() end
 end
 
+-- The cover cache's disk copies still waiting to be written (they wait for
+-- a pause, off the turn): written before a sleep or an exit, or those covers
+-- are decoded again next session.
+local function flushCoverWrites()
+    local SCC = package.loaded["lib/bookshelf_scaled_cover_cache"]
+    if type(SCC) == "table" and SCC.flushWrites then pcall(SCC.flushWrites, SCC) end
+end
+
 function BookshelfWidget:onSuspend()
     self:_stopStatusTimer()
     -- Suspend can be followed by a SIGTERM (Kindle frame switch) that never
     -- reaches onCloseWidget, so land deferred nav state here too.
     self:_flushNavStateNow()
     flushOpenPickers()
+    flushCoverWrites()
 end
 
 -- KOReader broadcasts onFlushSettings on its periodic autosave and on a
@@ -14194,6 +14236,7 @@ end
 function BookshelfWidget:onFlushSettings()
     self:_flushNavStateNow()
     flushOpenPickers()
+    flushCoverWrites()
 end
 
 function BookshelfWidget:onResume()
@@ -14202,13 +14245,31 @@ function BookshelfWidget:onResume()
     -- into sleep; bring it back so a wake-up detects any files synced
     -- while the device was suspended. Idempotent.
     self:_startFilePoll()
-    -- Repaint immediately so post-wake clock + batt + wifi state shows
-    -- without waiting for the next minute boundary. Hint "status" so
-    -- the panel refresh stays scoped to the status strip.
-    local _hc_resume = self._hero_card or (self._hero_parent and self._hero_parent[1])
-    if UIManager:getTopmostVisibleWidget() == self
-            and _hc_resume
-            and _hc_resume.replaceRightColumn then
+    -- Build ahead again. A sleep outlasts the Spines list (30 s), and the
+    -- first turn after a wake fetched it with the device just awake: 338 ms
+    -- against 115 ms for the same fetch awake (PW5). The build fetches it
+    -- first, and builds again a kept page whose data moved while asleep.
+    self._ahead_wake_until = _gettime() + PAGE_AHEAD_WAKE_WINDOW_S
+    self:_pageAheadArm(self._page_ahead_dir or 1)
+    -- The status as it is now, without waiting for the minute tick. With the
+    -- sleep screen still up this does nothing: the underlay asks again when
+    -- it puts the shelf back from under it.
+    self:_wakeStatusRefresh()
+end
+
+-- _wakeStatusRefresh(): draw the status again, in place, for a wake: clock,
+-- battery and wifi as they are now, not as the device slept (issue 596).
+-- Only with the shelf on top; the panel refresh stays on the status.
+function BookshelfWidget:_wakeStatusRefresh()
+    if self._closed or UIManager:getTopmostVisibleWidget() ~= self then return end
+    -- As the minute tick does: a micro grid's clocks, then the status line.
+    if self._hero_mode == "micro" and not self._expanded then
+        require("lib/bookshelf_hero_modules").tickClocks(self)
+    end
+    local hc = self._hero_card or (self._hero_parent and self._hero_parent[1])
+    if self._hero_status_strip then
+        self:_swapHeroStatusStrip()
+    elseif hc and hc.replaceRightColumn then
         local Regions = require("lib/bookshelf_hero_regions")
         self:_swapHeroRightColumnInPlace(Regions.read(), "status")
     end
@@ -17414,6 +17475,7 @@ end
 local PRELOAD_START_DELAY_S = 0.35   -- let the current page's EPDC flush drain first
 local PRELOAD_TICK_S        = 0.05   -- gap between chunks
 local PRELOAD_CHUNK         = 4      -- covers warmed per tick (upper bound)
+local SPINE_WARM_AHEAD      = 24     -- Spines face-out covers warmed ahead (_spineFaceOutJobs)
 -- Main-thread time budget per chunk. PRELOAD_CHUNK alone is a count budget:
 -- fine on fast hardware (4 jobs ≈ a few ms) but on a 1GHz e-ink device 4
 -- cover decodes can hold the main thread 200-600ms per 50ms tick, so taps
@@ -17622,6 +17684,14 @@ local function _warmChunk(jobs, chunk, counters)
             -- _progress_cache (120s TTL) on the next page render.
             pcall(Repo.readProgress, job.progress_fp)
             counters.progress = (counters.progress or 0) + 1
+        elseif job.face_out then
+            -- A Spines face-out: at its own size and by its tile's cache
+            -- rules, where any copy at all (has) may be a list thumbnail.
+            local SW = require("lib/bookshelf_spine_widget")
+            local ok_w, res = pcall(function() return SW.warmFaceOut(job) end)
+            if ok_w and res == "already" then counters.already = counters.already + 1
+            elseif ok_w and res == "decoded" then counters.decoded = counters.decoded + 1
+            else counters.failed = counters.failed + 1 end
         elseif job.fp then
             if ScaledCoverCache:has(job.fp) then
                 counters.already = counters.already + 1
@@ -17652,6 +17722,10 @@ end
 -- tick.)
 function BookshelfWidget:_buildPhaseJobs(phase, seen)
     local jobs = {}
+    -- A Spines shelf: the covers that will face out ahead.
+    if phase == "next" and self:_isSpineMode() then
+        return self:_spineFaceOutJobs(self._preload_dir)
+    end
     local w, h = self:_currentSlotDims()
     if not w then return jobs end
     local view = self:_viewSize()
@@ -17661,6 +17735,62 @@ function BookshelfWidget:_buildPhaseJobs(phase, seen)
         if target >= 1 and (total == 0 or target <= total) then
             self:_collectPageCovers(jobs, seen, self.chip, target, w, h)
         end
+    end
+    return jobs
+end
+
+-- _spineWarmable() -> true when a Spines shelf has covers ahead to warm:
+-- some reason stands books face out, the shelf is laid out (its rows are
+-- what the covers are sized from), and building ahead is allowed here (a
+-- feed's list fetch can reach the network). Cheap: asked on the turn.
+function BookshelfWidget:_spineWarmable()
+    if not (self._shelf_dims and self._shelf_dims.shelf_h) then return false end
+    local SpineShelf = require("lib/bookshelf_spine_shelf")
+    if SpineShelf.faceOutEmpty(SpineShelf.faceOutSpec(self:_spineFaceOut())) then return false end
+    return self:_pageAheadSafe() and true or false
+end
+
+-- _spineFaceOutJobs(direction) -> warm jobs for a Spines shelf's covers ahead:
+-- the books among the next SPINE_WARM_AHEAD in the paged direction (two
+-- pages and more) that will stand face out, decided as the plan decides it
+-- (SpineShelf.faceOutPaths), nearest first, each at its own slot as the plan
+-- sizes it (SpineShelf.faceOutSlot: covers differ in shape, so in width) and
+-- from the picture its tile shows (its own cover image, when it has one). A
+-- cover never shown at that size cost 70-150 ms on the turn (PW5, Decades
+-- with every book out: 0.7-1 s a page), 1-3 ms once warmed.
+function BookshelfWidget:_spineFaceOutJobs(direction)
+    local jobs = {}
+    local row_h = self._shelf_dims and self._shelf_dims.shelf_h
+    if not row_h then return jobs end
+    local SpineShelf = require("lib/bookshelf_spine_shelf")
+    local face_out = self:_spineFaceOut()
+    local spec = SpineShelf.faceOutSpec(face_out)
+    if SpineShelf.faceOutEmpty(spec) then return jobs end
+    if not self:_pageAheadSafe() then return jobs end
+    local items = self:_spineCachedFetch(400) or {}
+    local cur = self._cursor or 1
+    local back = (direction or 1) < 0
+    local first = back and math.max(1, cur - SPINE_WARM_AHEAD) or cur
+    local last = back and (cur - 1) or math.min(#items, cur + SPINE_WARM_AHEAD - 1)
+    -- The run in shelf order: first in series and the like are decided in it.
+    local window = {}
+    for i = first, last do window[#window + 1] = items[i] end
+    local opts = { face_out = face_out, face_recent_set = self:_spineFaceRecent(items) }
+    if spec.first_unread and not spec.all then
+        opts.series_next_claimed = SpineShelf.seriesClaimedBefore(items, first, window)
+    end
+    local fps, books = SpineShelf.faceOutPaths(window, opts)
+    local same_size = self:_spineSameSize()
+    local border = require("lib/bookshelf_spine_widget").CARD_BORDER or 0
+    local from, to, step = 1, #fps, 1
+    if back then from, to, step = #fps, 1, -1 end
+    for i = from, to, step do
+        local bk = books[i]
+        local face_h, w = SpineShelf.faceOutSlot(bk, row_h, same_size)
+        local ext = bk.cover_image_path
+        jobs[#jobs + 1] = { fp = fps[i], w = w - 2 * border, h = face_h - 2 * border,
+                            ext = (type(ext) == "string" and ext ~= "") and ext or nil,
+                            face_out = true }
     end
     return jobs
 end
@@ -18147,10 +18277,15 @@ function BookshelfWidget:_schedulePreload(direction)
     -- Spine mode: a page holds ~a hundred books whose covers the shelf never
     -- paints (a spine is colour and text; the few face-out favourites decode
     -- on demand), and the warm loop's decode chunks were exactly what made
-    -- the first tap after a chip switch feel dead. Nothing worth warming.
+    -- the first tap after a chip switch feel dead. Only the covers that face
+    -- out are worth warming: each is a decode the first time it shows
+    -- (_spineFaceOutJobs, chosen in the loop's first step).
     if self:_isSpineMode() then
-        self:_pageAheadArm(direction)
-        return
+        local ok_w, warm = pcall(self._spineWarmable, self)
+        if not (ok_w and warm) then
+            self:_pageAheadArm(direction)
+            return
+        end
     end
     self:_cancelPreload()
     self:_applyCoverCacheBudget()
@@ -19019,8 +19154,13 @@ function BookshelfWidget:_setExpanded(expanded)
         self:_clampCursor(self._total_items)
         self:_syncPageFromCursor()
     end
-    BookshelfSettings.save("home_expanded", expanded)
-    BookshelfSettings.flush()
+    -- Remembered now, written with the nav state at the next pause (or a
+    -- suspend, an exit, KOReader's settings flush), as the page and the row
+    -- count are: the write rewrites the whole settings file, and on the swipe
+    -- it cost 128, 159 and 1116 ms ahead of the rebuild (PW5).
+    BookshelfSettings.saveDeferred("home_expanded", expanded)
+    self._nav_dirty = true
+    self:_scheduleNavFlush()
 end
 
 -- ── Rows from the top panel (issue 465) ─────────────────────────────────────
