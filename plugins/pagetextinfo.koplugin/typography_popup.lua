@@ -939,11 +939,28 @@ local STYLE_CSS_PATHS = {
 
 -- Properties shown: name, text shown when nobody defines it
 local STYLE_PROPS = {
-    { "line-height", "normal (default)" },
-    { "text-align",  "start/left (default)" },
-    { "text-indent", "0 (default)" },
+    { "line-height",   "normal (default)" },
+    { "text-align",    "start/left (default)" },
+    { "text-indent",   "0 (default)" },
+    { "font-size",     "not set (default)" },
+    { "font-family",   "not set (default)" },
+    { "font-weight",   "normal (default)" },
+    { "margin",        "0 (default)" },
+    { "margin-top",    "0 (default)" },
+    { "margin-bottom", "0 (default)" },
+    { "margin-left",   "0 (default)" },
+    { "margin-right",  "0 (default)" },
 }
-local STYLE_WANTED = { ["line-height"] = true, ["text-align"] = true, ["text-indent"] = true }
+
+-- Properties that inherit from ancestors. The others (margin*) only count
+-- when declared on the paragraph element itself.
+local STYLE_INHERITED = {
+    ["line-height"] = true, ["text-align"] = true, ["text-indent"] = true,
+    ["font-size"] = true, ["font-family"] = true, ["font-weight"] = true,
+}
+
+local STYLE_WANTED = {}
+for _, p in ipairs(STYLE_PROPS) do STYLE_WANTED[p[1]] = true end
 
 -- Elements considered a "paragraph"
 local PARA_TAGS = {
@@ -1060,6 +1077,8 @@ local function parseDeclarations(body)
             elseif prop == "font" then
                 local lh = value:match("/%s*([%d%.]+%a*%%?)") or value:match("/%s*(normal)")
                 if lh then map["line-height"] = { value = lh, important = important } end
+                local fs = value:match("([%d%.]+[%a%%]+)%s*/") or value:match("([%d%.]+[%a%%]+)")
+                if fs then map["font-size"] = { value = fs, important = important } end
             end
         end
     end
@@ -1174,13 +1193,16 @@ local function declaredValue(rules, chain, idx, prop)
     return best, overridden
 end
 
--- Resolves `prop` going up through the ancestors (the three properties inherit).
+-- Resolves `prop`. Inheritable properties go up through the ancestors;
+-- the others are only looked up on the paragraph element itself.
 -- Returns: found, overridden count, name of the ancestor it was inherited from
 local function resolveProp(rules, chain, prop)
-    for i = #chain, 1, -1 do
+    local last  = #chain
+    local first = STYLE_INHERITED[prop] and 1 or last
+    for i = last, first, -1 do
         local found, overridden = declaredValue(rules, chain, i, prop)
         if found then
-            return found, overridden, (i == #chain) and nil or describeEl(chain[i])
+            return found, overridden, (i == last) and nil or describeEl(chain[i])
         end
     end
     return nil
@@ -1276,7 +1298,7 @@ local function buildStyleSections(data, fonts, layout)
             } })
         end
         table.insert(rows, { cells = { { kind = "mono", span = 3,
-            text = "From the book's CSS. KOReader tweaks / line spacing are not included (see TWEAKS). Selectors with :pseudo, [attr], + or ~ are ignored." } } })
+            text = "From the book's CSS. margin and its sides are resolved independently (shorthand and longhand are not merged) and are not inherited. KOReader tweaks / line spacing are not included (see TWEAKS). Selectors with :pseudo, [attr], + or ~ are ignored." } } })
         addSection(sections, fonts, L, "PARAGRAPH STYLE",
             buildTable(fonts, L, { 0.24, 0.26, 0.50 }, rows))
     end
