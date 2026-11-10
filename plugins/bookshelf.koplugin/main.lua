@@ -3695,7 +3695,7 @@ function Bookshelf:onOutOfScreenSaver()
     if not Device:isKindle() then return end
     local UIManager = require("ui/uimanager")
 
-    UIManager:scheduleIn(1, function()
+    UIManager:nextTick(function()
         -- self._bw is nil in this plugin: look up the widget in the window stack
         local bw = self._bw
         if not bw then
