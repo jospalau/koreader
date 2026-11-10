@@ -3690,4 +3690,25 @@ function Bookshelf.refreshLiveShelves()
     end
 end
 
+function Bookshelf:onOutOfScreenSaver()
+    local Device = require("device")
+    if not Device:isKindle() then return end
+    local UIManager = require("ui/uimanager")
+
+    UIManager:scheduleIn(1, function()
+        -- self._bw is nil in this plugin: look up the widget in the window stack
+        local bw = self._bw
+        if not bw then
+            for i = #UIManager._window_stack, 1, -1 do
+                local w = UIManager._window_stack[i].widget
+                if w and w.refreshStatusLine then bw = w; break end
+            end
+        end
+        if not bw then return end
+
+        pcall(function() bw:refreshStatusLine() end)
+        UIManager:setDirty(bw, "flashui")
+    end)
+end
+
 return Bookshelf
