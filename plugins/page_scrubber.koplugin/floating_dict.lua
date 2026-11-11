@@ -265,7 +265,7 @@ function FloatingCard:init()
         self.dimen = Geom:new({ w = c_sz.w, h = c_sz.h + b })
         if self.anchor_top then pad_bot = b else pad_top = b end
     end
-    
+
     self.frame = FrameContainer:new({
         padding_top = pad_top, padding_bottom = pad_bot,
         padding_left = pad_left, padding_right = pad_right,
@@ -301,16 +301,16 @@ function FloatingCard:paintTo(bb, x, y)
         -- MODO VERTICAL
         local bx = x - b
         local bw = w + (b * 2)
-        paintCornerRect(bb, bx, y, bw, h, r, Blitbuffer.COLOR_BLACK, 
+        paintCornerRect(bb, bx, y, bw, h, r, Blitbuffer.COLOR_BLACK,
             not self.anchor_top, not self.anchor_top, self.anchor_top, self.anchor_top)
-        
+
         local wy = self.anchor_top and y or (y + b)
         local wh = h - b
         local wr = math.max(0, r - b)
         paintCornerRect(bb, x, wy, w, wh, wr, Blitbuffer.COLOR_WHITE,
             not self.anchor_top, not self.anchor_top, self.anchor_top, self.anchor_top)
     end
-        
+
     if self[1] then self[1]:paintTo(bb, x, y) end
 end
 
@@ -326,7 +326,7 @@ function FloatingPillCard:init()
     local c_sz = self.content:getSize()
     local b = self.bordersize
     self.dimen = Geom:new({ w = c_sz.w + (b * 2), h = c_sz.h + (b * 2) })
-    
+
     self.frame = FrameContainer:new({
         padding_top = b,
         padding_bottom = b,
@@ -345,10 +345,10 @@ function FloatingPillCard:paintTo(bb, x, y)
     local r = self.radius
 
     paintCornerRect(bb, x, y, w, h, r, Blitbuffer.COLOR_BLACK, true, true, true, true)
-    
+
     local wr = math.max(0, r - b)
     paintCornerRect(bb, x + b, y + b, math.max(0, w - (b * 2)), math.max(0, h - (b * 2)), wr, Blitbuffer.COLOR_WHITE, true, true, true, true)
-        
+
     if self[1] then self[1]:paintTo(bb, x, y) end
 end
 
@@ -621,7 +621,7 @@ function PreviewButton:init()
             fgcolor = Blitbuffer.COLOR_BLACK
         }
     end
-    
+
     if icon_widget then
         table.insert(content_elements, icon_widget)
     end
@@ -631,35 +631,35 @@ function PreviewButton:init()
             table.insert(content_elements, VerticalSpan:new({ width = scale(1) }))
         end
         self._text_widget = TextWidget:new({
-            text = self.text, 
-            face = self.face or Font:getFace("cfont", self.font_size or scaleText(12)), 
-            bold = (self.bold ~= nil) and self.bold or (self.face == nil), 
+            text = self.text,
+            face = self.face or Font:getFace("cfont", self.font_size or scaleText(12)),
+            bold = (self.bold ~= nil) and self.bold or (self.face == nil),
             fgcolor = Blitbuffer.COLOR_BLACK,
             max_width = self.width and (self.width - scale(4)) or nil,
             truncate_with_ellipsis = true
         })
         table.insert(content_elements, self._text_widget)
     end
-    
+
     if #content_elements == 0 then
         self._text_widget = TextWidget:new({
-            text = "?", 
-            face = Font:getFace("cfont", self.font_size or scaleText(8)), 
+            text = "?",
+            face = Font:getFace("cfont", self.font_size or scaleText(8)),
             fgcolor = Blitbuffer.COLOR_BLACK
         })
         table.insert(content_elements, self._text_widget)
     end
 
-    local btn_content = CenterContainer:new({ 
+    local btn_content = CenterContainer:new({
         dimen = Geom:new({ w = self.width, h = inner_h })
     })
     btn_content[1] = VerticalGroup:new(content_elements)
-    
+
     self.frame = FrameContainer:new({ show_parent = self.show_parent, bordersize = 0, padding_left = 0, padding_right = 0 })
         self.frame[1] = btn_content
         self.dimen = self.frame:getSize()
         self[1] = self.frame
-        self.ges_events = { 
+        self.ges_events = {
             TapSelectButton = { GestureRange:new({ ges = "tap", range = self.dimen }) },
             HoldSelectButton = { GestureRange:new({ ges = "hold", range = self.dimen }) },
             -- El dedo puede haberse corrido del botón al soltar: el release se escucha en toda la pantalla
@@ -703,17 +703,17 @@ local function applyRoundedScrollbar(htmlwidget)
     local original_paintTo = htmlwidget.paintTo
     htmlwidget.paintTo = function(self, bb, x, y)
         local sb = self.scrollbar
-        self.scrollbar = nil 
+        self.scrollbar = nil
         original_paintTo(self, bb, x, y)
         self.scrollbar = sb
-        
+
         if sb and self.virtual_dimen and self.virtual_dimen.h > self.dimen.h then
             local max_h = self.dimen.h
             local max_v = self.virtual_dimen.h
             local thumb_h = math.max(scale(24), math.floor(max_h * max_h / max_v))
             local thumb_y = y + math.floor((self.pos / max_v) * max_h)
             if thumb_y + thumb_h > y + max_h then thumb_y = y + max_h - thumb_h end
-            
+
             local sw = scale(6)
             local sx = x + self.dimen.w - sw - scale(2)
             paintCornerRect(bb, sx, thumb_y, sw, thumb_h, math.floor(sw/2), Blitbuffer.COLOR_GRAY, true, true, true, true)
@@ -729,7 +729,7 @@ function FloatingDict:discoverExternalButtons(dict_self, word, result, result_in
     if not (self.ui and self.ui.handleEvent) then return {} end
 
     result = result or {}
-    
+
     local active_highlight = (popup_instance and popup_instance.highlight_obj)
         or (dict_self and dict_self.highlight)
         or (self.ui and self.ui.highlight)
@@ -778,22 +778,22 @@ function FloatingDict:discoverExternalButtons(dict_self, word, result, result_in
         setmetatable(fake_popup, { __index = popup_instance })
     end
 
-    local fake_button_table = { 
+    local fake_button_table = {
         getButtonById = function(self_tbl, id)
             local real_btn = fake_popup._real_buttons and fake_popup._real_buttons[id]
-            return { 
+            return {
                 width = real_btn and real_btn.width or scale(100),
                 dimen = real_btn and real_btn.dimen or Geom:new({w = scale(100), h = scale(40)}),
-                setText = function(self_btn, text) 
+                setText = function(self_btn, text)
                     if real_btn then
                         real_btn:setText(text)
                     end
-                end, 
-                refresh = function() end, 
-                enable = function() end, 
-                disable = function() end 
-            } 
-        end 
+                end,
+                refresh = function() end,
+                enable = function() end,
+                disable = function() end
+            }
+        end
     }
 
     fake_button_table.button_by_id = setmetatable({}, {
@@ -831,7 +831,7 @@ function FloatingDict:discoverExternalButtons(dict_self, word, result, result_in
             end
         end
     end
-    
+
     if dict_self then
         scan_for_buttons(dict_self.dict_plugin_buttons)
         scan_for_buttons(dict_self.dict_buttons_by_id)
@@ -896,7 +896,7 @@ function FloatingDict:discoverExternalButtons(dict_self, word, result, result_in
             else
                 local auto_group = "legacy_row_" .. legacy_group_counter
                 legacy_group_counter = legacy_group_counter + 1
-                
+
                 for _, spec in ipairs(item) do
                     if type(spec) == "table" and type(spec.callback) == "function" and not seen_ids[spec.id] then
                         table.insert(all_buttons, {
@@ -920,14 +920,14 @@ function FloatingDict:discoverExternalButtons(dict_self, word, result, result_in
             group_name = btn.id:match("^([a-zA-Z0-9]+)_") or btn.id
         end
         group_name = group_name or "ungrouped"
-        
+
         grouped_rows_map[group_name] = grouped_rows_map[group_name] or {}
         table.insert(grouped_rows_map[group_name], btn)
     end
 
     local sorted_group_names = {}
     for grp in pairs(grouped_rows_map) do table.insert(sorted_group_names, grp) end
-    
+
     table.sort(sorted_group_names, function(a, b)
         local len_a = #grouped_rows_map[a]
         local len_b = #grouped_rows_map[b]
@@ -1048,11 +1048,11 @@ function FloatingDictionaryPopup:init()
     self.current_result_idx = self.current_result_idx or 1
     local total_dicts = self.results and #self.results or 1
     local entry = self.results and self.results[self.current_result_idx] or {}
-    
+
     local dict_name = tostring(entry.dict or "Diccionario")
     local def_body = tostring(entry.definition or "<p>Sin definición.</p>")
     if not def_body:find("<") then def_body = "<p>" .. htmlEscape(def_body):gsub("\n", "<br/>") .. "</p>" end
-    
+
     local dict_indicator = ""
     if total_dicts > 1 then
         dict_indicator = string.format("<b>[%d/%d]</b> &nbsp;&bull;&nbsp; ", self.current_result_idx, total_dicts)
@@ -1067,7 +1067,7 @@ function FloatingDictionaryPopup:init()
     local icon_btn_specs = {}
 
     local external_rows = {}
-    
+
     self.word = self.text
     self.clean_text = cleanWordForLookup(self.text) or self.text
     self.clean_word = self.clean_text
@@ -1173,8 +1173,8 @@ function FloatingDictionaryPopup:init()
                 text = spec.text,
                 font_size = spec.font_size,
                 face = not spec.icon_svg and getBookFace(ui_instance, spec.font_size or scaleText(12), true) or nil,
-                width = icon_btn_w, 
-                height = icon_btn_h, 
+                width = icon_btn_w,
+                height = icon_btn_h,
                 always_show_text = false,
                 show_parent = self,
                 callback = function()
@@ -1186,12 +1186,12 @@ function FloatingDictionaryPopup:init()
                     end
                 end
             })
-            
+
             if spec.fake_popup and spec.id then
                 spec.fake_popup._real_buttons = spec.fake_popup._real_buttons or {}
                 spec.fake_popup._real_buttons[spec.id] = btn
             end
-            
+
             table.insert(icon_widgets, btn)
         end
     end
@@ -1260,8 +1260,8 @@ function FloatingDictionaryPopup:init()
                     text = btn_text,
                     face = plugin_face,
                     font_size = chosen_fs,
-                    width = btn_w, 
-                    height = scale(34), 
+                    width = btn_w,
+                    height = scale(34),
                     always_show_text = true,
                     show_parent = self,
                     callback = function()
@@ -1307,7 +1307,7 @@ function FloatingDictionaryPopup:init()
             table.insert(text_row_widgets, HorizontalGroup:new(row_widgets))
         end
     end
-    
+
     local content_w = self.is_landscape and (self.width - scale(3)) or self.width
     local top_pad = self.is_landscape and scale(20) or (self.anchor_top and scale(32) or scale(20))
     local bot_pad = self.is_landscape and scale(14) or (self.anchor_top and scale(20) or scale(8))
@@ -1465,7 +1465,7 @@ function FloatingDictionaryPopup:init()
     if #icon_widgets > 0 then
         table.insert(rows, HorizontalGroup:new(icon_widgets))
     end
-    
+
     table.insert(rows, VerticalSpan:new({ width = bot_pad }))
     local popup_content = VerticalGroup:new(rows)
 
@@ -1501,11 +1501,11 @@ function FloatingDictionaryPopup:init()
             self.container
         })
     end
-    
+
     self.dimen = Geom:new({ x = 0, y = 0, w = screen_width, h = screen_height })
-    
-    if Device:isTouchDevice() then 
-        self.ges_events = { 
+
+    if Device:isTouchDevice() then
+        self.ges_events = {
             TapClose = { GestureRange:new({ ges = "tap", range = self.dimen }) },
             Swipe    = { GestureRange:new({ ges = "swipe", range = self.dimen }) },
             HoldStartText = {
@@ -1531,7 +1531,7 @@ function FloatingDictionaryPopup:init()
                     end
                 end,
             },
-        } 
+        }
     end
 end
 
@@ -1580,7 +1580,7 @@ end
 function FloatingDictionaryPopup:onSwipe(arg1, arg2)
     local ges = arg2 or arg1
     if not self.results or #self.results <= 1 then return false end
-    
+
     if ges.direction == "west" then
         if self.current_result_idx < #self.results then
             self:switchDict(self.current_result_idx + 1)
@@ -1962,8 +1962,8 @@ function FloatingActionMenu:init()
     })
 
     self.dimen = Geom:new({ x = 0, y = 0, w = screen_width, h = screen_height })
-    if Device:isTouchDevice() then 
-        self.ges_events = { TapClose = { GestureRange:new({ ges = "tap", range = self.dimen }) } } 
+    if Device:isTouchDevice() then
+        self.ges_events = { TapClose = { GestureRange:new({ ges = "tap", range = self.dimen }) } }
     end
 
     self:buildMoreCard()
@@ -2037,7 +2037,7 @@ function FloatingActionMenu:buildMoreCard()
                         local is_html = id_clean:find("html") or k_clean:find("html") or txt_clean:find("html")
                         local is_xray = id_clean:find("xray") or id_clean:find("x%-ray") or k_clean:find("xray") or k_clean:find("x%-ray") or txt_clean:find("xray") or txt_clean:find("x%-ray")
                         local is_native_assistant = (
-                            k_clean == "assistant" or id_clean == "assistant" or 
+                            k_clean == "assistant" or id_clean == "assistant" or
                             k_clean == "ai" or id_clean == "ai" or
                             txt_clean:find("assistant") or txt_clean:find("asistente") or
                             txt_clean:find("ai assistant") or txt_clean:find("ia assistant")
@@ -2436,7 +2436,7 @@ end
 local function saveCustomHighlightInner(self_obj, style)
     local hl = self_obj.highlight_obj
     if not hl then return end
-    
+
     if type(hl.saveHighlightFormatted) == "function" then
         local saved_color = hl.view and hl.view.highlight and hl.view.highlight.saved_color
         local ok = pcall(function()
@@ -2448,14 +2448,14 @@ local function saveCustomHighlightInner(self_obj, style)
 
     local util = require("util")
     local Event = require("ui/event")
-    
+
     local sel = hl.selected_text or {
         pos0 = self_obj.pos0,
         pos1 = self_obj.pos1,
         text = self_obj.text
     }
     if not sel.pos0 or not sel.pos1 then return end
-    
+
     -- FIX 1: Evitar el crash fatal de Lua ("attempt to index a string value").
     -- En EPUBs, pos0 es un texto. Intentar sacarle ".page" rompía todo el plugin.
     local page
@@ -2466,9 +2466,9 @@ local function saveCustomHighlightInner(self_obj, style)
     else
         page = sel.pos0
     end
-    
+
     local saved_color = (hl.view and hl.view.highlight and hl.view.highlight.saved_color) or "yellow"
-    
+
     -- FIX 2: Capturar el capítulo de forma 100% nativa y a prueba de fallos.
     local current_chapter = nil
     pcall(function()
@@ -2476,12 +2476,12 @@ local function saveCustomHighlightInner(self_obj, style)
         if hl.ui and type(hl.ui.getBookmarkChapter) == "function" then
             current_chapter = hl.ui:getBookmarkChapter(sel.pos0)
         end
-        
+
         -- Intento B: Si falla, buscar manualmente en el índice usando el número real de página
         if not current_chapter and hl.ui and hl.ui.toc then
             local pageno = 1
             if type(hl.ui.getCurrentPage) == "function" then pageno = hl.ui:getCurrentPage() end
-            
+
             if type(hl.ui.toc.getTocIndexByPage) == "function" then
                 local idx = hl.ui.toc:getTocIndexByPage(pageno)
                 if idx and hl.ui.toc.toc and type(hl.ui.toc.toc[idx]) == "table" then
@@ -2490,7 +2490,7 @@ local function saveCustomHighlightInner(self_obj, style)
             end
         end
     end)
-    
+
     local item = {
         chapter = current_chapter,
         page = page,
@@ -2500,13 +2500,13 @@ local function saveCustomHighlightInner(self_obj, style)
         drawer = style,
         color = saved_color,
     }
-    
+
     if hl.ui and hl.ui.paging then
         item.pboxes = sel.pboxes or self_obj.boxes
         item.ext = sel.ext
         if hl.writePdfAnnotation then pcall(function() hl:writePdfAnnotation("save", item) end) end
     end
-    
+
     local ok, index = pcall(function() return hl.ui.annotation:addItem(item) end)
     if ok and index then
         if hl.view and hl.view.footer and type(hl.view.footer.maybeUpdateFooter) == "function" then
@@ -2544,7 +2544,7 @@ local function invokeAction(self_obj, action_name)
     if hl then hl.highlight_menu = nil end
     local UIManager = require("ui/uimanager")
     UIManager:close(self_obj)
-    
+
     UIManager:scheduleIn(0.1, function()
         pcall(function()
             if action_name == "highlight" then
@@ -2776,7 +2776,7 @@ function ColorSwatchPopup:init()
             end
         end
     end
-    
+
     x = math.max(scale(8), math.min(x, sw - w - scale(8)))
     y = math.max(scale(8), math.min(y, sh - h - scale(8)))
 
@@ -3126,6 +3126,15 @@ function FloatingDictionaryPopup:onCloseWidget()
     else
         UIManager:setDirty(nil, function() return "ui", dirty_rect end)
     end
+    local refresh_mode = "flashui"
+    local target = (self.plugin and self.plugin.ui) or nil
+    UIManager:setDirty(target, function()
+        return "flashui", Geom:new({
+            x = 0, y = 0,
+            w = Screen:getWidth(),
+            h = Screen:getHeight(),
+        })
+    end)
 end
 function FloatingActionMenu:onShow() UIManager:setDirty(self, function() return "ui", self.dimen end) end
 function FloatingActionMenu:onCloseWidget() UIManager:setDirty(self, function() return "ui", self.dimen end) end
@@ -3142,9 +3151,9 @@ function FloatingDict:isEnabled()
 end
 
 function FloatingDict:setEnabled(state)
-    if G_reader_settings then 
+    if G_reader_settings then
         G_reader_settings:saveSetting(SETTING_DICT_ENABLED, state)
-        G_reader_settings:flush() 
+        G_reader_settings:flush()
     end
 end
 
@@ -3157,9 +3166,9 @@ function FloatingDict:isSelectionMenuEnabled()
 end
 
 function FloatingDict:setSelectionMenuEnabled(state)
-    if G_reader_settings then 
+    if G_reader_settings then
         G_reader_settings:saveSetting(SETTING_SELECTION_ENABLED, state)
-        G_reader_settings:flush() 
+        G_reader_settings:flush()
     end
 end
 
@@ -3264,20 +3273,20 @@ function FloatingDict:patchSystem()
     if dictionary and not dictionary._ps_fdict_patched then
         plugin.original_showDict = dictionary.showDict
         plugin.patched_dictionary = dictionary
-        
+
         dictionary.showDict = function(dict_self, ...)
             local args = {...}
             local word = args[1]
             local results = args[2]
             local boxes = args[3]
-            
+
             if not plugin:isEnabled() or plugin.opening_original_popup or type(results) ~= "table" or not results[1] then
                 return plugin.original_showDict(dict_self, ...)
             end
-            
+
             pcall(function()
                 if dict_self.dismissLookupInfo then pcall(function() dict_self:dismissLookupInfo() end) end
-                
+
                 local is_landscape = Screen:getWidth() > Screen:getHeight()
                 local anchor_top = false
                 local anchor_left = false
