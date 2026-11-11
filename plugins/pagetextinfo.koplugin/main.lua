@@ -2857,7 +2857,6 @@ local Blitbuffer = require("ffi/blitbuffer")
 local VOCAB_MIN_TRANSLATION_SIZE = 7   -- minimum font size for the gloss
 local GLOSS_MAX_CHARS = 14             -- max visible characters before truncating with "…"
 local GLOSS_SCALE = 0.70   -- gloss size relative to the book text (lower = smaller)
-local GLOSS_MIN_GAP   = Screen:scaleBySize(3)  -- min horizontal gap between two glosses on the same line
 local GLOSS_INVERTED  = false          -- true = black background, white text
 local GLOSS_PAD_X     = Screen:scaleBySize(3)  -- horizontal padding inside the chip
 local GLOSS_PAD_Y     = Screen:scaleBySize(1)  -- vertical padding inside the chip
@@ -2909,9 +2908,8 @@ local function paintDotted(bb, x, y, w, thick)
 end
 
 -- Paint a gloss as a "chip" (background + optional border) above the word.
--- It is centered on the word, clamped to the screen, and shifted right
--- (or skipped) if it would overlap the previous gloss on the same line.
--- `line_end` maps a line's y position to the right edge of the last gloss painted there.
+-- It is always centered on the word (clamped to the screen).
+-- Overlaps with neighbouring glosses are tolerated.
 local function paintGloss(bb, box, gloss, face)
     -- Measure the text and the font height/ascender
     local size = RenderText:sizeUtf8Text(0, Screen:getWidth(), face, gloss, true, true)
