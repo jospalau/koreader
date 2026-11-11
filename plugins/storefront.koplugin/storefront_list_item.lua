@@ -20,6 +20,7 @@ local UIManager = require("ui/uimanager")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
 local Localization = require("localization_storefront")
+local StorefrontUtils = require("storefront_utils")
 local _ = function(key, ...) return Localization:t(key, ...) end
 local function sc(val) return Device.screen:scaleBySize(val) end
 local DataStorage = require("datastorage")
@@ -62,7 +63,7 @@ local _font_face_path_cache = {}
 local function resolveFontItemFace(e, size)
     size = size or 22
     if not (e and (e.kind == "font" or e.is_font)) then
-        return Font:getFace("NotoSerif-Regular.ttf", size)
+        return StorefrontUtils.getTitleFace(size)
     end
 
     local face = nil
@@ -208,11 +209,10 @@ local function resolveFontItemFace(e, size)
     end
 
     if not face then
-        local ok, f = pcall(Font.getFace, Font, "NotoSerif-Regular.ttf", size)
-        if ok and f then face = f end
+        face = StorefrontUtils.getTitleFace(size)
     end
 
-    return face or Font:getFace("cfont", size)
+    return face or StorefrontUtils.getFace("cfont", size)
 end
 
 local StorefrontListItem = InputContainer:extend{
@@ -264,7 +264,7 @@ function StorefrontListItem:init()
         self._clear_btn = btn
     elseif is_control then
         -- Control rows (Filter / Sort / Settings links) keep the existing TextBox representation with a frame
-        local face = Font:getFace("smallinfofont")
+        local face = StorefrontUtils.getFace("smallinfofont")
         local text_box = TextBoxWidget:new{
             text = entry.text or "",
             width = content_inner,
@@ -284,7 +284,7 @@ function StorefrontListItem:init()
         self.dimen = self.frame:getSize()
     elseif not entry.is_entry then
         -- Info/status/warning rows
-        local face = Font:getFace("smallinfofont")
+        local face = StorefrontUtils.getFace("smallinfofont")
         local text_box = TextBoxWidget:new{
             text = entry.text or "",
             width = content_inner,
@@ -328,7 +328,7 @@ function StorefrontListItem:init()
 
                 local badge_txt_w = TextWidget:new{
                     text = badge_text,
-                    face = Font:getFace("smallinfofont", 14),
+                    face = StorefrontUtils.getFace("smallinfofont", 14),
                     bold = is_solid_inverted,
                     fgcolor = badge_fg,
                 }
@@ -388,7 +388,7 @@ function StorefrontListItem:init()
 
         -- Line 1: Name
         local is_font_item = (entry.kind == "font" or entry.is_font)
-        local name_face = is_font_item and resolveFontItemFace(entry, 22) or Font:getFace("NotoSerif-Regular.ttf", 22)
+        local name_face = is_font_item and resolveFontItemFace(entry, 22) or StorefrontUtils.getTitleFace(22)
         local name_w = TextWidget:new{
             text = name_text,
             face = name_face,
@@ -398,7 +398,7 @@ function StorefrontListItem:init()
         }
 
         -- Line 2: Meta Line (owner · ★ stars · 👍 score · updated)
-        local meta_face = Font:getFace("cfont", 16)
+        local meta_face = StorefrontUtils.getFace("cfont", 16)
         local meta_w
         if entry.is_update_item then
             local meta_parts = {}
@@ -441,10 +441,28 @@ function StorefrontListItem:init()
             local user_up = live_r.up
             local user_down = live_r.down
             local net_score = user_up - user_down
-            if net_score ~= 0 or user_up > 0 or user_down > 0 then
-                add_sep()
-                
+            local has_ratings = (net_score ~= 0 or user_up > 0 or user_down > 0)
+
+            if not has_ratings then
+                local parts = {}
+                if owner_text ~= "" then table.insert(parts, owner_text) end
+                if stars_text ~= "" and stars_text ~= "0" then table.insert(parts, "★ " .. stars_text) end
+                if updated_text ~= "" then table.insert(parts, updated_text) end
+                if entry.kind_label then
+                    local label_txt = (entry.kind == "font" or entry.is_font) and entry.kind_label:lower() or entry.kind_label
+                    table.insert(parts, label_txt)
+                end
+                if #parts > 0 then
+                    meta_w = TextWidget:new{
+                        text = table.concat(parts, "  ·  "),
+                        face = meta_face,
+                        fgcolor = Blitbuffer.COLOR_BLACK,
+                        max_width = text_w,
+                    }
+                end
+            else
                 local icon_file = is_up_active and getAssetPath("thumbs-up-filled.svg") or getAssetPath("thumbs-up.svg")
+                add_sep()
                 table.insert(meta_items, ImageWidget:new{
                     file = icon_file,
                     width = sc(14),
@@ -461,20 +479,32 @@ function StorefrontListItem:init()
                     bold = is_up_active or is_down_active,
                     fgcolor = Blitbuffer.COLOR_BLACK,
                 })
-            end
 
-            if updated_text ~= "" then
-                add_sep()
-                table.insert(meta_items, TextWidget:new{ text = updated_text, face = meta_face, fgcolor = Blitbuffer.COLOR_BLACK })
-            end
+                if updated_text ~= "" then
+                    add_sep()
+                    table.insert(meta_items, TextWidget:new{ text = updated_text, face = meta_face, fgcolor = Blitbuffer.COLOR_BLACK })
+                end
 
-            if entry.kind_label then
-                add_sep()
-                local label_txt = (entry.kind == "font" or entry.is_font) and entry.kind_label:lower() or entry.kind_label
-                table.insert(meta_items, TextWidget:new{ text = label_txt, face = meta_face, fgcolor = Blitbuffer.COLOR_BLACK })
-            end
+                if entry.kind_label then
+                    add_sep()
+                    local label_txt = (entry.kind == "font" or entry.is_font) and entry.kind_label:lower() or entry.kind_label
+                    local current_w = 0
+                    for _, item in ipairs(meta_items) do
+                        if item.getSize then current_w = current_w + item:getSize().w end
+                    end
+                    local remain_w = math.max(sc(40), text_w - current_w)
+                    table.insert(meta_items, TextWidget:new{
+                        text = label_txt,
+                        face = meta_face,
+                        fgcolor = Blitbuffer.COLOR_BLACK,
+                        max_width = remain_w,
+                    })
+                end
 
-            meta_w = HorizontalGroup:new(meta_items)
+                if #meta_items > 0 then
+                    meta_w = HorizontalGroup:new(meta_items)
+                end
+            end
         end
 
         local group
@@ -486,7 +516,7 @@ function StorefrontListItem:init()
                 meta_w,
             }
         else
-            local desc_face = Font:getFace("cfont", 14)
+            local desc_face = StorefrontUtils.getFace("cfont", 14)
             local desc_w = TextWidget:new{
                 text = desc_text,
                 face = desc_face,
@@ -523,6 +553,7 @@ function StorefrontListItem:init()
                     end
                 end
                 if thumb_w then
+                    self.thumb_widget = thumb_w
                     table.insert(left_elements, thumb_w)
                     table.insert(left_elements, HorizontalSpan:new{ width = sc(12) })
                 end
@@ -631,6 +662,9 @@ function StorefrontListItem:onFocus()
         return true
     end
     self.frame.invert = true
+    if self.thumb_widget then
+        self.thumb_widget.invert = true
+    end
     UIManager:setDirty(self.show_parent or self, "fast")
     return true
 end
@@ -640,6 +674,9 @@ function StorefrontListItem:onUnfocus()
         return true
     end
     self.frame.invert = false
+    if self.thumb_widget then
+        self.thumb_widget.invert = false
+    end
     UIManager:setDirty(self.show_parent or self, "fast")
     return true
 end

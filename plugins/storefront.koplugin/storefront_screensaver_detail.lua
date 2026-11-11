@@ -57,6 +57,10 @@ function StorefrontScreensaverDetail:init()
     end
 
     local item = self.item or {}
+    local ok_ss, StorefrontScreensavers = pcall(require, "storefront_screensavers_ui")
+    if ok_ss and StorefrontScreensavers and StorefrontScreensavers.normalizeItem then
+        StorefrontScreensavers.normalizeItem(item)
+    end
 
     -- -----------------------------------------------------------------------
     -- 1. Back button
@@ -66,6 +70,7 @@ function StorefrontScreensaverDetail:init()
         text_font_size = 20,
         bordersize = 0,
         background = nil,
+        allow_flash = false,
         show_parent = self,
         callback   = function() self:onClose() end,
     }
@@ -75,7 +80,7 @@ function StorefrontScreensaverDetail:init()
     -- -----------------------------------------------------------------------
     local title_label = TextWidget:new{
         text   = item.title or item.name or _("Screensaver"),
-        face   = Font:getFace("NotoSerif-Regular.ttf", 28) or Font:getFace("cfont", 28),
+        face   = StorefrontUtils.getTitleFace(28),
         bold   = true,
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
@@ -357,7 +362,7 @@ function StorefrontScreensaverDetail:init()
             local dynamic_title_size = StorefrontUtils.calcDynamicFontSize(title_text, inner_w, "NotoSerif-Regular.ttf", storefront_theme.title_font_size or 22, 12, true)
             local title_label = TextBoxWidget:new{
                 text = title_text,
-                face = Font:getFace("NotoSerif-Regular.ttf", dynamic_title_size),
+                face = StorefrontUtils.getTitleFace(dynamic_title_size),
                 bold = true,
                 fgcolor = Blitbuffer.COLOR_BLACK,
                 width = inner_w,
@@ -460,7 +465,12 @@ function StorefrontScreensaverDetail:init()
                                     path_to_del = found_path
                                 end
                                 if path_to_del then
-                                    StorefrontScreensaverMgr.deleteLocalScreensaver(path_to_del)
+                                    local ok, was_active_single = StorefrontScreensaverMgr.deleteLocalScreensaver(path_to_del)
+                                    if ok then
+                                        UIManager:nextTick(function()
+                                            StorefrontScreensaverMgr.autoFallbackAfterDelete(was_active_single)
+                                        end)
+                                    end
                                 end
                                 Toast:new{ text = _("Wallpaper deleted from device."), timeout = 2 }:show()
                                 self:onClose()
@@ -643,9 +653,17 @@ function StorefrontScreensaverDetail:init()
         }
     end
 
+    self._preview_widget = preview_widget
+
+    local image_frame = FrameContainer:new{
+        bordersize = 0,
+        color      = Blitbuffer.COLOR_BLACK,
+        padding    = 0,
+        preview_widget,
+    }
     local image_container = CenterContainer:new{
         dimen  = Geom:new{ w = sw - sc(24), h = img_h },
-        preview_widget,
+        image_frame,
     }
 
     local tap_wrapper
@@ -653,7 +671,7 @@ function StorefrontScreensaverDetail:init()
     local ok_modal, StorefrontImageModal = pcall(require, "storefront_image_modal")
     if ok_modal and StorefrontImageModal and thumb_file then
         tap_wrapper = InputContainer:new{ image_container }
-        tap_wrapper.frame = image_container
+        tap_wrapper.frame = image_frame
         tap_wrapper.show_parent = self
         tap_wrapper.ges_events = {
             SfssImgTap = {
@@ -676,11 +694,17 @@ function StorefrontScreensaverDetail:init()
         end
         tap_wrapper.isFocusable = function(self) return true end
         tap_wrapper.onFocus = function(self)
-            if self.frame then self.frame.invert = true; UIManager:setDirty(self.show_parent or self, "fast") end
+            if self.frame then
+                self.frame.bordersize = sc(2)
+                UIManager:setDirty(self.show_parent or self, "fast")
+            end
             return true
         end
         tap_wrapper.onUnfocus = function(self)
-            if self.frame then self.frame.invert = false; UIManager:setDirty(self.show_parent or self, "fast") end
+            if self.frame then
+                self.frame.bordersize = 0
+                UIManager:setDirty(self.show_parent or self, "fast")
+            end
             return true
         end
         tap_wrapper.onTapSelect = function(self)
@@ -736,6 +760,10 @@ end
 
 function StorefrontScreensaverDetail:onClose(callback)
     self.is_closed = true
+    if self._preview_widget and self._preview_widget.free then
+        pcall(function() self._preview_widget:free() end)
+        self._preview_widget = nil
+    end
     UIManager:close(self)
     if self._vote_toggled and self.parent and type(self.parent.reopenBrowser) == "function" then
         self.parent:reopenBrowser(nil, callback)

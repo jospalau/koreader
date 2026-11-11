@@ -11,14 +11,20 @@ msgstr "\"My dear Mr. Bennet,\" said his lady to him one day, \"have you heard t
 msgid "%d Categories"
 msgstr "%d Categories"
 
+msgid "%d Curated Collections"
+msgstr "%d Curated Collections"
+
+msgid "%d missing · %d updates · %d installed"
+msgstr "%d missing · %d updates · %d installed"
+
 msgid "%d patches"
 msgstr "%d patches"
 
 msgid "%d plugins"
 msgstr "%d plugins"
 
-msgid "%d wallpapers"
-msgstr "%d wallpapers"
+msgid "%d updates available"
+msgstr "%d updates available"
 
 msgid "%d wallpapers found in this folder"
 msgstr "%d wallpapers found in this folder"
@@ -35,11 +41,17 @@ msgstr "%d wallpapers · Mode: Book Cover"
 msgid "%d wallpapers · Single mode active"
 msgstr "%d wallpapers · Single mode active"
 
+msgid "%d wallpapers ›"
+msgstr "%d wallpapers ›"
+
 msgid "%s and %s"
 msgstr "%s and %s"
 
 msgid "%s is up to date (version %s)."
 msgstr "%s is up to date (version %s)."
+
+msgid "%s is up to date on branch %s (%s)."
+msgstr "%s is up to date on branch %s (%s)."
 
 msgid "%s is up to date."
 msgstr "%s is up to date."
@@ -53,8 +65,17 @@ msgstr "%s · %d files"
 msgid "%s · 1 file"
 msgstr "%s · 1 file"
 
+msgid "'%s' is a built-in KOReader plugin and cannot be deleted."
+msgstr "'%s' is a built-in KOReader plugin and cannot be deleted."
+
+msgid "'%s' is a built-in KOReader plugin and cannot be deleted. Cleared stale install record."
+msgstr "'%s' is a built-in KOReader plugin and cannot be deleted. Cleared stale install record."
+
 msgid "(fork)"
 msgstr "(fork)"
+
+msgid "(patch)"
+msgstr "(patch)"
 
 msgid "(showing %d of %d commits)"
 msgstr "(showing %d of %d commits)"
@@ -65,17 +86,32 @@ msgstr "+ Add to Shuffle Pool"
 msgid "+ New"
 msgstr "+ New"
 
+msgid "+%d more"
+msgstr "+%d more"
+
+msgid "+1 more"
+msgstr "+1 more"
+
 msgid ".. (Parent Folder)"
 msgstr ".. (Parent Folder)"
 
 msgid "1 / 1"
 msgstr "1 / 1"
 
+msgid "1 hour"
+msgstr "1 hour"
+
 msgid "1 patch"
 msgstr "1 patch"
 
 msgid "1 plugin"
 msgstr "1 plugin"
+
+msgid "1 update available"
+msgstr "1 update available"
+
+msgid "4 hours"
+msgstr "4 hours"
 
 msgid "< Back"
 msgstr "< Back"
@@ -85,12 +121,6 @@ msgstr "< Prev"
 
 msgid "?"
 msgstr "?"
-
-msgid "A -> Z"
-msgstr "A -> Z"
-
-msgid "A → Z"
-msgstr "A → Z"
 
 msgid "About"
 msgstr "About"
@@ -140,6 +170,12 @@ msgstr "All plugins"
 msgid "All plugins are already matched."
 msgstr "All plugins are already matched."
 
+msgid "All selected items are already installed."
+msgstr "All selected items are already installed."
+
+msgid "All wallpapers in this collection are already downloaded!"
+msgstr "All wallpapers in this collection are already downloaded!"
+
 msgid "Allow pre-release updates"
 msgstr "Allow pre-release updates"
 
@@ -164,6 +200,12 @@ msgstr "App Store · Installed plugins"
 msgid "Apply"
 msgstr "Apply"
 
+msgid "Apply Blueprint from Storage…"
+msgstr "Apply Blueprint from Storage…"
+
+msgid "Apply Selected"
+msgstr "Apply Selected"
+
 msgid "Assets — %s"
 msgstr "Assets — %s"
 
@@ -185,11 +227,29 @@ msgstr "Black Fill"
 msgid "Blank"
 msgstr "Blank"
 
+msgid "Blueprint"
+msgstr "Blueprint"
+
+msgid "Blueprint Name"
+msgstr "Blueprint Name"
+
+msgid "Blueprint Setup"
+msgstr "Blueprint Setup"
+
+msgid "Blueprint Shared!"
+msgstr "Blueprint Shared!"
+
+msgid "Blueprint applied: %d installed, %d failed."
+msgstr "Blueprint applied: %d installed, %d failed."
+
+msgid "Blueprints"
+msgstr "Blueprints"
+
 msgid "Book Cover"
 msgstr "Book Cover"
 
-msgid "Border Fill / Background"
-msgstr "Border Fill / Background"
+msgid "Border Fill/Background"
+msgstr "Border Fill/Background"
 
 msgid "Both owner and repository name are required."
 msgstr "Both owner and repository name are required."
@@ -197,8 +257,14 @@ msgstr "Both owner and repository name are required."
 msgid "Branch: %s"
 msgstr "Branch: %s"
 
+msgid "Browse Collection ›"
+msgstr "Browse Collection ›"
+
 msgid "Browse Wallpapers in Storefront"
 msgstr "Browse Wallpapers in Storefront"
+
+msgid "Browse saved .blueprint files to inspect and install"
+msgstr "Browse saved .blueprint files to inspect and install"
 
 msgid "By "
 msgstr "By "
@@ -211,6 +277,12 @@ msgstr "Cache empty. Refresh to retrieve repositories."
 
 msgid "Cache is older than a week, consider refreshing."
 msgstr "Cache is older than a week, consider refreshing."
+
+msgid "Cache limit"
+msgstr "Cache limit"
+
+msgid "Cache limit: %s · In use: %s"
+msgstr "Cache limit: %s · In use: %s"
 
 msgid "Cached %s patch repositories."
 msgstr "Cached %s patch repositories."
@@ -227,26 +299,35 @@ msgstr "Cancel"
 msgid "Cancel matching"
 msgstr "Cancel matching"
 
+msgid "Cannot open image: file is missing or empty."
+msgstr "Cannot open image: file is missing or empty."
+
 msgid "Cannot read source file."
 msgstr "Cannot read source file."
 
 msgid "Cannot write destination file."
 msgstr "Cannot write destination file."
 
-msgid "Catalog & Cache"
-msgstr "Catalog & Cache"
+msgid "Catalog & Search"
+msgstr "Catalog & Search"
 
-msgid "Catalog refresh failed: "
-msgstr "Catalog refresh failed: "
+msgid "Catalog refresh cancelled."
+msgstr "Catalog refresh cancelled."
 
 msgid "Catalog refresh is already in progress in the background."
 msgstr "Catalog refresh is already in progress in the background."
 
-msgid "Catalog refreshed successfully."
-msgstr "Catalog refreshed successfully."
+msgid "Catalog refresh is already in progress."
+msgstr "Catalog refresh is already in progress."
 
 msgid "Catalog source"
 msgstr "Catalog source"
+
+msgid "Catalog updated"
+msgstr "Catalog updated"
+
+msgid "Catalog updated: %d plugins, %d patches, %d fonts, %d screensavers."
+msgstr "Catalog updated: %d plugins, %d patches, %d fonts, %d screensavers."
 
 msgid "Catalog updated: %d plugins, %d patches, %d fonts."
 msgstr "Catalog updated: %d plugins, %d patches, %d fonts."
@@ -302,6 +383,9 @@ msgstr "Checking patch updates…"
 msgid "Checking plugin updates…"
 msgstr "Checking plugin updates…"
 
+msgid "Choose Branch — %s"
+msgstr "Choose Branch — %s"
+
 msgid "Choose Build — %s"
 msgstr "Choose Build — %s"
 
@@ -319,6 +403,9 @@ msgstr "Clear Cache"
 
 msgid "Clear README Cache?"
 msgstr "Clear README Cache?"
+
+msgid "Clear Ratings Cache?"
+msgstr "Clear Ratings Cache?"
 
 msgid "Clear Thumbnail Cache?"
 msgstr "Clear Thumbnail Cache?"
@@ -344,14 +431,32 @@ msgstr "Cleared Wiki cache (%s freed)."
 msgid "Cleared all caches (%s freed, %d files)."
 msgstr "Cleared all caches (%s freed, %d files)."
 
+msgid "Cleared all caches (%s freed, %d files, %d active thumbnails preserved)."
+msgstr "Cleared all caches (%s freed, %d files, %d active thumbnails preserved)."
+
+msgid "Cleared ratings cache (%s freed)."
+msgstr "Cleared ratings cache (%s freed)."
+
 msgid "Cleared screensaver thumbnails (%s freed)."
 msgstr "Cleared screensaver thumbnails (%s freed)."
+
+msgid "Cleared screensaver thumbnails (%s freed, %d active preserved)."
+msgstr "Cleared screensaver thumbnails (%s freed, %d active preserved)."
 
 msgid "Close"
 msgstr "Close"
 
+msgid "Cloud upload failed: "
+msgstr "Cloud upload failed: "
+
 msgid "Collection"
 msgstr "Collection"
+
+msgid "Collections"
+msgstr "Collections"
+
+msgid "Collections will appear here once published from the studio."
+msgstr "Collections will appear here once published from the studio."
 
 msgid "Commit diff: %s → %s"
 msgstr "Commit diff: %s → %s"
@@ -361,6 +466,9 @@ msgstr "Commits: %s → %s"
 
 msgid "Community"
 msgstr "Community"
+
+msgid "Community ratings & stats"
+msgstr "Community ratings & stats"
 
 msgid "Config files only"
 msgstr "Config files only"
@@ -401,6 +509,9 @@ msgstr "Could not detect .koplugin folder in archive"
 msgid "Could not detect plugin inside archive."
 msgstr "Could not detect plugin inside archive."
 
+msgid "Could not fetch branch SHA."
+msgstr "Could not fetch branch SHA."
+
 msgid "Could not fetch commit comparison."
 msgstr "Could not fetch commit comparison."
 
@@ -413,6 +524,12 @@ msgstr "Could not fetch releases for this repository."
 msgid "Could not locate plugin folder (_meta.lua) in archive."
 msgstr "Could not locate plugin folder (_meta.lua) in archive."
 
+msgid "Could not remove wallpaper"
+msgstr "Could not remove wallpaper"
+
+msgid "Cover"
+msgstr "Cover"
+
 msgid "Create"
 msgstr "Create"
 
@@ -422,8 +539,20 @@ msgstr "Create subfolder in '%s':"
 msgid "Created '%s'"
 msgstr "Created '%s'"
 
+msgid "Created by %s · %s items"
+msgstr "Created by %s · %s items"
+
+msgid "Curated Collections"
+msgstr "Curated Collections"
+
+msgid "Curated by %s · %d wallpapers"
+msgstr "Curated by %s · %d wallpapers"
+
 msgid "Custom folder"
 msgstr "Custom folder"
+
+msgid "Daily"
+msgstr "Daily"
 
 msgid "Default"
 msgstr "Default"
@@ -491,6 +620,9 @@ msgstr "Disable plugin"
 msgid "Disabled"
 msgstr "Disabled"
 
+msgid "Dismiss"
+msgstr "Dismiss"
+
 msgid "Display Options"
 msgstr "Display Options"
 
@@ -500,11 +632,23 @@ msgstr "Displays a static wallpaper on sleep"
 msgid "Done"
 msgstr "Done"
 
+msgid "Download"
+msgstr "Download"
+
 msgid "Download & Set Active"
 msgstr "Download & Set Active"
 
+msgid "Download All"
+msgstr "Download All"
+
+msgid "Download All (%d)"
+msgstr "Download All (%d)"
+
 msgid "Download Only"
 msgstr "Download Only"
+
+msgid "Download cancelled (%d downloaded)."
+msgstr "Download cancelled (%d downloaded)."
 
 msgid "Download cancelled."
 msgstr "Download cancelled."
@@ -521,6 +665,18 @@ msgstr "Download options — %s"
 msgid "Download options — %s (%s)"
 msgstr "Download options — %s (%s)"
 
+msgid "Downloaded %d wallpapers (%d failed)."
+msgstr "Downloaded %d wallpapers (%d failed)."
+
+msgid "Downloaded %d wallpapers from '%s'!"
+msgstr "Downloaded %d wallpapers from '%s'!"
+
+msgid "Downloading %d of %d…"
+msgstr "Downloading %d of %d…"
+
+msgid "Downloading %s (%s)…\nTap screen to cancel."
+msgstr "Downloading %s (%s)…\nTap screen to cancel."
+
 msgid "Downloading %s%s…\nTap screen to cancel."
 msgstr "Downloading %s%s…\nTap screen to cancel."
 
@@ -532,6 +688,9 @@ msgstr "Downloading %s…\nTap screen to cancel."
 
 msgid "Downloading '%s'..."
 msgstr "Downloading '%s'..."
+
+msgid "Downloading Collection"
+msgstr "Downloading Collection"
 
 msgid "Downloading patch %s%s…\nTap screen to cancel."
 msgstr "Downloading patch %s%s…\nTap screen to cancel."
@@ -566,11 +725,41 @@ msgstr "Enable plugin"
 msgid "Enabled"
 msgstr "Enabled"
 
+msgid "Enter Blueprint Code"
+msgstr "Enter Blueprint Code"
+
+msgid "Enter Cloud Code to Download…"
+msgstr "Enter Cloud Code to Download…"
+
 msgid "Enter item number"
 msgstr "Enter item number"
 
 msgid "Enter plugin number"
 msgstr "Enter plugin number"
+
+msgid "Enter the 6-character shortcode (e.g. A8K2M9) to download the setup:"
+msgstr "Enter the 6-character shortcode (e.g. A8K2M9) to download the setup:"
+
+msgid "Enter this 6-character code on any device in Storefront to instantly download and install this setup."
+msgstr "Enter this 6-character code on any device in Storefront to instantly download and install this setup."
+
+msgid "Every day"
+msgstr "Every day"
+
+msgid "Every hour"
+msgstr "Every hour"
+
+msgid "Every month"
+msgstr "Every month"
+
+msgid "Every week"
+msgstr "Every week"
+
+msgid "Export Blueprint"
+msgstr "Export Blueprint"
+
+msgid "Export Blueprint…"
+msgstr "Export Blueprint…"
 
 msgid "Failed to check %s: %s"
 msgstr "Failed to check %s: %s"
@@ -596,6 +785,9 @@ msgstr "Failed to delete: %s"
 msgid "Failed to disable patch '%s'."
 msgstr "Failed to disable patch '%s'."
 
+msgid "Failed to display branch list."
+msgstr "Failed to display branch list."
+
 msgid "Failed to download patch: %s"
 msgstr "Failed to download patch: %s"
 
@@ -614,14 +806,26 @@ msgstr "Failed to fetch patch list."
 msgid "Failed to fetch repository '%s/%s': %s"
 msgstr "Failed to fetch repository '%s/%s': %s"
 
+msgid "Failed to load blueprint: "
+msgstr "Failed to load blueprint: "
+
 msgid "Failed to open downloaded archive."
 msgstr "Failed to open downloaded archive."
 
 msgid "Failed to save downloaded file"
 msgstr "Failed to save downloaded file"
 
+msgid "Failed to save: %s"
+msgstr "Failed to save: %s"
+
 msgid "Failed to toggle patch status."
 msgstr "Failed to toggle patch status."
+
+msgid "Featured"
+msgstr "Featured"
+
+msgid "Fetching blueprint…"
+msgstr "Fetching blueprint…"
 
 msgid "Fetching changelog…"
 msgstr "Fetching changelog…"
@@ -716,6 +920,12 @@ msgstr "Fonts"
 msgid "Free up storage space on your device. Cached items are re-downloaded automatically when needed."
 msgstr "Free up storage space on your device. Cached items are re-downloaded automatically when needed."
 
+msgid "Frequency"
+msgstr "Frequency"
+
+msgid "GitHub API"
+msgstr "GitHub API"
+
 msgid "GitHub API rate limit exceeded. Add a GitHub token in Storefront settings to increase the limit (10→30 req/min)."
 msgstr "GitHub API rate limit exceeded. Add a GitHub token in Storefront settings to increase the limit (10→30 req/min)."
 
@@ -743,6 +953,9 @@ msgstr "Go to page"
 msgid "HTTP error"
 msgstr "HTTP error"
 
+msgid "Hourly"
+msgstr "Hourly"
+
 msgid "Ignore"
 msgstr "Ignore"
 
@@ -757,6 +970,21 @@ msgstr "Image View"
 
 msgid "Include 0-star forks"
 msgstr "Include 0-star forks"
+
+msgid "Include Fonts"
+msgstr "Include Fonts"
+
+msgid "Include Plugins"
+msgstr "Include Plugins"
+
+msgid "Include Storefront Settings"
+msgstr "Include Storefront Settings"
+
+msgid "Include User Patches"
+msgstr "Include User Patches"
+
+msgid "Include Wallpaper/Screensavers"
+msgstr "Include Wallpaper/Screensavers"
 
 msgid "Install"
 msgstr "Install"
@@ -785,6 +1013,9 @@ msgstr "Install to Default?"
 msgid "Install to default"
 msgstr "Install to default"
 
+msgid "Installation Complete"
+msgstr "Installation Complete"
+
 msgid "Installation failed: "
 msgstr "Installation failed: "
 
@@ -812,8 +1043,23 @@ msgstr "Installed full font family \"%s\" (%d file(s))."
 msgid "Installed patch \"%s\"."
 msgstr "Installed patch \"%s\"."
 
+msgid "Installed plugin \"%s\" (%s)."
+msgstr "Installed plugin \"%s\" (%s)."
+
+msgid "Installed plugin \"%s\" (version %s)."
+msgstr "Installed plugin \"%s\" (version %s)."
+
+msgid "Installed plugin \"%s\"."
+msgstr "Installed plugin \"%s\"."
+
+msgid "Installing %d of %d: %s…"
+msgstr "Installing %d of %d: %s…"
+
 msgid "Installing %s…"
 msgstr "Installing %s…"
+
+msgid "Insufficient storage space to download %d wallpapers.\n\nRequired: %s\nAvailable: %s"
+msgstr "Insufficient storage space to download %d wallpapers.\n\nRequired: %s\nAvailable: %s"
 
 msgid "Invalid archive reader"
 msgstr "Invalid archive reader"
@@ -827,8 +1073,8 @@ msgstr "Invalid patch target filename."
 msgid "Invalid selection."
 msgstr "Invalid selection."
 
-msgid "Invert colors (night mode / dark background)"
-msgstr "Invert colors (night mode / dark background)"
+msgid "Invert colors (night mode/dark background)"
+msgstr "Invert colors (night mode/dark background)"
 
 msgid "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife. However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered the rightful property of some one or other of their daughters."
 msgstr "It is a truth universally acknowledged, that a single man in possession of a good fortune, must be in want of a wife. However little known the feelings or views of such a man may be on his first entering a neighbourhood, this truth is so well fixed in the minds of the surrounding families, that he is considered the rightful property of some one or other of their daughters."
@@ -847,6 +1093,12 @@ msgstr "Last Updated (Oldest)"
 
 msgid "Last check: %s"
 msgstr "Last check: %s"
+
+msgid "Last checked: %s"
+msgstr "Last checked: %s"
+
+msgid "Later"
+msgstr "Later"
 
 msgid "Latest Release"
 msgstr "Latest Release"
@@ -883,6 +1135,9 @@ msgstr "Local: %s"
 
 msgid "Local: %s → Remote: %s"
 msgstr "Local: %s → Remote: %s"
+
+msgid "Maintainer"
+msgstr "Maintainer"
 
 msgid "Manage plugin paths"
 msgstr "Manage plugin paths"
@@ -977,8 +1232,14 @@ msgstr "Missing repository metadata for releases."
 msgid "Missing repository metadata for remote fetch."
 msgstr "Missing repository metadata for remote fetch."
 
+msgid "Missing repository metadata."
+msgstr "Missing repository metadata."
+
 msgid "Missing target path"
 msgstr "Missing target path"
+
+msgid "Mock test update shown because 'Test Notification on Launch' is enabled in Notification Settings."
+msgstr "Mock test update shown because 'Test Notification on Launch' is enabled in Notification Settings."
 
 msgid "Modify Patch"
 msgstr "Modify Patch"
@@ -988,6 +1249,9 @@ msgstr "Modify Plugin"
 
 msgid "Modify Plugin: %s"
 msgstr "Modify Plugin: %s"
+
+msgid "Monthly"
+msgstr "Monthly"
 
 msgid "Most Downloaded"
 msgstr "Most Downloaded"
@@ -1010,6 +1274,9 @@ msgstr "Name (Z-A)"
 msgid "Name, description, topic"
 msgstr "Name, description, topic"
 
+msgid "Name: "
+msgstr "Name: "
+
 msgid "Needs update"
 msgstr "Needs update"
 
@@ -1030,6 +1297,9 @@ msgstr "Next"
 
 msgid "Next >"
 msgstr "Next >"
+
+msgid "Next ›"
+msgstr "Next ›"
 
 msgid "No Fill (Transparent)"
 msgstr "No Fill (Transparent)"
@@ -1058,6 +1328,9 @@ msgstr "No cached entries yet. Refresh to fetch from GitHub."
 msgid "No changelog entries found for this range."
 msgstr "No changelog entries found for this range."
 
+msgid "No collections available"
+msgstr "No collections available"
+
 msgid "No commits found in this range."
 msgstr "No commits found in this range."
 
@@ -1076,14 +1349,14 @@ msgstr "No entries match current filters."
 msgid "No installed items found."
 msgstr "No installed items found."
 
+msgid "No items found in this blueprint."
+msgstr "No items found in this blueprint."
+
 msgid "No items found."
 msgstr "No items found."
 
 msgid "No matched patches to check."
 msgstr "No matched patches to check."
-
-msgid "No matched plugins to check."
-msgstr "No matched plugins to check."
 
 msgid "No patch files found in %s/%s."
 msgstr "No patch files found in %s/%s."
@@ -1127,6 +1400,9 @@ msgstr "No releases found for this repository."
 msgid "No remote version info for %s."
 msgstr "No remote version info for %s."
 
+msgid "No saved blueprints found in koreader/blueprints/"
+msgstr "No saved blueprints found in koreader/blueprints/"
+
 msgid "No screensavers match this filter."
 msgstr "No screensavers match this filter."
 
@@ -1151,8 +1427,23 @@ msgstr "Not matched with a repository."
 msgid "Not set"
 msgstr "Not set"
 
+msgid "Note: Archive contained extra plugin folder(s) that were skipped: %s"
+msgstr "Note: Archive contained extra plugin folder(s) that were skipped: %s"
+
+msgid "Notification Settings"
+msgstr "Notification Settings"
+
+msgid "Notification settings"
+msgstr "Notification settings"
+
+msgid "Notifications"
+msgstr "Notifications"
+
 msgid "OK"
 msgstr "OK"
+
+msgid "Off"
+msgstr "Off"
 
 msgid "Offline Regular"
 msgstr "Offline Regular"
@@ -1166,8 +1457,8 @@ msgstr "Open Wallpaper Collection Gallery"
 msgid "Open details"
 msgstr "Open details"
 
-msgid "Optional. Raises the GitHub API rate limit. Generate one (classic, 'public_repo' scope is enough) at github.com/settings/tokens, then paste it here."
-msgstr "Optional. Raises the GitHub API rate limit. Generate one (classic, 'public_repo' scope is enough) at github.com/settings/tokens, then paste it here."
+msgid "Optional. Raises GitHub API rate limits."
+msgstr "Optional. Raises GitHub API rate limits."
 
 msgid "Options ▾"
 msgstr "Options ▾"
@@ -1241,6 +1532,9 @@ msgstr "Patches found: %d"
 msgid "Path: %s"
 msgstr "Path: %s"
 
+msgid "Please enter a valid code"
+msgstr "Please enter a valid code"
+
 msgid "Plugin"
 msgstr "Plugin"
 
@@ -1265,6 +1559,9 @@ msgstr "Plugin cache is older than a week, consider refreshing."
 msgid "Plugin directory not found."
 msgstr "Plugin directory not found."
 
+msgid "Plugin folder '%s' was not found on disk. Cleared stale install record."
+msgstr "Plugin folder '%s' was not found on disk. Cleared stale install record."
+
 msgid "Plugin folder not found."
 msgstr "Plugin folder not found."
 
@@ -1280,11 +1577,20 @@ msgstr "Plugins cached: %s (last update: %s)"
 msgid "Pool size: %d wallpapers in rotation"
 msgstr "Pool size: %d wallpapers in rotation"
 
+msgid "Pre-installed Font"
+msgstr "Pre-installed Font"
+
+msgid "Pre-installed core KOReader font."
+msgstr "Pre-installed core KOReader font."
+
 msgid "Pre-installed core KOReader plugin."
 msgstr "Pre-installed core KOReader plugin."
 
 msgid "Prev"
 msgstr "Prev"
+
+msgid "Preview Notification Now"
+msgstr "Preview Notification Now"
 
 msgid "Published: %s"
 msgstr "Published: %s"
@@ -1301,14 +1607,20 @@ msgstr "README files & images"
 msgid "Rate Wallpaper"
 msgstr "Rate Wallpaper"
 
+msgid "ReaderBackdrop (Community)"
+msgstr "ReaderBackdrop (Community)"
+
 msgid "Reading Passage Specimen"
 msgstr "Reading Passage Specimen"
 
 msgid "Reading Progress"
 msgstr "Reading Progress"
 
-msgid "Reading Progress / Summary"
-msgstr "Reading Progress / Summary"
+msgid "Reading Progress/Summary"
+msgstr "Reading Progress/Summary"
+
+msgid "Recently"
+msgstr "Recently"
 
 msgid "Recently Added"
 msgstr "Recently Added"
@@ -1322,8 +1634,8 @@ msgstr "Refresh catalog"
 msgid "Refreshing catalog via Direct GitHub API…"
 msgstr "Refreshing catalog via Direct GitHub API…"
 
-msgid "Refreshing catalog..."
-msgstr "Refreshing catalog..."
+msgid "Refreshing catalog via Direct GitHub API…\nTap screen to cancel."
+msgstr "Refreshing catalog via Direct GitHub API…\nTap screen to cancel."
 
 msgid "Refreshing catalog…"
 msgstr "Refreshing catalog…"
@@ -1351,6 +1663,18 @@ msgstr "Releases"
 
 msgid "Releases — %s"
 msgstr "Releases — %s"
+
+msgid "Remind Me Later"
+msgstr "Remind Me Later"
+
+msgid "Remind me in 1 hour."
+msgstr "Remind me in 1 hour."
+
+msgid "Remind me in 4 hours."
+msgstr "Remind me in 4 hours."
+
+msgid "Remind me tomorrow."
+msgstr "Remind me tomorrow."
 
 msgid "Remote SHA: %s"
 msgstr "Remote SHA: %s"
@@ -1430,6 +1754,12 @@ msgstr "Reset to default screensaver folder"
 msgid "Reset to defaults"
 msgstr "Reset to defaults"
 
+msgid "Restart KOReader now to activate the new plugins and patches?"
+msgstr "Restart KOReader now to activate the new plugins and patches?"
+
+msgid "Restart Now"
+msgstr "Restart Now"
+
 msgid "Restart later"
 msgstr "Restart later"
 
@@ -1444,6 +1774,18 @@ msgstr "Sample Text"
 
 msgid "Save"
 msgstr "Save"
+
+msgid "Save File"
+msgstr "Save File"
+
+msgid "Save current plugins, patches, fonts & settings"
+msgstr "Save current plugins, patches, fonts & settings"
+
+msgid "Saved blueprint to %s"
+msgstr "Saved blueprint to %s"
+
+msgid "Scan Blueprint QR Code"
+msgstr "Scan Blueprint QR Code"
 
 msgid "Screensaver"
 msgstr "Screensaver"
@@ -1481,9 +1823,6 @@ msgstr "Search"
 msgid "Search \"%s\""
 msgstr "Search \"%s\""
 
-msgid "Search & API"
-msgstr "Search & API"
-
 msgid "Search filter (\"%s\") is not applied to Updates."
 msgstr "Search filter (\"%s\") is not applied to Updates."
 
@@ -1504,6 +1843,9 @@ msgstr "Select Folder"
 
 msgid "Select Screensaver Folder"
 msgstr "Select Screensaver Folder"
+
+msgid "Select a Blueprint"
+msgstr "Select a Blueprint"
 
 msgid "Select a repository patch entry to match with the chosen file."
 msgstr "Select a repository patch entry to match with the chosen file."
@@ -1541,11 +1883,20 @@ msgstr "Set as active single wallpaper!"
 msgid "Settings"
 msgstr "Settings"
 
+msgid "Share Cloud"
+msgstr "Share Cloud"
+
+msgid "Share via Cloud Shortcode…"
+msgstr "Share via Cloud Shortcode…"
+
 msgid "Show needs update"
 msgstr "Show needs update"
 
 msgid "Show reading progress banner overlay"
 msgstr "Show reading progress banner overlay"
+
+msgid "Showing thumbnail preview (original image could not be decoded)."
+msgstr "Showing thumbnail preview (original image could not be decoded)."
 
 msgid "Shows reading stats, percentage, and chapter progress"
 msgstr "Shows reading stats, percentage, and chapter progress"
@@ -1564,6 +1915,9 @@ msgstr "Single"
 
 msgid "Single Wallpaper"
 msgstr "Single Wallpaper"
+
+msgid "Snooze Options"
+msgstr "Snooze Options"
 
 msgid "Solid fill for screen margins & letterboxing"
 msgstr "Solid fill for screen margins & letterboxing"
@@ -1610,8 +1964,14 @@ msgstr "Sort: Z-A"
 msgid "Sorting"
 msgstr "Sorting"
 
+msgid "Sources"
+msgstr "Sources"
+
 msgid "Stable"
 msgstr "Stable"
+
+msgid "Starting download (0/%d)..."
+msgstr "Starting download (0/%d)..."
 
 msgid "Status"
 msgstr "Status"
@@ -1625,8 +1985,8 @@ msgstr "Status: Up to date"
 msgid "Status: Update available"
 msgstr "Status: Update available"
 
-msgid "Storefront"
-msgstr "Storefront"
+msgid "Storefront (Curated)"
+msgstr "Storefront (Curated)"
 
 msgid "Storefront cache refreshed."
 msgstr "Storefront cache refreshed."
@@ -1640,6 +2000,9 @@ msgstr "Storefront refresh failed: "
 msgid "Storefront · Updates"
 msgstr "Storefront · Updates"
 
+msgid "Storefront: Blueprints"
+msgstr "Storefront: Blueprints"
+
 msgid "Storefront: Open"
 msgstr "Storefront: Open"
 
@@ -1648,6 +2011,9 @@ msgstr "Stretch image to fill entire screen"
 
 msgid "Style: "
 msgstr "Style: "
+
+msgid "Submitting vote..."
+msgstr "Submitting vote..."
 
 msgid "Successfully updated %d item(s)."
 msgstr "Successfully updated %d item(s)."
@@ -1670,6 +2036,9 @@ msgstr "Switch to plugin list"
 msgid "Tag not found on GitHub (%s or %s)."
 msgstr "Tag not found on GitHub (%s or %s)."
 
+msgid "Testing & Preview"
+msgstr "Testing & Preview"
+
 msgid "Text editor plugin is not available."
 msgstr "Text editor plugin is not available."
 
@@ -1678,6 +2047,12 @@ msgstr "The quick brown fox jumps over the lazy dog."
 
 msgid "This action cannot be undone.\n\nChanges will take effect after restart."
 msgstr "This action cannot be undone.\n\nChanges will take effect after restart."
+
+msgid "This collection has no wallpapers to download."
+msgstr "This collection has no wallpapers to download."
+
+msgid "This wallpaper is currently active"
+msgstr "This wallpaper is currently active"
 
 msgid "This wallpaper is currently set as your active screensaver."
 msgstr "This wallpaper is currently set as your active screensaver."
@@ -1688,6 +2063,9 @@ msgstr "This will delete all cached README files, wiki articles, and screensaver
 msgid "This will delete cached README markdown files and downloaded images (%s)."
 msgstr "This will delete cached README markdown files and downloaded images (%s)."
 
+msgid "This will delete cached community ratings and download counts (%s)."
+msgstr "This will delete cached community ratings and download counts (%s)."
+
 msgid "This will delete cached screensaver thumbnail previews (%s)."
 msgstr "This will delete cached screensaver thumbnail previews (%s)."
 
@@ -1697,17 +2075,35 @@ msgstr "This will delete cached wiki articles and downloaded images (%s)."
 msgid "This will take effect on next restart."
 msgstr "This will take effect on next restart."
 
+msgid "Today %s"
+msgstr "Today %s"
+
+msgid "Tomorrow"
+msgstr "Tomorrow"
+
 msgid "Total commits: %d"
 msgstr "Total commits: %d"
 
 msgid "Tracked: %d"
 msgstr "Tracked: %d"
 
+msgid "Tracking branch: %s"
+msgstr "Tracking branch: %s"
+
+msgid "Tracking branch: %s (%s)"
+msgstr "Tracking branch: %s (%s)"
+
 msgid "Transparent overlay (page content visible behind)"
 msgstr "Transparent overlay (page content visible behind)"
 
+msgid "Trigger on every startup (testing)"
+msgstr "Trigger on every startup (testing)"
+
 msgid "Type"
 msgstr "Type"
+
+msgid "Type a 6-character code to fetch and install a setup"
+msgstr "Type a 6-character code to fetch and install a setup"
 
 msgid "Unable to load wiki page. Tap refresh to retry."
 msgstr "Unable to load wiki page. Tap refresh to retry."
@@ -1717,6 +2113,9 @@ msgstr "Unable to read README file"
 
 msgid "Unable to read README. Tap refresh to retry."
 msgstr "Unable to read README. Tap refresh to retry."
+
+msgid "Unable to render image (file may be corrupted or format unsupported)."
+msgstr "Unable to render image (file may be corrupted or format unsupported)."
 
 msgid "Unable to store match for patch."
 msgstr "Unable to store match for patch."
@@ -1733,6 +2132,12 @@ msgstr "Unknown"
 msgid "Unknown error"
 msgstr "Unknown error"
 
+msgid "Unknown item"
+msgstr "Unknown item"
+
+msgid "Unlimited"
+msgstr "Unlimited"
+
 msgid "Unlink the repo"
 msgstr "Unlink the repo"
 
@@ -1745,6 +2150,9 @@ msgstr "Unmatched: %d"
 msgid "Unnamed release"
 msgstr "Unnamed release"
 
+msgid "Untitled Collection"
+msgstr "Untitled Collection"
+
 msgid "Update"
 msgstr "Update"
 
@@ -1754,6 +2162,9 @@ msgstr "Update %s?"
 msgid "Update All"
 msgstr "Update All"
 
+msgid "Update available for %s (%s): %s → %s."
+msgstr "Update available for %s (%s): %s → %s."
+
 msgid "Update available for %s: remote %s, installed %s."
 msgstr "Update available for %s: remote %s, installed %s."
 
@@ -1762,6 +2173,9 @@ msgstr "Update channel"
 
 msgid "Update check was cancelled."
 msgstr "Update check was cancelled."
+
+msgid "Update notifications"
+msgstr "Update notifications"
 
 msgid "Update patch"
 msgstr "Update patch"
@@ -1774,6 +2188,9 @@ msgstr "Updated %d of %d item(s) (%d failed)."
 
 msgid "Updated patch \"%s\"."
 msgstr "Updated patch \"%s\"."
+
+msgid "Updated plugin \"%s\" to %s."
+msgstr "Updated plugin \"%s\" to %s."
 
 msgid "Updated plugin \"%s\" to version %s."
 msgstr "Updated plugin \"%s\" to version %s."
@@ -1793,6 +2210,21 @@ msgstr "Updates Ignored"
 msgid "Updating [%d/%d]: %s…\nTap screen to cancel."
 msgstr "Updating [%d/%d]: %s…\nTap screen to cancel."
 
+msgid "Upload blueprint to get a 6-character sharing code"
+msgstr "Upload blueprint to get a 6-character sharing code"
+
+msgid "Upload failed: "
+msgstr "Upload failed: "
+
+msgid "Uploading blueprint to cloud…"
+msgstr "Uploading blueprint to cloud…"
+
+msgid "Uploading to Cloudflare…"
+msgstr "Uploading to Cloudflare…"
+
+msgid "User"
+msgstr "User"
+
 msgid "User Installed"
 msgstr "User Installed"
 
@@ -1805,8 +2237,20 @@ msgstr "Version"
 msgid "Versions"
 msgstr "Versions"
 
+msgid "Versions: Latest Releases (Recommended)"
+msgstr "Versions: Latest Releases (Recommended)"
+
+msgid "Versions: Pin Current Installed Versions"
+msgstr "Versions: Pin Current Installed Versions"
+
+msgid "View QR Code"
+msgstr "View QR Code"
+
 msgid "View README"
 msgstr "View README"
+
+msgid "View Updates"
+msgstr "View Updates"
 
 msgid "View commits (%s → %s)"
 msgstr "View commits (%s → %s)"
@@ -1835,6 +2279,12 @@ msgstr "Wallpaper set as active screensaver!"
 msgid "Warning: the selected version is older than what is currently installed. You are downgrading."
 msgstr "Warning: the selected version is older than what is currently installed. You are downgrading."
 
+msgid "Weekly"
+msgstr "Weekly"
+
+msgid "When tapping 'Remind Me Later' on an update notification, you can choose:"
+msgstr "When tapping 'Remind Me Later' on an update notification, you can choose:"
+
 msgid "White Fill"
 msgstr "White Fill"
 
@@ -1847,20 +2297,23 @@ msgstr "Wiki Pages"
 msgid "Wiki pages & images"
 msgstr "Wiki pages & images"
 
-msgid "Z -> A"
-msgstr "Z -> A"
-
-msgid "Z → A"
-msgstr "Z → A"
-
 msgid "[ Loading preview... ]"
 msgstr "[ Loading preview... ]"
 
 msgid "[ Wallpaper Preview Loading... ]"
 msgstr "[ Wallpaper Preview Loading... ]"
 
+msgid "[INSTALLED]"
+msgstr "[INSTALLED]"
+
 msgid "[Ignored]"
 msgstr "[Ignored]"
+
+msgid "[NEW]"
+msgstr "[NEW]"
+
+msgid "[UPDATE]"
+msgstr "[UPDATE]"
 
 msgid "[draft]"
 msgstr "[draft]"
@@ -1873,6 +2326,15 @@ msgstr "Storefront is an in-app package manager for KOReader plugins, patches, a
 
 msgid "anyone"
 msgstr "anyone"
+
+msgid "branch: %s"
+msgstr "branch: %s"
+
+msgid "branch: %s (%s)"
+msgstr "branch: %s (%s)"
+
+msgid "branch_label"
+msgstr "branch: %s"
 
 msgid "btn_apply"
 msgstr "Apply"
@@ -1919,6 +2381,12 @@ msgstr "Update"
 msgid "btn_view_details"
 msgstr "View Details"
 
+msgid "confirm_branch_install_body"
+msgstr "This is a developer/contributor build and may be unstable. Only install if you know what you're doing."
+
+msgid "confirm_branch_install_title"
+msgstr "Install from branch '%s'?"
+
 msgid "confirm_install"
 msgstr "Install '%s'?"
 
@@ -1946,6 +2414,9 @@ msgstr "Network error: Unable to download catalog."
 msgid "err_uninstall_failed"
 msgstr "Uninstallation failed for '%s'."
 
+msgid "fetching_branches"
+msgstr "Fetching branches…"
+
 msgid "filter_all"
 msgstr "All Categories"
 
@@ -1966,6 +2437,9 @@ msgstr "header_about"
 
 msgid "header_updates"
 msgstr "header_updates"
+
+msgid "install_from_branch"
+msgstr "Install from branch…"
 
 msgid "label_author"
 msgstr "Author"
@@ -2021,6 +2495,12 @@ msgstr "No items found matching search."
 msgid "new"
 msgstr "new"
 
+msgid "new_commit_on_branch"
+msgstr "New commit on '%s'"
+
+msgid "no_branches_found"
+msgstr "No branches found for this repository."
+
 msgid "not found"
 msgstr "not found"
 
@@ -2047,6 +2527,9 @@ msgstr "remote is newer by date"
 
 msgid "repository"
 msgstr "repository"
+
+msgid "repull_from_branch"
+msgstr "Re-pull from branch"
 
 msgid "search_hint"
 msgstr "Search storefront..."
@@ -2099,6 +2582,12 @@ msgstr "Screensavers"
 msgid "tab_versions"
 msgstr "Versions"
 
+msgid "tracked_badge"
+msgstr "TRACKED"
+
+msgid "tracking_branch"
+msgstr "Tracking branch: %s"
+
 msgid "unknown"
 msgstr "unknown"
 
@@ -2110,6 +2599,12 @@ msgstr "updated %s (%s)"
 
 msgid "·"
 msgstr "·"
+
+msgid "‹ Back"
+msgstr "‹ Back"
+
+msgid "‹ Previous"
+msgstr "‹ Previous"
 
 msgid "≥ %s ⭐"
 msgstr "≥ %s ⭐"

@@ -28,6 +28,7 @@ local RightContainer = require("ui/widget/container/rightcontainer")
 local OverlapGroup = require("ui/widget/overlapgroup")
 local StorefrontImageModal = require("storefront_image_modal")
 local InstallStore = require("storefront_installs")
+local StorefrontUtils = require("storefront_utils")
 local InfoMessage = require("ui/widget/infomessage")
 local logger = require("logger")
 local GestureRange = require("ui/gesturerange")
@@ -224,31 +225,71 @@ function StorefrontDetailsDialog:init()
     -- 2. Title & Metadata
     -- -----------------------------------------------------------------------
     local function getInstallRecord()
+        if self.update_item and self.update_item.record then
+            local r = self.update_item.record
+            local k = (self.update_item.plugin and self.update_item.plugin.dirname) or r.dirname
+            return r, k
+        end
         if self.patch then
             local patch_records = InstallStore.listPatches() or {}
             local fn = self.patch.filename or ""
             local clean_fn = fn:gsub("%.disabled$", "")
-            return patch_records[fn] or patch_records[clean_fn] or patch_records[clean_fn .. ".disabled"]
+            local rec = patch_records[fn] or patch_records[clean_fn] or patch_records[clean_fn .. ".disabled"]
+            return rec, fn
         else
-            local repo_name_lower = (self.repo.name or ""):lower()
-            local install_records = InstallStore.list() or {}
-            return install_records[repo_name_lower]
+            local core_plugins = (self.Storefront and self.Storefront.CORE_KOREADER_PLUGINS)
+            if not core_plugins then
+                local ok, sm = pcall(require, "storefront_match")
+                if ok and sm then core_plugins = sm.CORE_KOREADER_PLUGINS end
+            end
+            local owner_candidate = (self.repo and self.repo.owner and self.repo.owner ~= "" and self.repo.owner)
+                or (type(self.repo and self.repo.full_name) == "string" and self.repo.full_name:match("^([^/]+)/"))
+                or (self.repo and self.repo.data and self.repo.data.owner and (type(self.repo.data.owner) == "string" and self.repo.data.owner ~= "" and self.repo.data.owner or (type(self.repo.data.owner) == "table" and self.repo.data.owner.login)))
+                or nil
+            return InstallStore.findPluginRecord({
+                dirname = self.update_item and self.update_item.plugin and self.update_item.plugin.dirname,
+                repo_name = self.repo and self.repo.name,
+                full_name = self.repo and self.repo.full_name,
+                owner = owner_candidate,
+                repo_id = self.repo and (self.repo.id or self.repo.repo_id),
+                core_plugins = core_plugins,
+            })
         end
+    end
+
+    local function getInstalledPluginDirname()
+        if self.update_item and self.update_item.plugin and self.update_item.plugin.dirname then
+            return self.update_item.plugin.dirname
+        end
+        local rec, rec_key = getInstallRecord()
+        local cand = (rec and rec.dirname) or rec_key or (self.repo and self.repo.name)
+        if cand and not cand:find("%.koplugin$") then
+            cand = cand .. ".koplugin"
+        end
+        return cand
     end
 
     local title_text = ""
     local meta_text  = ""
     local desc_text  = ""
 
-    local owner = self.repo.owner
-        or (type(self.repo.full_name) == "string" and self.repo.full_name:match("^([^/]+)/"))
-        or (self.repo.data and self.repo.data.owner and (type(self.repo.data.owner) == "string" and self.repo.data.owner or self.repo.data.owner.login))
-        or (self.update_item and self.update_item.record and self.update_item.record.owner)
+    local owner = (self.repo and self.repo.owner and self.repo.owner ~= "" and self.repo.owner)
+        or (type(self.repo and self.repo.full_name) == "string" and self.repo.full_name:match("^([^/]+)/"))
+        or (self.repo and self.repo.data and self.repo.data.owner and (type(self.repo.data.owner) == "string" and self.repo.data.owner ~= "" and self.repo.data.owner or (type(self.repo.data.owner) == "table" and self.repo.data.owner.login)))
+        or (self.update_item and self.update_item.record and self.update_item.record.owner and self.update_item.record.owner ~= "" and self.update_item.record.owner)
         or ""
-    local repo_name = self.repo.name
-        or (type(self.repo.full_name) == "string" and self.repo.full_name:match("^[^/]+/(.+)$"))
-        or (self.update_item and self.update_item.record and self.update_item.record.repo)
+    local repo_name = (self.repo and self.repo.name and self.repo.name ~= "" and self.repo.name)
+        or (type(self.repo and self.repo.full_name) == "string" and self.repo.full_name:match("^[^/]+/(.+)$"))
+        or (self.update_item and self.update_item.record and self.update_item.record.repo and self.update_item.record.repo ~= "" and self.update_item.record.repo)
         or ""
+
+    if owner == "" or repo_name == "" then
+        local rec = getInstallRecord()
+        if rec then
+            if owner == "" and rec.owner and rec.owner ~= "" then owner = rec.owner end
+            if repo_name == "" and rec.repo and rec.repo ~= "" then repo_name = rec.repo end
+        end
+    end
 
     local item_key
     if self.patch then
@@ -274,15 +315,11 @@ function StorefrontDetailsDialog:init()
         end
     end
     if self.has_wiki == nil and owner ~= "" and repo_name ~= "" then
-        UIManager:scheduleIn(0.2, function()
-            if self.has_wiki == nil and RepoContent and type(RepoContent.checkWikiExists) == "function" then
-                local ok_check, has_w = pcall(RepoContent.checkWikiExists, owner, repo_name)
-                if ok_check and has_w then
+        pcall(function()
+            if RepoContent and type(RepoContent.getWikiCacheDir) == "function" then
+                local dir = RepoContent.getWikiCacheDir(owner, repo_name)
+                if dir and lfs.attributes(dir .. "/Home.html", "mode") == "file" then
                     self.has_wiki = true
-                    if self.tab_bar_box then
-                        self.tab_bar_box[1] = self:buildTabBar()
-                        UIManager:setDirty(self, "ui")
-                    end
                 end
             end
         end)
@@ -304,7 +341,8 @@ function StorefrontDetailsDialog:init()
             version_str = remote.release_tag_name or remote.tag_name or remote.remote_version or remote.version
         end
         if not version_str and remote_entry then
-            version_str = remote_entry.sha and ("sha:" .. remote_entry.sha:sub(1, 7)) or remote_entry.version
+            local r_sha = remote_entry.remote_sha or remote_entry.sha
+            version_str = r_sha and ("sha:" .. r_sha:sub(1, 7)) or remote_entry.version
         end
         if not version_str and plugin then
             version_str = plugin.version
@@ -313,22 +351,41 @@ function StorefrontDetailsDialog:init()
     if not version_str and self.patch then
         version_str = self.patch.sha and ("sha:" .. self.patch.sha:sub(1, 7)) or self.patch.version
     end
+    local rec = getInstallRecord()
+    local is_branch_tracked = rec and rec.source == "branch" and rec.branch
+
+    if is_branch_tracked then
+        local short_sha = rec.sha and rec.sha:sub(1, 7)
+        if short_sha and short_sha ~= "" then
+            version_str = string.format(_("branch: %s (%s)"), rec.branch, short_sha)
+        else
+            version_str = string.format(_("branch: %s"), rec.branch)
+        end
+    end
+
     if not version_str and self.repo then
-        version_str = self.repo.latest_version or self.repo.version or self.repo.tag_name or self.repo.release_tag
+        local function getValidTag(tag)
+            if tag and StorefrontUtils and StorefrontUtils.isValidVersion and not StorefrontUtils.isValidVersion(tag) then
+                return nil
+            end
+            return tag
+        end
+        local rel_tag = self.repo.latest_release and getValidTag(self.repo.latest_release.tag_name)
+        version_str = self.repo.version or self.repo.latest_version or rel_tag or self.repo.tag_name or self.repo.release_tag
         if not version_str and self.repo.latest_release and type(self.repo.latest_release) == "table" then
-            version_str = self.repo.latest_release.tag_name or self.repo.latest_release.release_tag_name or self.repo.latest_release.name or self.repo.latest_release.version
+            version_str = self.repo.latest_release.version or rel_tag or self.repo.latest_release.release_tag_name or self.repo.latest_release.name
         end
         if not version_str and self.repo.data then
             if type(self.repo.data.latest_release) == "table" then
-                version_str = self.repo.data.latest_release.tag_name or self.repo.data.latest_release.release_tag_name or self.repo.data.latest_release.name or self.repo.data.latest_release.version
+                local data_rel_tag = getValidTag(self.repo.data.latest_release.tag_name)
+                version_str = self.repo.data.latest_release.version or data_rel_tag or self.repo.data.latest_release.release_tag_name or self.repo.data.latest_release.name
             end
             if not version_str then
-                version_str = self.repo.data.tag_name or self.repo.data.latest_version or self.repo.data.version
+                version_str = self.repo.data.version or self.repo.data.latest_version or getValidTag(self.repo.data.tag_name)
             end
         end
     end
 
-    local rec = getInstallRecord()
     if not version_str and rec then
         version_str = rec.version or rec.installed_version or rec.installed_tag or rec.tag_name or rec.release_tag_name or (rec.sha and ("sha:" .. rec.sha:sub(1, 7)))
     end
@@ -363,12 +420,14 @@ function StorefrontDetailsDialog:init()
     end
 
     if version_str and type(version_str) == "string" and version_str ~= "" then
-        if version_str:find("^sha:") then
-            -- keep sha:xxxxxxx format
+        if is_branch_tracked or version_str:find("^branch:") or version_str:find("^sha:") then
+            -- keep as-is; never prepend "v" to branch or sha
         else
             version_str = version_str:gsub("^[vV]", "")
             if version_str ~= "" then
-                version_str = "v" .. version_str
+                if version_str:match("^%d") then
+                    version_str = "v" .. version_str
+                end
             else
                 version_str = nil
             end
@@ -402,25 +461,68 @@ function StorefrontDetailsDialog:init()
         local meta_parts = {}
         if owner and owner ~= "" then table.insert(meta_parts, owner) end
         if stars > 0 then table.insert(meta_parts, "★ " .. stars_fmt) end
-        if updated ~= "" and version_str then
+        if updated ~= "" and version_str and not is_branch_tracked then
             table.insert(meta_parts, string.format(_("updated %s (%s)"), updated, version_str))
         elseif updated ~= "" then
             table.insert(meta_parts, string.format(_("updated %s"), updated))
-        elseif version_str then
+        elseif version_str and not is_branch_tracked then
             table.insert(meta_parts, version_str)
         end
         desc_text = (self.repo and self.repo.description) or (self.update_item and self.update_item.description) or ""
     end
 
+    local available_pills_w = self.screen_w - sc(24)
+    local branch_pill_widget = nil
+    if is_branch_tracked then
+        local short_sha = rec.sha and rec.sha:sub(1, 7)
+        local branch_disp = (short_sha and short_sha ~= "")
+            and string.format(_("Tracking branch: %s (%s)"), rec.branch, short_sha)
+            or string.format(_("Tracking branch: %s"), rec.branch)
+        local branch_icon = ImageWidget:new{
+            file = getAssetPath("git-branch.svg"),
+            width = sc(14),
+            height = sc(14),
+            scale_factor = 0,
+            is_icon = true,
+            alpha = true,
+        }
+        local branch_text = TextWidget:new{
+            text = branch_disp,
+            face = Font:getFace("cfont", 14),
+            bold = true,
+            fgcolor = Blitbuffer.COLOR_BLACK,
+            max_width = available_pills_w - sc(20) - sc(14) - sc(6),
+        }
+        local branch_inner = HorizontalGroup:new{
+            align = "center",
+            branch_icon,
+            HorizontalSpan:new{ width = sc(6) },
+            branch_text,
+        }
+        branch_pill_widget = FrameContainer:new{
+            background = Blitbuffer.COLOR_WHITE,
+            bordersize = sc(1),
+            color = Blitbuffer.COLOR_BLACK,
+            radius = sc(4),
+            padding = sc(4),
+            padding_h = sc(10),
+            branch_inner,
+        }
+    end
+
     local folder_pill_widget = nil
-    if self.update_item and self.update_item.plugin and self.update_item.plugin.dirname then
-        if self.update_item.plugin.dirname ~= self.repo.name then
-            local folder_name = self.update_item.plugin.dirname
+    local installed_plugin_dir = getInstalledPluginDirname()
+    if installed_plugin_dir and not is_font and not self.patch and self.kind ~= "patch" and not (self.repo and self.repo.kind == "patch") then
+        local repo_base = self.repo and self.repo.name and self.repo.name:gsub("%.koplugin$", ""):lower()
+        local dir_base = installed_plugin_dir:gsub("%.koplugin$", ""):lower()
+        if repo_base and dir_base ~= repo_base and (is_installed or has_update) then
+            local folder_name = installed_plugin_dir
             local folder_text = TextWidget:new{
                 text = string.format("folder: %s", folder_name),
                 face = Font:getFace("cfont", 14),
                 bold = true,
                 fgcolor = Blitbuffer.COLOR_WHITE,
+                max_width = available_pills_w - sc(28),
             }
             folder_pill_widget = FrameContainer:new{
                 background = Blitbuffer.COLOR_DARK_GRAY,
@@ -431,6 +533,29 @@ function StorefrontDetailsDialog:init()
                 folder_text,
             }
         end
+    end
+
+    local pills_row_widget = nil
+    if branch_pill_widget and folder_pill_widget then
+        local combined_w = branch_pill_widget:getSize().w + sc(8) + folder_pill_widget:getSize().w
+        if combined_w <= available_pills_w then
+            pills_row_widget = HorizontalGroup:new{
+                branch_pill_widget,
+                HorizontalSpan:new{ width = sc(8) },
+                folder_pill_widget,
+            }
+        else
+            pills_row_widget = VerticalGroup:new{
+                align = "left",
+                branch_pill_widget,
+                VerticalSpan:new{ width = sc(4) },
+                folder_pill_widget,
+            }
+        end
+    elseif branch_pill_widget then
+        pills_row_widget = branch_pill_widget
+    elseif folder_pill_widget then
+        pills_row_widget = folder_pill_widget
     end
 
     local is_font = false
@@ -450,7 +575,7 @@ function StorefrontDetailsDialog:init()
             title_face = StorefrontListItem.resolveFontItemFace(font_entry, 28)
         end
     end
-    title_face = title_face or Font:getFace("NotoSerif-Regular.ttf", 28) or Font:getFace("cfont", 28)
+    title_face = title_face or StorefrontUtils.getTitleFace(28)
     local title_label = TextWidget:new{
         text = title_text,
         face = title_face,
@@ -650,7 +775,7 @@ function StorefrontDetailsDialog:init()
         end
     end
 
-    if updated ~= "" or version_str or (self.patch and self.patch.branch) then
+    if updated ~= "" or (version_str and not is_branch_tracked) or (self.patch and self.patch.branch) then
         if #meta_group_items > 0 then
             table.insert(meta_group_items, TextWidget:new{
                 text = "  ·  ",
@@ -659,11 +784,11 @@ function StorefrontDetailsDialog:init()
             })
         end
         local updated_parts = {}
-        if updated ~= "" and version_str then
+        if updated ~= "" and version_str and not is_branch_tracked then
             table.insert(updated_parts, string.format(_("updated %s (%s)"), updated, version_str))
         elseif updated ~= "" then
             table.insert(updated_parts, string.format(_("updated %s"), updated))
-        elseif version_str then
+        elseif version_str and not is_branch_tracked then
             table.insert(updated_parts, version_str)
         end
         if self.patch and self.patch.branch then
@@ -776,6 +901,9 @@ function StorefrontDetailsDialog:init()
         is_default = self.update_item.is_default
     elseif self.repo and self.repo.is_default ~= nil then
         is_default = self.repo.is_default
+    elseif is_font and self.Storefront and self.Storefront.isDefaultFont then
+        local font_obj = (self.update_item and self.update_item.font) or self.repo
+        is_default = self.Storefront:isDefaultFont(font_obj)
     elseif self.Storefront and self.Storefront.isDefaultPlugin then
         local plugin_obj = (self.update_item and self.update_item.plugin) or self.repo
         is_default = self.Storefront:isDefaultPlugin(plugin_obj)
@@ -783,7 +911,7 @@ function StorefrontDetailsDialog:init()
     if is_default then
         is_installed = true
         if desc_text == "" or desc_text == _("No README available.") then
-            desc_text = _("Pre-installed core KOReader plugin.")
+            desc_text = is_font and _("Pre-installed core KOReader font.") or _("Pre-installed core KOReader plugin.")
         end
     end
 
@@ -810,8 +938,9 @@ function StorefrontDetailsDialog:init()
         if owner ~= "" and repo_name ~= "" then table.insert(keys_to_set, string.format("%s/%s", owner, repo_name)) end
         if repo_name ~= "" then table.insert(keys_to_set, repo_name) end
         if self.patch and self.patch.filename then table.insert(keys_to_set, self.patch.filename) end
-        if self.update_item and self.update_item.plugin and self.update_item.plugin.dirname then
-            table.insert(keys_to_set, self.update_item.plugin.dirname)
+        local plugin_dirname = getInstalledPluginDirname()
+        if plugin_dirname then
+            table.insert(keys_to_set, plugin_dirname)
         end
         for _, k in ipairs(keys_to_set) do
             InstallStore.setAllUpdatesIgnored(k, new_state)
@@ -824,8 +953,21 @@ function StorefrontDetailsDialog:init()
         end
     end
 
+    local function safeAction(callback_fn)
+        if self._action_in_flight or self.is_closed then return end
+        self._action_in_flight = true
+        self:cancelActiveFetch()
+        self:onClose()
+        if callback_fn then
+            UIManager:nextTick(function()
+                pcall(callback_fn)
+            end)
+        end
+    end
+
     local function doRemove()
         if not self.Storefront then return end
+        self:cancelActiveFetch()
         self:onClose()
         if is_font then
             local font_name = (self.repo and (self.repo.name or self.repo.font_family))
@@ -846,14 +988,11 @@ function StorefrontDetailsDialog:init()
                 self.Storefront:deletePatch(patch_filename, rec)
             end
         else
-            local dirname = (self.update_item and self.update_item.plugin and self.update_item.plugin.dirname)
-                or (self.repo and self.repo.name)
+            local rec = getInstallRecord()
+            local dirname = getInstalledPluginDirname()
             if dirname then
-                if not dirname:find("%.koplugin$") then
-                    dirname = dirname .. ".koplugin"
-                end
                 if type(self.Storefront.deletePlugin) == "function" then
-                    self.Storefront:deletePlugin(dirname, true)
+                    self.Storefront:deletePlugin(dirname, rec)
                 end
             end
         end
@@ -906,7 +1045,7 @@ function StorefrontDetailsDialog:init()
             end
         elseif (self.repo and self.repo.name) or (self.update_item and self.update_item.plugin and self.update_item.plugin.dirname) then
             local plugins_disabled = G_reader_settings:readSetting("plugins_disabled") or {}
-            local dirname = (self.update_item and self.update_item.plugin and self.update_item.plugin.dirname) or (self.repo and self.repo.name)
+            local dirname = getInstalledPluginDirname() or (self.repo and self.repo.name)
             local p_name = dirname and dirname:gsub("%.koplugin$", "")
             if p_name then
                 is_item_disabled = plugins_disabled[p_name] == true
@@ -914,7 +1053,9 @@ function StorefrontDetailsDialog:init()
         end
 
         local is_updates_ignored = isItemIgnored()
-        local primary_text = _("Update")
+        local record_item = (self.update_item and self.update_item.record) or getInstallRecord()
+        local is_branch_tracked = record_item and record_item.source == "branch" and record_item.branch
+        local primary_text = is_branch_tracked and _("repull_from_branch") or _("Update")
         local toggle_text = is_item_disabled and _("Enable") or _("Disable")
         local ignore_text = is_updates_ignored and _("Updates Ignored") or _("Ignore Updates")
         local remove_text = _("Remove")
@@ -939,17 +1080,30 @@ function StorefrontDetailsDialog:init()
             height = action_btn_h,
             show_parent = self,
             callback = function()
-                self:onClose()
-                if self.patch then
-                    self.Storefront:installPatchFromRepo(self.repo, self.patch)
-                else
-                    local rel = (self.update_item and (self.update_item.remote or self.update_item.remote_entry)) or (self.repo and (self.repo.latest_release or (self.repo.data and self.repo.data.latest_release)))
-                    if self.Storefront and type(self.Storefront.promptPluginInstallOptions) == "function" then
-                        self.Storefront:promptPluginInstallOptions(self.repo, rel, false)
+                safeAction(function()
+                    if self.patch then
+                        if self.Storefront then
+                            self.Storefront.pending_patch_install = {
+                                mode = "update",
+                                patch = (self.update_item and self.update_item.patch) or self.patch,
+                            }
+                        end
+                        self.Storefront:installPatchFromRepo(self.repo, self.patch)
+                    elseif is_branch_tracked and self.Storefront and type(self.Storefront.installPluginFromBranch) == "function" then
+                        self.Storefront.pending_install_context = {
+                            mode = "update",
+                            plugin = self.update_item and self.update_item.plugin,
+                        }
+                        self.Storefront:installPluginFromBranch(self.repo, record_item.branch)
                     else
-                        self.Storefront:installPluginFromRepo(self.repo)
+                        local rel = (self.update_item and (self.update_item.remote or self.update_item.remote_entry)) or (self.repo and (self.repo.latest_release or (self.repo.data and self.repo.data.latest_release)))
+                        if self.Storefront and type(self.Storefront.promptPluginInstallOptions) == "function" then
+                            self.Storefront:promptPluginInstallOptions(self.repo, rel, false)
+                        else
+                            self.Storefront:installPluginFromRepo(self.repo)
+                        end
                     end
-                end
+                end)
             end,
         }
         if primary_btn.label_widget then
@@ -966,6 +1120,7 @@ function StorefrontDetailsDialog:init()
             height = action_btn_h,
             show_parent = self,
             callback = function()
+                self:cancelActiveFetch()
                 self:onClose()
                 if self.patch then
                     local filename = self.patch.filename
@@ -973,7 +1128,7 @@ function StorefrontDetailsDialog:init()
                         self.Storefront:togglePatchDisabled(filename)
                     end
                 else
-                    local dirname = (self.update_item and self.update_item.plugin and self.update_item.plugin.dirname) or (self.repo and self.repo.name)
+                    local dirname = getInstalledPluginDirname() or (self.repo and self.repo.name)
                     if dirname and self.Storefront then
                         self.Storefront:togglePluginDisabled(dirname)
                     end
@@ -1050,12 +1205,27 @@ function StorefrontDetailsDialog:init()
             end
         elseif self.repo and self.repo.name then
             local plugins_disabled = G_reader_settings:readSetting("plugins_disabled") or {}
-            local dirname = (self.update_item and self.update_item.plugin and self.update_item.plugin.dirname) or self.repo.name
+            local dirname = getInstalledPluginDirname() or self.repo.name
             local p_name = dirname:gsub("%.koplugin$", "")
             is_item_disabled = plugins_disabled[p_name] == true
         end
 
-        if is_default then
+        if is_default and is_font then
+            main_action_btn = Button:new{
+                text = _("Pre-installed Font"),
+                text_font_size = 18,
+                text_font_color = Blitbuffer.COLOR_GRAY,
+                bordersize = sc(1),
+                border_color = Blitbuffer.COLOR_GRAY,
+                padding = sc(11),
+                radius = sc(4),
+                width = action_btn_width,
+                show_parent = self,
+                callback = function()
+                    self:onClose()
+                end,
+            }
+        elseif is_default then
             local toggle_btn = Button:new{
                 text = is_item_disabled and _("Enable") or _("Disable"),
                 text_font_size = 18,
@@ -1067,11 +1237,12 @@ function StorefrontDetailsDialog:init()
                 width = action_btn_width,
                 show_parent = self,
                 callback = function()
-                    self:onClose()
-                    local dirname = (self.update_item and self.update_item.plugin and self.update_item.plugin.dirname) or (self.repo and self.repo.name)
-                    if dirname and self.Storefront then
-                        self.Storefront:togglePluginDisabled(dirname)
-                    end
+                    safeAction(function()
+                        local dirname = getInstalledPluginDirname() or (self.repo and self.repo.name)
+                        if dirname and self.Storefront then
+                            self.Storefront:togglePluginDisabled(dirname)
+                        end
+                    end)
                 end,
             }
             if toggle_btn.label_widget and is_item_disabled then
@@ -1100,8 +1271,9 @@ function StorefrontDetailsDialog:init()
                 height = action_btn_h,
                 show_parent = self,
                 callback = function()
-                    self:onClose()
-                    self.Storefront:installFontFromRepo(self.repo)
+                    safeAction(function()
+                        self.Storefront:installFontFromRepo(self.repo)
+                    end)
                 end,
             }
             if primary_btn.label_widget then
@@ -1125,7 +1297,9 @@ function StorefrontDetailsDialog:init()
             }
         else
             local is_updates_ignored = isItemIgnored()
-            local primary_text = _("Reinstall")
+            local record_item = (self.update_item and self.update_item.record) or getInstallRecord()
+            local is_branch_tracked = record_item and record_item.source == "branch" and record_item.branch
+            local primary_text = is_branch_tracked and _("repull_from_branch") or _("Reinstall")
             local toggle_text = is_item_disabled and _("Enable") or _("Disable")
             local ignore_text = is_updates_ignored and _("Updates Ignored") or _("Ignore Updates")
             local remove_text = _("Remove")
@@ -1150,12 +1324,21 @@ function StorefrontDetailsDialog:init()
                 height = action_btn_h,
                 show_parent = self,
                 callback = function()
-                    self:onClose()
-                    if self.patch then
-                        self.Storefront:installPatchFromRepo(self.repo, self.patch)
-                    else
-                        self.Storefront:installPluginFromRepo(self.repo)
-                    end
+                    safeAction(function()
+                        if self.patch then
+                            self.Storefront:installPatchFromRepo(self.repo, self.patch)
+                        elseif is_branch_tracked and self.Storefront and type(self.Storefront.installPluginFromBranch) == "function" then
+                            self.Storefront.pending_install_context = {
+                                mode = "update",
+                                plugin = (self.update_item and self.update_item.plugin) or {
+                                    dirname = record_item.dirname or (self.repo and self.repo.name),
+                                },
+                            }
+                            self.Storefront:installPluginFromBranch(self.repo, record_item.branch)
+                        else
+                            self.Storefront:installPluginFromRepo(self.repo)
+                        end
+                    end)
                 end,
             }
             if primary_btn.label_widget then
@@ -1172,6 +1355,7 @@ function StorefrontDetailsDialog:init()
                 height = action_btn_h,
                 show_parent = self,
                 callback = function()
+                    self:cancelActiveFetch()
                     self:onClose()
                     if self.patch then
                         local filename = self.patch.filename
@@ -1179,7 +1363,7 @@ function StorefrontDetailsDialog:init()
                             self.Storefront:togglePatchDisabled(filename)
                         end
                     else
-                        local dirname = (self.update_item and self.update_item.plugin and self.update_item.plugin.dirname) or (self.repo and self.repo.name)
+                        local dirname = getInstalledPluginDirname() or (self.repo and self.repo.name)
                         if dirname and self.Storefront then
                             self.Storefront:togglePluginDisabled(dirname)
                         end
@@ -1245,19 +1429,20 @@ function StorefrontDetailsDialog:init()
             width = action_btn_width,
             show_parent = self,
             callback = function()
-                self:onClose()
-                if is_font then
-                    self.Storefront:installFontFromRepo(self.repo)
-                elseif self.patch then
-                    self.Storefront:installPatchFromRepo(self.repo, self.patch)
-                else
-                    local rel = self.repo and (self.repo.latest_release or (self.repo.data and self.repo.data.latest_release))
-                    if self.Storefront and type(self.Storefront.promptPluginInstallOptions) == "function" then
-                        self.Storefront:promptPluginInstallOptions(self.repo, rel, true)
+                safeAction(function()
+                    if is_font then
+                        self.Storefront:installFontFromRepo(self.repo)
+                    elseif self.patch then
+                        self.Storefront:installPatchFromRepo(self.repo, self.patch)
                     else
-                        self.Storefront:installPluginFromRepo(self.repo)
+                        local rel = self.repo and (self.repo.latest_release or (self.repo.data and self.repo.data.latest_release))
+                        if self.Storefront and type(self.Storefront.promptPluginInstallOptions) == "function" then
+                            self.Storefront:promptPluginInstallOptions(self.repo, rel, true)
+                        else
+                            self.Storefront:installPluginFromRepo(self.repo)
+                        end
                     end
-                end
+                end)
             end,
         }
         if main_action_btn.label_widget then
@@ -1525,7 +1710,7 @@ function StorefrontDetailsDialog:init()
                    + title_label:getSize().h
                    + sc(4)
                    + meta_label:getSize().h
-                   + (folder_pill_widget and (sc(6) + folder_pill_widget:getSize().h) or 0)
+                   + (pills_row_widget and (sc(6) + pills_row_widget:getSize().h) or 0)
                    + sc(12)
                    + desc_label:getSize().h
                    + sc(16)
@@ -1710,6 +1895,7 @@ tr:nth-child(even) td { background-color: #f5f5f5 !important; }
     self._updatePagination = updatePagination
     loadContent = function(tab_name, force_refresh, keep_page_number)
         self.loadContent = loadContent
+        self:cancelActiveFetch()
         self.load_req_id = (self.load_req_id or 0) + 1
         local current_req_id = self.load_req_id
 
@@ -1914,19 +2100,23 @@ tr:nth-child(even) td { background-color: #f5f5f5 !important; }
 
                 local raw_releases = self.cached_releases
                 if not raw_releases or force_refresh then
-                    local cached = getReleasesFromCache(self.repo)
-                    if cached and #cached > 1 then
-                        self.cached_releases = cached
-                        raw_releases = cached
-                    else
+                    local explicit_releases = (self.repo and self.repo.releases and type(self.repo.releases) == "table" and #self.repo.releases > 0 and self.repo.releases)
+                        or (self.repo and self.repo.data and type(self.repo.data) == "table" and self.repo.data.releases and type(self.repo.data.releases) == "table" and #self.repo.data.releases > 0 and self.repo.data.releases)
+
+                    if explicit_releases then
+                        self.cached_releases = explicit_releases
+                        raw_releases = explicit_releases
+                    elseif owner and owner ~= "" and repo_name and repo_name ~= "" then
                         local fetched, err = GitHubClient.fetchReleases(owner, repo_name)
                         if fetched and #fetched > 0 then
                             self.cached_releases = fetched
                             raw_releases = fetched
                         else
                             -- Fall back to cached release for display without poisoning self.cached_releases permanently
-                            raw_releases = cached
+                            raw_releases = getReleasesFromCache(self.repo)
                         end
+                    else
+                        raw_releases = getReleasesFromCache(self.repo)
                     end
                 end
 
@@ -1946,7 +2136,8 @@ tr:nth-child(even) td { background-color: #f5f5f5 !important; }
                 self.versions_page = self.versions_page or 1
 
                 local toggle_h = sc(46)
-                local avail_h = readme_h - toggle_h
+                local branch_row_h = (not self.patch) and sc(46) or 0
+                local avail_h = readme_h - toggle_h - branch_row_h
                 local row_h = sc(72)
                 local per_page = math.max(1, math.floor(avail_h / row_h))
                 local total_rels = #releases
@@ -2033,7 +2224,8 @@ tr:nth-child(even) td { background-color: #f5f5f5 !important; }
                         InstallStore.setPreReleaseAllowed(item_key, next_val)
                         if dialog_self.repo and dialog_self.repo.name then InstallStore.setPreReleaseAllowed(dialog_self.repo.name, next_val) end
                         if dialog_self.repo and dialog_self.repo.full_name then InstallStore.setPreReleaseAllowed(dialog_self.repo.full_name, next_val) end
-                        if dialog_self.update_item and dialog_self.update_item.plugin and dialog_self.update_item.plugin.dirname then InstallStore.setPreReleaseAllowed(dialog_self.update_item.plugin.dirname, next_val) end
+                        local p_dirname = getInstalledPluginDirname()
+                        if p_dirname then InstallStore.setPreReleaseAllowed(p_dirname, next_val) end
                         if dialog_self.loadContent then dialog_self.loadContent("versions") end
                     end
                     return true
@@ -2043,6 +2235,131 @@ tr:nth-child(even) td { background-color: #f5f5f5 !important; }
                 table.insert(list_items, VerticalSpan:new{ width = sc(6) })
 
                 local tab_focus_items = { toggle_btn }
+
+                -- Pinned "Install from branch…" row (for plugins)
+                if not self.patch then
+                    local record_item = (self.update_item and self.update_item.record) or getInstallRecord()
+                    local is_branch_tracked = record_item and record_item.source == "branch" and record_item.branch
+                    local branch_icon_prefix = ImageWidget:new{
+                        file = getAssetPath("git-branch.svg"),
+                        width = sc(18),
+                        height = sc(18),
+                        scale_factor = 0,
+                        is_icon = true,
+                        alpha = true,
+                    }
+                    local branch_title = is_branch_tracked
+                        and string.format(_("tracking_branch"), record_item.branch)
+                        or _("install_from_branch")
+                    local branch_label_w = TextWidget:new{
+                        text = branch_title,
+                        face = Font:getFace("cfont", 16),
+                        bold = true,
+                        fgcolor = Blitbuffer.COLOR_BLACK,
+                    }
+                    local branch_icon_w = ImageWidget:new{
+                        file = getAssetPath("chevron-right.svg"),
+                        width = sc(22),
+                        height = sc(22),
+                        scale_factor = 0,
+                        is_icon = true,
+                        alpha = true,
+                    }
+                    local branch_left_hg = HorizontalGroup:new{
+                        align = "center",
+                        branch_icon_prefix,
+                        HorizontalSpan:new{ width = sc(8) },
+                        branch_label_w,
+                    }
+                    local branch_right_hg_items = {}
+                    if is_branch_tracked then
+                        local tracked_badge_w = TextWidget:new{
+                            text = _("tracked_badge") or "TRACKED",
+                            face = Font:getFace("smallinfofont", 12),
+                            bold = true,
+                            fgcolor = Blitbuffer.COLOR_WHITE,
+                        }
+                        local tracked_chip = FrameContainer:new{
+                            padding_top = sc(2),
+                            padding_bottom = sc(2),
+                            padding_left = sc(6),
+                            padding_right = sc(6),
+                            background = Blitbuffer.COLOR_BLACK,
+                            radius = sc(4),
+                            bordersize = 0,
+                            tracked_badge_w,
+                        }
+                        table.insert(branch_right_hg_items, tracked_chip)
+                        table.insert(branch_right_hg_items, HorizontalSpan:new{ width = sc(8) })
+                    end
+                    table.insert(branch_right_hg_items, branch_icon_w)
+                    local branch_right_hg = HorizontalGroup:new{
+                        align = "center",
+                        (table.unpack or unpack)(branch_right_hg_items)
+                    }
+                    local branch_row = OverlapGroup:new{
+                        dimen = Geom:new{ w = readme_w - sc(24), h = sc(28) },
+                        LeftContainer:new{
+                            dimen = Geom:new{ w = readme_w - sc(24), h = sc(28) },
+                            branch_left_hg,
+                        },
+                        RightContainer:new{
+                            dimen = Geom:new{ w = readme_w - sc(24), h = sc(28) },
+                            branch_right_hg,
+                        },
+                    }
+                    local branch_frame = FrameContainer:new{
+                        padding = sc(6),
+                        padding_h = sc(12),
+                        bordersize = sc(1),
+                        radius = sc(4),
+                        background = Blitbuffer.COLOR_WHITE,
+                        branch_row,
+                    }
+                    local branch_btn = InputContainer:new{
+                        branch_frame,
+                    }
+                    branch_btn.show_parent = self
+                    branch_btn.isFocusable = function() return true end
+                    branch_btn.onFocus = function()
+                        branch_frame.bordersize = sc(2)
+                        branch_frame.color = Blitbuffer.COLOR_BLACK
+                        branch_frame.background = Blitbuffer.Color8(230)
+                        UIManager:setDirty(self.show_parent or self, "fast")
+                        return true
+                    end
+                    branch_btn.onUnfocus = function()
+                        branch_frame.bordersize = sc(1)
+                        branch_frame.color = nil
+                        branch_frame.background = Blitbuffer.COLOR_WHITE
+                        UIManager:setDirty(self.show_parent or self, "fast")
+                        return true
+                    end
+                    branch_btn.onTapSelect = function()
+                        return branch_btn:onStorefrontBranchTap()
+                    end
+                    branch_btn.ges_events = {
+                        StorefrontBranchTap = {
+                            GestureRange:new{
+                                ges = "tap",
+                                range = function()
+                                    local d = branch_btn.dimen or branch_frame:getSize()
+                                    return Geom:new{ x = d.x or 0, y = d.y or 0, w = d.w or 0, h = d.h or 0 }
+                                end,
+                            },
+                        },
+                    }
+                    function branch_btn:onStorefrontBranchTap()
+                        if dialog_self.Storefront and dialog_self.Storefront.showBranchPickerDialog then
+                            dialog_self.Storefront:showBranchPickerDialog(dialog_self.repo)
+                        end
+                        return true
+                    end
+
+                    table.insert(list_items, branch_btn)
+                    table.insert(list_items, VerticalSpan:new{ width = sc(6) })
+                    table.insert(tab_focus_items, branch_btn)
+                end
 
                 if #releases == 0 then
                     table.insert(list_items, TextWidget:new{
@@ -2370,13 +2687,159 @@ tr:nth-child(even) td { background-color: #f5f5f5 !important; }
             updatePagination()
 
             -- Perform network fetch asynchronously without blocking the UI main loop
+            local ok_ffi, ffiutil = pcall(require, "ffi/util")
+            if not ok_ffi then ok_ffi, ffiutil = pcall(require, "ffiutil") end
+            local is_low = false
+            pcall(function()
+                local StorefrontUtils = require("storefront_utils")
+                if StorefrontUtils and StorefrontUtils.isLowMemory then
+                    is_low = StorefrontUtils.isLowMemory(20 * 1024)
+                end
+            end)
+            local can_fork = ok_ffi and ffiutil and ffiutil.runInSubProcess and ffiutil.isSubProcessDone and not is_low
+
+            local active_wiki_p = self.active_wiki_page
+            local rel_data_arg = (tab_name == "release_notes") and ((self.update_item and (self.update_item.remote or self.update_item.remote_entry)) or self.repo.latest_release) or nil
+
+            if can_fork then
+                local pid, parent_read_fd = ffiutil.runInSubProcess(function(pid, child_write_fd)
+                    local json = require("json")
+                    local RepoContent = require("storefront_repo_content")
+                    local res_ok, res_path
+                    if tab_name == "release_notes" then
+                        if RepoContent and type(RepoContent.fetchReleaseNotesHtml) == "function" then
+                            local ok_pcall, r_ok, r_path = pcall(RepoContent.fetchReleaseNotesHtml, owner, repo_name, rel_data_arg, force_refresh)
+                            if ok_pcall then res_ok, res_path = r_ok, r_path end
+                        end
+                    elseif tab_name == "wiki" then
+                        if RepoContent and type(RepoContent.fetchWikiSidebar) == "function" then
+                            pcall(RepoContent.fetchWikiSidebar, owner, repo_name, force_refresh)
+                        end
+                        if RepoContent and type(RepoContent.fetchWikiPageHtml) == "function" then
+                            local ok_pcall, r_ok, r_path = pcall(RepoContent.fetchWikiPageHtml, owner, repo_name, active_wiki_p, force_refresh)
+                            if ok_pcall then res_ok, res_path = r_ok, r_path end
+                        end
+                    else
+                        if RepoContent and type(RepoContent.fetchReadmeHtml) == "function" then
+                            local ok_pcall, r_ok, r_path = pcall(RepoContent.fetchReadmeHtml, owner, repo_name, force_refresh)
+                            if ok_pcall then res_ok, res_path = r_ok, r_path end
+                        end
+                    end
+                    if child_write_fd then
+                        local payload = string.format("%s\t%s", res_ok and "1" or "0", res_path or "")
+                        ffiutil.writeToFD(child_write_fd, payload, true)
+                    end
+                end, true)
+
+                if pid then
+                    local req = {
+                        pid = pid,
+                        fd = parent_read_fd,
+                        tab = tab_name,
+                        req_id = current_req_id,
+                    }
+                    self._active_async_fetch = req
+
+                    local poll_attempts = 0
+                    local MAX_POLL_ATTEMPTS = 120 -- ~18 seconds hard ceiling
+                    local poll_func
+                    poll_func = function()
+                        req.timer = nil
+                        if self.is_closed or self.load_req_id ~= current_req_id or self.active_tab ~= tab_name then
+                            self:cancelActiveFetch()
+                            return
+                        end
+
+                        local ok_dev, Device = pcall(require, "device")
+                        if ok_dev and Device and ((Device.isSuspended and Device:isSuspended()) or Device.screen_saver_mode) then
+                            self:cancelActiveFetch()
+                            return
+                        end
+
+                        poll_attempts = poll_attempts + 1
+                        if poll_attempts > MAX_POLL_ATTEMPTS then
+                            self:cancelActiveFetch()
+                            if not cached_html and self.active_tab == tab_name and self._html_box then
+                                local timeout_msg = (tab_name == "wiki") and _("Unable to load wiki page. Tap refresh to retry.") or _("Unable to read README. Tap refresh to retry.")
+                                pcall(function()
+                                    self._html_box:setContent(string.format('<div class="markdown-body"><p style="text-align:center;color:red;margin-top:2em;">%s</p></div>', timeout_msg), readme_css, sc(18))
+                                end)
+                                if self._updatePagination then self._updatePagination() end
+                                UIManager:setDirty(self, "ui")
+                            end
+                            return
+                        end
+
+                        -- Non-blocking check for subprocess completion (wait = false)
+                        if ffiutil.isSubProcessDone(pid) then
+                            self._active_async_fetch = nil
+                            local read_func = ffiutil.readAllFromFD or ffiutil.readFromFD
+                            local raw_msg = nil
+                            if read_func and parent_read_fd then
+                                pcall(function() raw_msg = read_func(parent_read_fd) end)
+                            end
+                            local res_data = nil
+                            if raw_msg and raw_msg ~= "" then
+                                local ok_s, path_s = raw_msg:match("^(%d)\t(.*)$")
+                                if ok_s then
+                                    res_data = { ok = (ok_s == "1"), path = path_s }
+                                else
+                                    local ok_json, json = pcall(require, "json")
+                                    if ok_json and json then
+                                        pcall(function() res_data = json.decode(raw_msg) end)
+                                    end
+                                end
+                            end
+
+                            if self.is_closed or self.load_req_id ~= current_req_id or self.active_tab ~= tab_name then
+                                return
+                            end
+
+                            local ok = res_data and res_data.ok
+                            local path = res_data and res_data.path
+                            if ok and path then
+                                local fresh_html = util.readFromFile(path)
+                                if fresh_html and fresh_html ~= "" and self.active_tab == tab_name and self._html_box then
+                                    pcall(function()
+                                        self._html_box:setContent(fresh_html, readme_css, sc(18), false, false, cache_dir)
+                                    end)
+                                    if rawget(self._html_box, "_bb") then self._html_box._bb = nil end
+                                    if rawget(self._html_box, "bb") then self._html_box.bb = nil end
+                                    if self._updatePagination then self._updatePagination() end
+                                    UIManager:setDirty(self, "ui")
+                                    UIManager:setDirty(self._html_box, "ui")
+                                    pcall(collectgarbage, "collect")
+                                end
+                            elseif not cached_html then
+                                local err_msg = (tab_name == "wiki") and _("Unable to load wiki page. Tap refresh to retry.") or _("Unable to read README. Tap refresh to retry.")
+                                if self.active_tab == tab_name and self._html_box then
+                                    pcall(function()
+                                        self._html_box:setContent(string.format('<div class="markdown-body"><p style="text-align:center;color:red;margin-top:2em;">%s</p></div>', err_msg), readme_css, sc(18))
+                                    end)
+                                    if self._updatePagination then self._updatePagination() end
+                                    UIManager:setDirty(self, "ui")
+                                end
+                            end
+                            return
+                        end
+
+                        req.timer = poll_func
+                        UIManager:scheduleIn(0.15, poll_func)
+                    end
+
+                    req.timer = poll_func
+                    UIManager:scheduleIn(0.15, poll_func)
+                    return
+                end
+            end
+
+            -- Fallback when subprocess is unavailable: run on UI thread with skip_sync_images = true
             UIManager:scheduleIn(0.05, function()
-                if self.is_closed or self.active_tab ~= tab_name then return end
+                if self.is_closed or self.load_req_id ~= current_req_id or self.active_tab ~= tab_name then return end
                 local ok, path
                 if tab_name == "release_notes" then
-                    local rel_data = (self.update_item and (self.update_item.remote or self.update_item.remote_entry)) or self.repo.latest_release
                     if RepoContent and type(RepoContent.fetchReleaseNotesHtml) == "function" then
-                        local ok_pcall, res_ok, res_path = pcall(RepoContent.fetchReleaseNotesHtml, owner, repo_name, rel_data, force_refresh)
+                        local ok_pcall, res_ok, res_path = pcall(RepoContent.fetchReleaseNotesHtml, owner, repo_name, rel_data_arg, force_refresh)
                         if ok_pcall then ok, path = res_ok, res_path end
                     end
                 elseif tab_name == "wiki" then
@@ -2384,12 +2847,12 @@ tr:nth-child(even) td { background-color: #f5f5f5 !important; }
                         pcall(function() self.wiki_sidebar_items = RepoContent.fetchWikiSidebar(owner, repo_name, force_refresh) end)
                     end
                     if RepoContent and type(RepoContent.fetchWikiPageHtml) == "function" then
-                        local ok_pcall, res_ok, res_path = pcall(RepoContent.fetchWikiPageHtml, owner, repo_name, self.active_wiki_page, force_refresh)
+                        local ok_pcall, res_ok, res_path = pcall(RepoContent.fetchWikiPageHtml, owner, repo_name, active_wiki_p, force_refresh)
                         if ok_pcall then ok, path = res_ok, res_path end
                     end
                 else
                     if RepoContent and type(RepoContent.fetchReadmeHtml) == "function" then
-                        local ok_pcall, res_ok, res_path = pcall(RepoContent.fetchReadmeHtml, owner, repo_name, force_refresh)
+                        local ok_pcall, res_ok, res_path = pcall(RepoContent.fetchReadmeHtml, owner, repo_name, force_refresh, { skip_sync_images = true })
                         if ok_pcall then ok, path = res_ok, res_path end
                     end
                 end
@@ -2406,29 +2869,6 @@ tr:nth-child(even) td { background-color: #f5f5f5 !important; }
                         UIManager:setDirty(self, "ui")
                         UIManager:setDirty(self._html_box, "ui")
                         pcall(collectgarbage, "collect")
-
-                        if RepoContent and type(RepoContent.processPendingImages) == "function" then
-                            UIManager:scheduleIn(0.5, function()
-                                RepoContent.processPendingImages(function(updated_html_path)
-                                    UIManager:scheduleIn(0.1, function()
-                                        if self.active_tab == tab_name and self._html_box then
-                                            local updated_html = util.readFromFile(updated_html_path)
-                                            if updated_html and updated_html ~= "" then
-                                                pcall(function()
-                                                    self._html_box:setContent(updated_html, readme_css, sc(18), false, false, cache_dir)
-                                                end)
-                                                if rawget(self._html_box, "_bb") then self._html_box._bb = nil end
-                                                if rawget(self._html_box, "bb") then self._html_box.bb = nil end
-                                                if self._updatePagination then self._updatePagination() end
-                                                UIManager:setDirty(self, "ui")
-                                                UIManager:setDirty(self._html_box, "ui")
-                                                pcall(collectgarbage, "collect")
-                                            end
-                                        end
-                                    end)
-                                end)
-                            end)
-                        end
                     end
                 elseif not cached_html then
                     local err_msg = (tab_name == "wiki") and _("Unable to load wiki page. Tap refresh to retry.") or _("Unable to read README. Tap refresh to retry.")
@@ -2483,9 +2923,9 @@ tr:nth-child(even) td { background-color: #f5f5f5 !important; }
         meta_label,
     }
 
-    if folder_pill_widget then
+    if pills_row_widget then
         table.insert(content_group_items, VerticalSpan:new{ width = sc(6) })
-        table.insert(content_group_items, folder_pill_widget)
+        table.insert(content_group_items, pills_row_widget)
     end
 
     table.insert(content_group_items, VerticalSpan:new{ width = sc(12) })
@@ -2639,7 +3079,8 @@ function StorefrontDetailsDialog:onLinkTap(href)
                 InstallStore.setPreReleaseAllowed(item_key, next_val)
                 if self.repo and self.repo.name then InstallStore.setPreReleaseAllowed(self.repo.name, next_val) end
                 if self.repo and self.repo.full_name then InstallStore.setPreReleaseAllowed(self.repo.full_name, next_val) end
-                if self.update_item and self.update_item.plugin and self.update_item.plugin.dirname then InstallStore.setPreReleaseAllowed(self.update_item.plugin.dirname, next_val) end
+                local p_dirname = getInstalledPluginDirname()
+                if p_dirname then InstallStore.setPreReleaseAllowed(p_dirname, next_val) end
                 if self.loadContent then self.loadContent("versions") end
             end
             return true
@@ -2761,11 +3202,39 @@ function StorefrontDetailsDialog:onSwipe(arg, ges_ev)
     return false
 end
 
+function StorefrontDetailsDialog:cancelActiveFetch()
+    if self._active_async_fetch then
+        local req = self._active_async_fetch
+        self._active_async_fetch = nil
+        if req.timer then
+            pcall(UIManager.unschedule, UIManager, req.timer)
+            req.timer = nil
+        end
+        local ok_ffi, ffiutil = pcall(require, "ffi/util")
+        if not ok_ffi then ok_ffi, ffiutil = pcall(require, "ffiutil") end
+        if ok_ffi and ffiutil then
+            if req.pid and ffiutil.terminateSubProcess then
+                pcall(ffiutil.terminateSubProcess, req.pid)
+            end
+            if req.pid and ffiutil.isSubProcessDone then
+                pcall(ffiutil.isSubProcessDone, req.pid)
+            end
+            if req.fd then
+                local close_func = ffiutil.readAllFromFD or ffiutil.readFromFD
+                if close_func then pcall(close_func, req.fd) end
+            end
+        end
+    end
+    local ok_rc, RepoContent = pcall(require, "storefront_repo_content")
+    if ok_rc and RepoContent and RepoContent.cancelPendingImages then
+        pcall(RepoContent.cancelPendingImages)
+    end
+end
+
 function StorefrontDetailsDialog:onClose()
     self.is_closed = true
-    if RepoContent and RepoContent.cancelPendingImages then
-        RepoContent.cancelPendingImages()
-    end
+    self._action_in_flight = nil
+    self:cancelActiveFetch()
     UIManager:close(self, "ui")
     local sf = self.Storefront
     local needs_refresh = self._ignore_toggled

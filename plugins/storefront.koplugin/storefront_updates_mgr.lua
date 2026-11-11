@@ -223,8 +223,12 @@ function UpdatesMgr:init(Storefront)
                     description = record.repo_description,
                     default_branch = record.branch or "main",
                 }
-                local release_override = item.remote or (record.tag_name and { tag_name = record.tag_name })
-                sf:promptPluginInstallOptions(descriptor, release_override)
+                if record.source == "branch" and record.branch and sf.installPluginFromBranch then
+                    sf:installPluginFromBranch(descriptor, record.branch)
+                else
+                    local release_override = item.remote or (record.tag_name and { tag_name = record.tag_name })
+                    sf:promptPluginInstallOptions(descriptor, release_override)
+                end
             elseif item.kind == "patch" then
                 local record = item.record
                 local installed_patch = item.patch
@@ -240,12 +244,13 @@ function UpdatesMgr:init(Storefront)
                     id = record.repo_id,
                     description = record.repo_description,
                 }
+                local remote_entry = item.remote_entry or (sf.patch_updates_state and sf.patch_updates_state.remote_info and sf.patch_updates_state.remote_info[record.filename])
                 local patch_entry = {
                     filename = record.filename,
                     path = record.path,
                     branch = record.branch or "HEAD",
-                    download_url = record.download_url,
-                    sha = record.sha,
+                    download_url = (remote_entry and remote_entry.download_url) or record.download_url,
+                    sha = (remote_entry and remote_entry.remote_sha) or item.remote_sha or record.sha,
                 }
                 sf.pending_patch_install = {
                     mode = "update",
@@ -285,12 +290,182 @@ function UpdatesMgr:init(Storefront)
                 tracked[#tracked + 1] = record
             end
         end
-        if #tracked == 0 then
-            UIManager:show(InfoMessage:new{ text = _("No matched plugins to check."), timeout = 4 })
+
+        local tracked_patches = {}
+        local ok_patch, PatchMgr = pcall(require, "storefront_patch_mgr")
+        if ok_patch and PatchMgr and PatchMgr.isUserPatchEnabled and PatchMgr.isUserPatchEnabled() then
+            local patch_records = (sf.getPatchRecordsMap and sf:getPatchRecordsMap()) or {}
+            local installed_patches = (sf.listInstalledPatches and sf:listInstalledPatches()) or {}
+            local installed_patch_map = {}
+            for _, patch in ipairs(installed_patches) do
+                if patch.filename then
+                    installed_patch_map[patch.filename] = true
+                end
+            end
+            for filename, prec in pairs(patch_records) do
+                if installed_patch_map[filename] and prec.owner and prec.repo and prec.path then
+                    local copy = {}
+                    for k, v in pairs(prec) do copy[k] = v end
+                    copy.filename = filename
+                    tracked_patches[#tracked_patches + 1] = copy
+                end
+            end
+        end
+
+        if #tracked == 0 and #tracked_patches == 0 then
+            UIManager:show(InfoMessage:new{ text = _("No tracked plugins to check."), timeout = 4 })
             return
         end
         -- User explicitly requested manual update check: query GitHub API directly.
-        sf:_scanUpdatesForDirectApi(tracked)
+        sf:_scanUpdatesForDirectApi(tracked, tracked_patches)
+    end
+
+    Storefront.collectUpdatesForNotification = function(sf)
+        if sf.ensureUpdatesState then sf:ensureUpdatesState() end
+        if sf.ensurePatchUpdatesState then sf:ensurePatchUpdatesState() end
+
+        if sf.populateRemoteInfoFromCatalog then
+            pcall(function() sf:populateRemoteInfoFromCatalog() end)
+        end
+
+        local plugin_summary = (sf.collectUpdateSummary and sf:collectUpdateSummary()) or {}
+        local patch_summary = (sf.collectPatchUpdateSummary and sf:collectPatchUpdateSummary()) or {}
+
+        local updates = {}
+        local seen_names = {}
+
+        -- 1. Plugins with updates
+        for _, item in ipairs(plugin_summary.data or {}) do
+            if item.has_update then
+                local dirname = item.plugin and item.plugin.dirname
+                local repo = item.record and item.record.repo
+                local is_storefront = (dirname and dirname:lower():match("storefront"))
+                    or (repo and repo:lower():match("storefront"))
+
+                local name
+                if is_storefront then
+                    name = "Storefront"
+                else
+                    name = (item.plugin and (item.plugin.name or item.plugin.dirname))
+                        or (item.record and item.record.repo)
+                        or _("Plugin")
+                end
+
+                local ver = item.remote and (item.remote.release_tag_name or item.remote.remote_version)
+                if not ver and item.record then
+                    ver = item.record.tag_name or item.record.version
+                end
+                local key = name:lower():gsub("%.koplugin$", "")
+                
+                local is_seen = seen_names[key]
+                if dirname then
+                    local d_key = dirname:lower():gsub("%.koplugin$", "")
+                    is_seen = is_seen or seen_names[d_key]
+                end
+                if repo then
+                    local r_key = repo:lower():gsub("%.koplugin$", "")
+                    is_seen = is_seen or seen_names[r_key]
+                end
+
+                if not is_seen then
+                    seen_names[key] = true
+                    if dirname then seen_names[dirname:lower():gsub("%.koplugin$", "")] = true end
+                    if repo then seen_names[repo:lower():gsub("%.koplugin$", "")] = true end
+                    if is_storefront then
+                        seen_names["storefront"] = true
+                        seen_names["storefront.koplugin"] = true
+                    end
+
+                    table.insert(updates, {
+                        name = name,
+                        version = ver or "",
+                        kind = "plugin",
+                    })
+                end
+            end
+        end
+
+        -- 2. Patches with updates
+        for _, item in ipairs(patch_summary.data or {}) do
+            if item.needs_update then
+                local name = (item.patch and (item.patch.filename or item.patch.path))
+                    or (item.record and item.record.filename)
+                    or _("Patch")
+                local key = name:lower()
+                if not seen_names[key] then
+                    seen_names[key] = true
+                    table.insert(updates, {
+                        name = name,
+                        version = "(patch)",
+                        kind = "patch",
+                    })
+                end
+            end
+        end
+
+        -- 3. Storefront self-update (if not already found in plugin_summary)
+        local sf_seen = seen_names["storefront"] or seen_names["storefront.koplugin"]
+        if not sf_seen then
+            local ok_about, AboutDialog = pcall(require, "storefront_about_dialog")
+            local ok_cache, Cache = pcall(require, "storefront_cache")
+            local ok_utils, StorefrontUtils = pcall(require, "storefront_utils")
+            if ok_about and AboutDialog and ok_cache and Cache and ok_utils and StorefrontUtils then
+                local current_ver = AboutDialog.getVersion and AboutDialog.getVersion()
+                local channel = AboutDialog.getChannel and AboutDialog.getChannel() or "stable"
+                local cached_repo = Cache.getRepoByName("ultimatejimmy", "storefront.koplugin")
+                    or Cache.getRepoByName("ultimatejimmy", "storefront")
+                if cached_repo and current_ver then
+                    local target_rel = cached_repo.latest_release or (cached_repo.data and cached_repo.data.latest_release)
+                    if channel == "beta" then
+                        local pre_rel = cached_repo.latest_prerelease or (cached_repo.data and cached_repo.data.latest_prerelease)
+                        if pre_rel and pre_rel.tag_name then
+                            target_rel = pre_rel
+                        end
+                    end
+                    local remote_tag = target_rel and (target_rel.tag_name or target_rel.name)
+                    if remote_tag then
+                        local clean_remote = tostring(remote_tag):gsub("^[vV]", "")
+                        local clean_curr = tostring(current_ver):gsub("^[vV]", "")
+                        if clean_remote ~= "" and StorefrontUtils.isVersionNewer(clean_remote, clean_curr) then
+                            table.insert(updates, 1, {
+                                name = "Storefront",
+                                version = "v" .. clean_remote,
+                                kind = "plugin",
+                            })
+                        end
+                    end
+                end
+            end
+        end
+
+        return updates
+    end
+
+    Storefront.checkStartupNotifications = function(sf, is_online)
+        local NotificationMgr = require("storefront_notification_mgr")
+        local should_check, reason = NotificationMgr.shouldCheckNow(nil, is_online)
+        if not should_check then
+            StorefrontLogger.info(string.format("Storefront notifications: check skipped (%s)", tostring(reason)))
+            return
+        end
+
+        local updates = sf:collectUpdatesForNotification()
+        if (not updates or #updates == 0) and NotificationMgr.isDebugAlwaysTrigger() then
+            updates = {
+                { name = "Libbee (Test)", version = "v26.9.13-beta", kind = "plugin" },
+            }
+        end
+        NotificationMgr.markChecked()
+
+        if updates and #updates > 0 then
+            StorefrontLogger.info(string.format("Storefront notifications: %d update(s) found, presenting notification dialog", #updates))
+            local NotificationUI = require("storefront_notification_ui")
+            UIManager:nextTick(function()
+                NotificationUI.show(sf, updates)
+            end)
+        else
+            StorefrontLogger.info("Storefront notifications: check completed, no updates found")
+        end
     end
 end
 

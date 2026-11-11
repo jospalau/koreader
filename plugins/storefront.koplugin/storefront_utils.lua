@@ -68,20 +68,20 @@ function storefront_utils.firstNonEmpty(...)
 end
 
 local function parseVersionDescriptor(v_str)
-    v_str = tostring(v_str):gsub("^[vV]", "")
-    local main_str, pre_str = v_str:match("^([%d%.]+)%-?(.*)$")
-    if not main_str or main_str == "" then
-        main_str = v_str
-        pre_str = ""
+    if not v_str then
+        return { nums = {}, pre = nil }
     end
-
+    v_str = tostring(v_str):gsub("^release%-?", ""):gsub("^version%-?", ""):gsub("^plugin%-?", ""):gsub("^[vV]%-?", "")
+    local main_str, pre_str = v_str:match("^([%d%.]+)%-?(.*)$")
     local nums = {}
-    for part in main_str:gmatch("%d+") do
-        table.insert(nums, tonumber(part) or 0)
+    if main_str and main_str ~= "" then
+        for part in main_str:gmatch("%d+") do
+            table.insert(nums, tonumber(part) or 0)
+        end
     end
 
     local pre_info = nil
-    if pre_str and pre_str ~= "" then
+    if main_str and pre_str and pre_str ~= "" then
         local pre_type, pre_num = pre_str:match("^([a-zA-Z]+)(%d*)$")
         if not pre_type then
             pre_type = pre_str
@@ -107,18 +107,51 @@ local function parseVersionDescriptor(v_str)
     }
 end
 
+storefront_utils.parseVersionDescriptor = parseVersionDescriptor
+
+function storefront_utils.isValidVersion(v_str)
+    if not v_str or v_str == "" then
+        return false
+    end
+    local d = parseVersionDescriptor(v_str)
+    return #d.nums > 0
+end
+
+--- Compares two git commit/blob SHAs to determine if they refer to different commits.
+-- Handles short SHAs (7+ hex chars), case insensitivity, and surrounding whitespace.
+-- If either SHA is missing or empty, returns false (cannot determine difference).
+function storefront_utils.isShaDifferent(sha1, sha2)
+    if not sha1 or not sha2 then
+        return false
+    end
+    local s1 = tostring(sha1):lower():match("^%s*(%x+)%s*$")
+    local s2 = tostring(sha2):lower():match("^%s*(%x+)%s*$")
+    if not s1 or not s2 or s1 == "" or s2 == "" then
+        return false
+    end
+    if #s1 >= 7 and #s2 >= 7 then
+        local cmp_len = math.min(#s1, #s2)
+        return s1:sub(1, cmp_len) ~= s2:sub(1, cmp_len)
+    end
+    return s1 ~= s2
+end
+
 function storefront_utils.isVersionNewer(v1_str, v2_str)
     if not v1_str or not v2_str then
         return false
     end
-    v1_str = tostring(v1_str):gsub("^[vV]", "")
-    v2_str = tostring(v2_str):gsub("^[vV]", "")
+    v1_str = tostring(v1_str)
+    v2_str = tostring(v2_str)
     if v1_str == v2_str then
         return false
     end
 
     local d1 = parseVersionDescriptor(v1_str)
     local d2 = parseVersionDescriptor(v2_str)
+
+    if #d1.nums == 0 or #d2.nums == 0 then
+        return false
+    end
 
     local max_len = math.max(#d1.nums, #d2.nums)
     for i = 1, max_len do
@@ -202,7 +235,7 @@ end
 
 function storefront_utils.getMappedScreensaverCategories(cat_input)
     if not cat_input then
-        return { "Fine Art" }
+        return { "Art" }
     end
 
     local raw_list = {}
@@ -220,21 +253,21 @@ function storefront_utils.getMappedScreensaverCategories(cat_input)
             end
         end
     elseif type(cat_input) == "string" then
-        if cat_input == "" then return { "Fine Art" } end
+        if cat_input == "" then return { "Art" } end
         for part in string.gmatch(cat_input, "[^,]+") do
             table.insert(raw_list, part)
         end
     end
 
     if #raw_list == 0 then
-        return { "Fine Art" }
+        return { "Art" }
     end
 
     local result = {}
     local seen = {}
     for _, part in ipairs(raw_list) do
         local c = part:match("^%s*(.-)%s*$"):lower()
-        local mapped = nil
+        local mapped
         if c:find("transparent") or c:find("overlay") then
             mapped = "Transparent"
         elseif c:find("space") or c:find("astronomy") or c:find("sci") then
@@ -255,14 +288,15 @@ function storefront_utils.getMappedScreensaverCategories(cat_input)
             mapped = "Fantasy"
         elseif c:find("quote") then
             mapped = "Quotes"
-        elseif c:find("art") or c:find("ceramic") or c:find("drawing") or c:find("paint") or c:find("print") or c:find("sculpture") or c:find("installation") or c:find("funerary") then
-            mapped = "Fine Art"
+        elseif c:find("art") or c:find("ceramic") or c:find("drawing") or c:find("paint")
+            or c:find("print") or c:find("sculpture") or c:find("installation") or c:find("funerary") then
+            mapped = "Art"
         else
             local clean = part:match("^%s*(.-)%s*$")
             if clean ~= "" then
                 mapped = clean:sub(1,1):upper() .. clean:sub(2):lower()
             else
-                mapped = "Fine Art"
+                mapped = "Art"
             end
         end
         if mapped and not seen[mapped:lower()] then
@@ -270,8 +304,34 @@ function storefront_utils.getMappedScreensaverCategories(cat_input)
             table.insert(result, mapped)
         end
     end
-    if #result == 0 then table.insert(result, "Fine Art") end
+    if #result == 0 then table.insert(result, "Art") end
     return result
+end
+
+--- Safely retrieves a valid font face object with progressive fallback
+-- to standard KOReader UI tokens ("cfont", "tfont", "smallinfofont", "infofont").
+function storefront_utils.getFace(face_name, size)
+    local Font = require("ui/font")
+    local ok, face
+    if face_name then
+        ok, face = pcall(Font.getFace, Font, face_name, size)
+        if ok and face then return face end
+    end
+    local fallbacks = { "cfont", "tfont", "smallinfofont", "infofont" }
+    for _, fb in ipairs(fallbacks) do
+        if fb ~= face_name then
+            ok, face = pcall(Font.getFace, Font, fb, size)
+            if ok and face then return face end
+        end
+    end
+    ok, face = pcall(Font.getFace, Font, "cfont")
+    if ok and face then return face end
+    return nil
+end
+
+--- Returns title/serif face if available, otherwise cleanly falls back to cfont
+function storefront_utils.getTitleFace(size)
+    return storefront_utils.getFace("NotoSerif-Regular.ttf", size)
 end
 
 function storefront_utils.calcDynamicFontSize(text, max_width, face_name, max_font_size, min_font_size, bold)
@@ -283,11 +343,13 @@ function storefront_utils.calcDynamicFontSize(text, max_width, face_name, max_fo
     min_font_size = min_font_size or 11
     if bold == nil then bold = true end
 
-    local Font = require("ui/font")
     local TextWidget = require("ui/widget/textwidget")
 
     for sz = max_font_size, min_font_size, -1 do
-        local face = Font:getFace(face_name, sz)
+        local face = storefront_utils.getFace(face_name, sz)
+        if not face then
+            return min_font_size
+        end
         local tw = TextWidget:new{ text = text, face = face, bold = bold }
         if tw:getSize().w <= max_width then
             return sz
@@ -301,7 +363,6 @@ function storefront_utils.calcGroupFontSize(
 )
     face_name = face_name or "cfont"
     local Device = require("device")
-    local Font = require("ui/font")
     local TextWidget = require("ui/widget/textwidget")
     local sc = function(val)
         return (Device and Device.screen and Device.screen.scaleBySize and Device.screen:scaleBySize(val)) or val
@@ -313,13 +374,17 @@ function storefront_utils.calcGroupFontSize(
     if num == 0 then return max_font_size end
     local gaps_total = gap * math.max(0, num - 1)
     for sz = max_font_size, min_font_size, -1 do
-        local face = Font:getFace(face_name, sz)
+        local face = storefront_utils.getFace(face_name, sz)
         local total_w = gaps_total
         for _, text in ipairs(texts) do
-            local tw = TextWidget:new{ text = text, face = face, bold = true }
-            local tw_sz = tw.getSize and tw:getSize()
-            local tw_w = (tw_sz and tw_sz.w) or (#text * 8)
-            total_w = total_w + tw_w + padding_per_item
+            if face then
+                local tw = TextWidget:new{ text = text, face = face, bold = true }
+                local tw_sz = tw.getSize and tw:getSize()
+                local tw_w = (tw_sz and tw_sz.w) or (#text * 8)
+                total_w = total_w + tw_w + padding_per_item
+            else
+                total_w = total_w + (#text * 8) + padding_per_item
+            end
         end
         if total_w <= total_avail_width then
             return sz
@@ -334,7 +399,6 @@ function storefront_utils.calcProportionalBtnWidths(button_texts, total_avail_wi
     if num_btns == 1 then return { total_avail_width } end
 
     local Device = require("device")
-    local Font = require("ui/font")
     local TextWidget = require("ui/widget/textwidget")
     local sc = function(val)
         return (Device and Device.screen and Device.screen.scaleBySize and Device.screen:scaleBySize(val)) or val
@@ -347,13 +411,16 @@ function storefront_utils.calcProportionalBtnWidths(button_texts, total_avail_wi
     local ideal_widths = {}
     local total_ideal = 0
     local padding_per_btn = sc(16)
-    local face = Font:getFace(face_name, font_size)
+    local face = storefront_utils.getFace(face_name, font_size)
 
     for i, text in ipairs(button_texts) do
-        local tw = TextWidget:new{ text = text, face = face, bold = true }
-        local sz = tw.getSize and tw:getSize()
-        local tw_w = (sz and sz.w) or (#text * 8)
-        local ideal = tw_w + padding_per_btn
+        local ideal = (#text * 8) + padding_per_btn
+        if face then
+            local tw = TextWidget:new{ text = text, face = face, bold = true }
+            local sz = tw.getSize and tw:getSize()
+            local tw_w = (sz and sz.w) or (#text * 8)
+            ideal = tw_w + padding_per_btn
+        end
         ideal_widths[i] = ideal
         total_ideal = total_ideal + ideal
     end
@@ -377,7 +444,6 @@ function storefront_utils.createButton(opts)
     opts = opts or {}
     local storefront_theme = require("storefront_theme")
     local Device = require("device")
-    local Font = require("ui/font")
     local Blitbuffer = require("ffi/blitbuffer")
     local Button = require("ui/widget/button")
     local TextWidget = require("ui/widget/textwidget")
@@ -403,20 +469,23 @@ function storefront_utils.createButton(opts)
         pad_v = sc(6)
     end
 
+    local min_font_size = opts.min_font_size or 9
     if btn_w and opts.text and opts.text ~= "" then
         local max_text_w = math.max(10, btn_w - (pad_h and (2 * pad_h) or sc(16)))
-        for sz = initial_font_size, 10, -1 do
-            local test_face = Font:getFace(face_name, sz)
-            local tw = TextWidget:new{
-                text = opts.text,
-                face = test_face,
-                bold = (opts.bold ~= false),
-            }
-            local tw_sz = tw.getSize and tw:getSize()
-            local tw_w = (tw_sz and tw_sz.w) or (#opts.text * 8)
-            if tw_w <= max_text_w then
-                chosen_font_size = sz
-                break
+        for sz = initial_font_size, min_font_size, -1 do
+            local test_face = storefront_utils.getFace(face_name, sz)
+            if test_face then
+                local tw = TextWidget:new{
+                    text = opts.text,
+                    face = test_face,
+                    bold = (opts.bold ~= false),
+                }
+                local tw_sz = tw.getSize and tw:getSize()
+                local tw_w = (tw_sz and tw_sz.w) or (#opts.text * 8)
+                if tw_w <= max_text_w then
+                    chosen_font_size = sz
+                    break
+                end
             end
             chosen_font_size = sz
         end
@@ -434,21 +503,23 @@ function storefront_utils.createButton(opts)
         radius = radius,
         width = btn_w,
         height = btn_h,
+        preselect = (opts.preselect ~= nil) and opts.preselect or is_primary,
+        allow_flash = (opts.allow_flash == true),
         show_parent = opts.show_parent,
         callback = opts.callback,
     }
 
     if is_primary then
-        btn_opts.background = Blitbuffer.COLOR_BLACK
-        btn_opts.text_font_color = Blitbuffer.COLOR_WHITE
+        btn_opts.background = nil
+        btn_opts.text_font_color = nil
     else
         btn_opts.background = nil
         btn_opts.text_font_color = opts.text_font_color or Blitbuffer.COLOR_BLACK
     end
 
     local btn = Button:new(btn_opts)
-    if is_primary and btn.label_widget then
-        btn.label_widget.fgcolor = Blitbuffer.COLOR_WHITE
+    if is_primary and btn.frame then
+        btn.frame.invert = true
     end
 
     return btn
@@ -458,7 +529,6 @@ function storefront_utils.showConfirmDialog(opts)
     opts = opts or {}
     local storefront_theme = require("storefront_theme")
     local Device = require("device")
-    local Font = require("ui/font")
     local Geom = require("ui/geometry")
     local Blitbuffer = require("ffi/blitbuffer")
     local UIManager = require("ui/uimanager")
@@ -493,7 +563,7 @@ function storefront_utils.showConfirmDialog(opts)
     )
     local title_label = TextBoxWidget:new{
         text = title_text,
-        face = Font:getFace("NotoSerif-Regular.ttf", dynamic_title_size),
+        face = storefront_utils.getTitleFace(dynamic_title_size),
         bold = true,
         fgcolor = Blitbuffer.COLOR_BLACK,
         width = inner_w,
@@ -505,7 +575,7 @@ function storefront_utils.showConfirmDialog(opts)
     if opts.text and opts.text ~= "" then
         local body_widget = TextBoxWidget:new{
             text = opts.text,
-            face = Font:getFace("cfont", ui_font_size),
+            face = storefront_utils.getFace("cfont", ui_font_size),
             fgcolor = Blitbuffer.COLOR_BLACK,
             width = inner_w,
             alignment = "center",
@@ -610,6 +680,59 @@ function storefront_utils.showConfirmDialog(opts)
 
     UIManager:show(overlay, "ui")
     return overlay
+end
+
+function storefront_utils.getMemoryInfo(meminfo_path)
+    local path = meminfo_path or "/proc/meminfo"
+    local f = io.open(path, "r")
+    if not f then return nil end
+    local info = {}
+    for line in f:lines() do
+        local key, val = line:match("^(%w+):%s+(%d+)%s+kB")
+        if key and val then
+            info[key] = tonumber(val)
+        end
+    end
+    f:close()
+    local total_kb = info["MemTotal"] or 0
+    local free_kb = info["MemFree"] or 0
+    local buffers_kb = info["Buffers"] or 0
+    local cached_kb = info["Cached"] or 0
+    local shmem_kb = info["Shmem"] or 0
+    local clean_cached = math.max(0, cached_kb - shmem_kb)
+    local available_kb = info["MemAvailable"] or (free_kb + buffers_kb + clean_cached)
+    return {
+        total_kb = total_kb,
+        free_kb = free_kb,
+        available_kb = available_kb,
+        buffers_kb = buffers_kb,
+        cached_kb = cached_kb,
+        shmem_kb = shmem_kb,
+    }
+end
+
+function storefront_utils.isLowMemoryDevice(meminfo_path)
+    local ok_dev, Device = pcall(require, "device")
+    if ok_dev and Device and Device.isKindle and Device:isKindle() then
+        return true
+    end
+    local mem = storefront_utils.getMemoryInfo(meminfo_path)
+    if mem and mem.total_kb > 0 and mem.total_kb <= (512 * 1024) then
+        return true
+    end
+    return false
+end
+
+function storefront_utils.isLowMemory(threshold_kb, meminfo_path)
+    local is_low_dev = storefront_utils.isLowMemoryDevice(meminfo_path)
+    if not threshold_kb then
+        threshold_kb = is_low_dev and (45 * 1024) or (30 * 1024)
+    end
+    local mem = storefront_utils.getMemoryInfo(meminfo_path)
+    if not mem or mem.available_kb <= 0 then
+        return false, nil, nil
+    end
+    return mem.available_kb < threshold_kb, mem.available_kb, mem.total_kb
 end
 
 return storefront_utils

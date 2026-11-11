@@ -4,6 +4,7 @@ local NetworkMgr = require("ui/network/manager")
 local UIManager = require("ui/uimanager")
 local Cache = require("storefront_cache")
 local Localization = require("localization_storefront")
+local StorefrontUtils = require("storefront_utils")
 local _ = function(key, ...) return Localization:t(key, ...) end
 
 local StorefrontUpdatesUi = {}
@@ -88,8 +89,34 @@ function StorefrontUpdatesUi:init(StorefrontClass)
             local remote_ver_raw = remote and (remote.release_tag_name or remote.remote_version)
             local remote_ver = remote_ver_raw and tostring(remote_ver_raw):gsub("^[vV]", "") or nil
 
+            local is_branch_tracked = record and record.source == "branch" and record.branch
+
+            if is_branch_tracked and has_update then
+                local remote_sha = remote and remote.remote_version
+                local has_installed_sha = record.sha and record.sha ~= ""
+                local short_l = has_installed_sha and record.sha:sub(1, 7):lower() or ""
+                local short_r = remote_sha and tostring(remote_sha):sub(1, 7):lower() or ""
+                if has_installed_sha and ((short_l ~= "" and short_l == short_r) or not StorefrontUtils.isShaDifferent(remote_sha, record.sha)) then
+                    has_update = false
+                end
+            end
+
             if has_update and match_search then
                 local remote_display = remote_ver or _("new")
+                local transition
+                if is_branch_tracked then
+                    local short_local_sha = (record.sha and record.sha ~= "") and record.sha:sub(1, 7) or _("unknown")
+                    local remote_sha = remote and remote.remote_version
+                    local is_remote_sha = remote_sha and type(remote_sha) == "string" and remote_sha:match("^%x%x%x%x%x%x%x+$")
+                    local short_remote_sha = is_remote_sha and remote_sha:sub(1, 7) or ""
+                    if short_remote_sha ~= "" then
+                        transition = string.format(_("tracking_branch"), record.branch) .. " (" .. short_local_sha .. " → " .. short_remote_sha .. ")"
+                    else
+                        transition = string.format(_("tracking_branch"), record.branch) .. " (" .. short_local_sha .. ")"
+                    end
+                else
+                    transition = local_ver .. " → " .. remote_display
+                end
                 
                 table.insert(merged, {
                     name = display_name,
@@ -98,11 +125,11 @@ function StorefrontUpdatesUi:init(StorefrontClass)
                     updated = "",
                     kind_label = _("Plugin"),
                     description = record and record.repo_description or "",
-                    badge = _("Update"),
+                    badge = is_branch_tracked and _("repull_from_branch") or _("Update"),
                     is_entry = true,
                     keep_menu_open = true,
                     is_update_item = true,
-                    version_transition = local_ver .. " → " .. remote_display,
+                    version_transition = transition,
                     callback = function()
                         local DetailsDialog = require("storefront_details_dialog")
                         local cached_repo
@@ -168,7 +195,7 @@ function StorefrontUpdatesUi:init(StorefrontClass)
             end
 
             if has_update and match_search then
-                local local_commit = (record and record.commit) or item.local_sha or ""
+                local local_commit = item.local_sha or (record and (record.sha or record.commit)) or ""
                 local remote_commit = (remote_entry and remote_entry.remote_sha) or item.remote_sha or ""
                 local local_ver = local_commit ~= "" and ("sha " .. local_commit:sub(1, 5)) or _("unknown")
                 local remote_ver = remote_commit ~= "" and ("sha " .. remote_commit:sub(1, 5)) or _("unknown")
@@ -218,11 +245,11 @@ function StorefrontUpdatesUi:init(StorefrontClass)
                         }
                         local patch_entry = {
                             filename = patch.filename,
-                            path = patch.path,
+                            path = (record and record.path) or patch.path,
                             display_path = record and record.path or patch.path,
-                            download_url = record and record.download_url,
+                            download_url = (remote_entry and remote_entry.download_url) or (record and record.download_url),
                             branch = record and record.branch or "HEAD",
-                            sha = record and record.sha,
+                            sha = (remote_entry and remote_entry.remote_sha) or item.remote_sha or (record and record.sha),
                         }
                         local details_dialog = DetailsDialog:new{
                             Storefront = self,
@@ -246,12 +273,56 @@ function StorefrontUpdatesUi:init(StorefrontClass)
             return aname < bname
         end)
 
+        if #merged == 0 then
+            local ok_nm, NotificationMgr = pcall(require, "storefront_notification_mgr")
+            if ok_nm and NotificationMgr and NotificationMgr.isDebugAlwaysTrigger and NotificationMgr.isDebugAlwaysTrigger() then
+                table.insert(merged, {
+                    name = "Libbee (Test)",
+                    owner = "dvdkhvr",
+                    stars_fmt = "plugin",
+                    updated = "",
+                    kind_label = _("Plugin"),
+                    description = _("Mock test update shown because 'Test Notification on Launch' is enabled in Notification Settings."),
+                    badge = _("Update"),
+                    is_entry = true,
+                    keep_menu_open = true,
+                    is_update_item = true,
+                    version_transition = "v26.9.12 → v26.9.13-beta",
+                    callback = function()
+                        local DetailsDialog = require("storefront_details_dialog")
+                        local cached_repo = (Cache and Cache.getRepoByName and Cache.getRepoByName("dvdkhvr", "libbee.koplugin")) or {
+                            name = "libbee",
+                            owner = "dvdkhvr",
+                            full_name = "dvdkhvr/libbee.koplugin",
+                            description = "Libbee library manager",
+                            stars = 0,
+                            data = {
+                                owner = { login = "dvdkhvr" },
+                                default_branch = "main",
+                                stargazers_count = 0,
+                            }
+                        }
+                        local details_dialog = DetailsDialog:new{
+                            Storefront = self,
+                            repo = cached_repo,
+                            kind = "update",
+                            update_item = { plugin = { name = "Libbee", dirname = "libbee.koplugin" }, needs_update = true },
+                            default_tab = "release_notes",
+                            from_updates_tab = true,
+                        }
+                        details_dialog:show()
+                    end,
+                })
+            end
+        end
+
         self._merged_updates_cache = {
             key = cache_key,
             merged = merged,
         }
         end
 
+        local display_total = #merged
         local items = {}
         if display_total == 0 then
             table.insert(items, {

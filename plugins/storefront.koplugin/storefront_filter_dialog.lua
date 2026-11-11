@@ -157,7 +157,7 @@ function StorefrontFilterDialog.showInstalledFilter(arg1, arg2)
         local dynamic_title_size = StorefrontUtils.calcDynamicFontSize(title_text, dialog_w - sc(24), "NotoSerif-Regular.ttf", title_font_size, 11, true)
         local title_label = TextBoxWidget:new{
             text = title_text,
-            face = Font:getFace("NotoSerif-Regular.ttf", dynamic_title_size),
+            face = StorefrontUtils.getTitleFace(dynamic_title_size),
             bold = true,
             fgcolor = Blitbuffer.COLOR_BLACK,
             width = dialog_w - sc(24),
@@ -560,7 +560,7 @@ function StorefrontFilterDialog.showCatalogFilter(arg1, arg2)
         local dynamic_title_size = StorefrontUtils.calcDynamicFontSize(title_text, dialog_w - sc(24), "NotoSerif-Regular.ttf", title_font_size, 11, true)
         local title_label = TextBoxWidget:new{
             text = title_text,
-            face = Font:getFace("NotoSerif-Regular.ttf", dynamic_title_size),
+            face = StorefrontUtils.getTitleFace(dynamic_title_size),
             bold = true,
             fgcolor = Blitbuffer.COLOR_BLACK,
             width = dialog_w - sc(24),
@@ -966,6 +966,13 @@ function StorefrontFilterDialog.showScreensaverFilter(arg1, arg2)
     end
     Storefront:ensureBrowserState()
     local state = Storefront.browser_state
+    if type(state.screensaver_sources) ~= "table" then
+        state.screensaver_sources = {
+            storefront = true,
+            readerbackdrop = true,
+        }
+    end
+    local active_sources = state.screensaver_sources
 
     local sw = Screen:getWidth()
     local sh = Screen:getHeight()
@@ -978,32 +985,49 @@ function StorefrontFilterDialog.showScreensaverFilter(arg1, arg2)
     local cat_counts = {}
     local seen_cats = {}
     local cats = { "all" }
-    cat_counts["all"] = #catalog
+
+    local count_sf = 0
+    local count_rb = 0
+    local total_active = 0
 
     for _, entry in ipairs(catalog) do
-        local mapped_cats = StorefrontUtils.getMappedScreensaverCategories(entry.category)
-        for _, mc in ipairs(mapped_cats) do
-            local key = mc:lower()
-            cat_counts[key] = (cat_counts[key] or 0) + 1
-            if not seen_cats[key] then
-                seen_cats[key] = true
-                table.insert(cats, mc)
+        local s = (entry.source or "Storefront"):lower()
+        local is_rb = s:find("reader") ~= nil
+        if is_rb then
+            count_rb = count_rb + 1
+        else
+            count_sf = count_sf + 1
+        end
+
+        local is_active = (is_rb and active_sources.readerbackdrop ~= false)
+                       or (not is_rb and active_sources.storefront ~= false)
+
+        if is_active then
+            total_active = total_active + 1
+            local mapped_cats = StorefrontUtils.getMappedScreensaverCategories(entry.category)
+            for _, mc in ipairs(mapped_cats) do
+                local key = mc:lower()
+                cat_counts[key] = (cat_counts[key] or 0) + 1
+                if not seen_cats[key] then
+                    seen_cats[key] = true
+                    table.insert(cats, mc)
+                end
             end
         end
     end
+    cat_counts["all"] = total_active
     table.sort(cats, function(a, b)
         if a == "all" then return true end
         if b == "all" then return false end
         return tostring(a):lower() < tostring(b):lower()
     end)
 
-    local sort_order = { "downloads", "recent", "popular", "az", "za" }
+    local sort_order = { "featured", "downloads", "recent", "popular" }
     local sort_labels = {
+        featured  = _("Featured"),
         downloads = _("Most Downloaded"),
         recent    = _("Recently Added"),
         popular   = _("Most Popular"),
-        az        = _("A -> Z"),
-        za        = _("Z -> A"),
     }
 
     local function getCategorySummary(set, legacy_cat)
@@ -1151,7 +1175,7 @@ function StorefrontFilterDialog.showScreensaverFilter(arg1, arg2)
             local dynamic_title_size = StorefrontUtils.calcDynamicFontSize(title_text, dialog_w - sc(24), "NotoSerif-Regular.ttf", title_font_size, 11, true)
             local title_label = TextBoxWidget:new{
                 text = title_text,
-                face = Font:getFace("NotoSerif-Regular.ttf", dynamic_title_size),
+                face = StorefrontUtils.getTitleFace(dynamic_title_size),
                 bold = true, fgcolor = Blitbuffer.COLOR_BLACK,
                 width = dialog_w - sc(24),
             }
@@ -1464,7 +1488,7 @@ function StorefrontFilterDialog.showScreensaverFilter(arg1, arg2)
         local dynamic_title_size = StorefrontUtils.calcDynamicFontSize(title_text, dialog_w - sc(24), "NotoSerif-Regular.ttf", title_font_size, 11, true)
         local title_label = TextBoxWidget:new{
             text = title_text,
-            face = Font:getFace("NotoSerif-Regular.ttf", dynamic_title_size),
+            face = StorefrontUtils.getTitleFace(dynamic_title_size),
             bold = true, fgcolor = Blitbuffer.COLOR_BLACK,
             width = dialog_w - sc(24),
         }
@@ -1513,6 +1537,66 @@ function StorefrontFilterDialog.showScreensaverFilter(arg1, arg2)
             }
         end
 
+        table.insert(content_vg, make_section_header_local(_("Sources")))
+
+        local function create_source_checkbox_row(source_name, count, is_checked, callback)
+            local icon_file = getAssetPath(is_checked and "check-square.svg" or "square.svg")
+            local icon_size = sc(18)
+            local icon_widget = ImageWidget:new{
+                file = icon_file,
+                width = icon_size,
+                height = icon_size,
+                scale_factor = 0,
+                is_icon = true,
+                alpha = true,
+            }
+            local count_str = count and string.format(" (%d)", count) or ""
+            local label_widget = TextBoxWidget:new{
+                text = source_name .. count_str,
+                face = Font:getFace("cfont", ui_font_size),
+                fgcolor = Blitbuffer.COLOR_BLACK,
+                width = dialog_w - sc(70),
+                alignment = "left",
+            }
+            local row_group = HorizontalGroup:new{
+                CenterContainer:new{
+                    dimen = Geom:new{ w = icon_size + sc(4), h = icon_size + sc(4) },
+                    icon_widget,
+                },
+                HorizontalSpan:new{ width = sc(10) },
+                label_widget,
+            }
+            local frame = FrameContainer:new{
+                bordersize = 0,
+                padding = row_pad_v,
+                padding_left = sc(14),
+                padding_right = sc(14),
+                width = dialog_w - sc(4),
+                background = Blitbuffer.COLOR_WHITE,
+                row_group,
+            }
+            return make_row_item(frame, callback, dialog_w - sc(4), (frame:getSize() or { h = 0 }).h)
+        end
+
+        local sf_checked = active_sources.storefront ~= false
+        local rb_checked = active_sources.readerbackdrop ~= false
+
+        table.insert(content_vg, create_source_checkbox_row(_("Storefront (Curated)"), count_sf, sf_checked, function()
+            if sf_checked and not rb_checked then
+                return
+            end
+            state.screensaver_sources.storefront = not sf_checked
+            refresh()
+        end))
+
+        table.insert(content_vg, create_source_checkbox_row(_("ReaderBackdrop (Community)"), count_rb, rb_checked, function()
+            if rb_checked and not sf_checked then
+                return
+            end
+            state.screensaver_sources.readerbackdrop = not rb_checked
+            refresh()
+        end))
+
         table.insert(content_vg, make_section_header_local(_("Filters")))
 
         -- Category row
@@ -1533,14 +1617,15 @@ function StorefrontFilterDialog.showScreensaverFilter(arg1, arg2)
         table.insert(content_vg, make_section_header_local(_("Sorting")))
 
         -- Sort row
-        local cur_sort = state.screensaver_sort or "downloads"
+        local cur_sort = state.screensaver_sort or "featured"
+        if cur_sort == "az" or cur_sort == "za" then cur_sort = "featured" end
         local sort_widget = TextWidget:new{
-            text = sort_labels[cur_sort] or sort_labels.downloads,
+            text = sort_labels[cur_sort] or sort_labels.featured,
             face = Font:getFace("cfont", subtext_font_size),
             fgcolor = storefront_theme.color_label_dim,
         }
         table.insert(content_vg, create_setting_row(_("Sort mode"), sort_widget, function()
-            local next_s = "downloads"
+            local next_s = "featured"
             for idx, s in ipairs(sort_order) do
                 if cur_sort == s then next_s = sort_order[(idx % #sort_order) + 1]; break end
             end
@@ -1557,9 +1642,10 @@ function StorefrontFilterDialog.showScreensaverFilter(arg1, arg2)
             bold = true, fgcolor = Blitbuffer.COLOR_BLACK,
         }
         table.insert(content_vg, create_setting_row(_("Reset filters"), reset_widget, function()
+            state.screensaver_sources = { storefront = true, readerbackdrop = true }
             state.screensaver_category = ""
             state.screensaver_categories = nil
-            state.screensaver_sort = "downloads"
+            state.screensaver_sort = "featured"
             state.screensaver_search = ""
             state.search_text = ""
             state.owner = ""

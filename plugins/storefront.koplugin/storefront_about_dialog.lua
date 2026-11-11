@@ -130,7 +130,9 @@ function StorefrontAboutDialog.checkForUpdates(Storefront)
             end
 
             if not completed then
-                StorefrontToast.show(_("Update check was cancelled."), 3)
+                UIManager:nextTick(function()
+                    StorefrontToast.show(_("Update check was cancelled."), 3)
+                end)
                 return
             end
 
@@ -156,6 +158,8 @@ function StorefrontAboutDialog.checkForUpdates(Storefront)
                 or 0
 
             local repo_desc = cached_repo or {
+                id = 1304319884,
+                repo_id = 1304319884,
                 owner = "ultimatejimmy",
                 name = "storefront.koplugin",
                 full_name = "ultimatejimmy/storefront.koplugin",
@@ -166,11 +170,14 @@ function StorefrontAboutDialog.checkForUpdates(Storefront)
                 tag_name = latest_tag,
                 latest_version = clean_latest,
                 data = {
+                    id = 1304319884,
                     owner = { login = "ultimatejimmy" },
                     stargazers_count = stars_count,
                     default_branch = "main",
                 }
             }
+            if not repo_desc.id then repo_desc.id = 1304319884 end
+            if not repo_desc.repo_id then repo_desc.repo_id = 1304319884 end
             if not repo_desc.stars or repo_desc.stars == 0 then
                 repo_desc.stars = stars_count
             end
@@ -222,7 +229,7 @@ function StorefrontAboutDialog.show(Storefront, on_close_cb)
         local dynamic_title_size = StorefrontUtils.calcDynamicFontSize(title_text, dialog_w - sc(24), "NotoSerif-Regular.ttf", title_font_size, 12, true)
         local title_label = TextBoxWidget:new{
             text = title_text,
-            face = Font:getFace("NotoSerif-Regular.ttf", dynamic_title_size),
+            face = StorefrontUtils.getTitleFace(dynamic_title_size),
             bold = true,
             fgcolor = Blitbuffer.COLOR_BLACK,
             width = dialog_w - sc(24),

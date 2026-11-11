@@ -9,8 +9,7 @@ local logger = require("logger")
 local ok_log, StorefrontLogger = pcall(require, "storefront_logger")
 if not ok_log then StorefrontLogger = { info = function() end, err = function() end, warn = function() end } end
 
-local SETTINGS_PATH = DataStorage:getSettingsDir() .. "/Storefront.lua"
-local StorefrontSettings = LuaSettings:open(SETTINGS_PATH)
+local StorefrontSettings = require("storefront_settings")
 
 local PLUGIN_TOPICS = { "koreader-plugin" }
 local PATCH_TOPICS = { "koreader-user-patch" }
@@ -282,7 +281,7 @@ function SearchNet:init(Storefront)
         sf.is_refreshing = true
         sf.patch_cache = {}
         sf._repo_descriptors_cache = nil
-        StorefrontLogger.info(string.format("CACHE REFRESH starting (kind=%s)", tostring(kind)))
+        StorefrontLogger.info(string.format("CACHE REFRESH starting (tab=%s, refreshing all feeds)", tostring(kind)))
 
         local Toast = require("storefront_toast")
         local UIManager = require("ui/uimanager")
@@ -315,7 +314,45 @@ function SearchNet:init(Storefront)
                     local p_count = Cache.countRepos("plugin")
                     local pt_count = Cache.countRepos("patch")
                     local f_count = Cache.countRepos("font")
-                    local summary = string.format(_("Catalog updated: %d plugins, %d patches, %d fonts."), p_count, pt_count, f_count)
+
+                    -- Screensavers feed was updated in background via fetchAndUpdateCacheAsync
+                    local s_count = 0
+                    local ok_ss, StorefrontScreensavers = pcall(require, "storefront_screensavers_ui")
+                    if ok_ss and StorefrontScreensavers then
+                        if StorefrontScreensavers.getCachedCatalog then
+                            local cat = StorefrontScreensavers.getCachedCatalog()
+                            if type(cat) == "table" then
+                                s_count = #cat
+                                if sf then
+                                    sf.screensavers_cache = cat
+                                end
+                            end
+                        end
+                        if s_count == 0 and StorefrontScreensavers.fetchCatalog then
+                            pcall(function()
+                                StorefrontScreensavers.fetchCatalog(function(s_ok, s_catalog)
+                                    if s_ok and type(s_catalog) == "table" then
+                                        s_count = #s_catalog
+                                        if sf then
+                                            sf.screensavers_cache = s_catalog
+                                        end
+                                    end
+                                end)
+                            end)
+                        end
+                    end
+
+                    if s_count > 0 then
+                        StorefrontLogger.info(string.format("Storefront: screensavers feed verified (%d screensavers in catalog)", s_count))
+                    end
+
+                    local summary
+                    if s_count > 0 then
+                        summary = string.format(_("Catalog updated: %d plugins, %d patches, %d fonts, %d screensavers."), p_count, pt_count, f_count, s_count)
+                    else
+                        summary = string.format(_("Catalog updated: %d plugins, %d patches, %d fonts."), p_count, pt_count, f_count)
+                    end
+
                     StorefrontSettings:saveSetting("status_text", summary)
                     StorefrontSettings:flush()
                     finishRefresh(true, summary, nil)

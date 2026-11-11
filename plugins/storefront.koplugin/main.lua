@@ -66,6 +66,7 @@ local normalizeMetaPath = StorefrontUtils.normalizeMetaPath
 local sanitizeMetaPath = StorefrontUtils.sanitizeMetaPath
 local firstNonEmpty = StorefrontUtils.firstNonEmpty
 local isVersionNewer = StorefrontUtils.isVersionNewer
+local isShaDifferent = StorefrontUtils.isShaDifferent
 local normalizeDescription = StorefrontUtils.normalizeDescription
 local parseGitHubTimestamp = StorefrontUtils.parseGitHubTimestamp
 local repoStarsValue = StorefrontUtils.repoStarsValue
@@ -78,7 +79,7 @@ end
 setfenv(1, env)
 
 local SETTINGS_PATH = DataStorage:getSettingsDir() .. "/Storefront.lua"
-local StorefrontSettings = LuaSettings:open(SETTINGS_PATH)
+local StorefrontSettings = require("storefront_settings")
 
 local IGNORED_RELEASES_KEY = "ignored_releases"
 
@@ -106,6 +107,8 @@ local MAX_SHA1_FILE_BYTES = 20 * 1024 * 1024
 local _session_bg_checks_done = false
 local _catalog_retry_timer_fn = nil
 local _catalog_show_timer_fn = nil
+local _notification_timer_fn = nil
+local _screensaver_warmup_timer_fn = nil
 
 local PluginPaths = require("storefront_plugin_paths")
 local PATCHES_ROOT = DataStorage:getDataDir() .. "/patches"
@@ -136,6 +139,23 @@ require("storefront_search_net"):init(Storefront)
 require("storefront_updates_mgr"):init(Storefront)
 local storefront_patch_mgr = require("storefront_patch_mgr")
 storefront_patch_mgr:init(Storefront)
+
+Storefront.instance = Storefront
+
+-- Ensure NotoSerif fallback alias in Font.fontmap so any unhandled or external calls
+-- to Font:getFace("NotoSerif-Regular.ttf", size) never return nil.
+local ok_font, FontModule = pcall(require, "ui/font")
+if ok_font and FontModule and FontModule.fontmap then
+    local test_face = nil
+    pcall(function() test_face = FontModule:getFace("NotoSerif-Regular.ttf", 20) end)
+    if not test_face then
+        FontModule.fontmap["NotoSerif-Regular.ttf"] = FontModule.fontmap.cfont or "NotoSans-Regular.ttf"
+    end
+end
+
+function Storefront:init()
+    Storefront.instance = self
+end
 
 
 
@@ -672,7 +692,7 @@ local function showFetchingProgress(message)
 
     local title_label = TextBoxWidget:new{
         text = progress_title,
-        face = Font:getFace("NotoSerif-Regular.ttf", dynamic_title_size),
+        face = StorefrontUtils.getTitleFace(dynamic_title_size),
         bold = true,
         fgcolor = Blitbuffer.COLOR_BLACK,
         width = inner_w,
@@ -687,7 +707,7 @@ local function showFetchingProgress(message)
 
     local body_widget = TextBoxWidget:new{
         text = message or _("Connecting to GitHub…\n\nPlease wait."),
-        face = Font:getFace("NotoSerif-Regular.ttf", ui_font_size),
+        face = StorefrontUtils.getFace("cfont", ui_font_size),
         fgcolor = Blitbuffer.COLOR_BLACK,
         width = dialog_w - sc(40),
         alignment = "center",
@@ -799,12 +819,13 @@ local function isReleaseIgnored(owner, repo_name, version)
 end
 
 
-local extractRepoOwner, ensureCacheDir, ensurePatchesDir, downloadToFile, buildPatchDownloadUrl, derivePluginRepoPath, fetchGitHubRaw, formatTimestamp, buildRepoDescriptorFromRecord, buildBranchCandidates, getRepoDefaultBranch, extractMetaField, getInstallRecordsMap, getPatchRecordsMap, listInstalledPatches, buildPatchRecordFields, buildPatchSummary, extractPluginToUserDir, extractReleaseNameFallback, detectPluginFromArchiveWithFallback, renderReleaseNotesText
+local extractRepoOwner, ensureCacheDir, ensurePatchesDir, downloadToFile, buildPatchDownloadUrl, derivePluginRepoPath, fetchGitHubRaw, formatTimestamp, buildRepoDescriptorFromRecord, buildBranchCandidates, getRepoDefaultBranch, extractMetaField, getInstallRecordsMap, getPatchRecordsMap, listInstalledPatches, buildPatchRecordFields, buildPatchSummary, extractPluginToUserDir, extractReleaseNameFallback, detectPluginFromArchiveWithFallback, renderReleaseNotesText, getRecordedInstall, findCachedPatchFile
 
 getPatchRecordsMap = storefront_patch_mgr.getPatchRecordsMap
 listInstalledPatches = storefront_patch_mgr.listInstalledPatches
 buildPatchRecordFields = storefront_patch_mgr.buildPatchRecordFields
 buildPatchSummary = storefront_patch_mgr.buildPatchSummary
+findCachedPatchFile = storefront_patch_mgr.findCachedPatchFile
 
 
 local function buildPatchRepoDescriptor(record)
@@ -838,8 +859,9 @@ local function makeScrollableTextBoxForDialog(dialog, text)
     if TextWidget.getDefaultFace then
         default_face = TextWidget:getDefaultFace()
     end
-    if (not default_face) and Font and Font.getFace then
-        default_face = Font:getFace("infofont")
+    if not default_face then
+        local StorefrontUtils = require("storefront_utils")
+        default_face = StorefrontUtils.getFace("infofont")
     end
 
     local box = TextBoxWidget:new{
@@ -859,20 +881,19 @@ local function makeScrollableTextBoxForDialog(dialog, text)
     }
 end
 local function makeTextBox(text)
-    local args = {
-        text = text,
-        width = math.floor(Device.screen:getWidth() * 0.8),
-    }
-    local face
+    local StorefrontUtils = require("storefront_utils")
+    local face = nil
     if TextWidget.getDefaultFace then
         face = TextWidget:getDefaultFace()
     end
-    if not face and Font and Font.getFace then
-        face = Font:getFace("infofont")
+    if not face then
+        face = StorefrontUtils.getFace("infofont")
     end
-    if face then
-        args.face = face
-    end
+    local args = {
+        text = text,
+        width = math.floor(Device.screen:getWidth() * 0.8),
+        face = face,
+    }
     return TextBoxWidget:new(args)
 end
 
@@ -883,8 +904,9 @@ local function makeScrollableTextBox(text)
     if TextWidget.getDefaultFace then
         default_face = TextWidget:getDefaultFace()
     end
-    if (not default_face) and Font and Font.getFace then
-        default_face = Font:getFace("infofont")
+    if not default_face then
+        local StorefrontUtils = require("storefront_utils")
+        default_face = StorefrontUtils.getFace("infofont")
     end
     local box = TextBoxWidget:new{
         text = text,
@@ -1088,8 +1110,9 @@ local function computeFileSha1(path)
         return nil
     end
     local ok_lfs2, lfs2 = pcall(require, "libs/libkoreader-lfs")
-    local fsize = ok_lfs2 and lfs2 and lfs2.attributes and lfs2.attributes(path, "size")
-    if fsize and fsize > MAX_SHA1_FILE_BYTES then
+    local attr_size = ok_lfs2 and lfs2 and lfs2.attributes and lfs2.attributes(path, "size")
+    local fsize = type(attr_size) == "table" and (attr_size.size or attr_size[1]) or attr_size
+    if fsize and type(fsize) == "number" and fsize > MAX_SHA1_FILE_BYTES then
         return nil
     end
     local file = io.open(path, "rb")
@@ -1130,6 +1153,17 @@ end
 
 local function isDefaultPatch(patch)
     return Storefront:isDefaultPatch(patch)
+end
+
+local function isDefaultFont(font, maybe_font)
+    if Storefront and type(Storefront.isDefaultFont) == "function" then
+        return Storefront:isDefaultFont(font, maybe_font)
+    end
+    local ok_m, Matcher = pcall(require, "storefront_match")
+    if ok_m and Matcher and Matcher.isDefaultFont then
+        return Matcher.isDefaultFont(font, maybe_font)
+    end
+    return false
 end
 
 
@@ -1331,17 +1365,19 @@ local function buildMetaPathCandidates(record)
     end
 
     if record.dirname and record.dirname ~= "" then
-        add("plugins/" .. record.dirname .. "/_meta.lua")
         add(record.dirname .. "/_meta.lua")
+        add("_meta.lua")
         if record.dirname:match("%.koplugin$") then
             local without_suffix = record.dirname:gsub("%.koplugin$", "")
-            add("plugins/" .. without_suffix .. "/_meta.lua")
             add(without_suffix .. "/_meta.lua")
+            add("plugins/" .. without_suffix .. "/_meta.lua")
         end
+        add("plugins/" .. record.dirname .. "/_meta.lua")
+    else
+        add("_meta.lua")
     end
 
     add("plugins/_meta.lua")
-    add("_meta.lua")
 
     return candidates
 end
@@ -1442,7 +1478,7 @@ local function getRepoOwner(repo)
     end
 end
 
-local function getRepoDefaultBranch(repo)
+getRepoDefaultBranch = function(repo)
     return (repo and repo.data and repo.data.default_branch)
         or (repo and repo.default_branch)
         or "HEAD"
@@ -1635,7 +1671,7 @@ local function findInstalledPatch(filename)
     end
 end
 
-local function getInstallRecordsMap(sf)
+getInstallRecordsMap = function(sf)
     if sf and type(sf) == "table" and type(sf.getInstallRecordsMap) == "function" and sf.getInstallRecordsMap ~= Storefront.getInstallRecordsMap then
         return sf:getInstallRecordsMap()
     end
@@ -1734,7 +1770,23 @@ function Storefront:populateRemoteInfoFromCatalog()
 
     for _, plugin in ipairs(installed) do
         local record = records[plugin.dirname]
-        if record and (record.repo_id or (record.owner and record.repo)) then
+        if record and record.source == "branch" then
+            -- Branch-tracked plugins should never have catalog release data in remote_info.
+            -- Clean up any stale release/catalog data.
+            if remote_info[plugin.dirname] and (remote_info[plugin.dirname].is_cached_fallback
+                or (remote_info[plugin.dirname].remote_version and not remote_info[plugin.dirname].remote_version:match("^%x%x%x%x%x%x%x+$"))) then
+                if record.sha and record.sha ~= "" then
+                    remote_info[plugin.dirname] = {
+                        remote_version = record.sha,
+                        release_tag_name = (record.branch or "branch") .. "@" .. record.sha:sub(1, 7),
+                        last_checked = os.time(),
+                    }
+                else
+                    remote_info[plugin.dirname] = nil
+                end
+                updated_count = updated_count + 1
+            end
+        elseif record and (record.repo_id or (record.owner and record.repo)) then
             local cached_repo
             if record.repo_id then
                 cached_repo = Cache.getRepo(record.repo_id)
@@ -1763,20 +1815,47 @@ function Storefront:populateRemoteInfoFromCatalog()
                         cat_rel = pre_rel
                     end
                 end
-                local cat_tag = (cat_rel and cat_rel.tag_name)
-                    or cached_repo.version
-                    or (cached_repo.data and (cached_repo.data.version or cached_repo.data.tag_name or cached_repo.data.latest_version))
+                local cat_tag
+                if cat_rel then
+                    if cat_rel.version and parseVersionFromTag(cat_rel.version) then
+                        cat_tag = cat_rel.version
+                    elseif cat_rel.tag_name and parseVersionFromTag(cat_rel.tag_name) then
+                        cat_tag = cat_rel.tag_name
+                    end
+                end
+                if not cat_tag then
+                    cat_tag = cached_repo.version
+                        or (cached_repo.data and (cached_repo.data.version or cached_repo.data.tag_name or cached_repo.data.latest_version))
+                end
                 local cat_published = cat_rel and cat_rel.published_at
 
+                if cat_tag and isPreReleaseTag(cat_tag) and not allow_prerelease then
+                    cat_tag = nil
+                end
+
+                if cat_tag and not parseVersionFromTag(cat_tag) then
+                    cat_tag = nil
+                end
+
                 if cat_tag then
-                    remote_info[plugin.dirname] = {
-                        remote_version = cat_tag:gsub("^[vV]", ""),
-                        release_tag_name = cat_tag,
-                        release_published_at = cat_published and parseGitHubTimestamp(cat_published) or 0,
-                        last_checked = os.time(),
-                        is_cached_fallback = true,
-                    }
-                    updated_count = updated_count + 1
+                    local existing = remote_info[plugin.dirname]
+                    local should_set = not existing
+                        or existing.is_cached_fallback
+                        or existing.error ~= nil
+                        or not existing.release_tag_name
+                        or (StorefrontUtils.isValidVersion and not StorefrontUtils.isValidVersion(existing.release_tag_name))
+                        or isVersionNewer(cat_tag, existing.release_tag_name)
+
+                    if should_set then
+                        remote_info[plugin.dirname] = {
+                            remote_version = cat_tag:gsub("^[vV]", ""),
+                            release_tag_name = cat_tag,
+                            release_published_at = cat_published and parseGitHubTimestamp(cat_published) or 0,
+                            last_checked = os.time(),
+                            is_cached_fallback = true,
+                        }
+                        updated_count = updated_count + 1
+                    end
                 else
                     if remote_info[plugin.dirname] and remote_info[plugin.dirname].is_cached_fallback then
                         remote_info[plugin.dirname] = nil
@@ -1788,7 +1867,9 @@ function Storefront:populateRemoteInfoFromCatalog()
     end
 
     self.updates_state.remote_info = remote_info
-    self.updates_state.last_checked = os.time()
+    if updated_count > 0 or not self.updates_state.last_checked or self.updates_state.last_checked == 0 then
+        self.updates_state.last_checked = os.time()
+    end
     self:saveUpdatesState()
     self._cached_plugin_summary = nil
     self._merged_updates_cache = nil
@@ -1893,8 +1974,9 @@ end
 
 function Storefront:collectPatchUpdateSummary()
     self:ensurePatchUpdatesState()
+    local cat_patch_fetched = (Cache and Cache.getLastFetched and Cache.getLastFetched("patch")) or 0
     local current_generation = InstallStore.getGeneration and InstallStore.getGeneration() or 0
-    local remote_info_key = self.patch_updates_state and self.patch_updates_state.last_checked
+    local remote_info_key = tostring(self.patch_updates_state and self.patch_updates_state.last_checked or 0) .. ":" .. tostring(cat_patch_fetched)
     
     if self._cached_patch_summary
        and self._cached_patch_summary_gen == current_generation
@@ -1933,8 +2015,14 @@ end
 
 function Storefront:collectUpdateSummary()
     self:ensureUpdatesState()
+    local cat_plugin_fetched = (Cache and Cache.getLastFetched and Cache.getLastFetched("plugin")) or 0
+    if cat_plugin_fetched > 0 and self._last_catalog_populated_ts ~= cat_plugin_fetched then
+        self._last_catalog_populated_ts = cat_plugin_fetched
+        pcall(function() self:populateRemoteInfoFromCatalog() end)
+    end
+
     local current_generation = InstallStore.getGeneration and InstallStore.getGeneration() or 0
-    local remote_info_key = self.updates_state and self.updates_state.last_checked
+    local remote_info_key = tostring(self.updates_state and self.updates_state.last_checked or 0) .. ":" .. tostring(cat_plugin_fetched)
 
     if self._cached_plugin_summary
        and self._cached_plugin_summary_gen == current_generation
@@ -1959,69 +2047,92 @@ function Storefront:collectUpdateSummary()
         StorefrontLogger.debug(string.format("UPDATE SCAN: checking %d installed plugins", #installed))
     end
 
-    local repo_map = {}
+    local repo_groups = {}
+    local untracked_plugins = {}
 
     for _, plugin in ipairs(installed) do
         local record = records[plugin.dirname]
         local tracked = record and record.owner and record.repo
         local repo_key = tracked and (record.owner:lower() .. "/" .. record.repo:lower()) or nil
-        local is_duplicate = false
-
         if repo_key then
-            if repo_map[repo_key] then
-                local existing_index = repo_map[repo_key]
-                local existing_item = data[existing_index]
-                local existing_plugin = existing_item.plugin
+            repo_groups[repo_key] = repo_groups[repo_key] or {}
+            table.insert(repo_groups[repo_key], { plugin = plugin, record = record })
+        else
+            table.insert(untracked_plugins, { plugin = plugin, record = record })
+        end
+    end
 
-                local current_matches_repo = (plugin.dirname:lower() == (record.repo:lower() .. ".koplugin"))
-                local existing_matches_repo = (existing_plugin.dirname:lower() == (existing_item.record.repo:lower() .. ".koplugin"))
+    local deduped_list = {}
+    for repo_key, group in pairs(repo_groups) do
+        if #group == 1 then
+            table.insert(deduped_list, group[1])
+        else
+            local primary = group[1]
+            local duplicates = {}
+            for i = 2, #group do
+                local cand = group[i]
+                local cand_is_branch = cand.record and cand.record.source == "branch"
+                local prim_is_branch = primary.record and primary.record.source == "branch"
 
-                local current_is_primary = false
-                if current_matches_repo and not existing_matches_repo then
-                    current_is_primary = true
-                elseif not current_matches_repo and existing_matches_repo then
-                    current_is_primary = false
+                local cand_matches_repo = (cand.plugin.dirname:lower() == (cand.record.repo:lower() .. ".koplugin"))
+                local prim_matches_repo = (primary.plugin.dirname:lower() == (primary.record.repo:lower() .. ".koplugin"))
+
+                local cand_better = false
+                if cand_is_branch and not prim_is_branch then
+                    cand_better = true
+                elseif not cand_is_branch and prim_is_branch then
+                    cand_better = false
+                elseif cand_matches_repo and not prim_matches_repo then
+                    cand_better = true
+                elseif not cand_matches_repo and prim_matches_repo then
+                    cand_better = false
                 else
-                    current_is_primary = (plugin.latest_mtime or 0) > (existing_plugin.latest_mtime or 0)
+                    cand_better = (cand.plugin.latest_mtime or 0) > (primary.plugin.latest_mtime or 0)
                 end
 
-                summary.total = summary.total - 1
-                if current_is_primary then
-                    existing_item.duplicates = existing_item.duplicates or {}
-                    table.insert(existing_item.duplicates, existing_plugin)
-
-                    existing_item.plugin = plugin
-                    existing_item.record = record
-                    existing_item.remote = remote_info[plugin.dirname]
+                if cand_better then
+                    table.insert(duplicates, primary.plugin)
+                    primary = cand
                 else
-                    existing_item.duplicates = existing_item.duplicates or {}
-                    table.insert(existing_item.duplicates, plugin)
-                    is_duplicate = true
+                    table.insert(duplicates, cand.plugin)
                 end
             end
+            primary.duplicates = duplicates
+            table.insert(deduped_list, primary)
+        end
+    end
+
+    for _, item in ipairs(untracked_plugins) do
+        table.insert(deduped_list, item)
+    end
+
+    summary.total = #deduped_list
+
+    for _, entry in ipairs(deduped_list) do
+        local plugin = entry.plugin
+        local record = entry.record
+        local tracked = record and record.owner and record.repo
+        if tracked then
+            summary.tracked = summary.tracked + 1
+        else
+            summary.unmatched = summary.unmatched + 1
         end
 
-        if not is_duplicate then
-            if tracked then
-                summary.tracked = summary.tracked + 1
-            else
-                summary.unmatched = summary.unmatched + 1
-            end
-
-            local remote = remote_info[plugin.dirname]
-            if not remote and record and record.repo then
-                remote = remote_info[record.repo]
-                    or remote_info[record.repo .. ".koplugin"]
-                    or remote_info[record.repo:lower()]
-                    or remote_info[record.repo:lower() .. ".koplugin"]
-            end
+        local remote = remote_info[plugin.dirname]
+        if not remote and record and record.repo and record.source ~= "branch" then
+            remote = remote_info[record.repo]
+                or remote_info[record.repo .. ".koplugin"]
+                or remote_info[record.repo:lower()]
+                or remote_info[record.repo:lower() .. ".koplugin"]
+        end
         -- A remote entry with an error is still usable if it has a release_tag_name.
         -- Only treat it as unchecked if it has NO version info at all.
         local has_checked_info = remote and (remote.release_tag_name or remote.remote_version) and not (remote.error and not remote.release_tag_name)
 
         -- Always check the catalog cache for a fresh release tag, and prefer it
         -- if it's newer than what's in the (possibly stale) remote_info.
-        if tracked then
+        -- Branch-tracked plugins bypass catalog release overrides.
+        if tracked and record and record.source ~= "branch" then
             local cached_repo
             if record.repo_id then
                 cached_repo = Cache.getRepo(record.repo_id)
@@ -2051,9 +2162,18 @@ function Storefront:collectUpdateSummary()
                         cat_rel = pre_rel
                     end
                 end
-                local cat_tag = (cat_rel and cat_rel.tag_name)
-                    or cached_repo.version
-                    or (cached_repo.data and (cached_repo.data.version or cached_repo.data.tag_name or cached_repo.data.latest_version))
+                local cat_tag
+                if cat_rel then
+                    if cat_rel.version and parseVersionFromTag(cat_rel.version) then
+                        cat_tag = cat_rel.version
+                    elseif cat_rel.tag_name and parseVersionFromTag(cat_rel.tag_name) then
+                        cat_tag = cat_rel.tag_name
+                    end
+                end
+                if not cat_tag then
+                    cat_tag = cached_repo.version
+                        or (cached_repo.data and (cached_repo.data.version or cached_repo.data.tag_name or cached_repo.data.latest_version))
+                end
                 local cat_published = cat_rel and cat_rel.published_at
 
                 local pushed_at_str = (cached_repo.data and (cached_repo.data.pushed_at or cached_repo.data.updated_at))
@@ -2065,10 +2185,12 @@ function Storefront:collectUpdateSummary()
                     -- unless the plugin explicitly allows prereleases.
                     local existing_tag = remote and remote.release_tag_name
                     local cat_is_prerelease = isPreReleaseTag(cat_tag)
-                    local catalog_tag_is_usable = not cat_is_prerelease or allow_pre_for_plugin
+                    local cat_is_valid = parseVersionFromTag(cat_tag) ~= nil
+                    local catalog_tag_is_usable = cat_is_valid and (not cat_is_prerelease or allow_pre_for_plugin)
 
                     local should_use_catalog = catalog_tag_is_usable and (
                         not existing_tag
+                        or (StorefrontUtils.isValidVersion and not StorefrontUtils.isValidVersion(existing_tag))
                         or (remote and remote.error ~= nil)
                         or isVersionNewer(cat_tag, existing_tag)
                     )
@@ -2081,7 +2203,7 @@ function Storefront:collectUpdateSummary()
                             ))
                         end
                         remote = {
-                            remote_version = remote and remote.remote_version,
+                            remote_version = cat_tag:gsub("^[vV]", ""),
                             remote_repo_ts = remote_repo_ts,
                             release_tag_name = cat_tag,
                             release_published_at = cat_published and parseGitHubTimestamp(cat_published) or 0,
@@ -2113,7 +2235,24 @@ function Storefront:collectUpdateSummary()
         
         local has_update = false
 
-        if tracked and remote then
+        if tracked and record and record.source == "branch" then
+            local remote_sha = remote and remote.remote_version
+            local installed_sha = record.sha
+            local is_valid_sha = remote_sha and type(remote_sha) == "string" and remote_sha:match("^%x%x%x%x%x%x%x+$")
+            if not installed_sha or installed_sha == "" then
+                has_update = true
+            elseif remote and not remote.is_cached_fallback and is_valid_sha then
+                has_update = isShaDifferent(remote_sha, installed_sha)
+            else
+                has_update = false
+            end
+            if has_update then
+                local item_k = plugin.dirname or (record and (record.owner and record.repo and (record.owner .. "/" .. record.repo) or record.repo))
+                if item_k and InstallStore.isAllUpdatesIgnored(item_k) then
+                    has_update = false
+                end
+            end
+        elseif tracked and remote then
             local release_tag = remote.release_tag_name
             local release_ts = remote.release_published_at or 0
 
@@ -2143,7 +2282,7 @@ function Storefront:collectUpdateSummary()
                         else
                             has_update = isVersionNewer(raw_tag, raw_local)
                         end
-                    elseif release_ts > 0 and local_latest_ts > 0 then
+                    elseif release_ts > 0 and local_latest_ts > 0 and StorefrontUtils.isValidVersion(release_tag) then
                         has_update = release_ts > local_latest_ts
                     end
                 end
@@ -2204,12 +2343,9 @@ function Storefront:collectUpdateSummary()
             record = record,
             remote = remote,
             has_update = has_update,
+            duplicates = entry.duplicates,
         }
-        if repo_key then
-            repo_map[repo_key] = #data
-        end
     end
-end
 
     summary.data = data
     summary.records = records
@@ -3107,7 +3243,43 @@ end
 
 
 
-function Storefront:_scanUpdatesForDirectApi(tracked)
+function Storefront:_scanUpdatesForDirectApi(tracked, tracked_patches)
+    tracked = tracked or {}
+    tracked_patches = tracked_patches or {}
+
+    local worker_tracked = {}
+    -- Pre-attach catalog metadata to avoid disk I/O in subprocess without mutating original records
+    for _, orig_rec in ipairs(tracked) do
+        local rec = {}
+        for k, v in pairs(orig_rec) do rec[k] = v end
+        local cached_repo = (rec.repo_id and Cache.getRepo(rec.repo_id))
+            or (rec.owner and rec.repo and Cache.getRepoByName(rec.owner, rec.repo))
+        if cached_repo then
+            rec.in_catalog = true
+            local rel = cached_repo.latest_release or (cached_repo.data and cached_repo.data.latest_release)
+            local pre = cached_repo.latest_prerelease or (cached_repo.data and cached_repo.data.latest_prerelease)
+            rec.cached_latest_release = rel and rel.tag_name
+            rec.cached_latest_prerelease = pre and pre.tag_name
+            rec.cached_version = cached_repo.version or (cached_repo.data and cached_repo.data.version)
+            rec.cached_default_branch = cached_repo.default_branch or (cached_repo.data and cached_repo.data.default_branch)
+            rec.cached_pushed_at = cached_repo.pushed_at or (cached_repo.data and cached_repo.data.pushed_at)
+        end
+        table.insert(worker_tracked, rec)
+    end
+
+    local worker_patches = {}
+    for _, orig_prec in ipairs(tracked_patches) do
+        local prec = {}
+        for k, v in pairs(orig_prec) do prec[k] = v end
+        if prec.filename then
+            local _, cached_file = findCachedPatchFile and findCachedPatchFile(prec, prec.filename)
+            if cached_file and cached_file.sha then
+                prec.cached_sha = cached_file.sha
+            end
+        end
+        table.insert(worker_patches, prec)
+    end
+
     NetworkMgr:runWhenOnline(function()
         local Trapper = require("ui/trapper")
         local ltn12 = require("ltn12")
@@ -3156,16 +3328,22 @@ function Storefront:_scanUpdatesForDirectApi(tracked)
             local url = string.format("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repo_name, branch, path)
             local response = {}
             local http_mod = getHttpModule(url)
+            local headers = {
+                ["User-Agent"] = "KOReader-Storefront",
+                ["Accept"] = "text/plain",
+            }
+            local token = GitHub.getToken and GitHub.getToken()
+            if token and token ~= "" then
+                local scheme = (StorefrontConfig and StorefrontConfig.auth and StorefrontConfig.auth.github and StorefrontConfig.auth.github.scheme) or "token"
+                headers["Authorization"] = string.format("%s %s", scheme, token)
+            end
             local code
-            socketutil:set_timeout(socketutil.FILE_BLOCK_TIMEOUT, socketutil.FILE_TOTAL_TIMEOUT)
+            socketutil:set_timeout(5, 10)
             pcall(function()
                 _, code = http_mod.request{
                     url = url,
                     sink = ltn12.sink.table(response),
-                    headers = {
-                        ["User-Agent"] = "KOReader-Storefront",
-                        ["Accept"] = "text/plain",
-                    },
+                    headers = headers,
                 }
             end)
             socketutil:reset_timeout()
@@ -3257,23 +3435,28 @@ function Storefront:_scanUpdatesForDirectApi(tracked)
             end
 
             if record.dirname and record.dirname ~= "" then
-                add("plugins/" .. record.dirname .. "/_meta.lua")
                 add(record.dirname .. "/_meta.lua")
+                add("_meta.lua")
                 if record.dirname:match("%.koplugin$") then
                     local without_suffix = record.dirname:gsub("%.koplugin$", "")
-                    add("plugins/" .. without_suffix .. "/_meta.lua")
                     add(without_suffix .. "/_meta.lua")
+                    add("plugins/" .. without_suffix .. "/_meta.lua")
                 end
+                add("plugins/" .. record.dirname .. "/_meta.lua")
+            else
+                add("_meta.lua")
             end
 
             add("plugins/_meta.lua")
-            add("_meta.lua")
 
             return candidates
         end
 
         local function runCheckAllUpdatesWorker(records_worker)
             local result = {}
+            local rate_limited = false
+            GitHub.setRequestTimeouts(5, 10)
+
             for _, record in ipairs(records_worker or {}) do
                 local dirname = record.dirname
                 local owner = record.owner
@@ -3283,9 +3466,30 @@ function Storefront:_scanUpdatesForDirectApi(tracked)
                 local release_tag_name
                 local release_published_at
                 local last_err
+                local migrated_source, migrated_branch, migrated_sha
+                local updated_meta_path
 
                 if not owner or not repo_name then
                     last_err = "Missing repository info."
+                elseif record.source == "branch" and record.branch then
+                    local branch_name = record.branch
+                    if rate_limited then
+                        last_err = "API rate limit reached; using catalog data."
+                    else
+                        local head_sha, sha_err = GitHub.fetchBranchSHA(owner, repo_name, branch_name)
+                        if head_sha and head_sha ~= "" then
+                            remote_version = head_sha
+                            release_tag_name = branch_name .. "@" .. head_sha:sub(1, 7)
+                            last_err = nil
+                        else
+                            if GitHub.isRateLimitError(sha_err) then
+                                rate_limited = true
+                                last_err = "API rate limit reached; using catalog data."
+                            else
+                                last_err = "Could not fetch branch SHA."
+                            end
+                        end
+                    end
                 else
                     local is_storefront_worker = dirname == "storefront.koplugin"
                         or (repo_name and repo_name:lower():match("storefront%.koplugin"))
@@ -3297,7 +3501,12 @@ function Storefront:_scanUpdatesForDirectApi(tracked)
                         end
                     end
                     local allow_prerelease = allow_beta_worker or isPreReleaseAllowedForPlugin(nil, record, dirname)
-                    if allow_prerelease then
+
+                    if rate_limited then
+                        release_tag_name = (allow_prerelease and record.cached_latest_prerelease) or record.cached_latest_release or record.cached_version
+                        release_published_at = parseGitHubTimestampWorker(record.cached_pushed_at)
+                        last_err = "API rate limit reached; using catalog data."
+                    elseif allow_prerelease then
                         local releases, fetch_err = GitHub.fetchReleases(owner, repo_name, {
                             per_page = 10,
                             max_pages = 1,
@@ -3310,123 +3519,130 @@ function Storefront:_scanUpdatesForDirectApi(tracked)
                                     break
                                 end
                             end
+                        elseif GitHub.isRateLimitError(fetch_err) then
+                            rate_limited = true
+                            release_tag_name = record.cached_latest_prerelease or record.cached_latest_release or record.cached_version
+                            release_published_at = parseGitHubTimestampWorker(record.cached_pushed_at)
+                            last_err = "API rate limit reached; using catalog data."
                         end
-                    end
-
-                    -- Check live GitHub release if not found via prerelease check
-                    if not release_tag_name then
-                        local latest_release, release_err = GitHub.fetchLatestRelease(owner, repo_name)
-                        if latest_release and latest_release.tag_name then
-                            if not latest_release.prerelease and not latest_release.draft then
-                                local tag_lower = latest_release.tag_name:lower()
-                                local is_prerelease_tag = tag_lower:find("alpha", 1, true) or 
-                                                          tag_lower:find("beta", 1, true) or 
-                                                          tag_lower:find("rc", 1, true) or 
-                                                          tag_lower:find("dev", 1, true) or 
-                                                          tag_lower:find("preview", 1, true) or 
-                                                          tag_lower:find("test", 1, true)
-                                if not is_prerelease_tag then
+                    else
+                        local is_releaseless = record.in_catalog and not record.cached_latest_release and not record.installed_tag and not record.tag_name
+                        if not is_releaseless then
+                            local latest_release, release_err = GitHub.fetchLatestRelease(owner, repo_name)
+                            if latest_release and latest_release.tag_name then
+                                if not latest_release.prerelease and not latest_release.draft and not isPreReleaseTag(latest_release.tag_name) then
                                     release_tag_name = latest_release.tag_name
                                     release_published_at = parseGitHubTimestampWorker(latest_release.published_at)
-                                end
-                            end
-                        end
-                    end
-
-                    if not release_tag_name then
-                        local releases, fetch_err = GitHub.fetchReleases(owner, repo_name, {
-                            per_page = 30,
-                            max_pages = 1,
-                        })
-                        if releases and #releases > 0 then
-                            for _, release in ipairs(releases) do
-                                if not release.draft and not release.prerelease then
-                                    local tag_lower = release.tag_name:lower()
-                                    local is_prerelease_tag = tag_lower:find("alpha", 1, true) or 
-                                                              tag_lower:find("beta", 1, true) or 
-                                                              tag_lower:find("rc", 1, true) or 
-                                                              tag_lower:find("dev", 1, true) or 
-                                                              tag_lower:find("preview", 1, true) or 
-                                                              tag_lower:find("test", 1, true)
-                                    if not is_prerelease_tag then
-                                        release_tag_name = release.tag_name
-                                        release_published_at = parseGitHubTimestampWorker(release.published_at)
-                                        break
+                                else
+                                    local releases, rel_err = GitHub.fetchReleases(owner, repo_name, {
+                                        per_page = 10,
+                                        max_pages = 1,
+                                    })
+                                    if releases and #releases > 0 then
+                                        for _, rel in ipairs(releases) do
+                                            if not rel.draft and not rel.prerelease and not isPreReleaseTag(rel.tag_name) then
+                                                release_tag_name = rel.tag_name
+                                                release_published_at = parseGitHubTimestampWorker(rel.published_at)
+                                                break
+                                            end
+                                        end
+                                    elseif GitHub.isRateLimitError(rel_err) then
+                                        rate_limited = true
                                     end
                                 end
+                            elseif GitHub.isRateLimitError(release_err) then
+                                rate_limited = true
+                                release_tag_name = record.cached_latest_release or record.cached_version
+                                release_published_at = parseGitHubTimestampWorker(record.cached_pushed_at)
+                                last_err = "API rate limit reached; using catalog data."
                             end
                         end
                     end
 
-                    -- Fallback to static catalog cache if live GitHub releases fetch returned nothing
-                    if not release_tag_name then
-                        local cached_repo = Cache.getRepoByName(owner, repo_name) or (record.repo_id and Cache.getRepo(record.repo_id))
-                        if cached_repo then
-                            local rel = cached_repo.latest_release or (cached_repo.data and cached_repo.data.latest_release)
-                            if rel and rel.tag_name then
-                                release_tag_name = rel.tag_name
-                                release_published_at = parseGitHubTimestampWorker(rel.published_at)
-                            end
-                            if not release_tag_name and cached_repo.version then
-                                release_tag_name = cached_repo.version
-                            end
-                            local ts = cached_repo.data and (cached_repo.data.pushed_at or cached_repo.data.created_at)
-                            remote_repo_ts = parseGitHubTimestampWorker(ts)
+                    -- Fallback to pre-attached catalog release if live check returned nothing
+                    if not release_tag_name and not rate_limited then
+                        if record.cached_latest_release or record.cached_version then
+                            release_tag_name = (allow_prerelease and record.cached_latest_prerelease) or record.cached_latest_release or record.cached_version
+                            release_published_at = parseGitHubTimestampWorker(record.cached_pushed_at)
                         end
                     end
 
-                    local metadata, metadata_err = GitHub.fetchRepoMetadata(owner, repo_name)
-                    if metadata and type(metadata) == "table" then
-                        local ts = metadata.pushed_at or metadata.created_at
-                        remote_repo_ts = parseGitHubTimestampWorker(ts)
+                    -- Fetch repo metadata ONLY when release_tag_name was not found
+                    local branch = record.branch or record.cached_default_branch
+                    if not release_tag_name and not rate_limited then
+                        if not branch or branch == "" then
+                            local metadata, metadata_err = GitHub.fetchRepoMetadata(owner, repo_name)
+                            if metadata and type(metadata) == "table" then
+                                local ts = metadata.pushed_at or metadata.created_at
+                                remote_repo_ts = parseGitHubTimestampWorker(ts)
+                                branch = metadata.default_branch or metadata.master_branch or "HEAD"
+                            elseif GitHub.isRateLimitError(metadata_err) then
+                                rate_limited = true
+                                last_err = "API rate limit reached; using catalog data."
+                            end
+                        end
                     end
 
                     if release_tag_name then
-                        last_err = nil
+                        last_err = rate_limited and "API rate limit reached; using catalog data." or nil
                     else
-                        local meta_path = record.meta_path
-                        if (not meta_path or meta_path == "") and dirname and dirname ~= "" then
-                            meta_path = dirname .. "/_meta.lua"
-                        end
-
-                        local branch = record.branch
-                        if (not branch or branch == "") and metadata and type(metadata) == "table" then
-                            branch = metadata.default_branch or metadata.master_branch or "HEAD"
-                        end
-
-                        local candidates = buildMetaPathCandidatesWorker and buildMetaPathCandidatesWorker(record) or {}
-                        if #candidates == 0 and meta_path then
-                            table.insert(candidates, meta_path)
-                        end
-
-                        local found_body = nil
-                        local working_meta_path = nil
-                        for _, candidate in ipairs(candidates) do
-                            local body, err = fetchGitHubRawWorker(owner, repo_name, branch, candidate)
-                            if body then
-                                found_body = body
-                                working_meta_path = candidate
+                        branch = branch or "HEAD"
+                        local has_installed_tag = record.installed_tag or record.tag_name
+                        if not has_installed_tag and not rate_limited and branch ~= "HEAD" then
+                            local head_sha, sha_err = GitHub.fetchBranchSHA(owner, repo_name, branch)
+                            if head_sha and head_sha ~= "" then
+                                remote_version = head_sha
+                                release_tag_name = branch .. "@" .. head_sha:sub(1, 7)
+                                migrated_source = "branch"
+                                migrated_branch = branch
+                                migrated_sha = nil
                                 last_err = nil
-                                break
-                            else
-                                last_err = err or last_err
+                            elseif GitHub.isRateLimitError(sha_err) then
+                                rate_limited = true
                             end
                         end
 
-                        if found_body then
-                            local version = extractMetaFieldWorker(found_body, "version")
-                            if version then
-                                remote_version = version
-                                last_err = nil
-                                if working_meta_path and working_meta_path ~= record.meta_path then
-                                    record.meta_path = working_meta_path
-                                    pcall(function() InstallStore.upsert(dirname, record) end)
+                        if not release_tag_name and not remote_version then
+                            local meta_path = record.meta_path
+                            if (not meta_path or meta_path == "") and dirname and dirname ~= "" then
+                                meta_path = dirname .. "/_meta.lua"
+                            end
+
+                            local candidates = buildMetaPathCandidatesWorker and buildMetaPathCandidatesWorker(record) or {}
+                            if #candidates == 0 and meta_path then
+                                table.insert(candidates, meta_path)
+                            end
+
+                            local found_body = nil
+                            local working_meta_path = nil
+                            if not rate_limited then
+                                for _, candidate in ipairs(candidates) do
+                                    local body, err = fetchGitHubRawWorker(owner, repo_name, branch, candidate)
+                                    if body then
+                                        found_body = body
+                                        working_meta_path = candidate
+                                        last_err = nil
+                                        break
+                                    else
+                                        last_err = err or last_err
+                                    end
+                                end
+                            end
+
+                            if found_body then
+                                local version = extractMetaFieldWorker(found_body, "version")
+                                if version then
+                                    remote_version = version
+                                    last_err = nil
+                                    if working_meta_path then
+                                        updated_meta_path = working_meta_path
+                                    end
+                                else
+                                    last_err = "Remote version not found."
                                 end
                             else
-                                last_err = "Remote version not found."
+                                last_err = last_err or "Missing meta path in record."
                             end
-                        else
-                            last_err = last_err or "Missing meta path in record."
                         end
                     end
                 end
@@ -3436,25 +3652,122 @@ function Storefront:_scanUpdatesForDirectApi(tracked)
                         remote_version = (type(remote_version) == "string") and remote_version or nil,
                         remote_repo_ts = tonumber(remote_repo_ts) or 0,
                         release_tag_name = (type(release_tag_name) == "string") and release_tag_name or nil,
-                        release_published_at = (type(release_published_at) == "string") and release_published_at or nil,
+                        release_published_at = tonumber(release_published_at) or (type(release_published_at) == "string" and parseGitHubTimestampWorker(release_published_at)) or 0,
                         error = (type(last_err) == "string") and last_err or (last_err and tostring(last_err) or nil),
                         last_checked = os.time(),
+                        migrated_source = migrated_source,
+                        migrated_branch = migrated_branch,
+                        migrated_sha = migrated_sha,
+                        updated_meta_path = updated_meta_path,
                     }
+                end
+            end
+            GitHub.resetRequestTimeouts()
+            return result, rate_limited
+        end
+
+        local function runCheckPatchUpdatesWorker(patch_records, rate_limited)
+            local result = {}
+            local repo_cache = {}
+
+            for _, record in ipairs(patch_records or {}) do
+                local filename = record.filename
+                local owner = record.owner
+                local repo_name = record.repo
+                local branch = record.branch or "HEAD"
+                local path = record.path
+                local cached_sha = record.cached_sha
+
+                if not filename then
+                    -- skip
+                elseif not owner or not repo_name or not path then
+                    result[filename] = {
+                        remote_sha = cached_sha,
+                        error = "Missing repository metadata for patch.",
+                        last_checked = os.time(),
+                    }
+                elseif rate_limited then
+                    result[filename] = {
+                        remote_sha = cached_sha,
+                        error = "API rate limit reached; using catalog data.",
+                        last_checked = os.time(),
+                    }
+                else
+                    local cache_key = string.format("%s/%s@%s", owner:lower(), repo_name:lower(), branch)
+                    local tree_map = repo_cache[cache_key]
+                    local fetch_err = nil
+
+                    if not tree_map and repo_cache[cache_key] ~= false then
+                        local tree, err = GitHub.fetchRepoTree(owner, repo_name, branch)
+                        if tree and type(tree.tree) == "table" then
+                            tree_map = {}
+                            for _, node in ipairs(tree.tree) do
+                                if node.type == "blob" and node.path then
+                                    tree_map[node.path] = node
+                                end
+                            end
+                            repo_cache[cache_key] = tree_map
+                        else
+                            fetch_err = err
+                            if GitHub.isRateLimitError(err) then
+                                rate_limited = true
+                            end
+                            repo_cache[cache_key] = false
+                        end
+                    end
+
+                    if tree_map then
+                        local node = tree_map[path]
+                        if node then
+                            result[filename] = {
+                                remote_sha = node.sha,
+                                download_url = string.format("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repo_name, branch, path),
+                                last_checked = os.time(),
+                                error = nil,
+                            }
+                        else
+                            result[filename] = {
+                                remote_sha = cached_sha,
+                                error = "Patch file not found in repository.",
+                                last_checked = os.time(),
+                            }
+                        end
+                    else
+                        result[filename] = {
+                            remote_sha = cached_sha,
+                            error = rate_limited and "API rate limit reached; using catalog data." or (fetch_err and tostring(fetch_err) or "Failed to fetch patch tree."),
+                            last_checked = os.time(),
+                        }
+                    end
                 end
             end
             return result
         end
 
+        local progress_msg = (#tracked == 0 and #tracked_patches > 0)
+            and _("Checking patch updates…")
+            or _("Checking plugin updates…")
+
         local Toast = require("storefront_toast")
-        local progress_toast = Toast.show(_("Checking plugin updates…"), 0)
+        local progress_toast = Toast.show(progress_msg, 0, { show_cancel = true })
 
         Trapper:wrap(function()
             local completed, remote_info_result = Trapper:dismissableRunInSubprocess(function()
-                local ok, res = pcall(runCheckAllUpdatesWorker, tracked)
+                local ok, res = pcall(function()
+                    local plugins_res, rate_limited = runCheckAllUpdatesWorker(worker_tracked)
+                    local patches_res = nil
+                    if #worker_patches > 0 then
+                        patches_res = runCheckPatchUpdatesWorker(worker_patches, rate_limited)
+                    end
+                    return {
+                        plugins = plugins_res or {},
+                        patches = patches_res or {},
+                    }
+                end)
                 if ok and type(res) == "table" then
                     return res
                 end
-                return {}
+                return { plugins = {}, patches = {} }
             end, progress_toast)
 
             if progress_toast and progress_toast.close then
@@ -3462,20 +3775,68 @@ function Storefront:_scanUpdatesForDirectApi(tracked)
             end
 
             if not completed then
-                Toast.show(_("Update check was cancelled."), 3)
+                UIManager:nextTick(function()
+                    Toast.show(_("Update check was cancelled."), 3)
+                end)
                 return
             end
 
             self:ensureUpdatesState()
             local remote_info = self.updates_state.remote_info or {}
-            for dirname, data in pairs(remote_info_result or {}) do
-                remote_info[dirname] = data
+            local plugins_res = remote_info_result and remote_info_result.plugins or {}
+            for dirname, data in pairs(plugins_res) do
+                local prev = remote_info[dirname]
+                if data.error and (not data.remote_version and not data.release_tag_name) and prev and (prev.remote_version or prev.release_tag_name) then
+                    prev.error = data.error
+                    prev.last_checked = data.last_checked or os.time()
+                else
+                    remote_info[dirname] = data
+                end
+                if data.migrated_source == "branch" and data.migrated_branch then
+                    local record = getRecordedInstall(dirname)
+                    if record then
+                        record.source = "branch"
+                        record.branch = data.migrated_branch
+                        if data.migrated_sha then
+                            record.sha = data.migrated_sha
+                        end
+                        InstallStore.upsert(dirname, record)
+                    end
+                end
+                if data.updated_meta_path then
+                    local record = getRecordedInstall(dirname)
+                    if record and record.meta_path ~= data.updated_meta_path then
+                        record.meta_path = data.updated_meta_path
+                        record.meta_path_verified = true
+                        InstallStore.upsert(dirname, record)
+                    end
+                end
             end
             self.updates_state.remote_info = remote_info
-            self.updates_state.last_checked = os.time()
-            
-            StorefrontLogger.action(string.format("REMOTE UPDATE CHECK FINISHED: %d records processed", #tracked))
-            for dirname, data in pairs(remote_info_result or {}) do
+            if #tracked > 0 then
+                self.updates_state.last_checked = os.time()
+            end
+
+            local patches_res = remote_info_result and remote_info_result.patches or {}
+            local patch_count = 0
+            for _ in pairs(patches_res) do patch_count = patch_count + 1 end
+            if patch_count > 0 then
+                self:ensurePatchUpdatesState()
+                local patch_remote = self.patch_updates_state.remote_info or {}
+                for filename, pdata in pairs(patches_res) do
+                    patch_remote[filename] = pdata
+                end
+                self.patch_updates_state.remote_info = patch_remote
+                self.patch_updates_state.last_checked = os.time()
+                self:savePatchUpdatesState()
+                self._cached_patch_summary = nil
+                if self.patch_updates_menu then
+                    self:updatePatchUpdatesDialog()
+                end
+            end
+
+            StorefrontLogger.action(string.format("REMOTE UPDATE CHECK FINISHED: %d plugins, %d patches processed", #tracked, patch_count))
+            for dirname, data in pairs(plugins_res) do
                 local msg = string.format(
                     "REMOTE UPDATE CHECK RECORD: %s -> tag=%s, remote_version=%s, err=%s",
                     tostring(dirname),
@@ -3494,11 +3855,17 @@ function Storefront:_scanUpdatesForDirectApi(tracked)
             self._cached_plugin_summary = nil
             self._merged_updates_cache = nil
             self:updateUpdatesDialog()
-            self:refreshCurrentBrowserTab()
             self:saveUpdatesState()
-            
-            local checked_count = #tracked
-            Toast.show(string.format(_("Checked %d plugin(s) for updates."), checked_count), 3)
+
+            local toast_msg
+            if #tracked == 0 and patch_count > 0 then
+                toast_msg = string.format(_("Checked %d patches: %d need updates, %d up to date."), patch_count, 0, patch_count)
+            else
+                toast_msg = string.format(_("Checked %d plugin(s) for updates."), #tracked)
+            end
+            self:refreshCurrentBrowserTab(function()
+                Toast.show(toast_msg, 3)
+            end)
         end)
     end)
 end
@@ -3525,6 +3892,7 @@ local function findLatestRelease(owner, repo, allow_prerelease)
                 end
             end
         end
+        return nil, fetch_err or "No releases found"
     end
 
     local latest, err = GitHub.fetchLatestRelease(owner, repo)
@@ -3535,26 +3903,24 @@ local function findLatestRelease(owner, repo, allow_prerelease)
                 return latest, nil
             end
         end
-    end
 
-    local releases, fetch_err = GitHub.fetchReleases(owner, repo, {
-        per_page = 30,
-        max_pages = 1,
-    })
-
-    if not releases or #releases == 0 then
-        return nil, fetch_err or err or "No releases found"
-    end
-
-    for _, release in ipairs(releases) do
-        if not release.draft and not release.prerelease then
-            if not isPreReleaseTag(release.tag_name) then
-                return release, nil
+        local releases, fetch_err = GitHub.fetchReleases(owner, repo, {
+            per_page = 10,
+            max_pages = 1,
+        })
+        if releases and #releases > 0 then
+            for _, release in ipairs(releases) do
+                if not release.draft and not release.prerelease then
+                    if not isPreReleaseTag(release.tag_name) then
+                        return release, nil
+                    end
+                end
             end
         end
+        return nil, fetch_err or "No stable release found"
     end
 
-    return nil, "No stable release found"
+    return nil, err or "No releases found"
 end
 
 -- Pure network-fetching core of fetchRemoteVersionForRecord below -- touches
@@ -3573,6 +3939,16 @@ local function fetchRemoteVersionCore(record)
     local repo_name = record.repo
     local last_err
 
+    if record.source == "branch" and record.branch then
+        local branch_name = record.branch
+        local head_sha = GitHub.fetchBranchSHA(owner, repo_name, branch_name)
+        if head_sha and head_sha ~= "" then
+            return head_sha, 0, nil, branch_name .. "@" .. head_sha:sub(1, 7)
+        else
+            return nil, 0, _("Could not fetch branch SHA.")
+        end
+    end
+
     local is_storefront = record.dirname == "storefront.koplugin"
         or (record.repo and record.repo:lower():match("storefront%.koplugin"))
     local allow_beta = is_storefront and (require("storefront_about_dialog").getChannel() == "beta")
@@ -3582,8 +3958,10 @@ local function fetchRemoteVersionCore(record)
 
     if latest_release and latest_release.tag_name then
         local release_version = parseVersionFromTag(latest_release.tag_name)
-        local release_ts = parseGitHubTimestamp(latest_release.published_at)
-        return release_version, release_ts, nil, latest_release.tag_name
+        if release_version then
+            local release_ts = parseGitHubTimestamp(latest_release.published_at)
+            return release_version, release_ts, nil, latest_release.tag_name
+        end
     end
 
     local meta_candidates = buildMetaPathCandidates(record)
@@ -3986,14 +4364,16 @@ function Storefront:promptUpdateAction(plugin, record)
         end,
     })
 
-    table.insert(other_buttons_row2, {
-        text = _("Delete plugin"),
-        background = Blitbuffer.COLOR_WHITE,
-        callback = function()
-            UIManager:close(info_box)
-            self:deletePlugin(plugin.dirname, record)
-        end,
-    })
+    if not isDefaultPlugin(plugin) then
+        table.insert(other_buttons_row2, {
+            text = _("Delete plugin"),
+            background = Blitbuffer.COLOR_WHITE,
+            callback = function()
+                UIManager:close(info_box)
+                self:deletePlugin(plugin.dirname, record)
+            end,
+        })
+    end
 
     info_box = ConfirmBox:new{
         text = plugin.name or plugin.dirname,
@@ -4567,7 +4947,9 @@ function Storefront:_checkSinglePluginInternal(record)
         end
 
         if not completed then
-            Toast.show(_("Update check was cancelled."), 3)
+            UIManager:nextTick(function()
+                Toast.show(_("Update check was cancelled."), 3)
+            end)
             return
         end
         if type(result) ~= "table" then
@@ -4599,6 +4981,14 @@ function Storefront:_checkSinglePluginInternal(record)
 
         if err then
             message = string.format(_("Failed to check %s: %s"), display_name, err)
+        elseif record.source == "branch" and record.branch then
+            local short_remote = (remote_version and remote_version ~= "") and remote_version:sub(1, 7) or _("unknown")
+            local short_installed = (record.sha and record.sha ~= "") and record.sha:sub(1, 7) or _("unknown")
+            if not record.sha or record.sha == "" or (remote_version and isShaDifferent(remote_version, record.sha)) then
+                message = string.format(_("Update available for %s (%s): %s → %s."), display_name, record.branch, short_installed, short_remote)
+            else
+                message = string.format(_("%s is up to date on branch %s (%s)."), display_name, record.branch, short_installed)
+            end
         elseif remote_version and installed_version then
             if isVersionNewer(remote_version, installed_version) then
                 message = string.format(_("Update available for %s: remote %s, installed %s."), display_name, remote_version, installed_version)
@@ -4635,11 +5025,15 @@ function Storefront:updatePluginFromRecord(record)
         mode = "update",
         plugin = plugin,
     }
-    self:promptPluginInstallOptions(descriptor)
+    if record.source == "branch" and record.branch and self.installPluginFromBranch then
+        self:installPluginFromBranch(descriptor, record.branch)
+    else
+        self:promptPluginInstallOptions(descriptor)
+    end
 end
 
 
-local function getRecordedInstall(dirname)
+getRecordedInstall = function(dirname)
     if not dirname or dirname == "" then
         return nil
     end
@@ -4686,7 +5080,7 @@ function Storefront:rememberPatchInstall(filename, repo, patch_info)
     end
 end
 
-function Storefront:updateSinglePatchStatus(filename, record)
+function Storefront:updateSinglePatchStatus(filename, record, remote_sha_override)
     if not filename or filename == "" then
         return
     end
@@ -4699,12 +5093,16 @@ function Storefront:updateSinglePatchStatus(filename, record)
     local download_url = record.download_url
         or buildPatchDownloadUrl(record.owner, record.repo, record.branch or "HEAD", record.path)
     remote_info[filename] = {
-        remote_sha = record.sha,
+        remote_sha = remote_sha_override or record.sha,
         download_url = download_url,
         error = nil,
         last_checked = os.time(),
     }
     self.patch_updates_state.remote_info = remote_info
+    self:savePatchUpdatesState()
+    self._cached_patch_summary = nil
+    self._merged_updates_cache = nil
+    self._cached_updates_count = nil
 
     if self.patch_updates_menu then
         local scroll = self.patch_updates_menu.getScrollOffset and self.patch_updates_menu:getScrollOffset()
@@ -4714,8 +5112,6 @@ function Storefront:updateSinglePatchStatus(filename, record)
         end
     end
 end
-
-local derivePluginRepoPath
 
 function Storefront:rememberInstall(info, repo)
     if not info or not info.plugin_dirname then
@@ -4739,6 +5135,15 @@ function Storefront:rememberInstall(info, repo)
         info.plugin_release_tag
     )
     if record then
+        if info.source then
+            record.source = info.source
+        end
+        if info.branch then
+            record.branch = info.branch
+        end
+        if info.sha then
+            record.sha = info.sha
+        end
         InstallStore.upsert(info.plugin_dirname, record)
         
         -- Clear ignored release if user installed the ignored version
@@ -4782,14 +5187,36 @@ fetchGitHubRaw = function(owner, repo_name, branch, path)
     branch = branch or "HEAD"
     local url = string.format("https://raw.githubusercontent.com/%s/%s/%s/%s", owner, repo_name, branch, path)
     local response = {}
-    local _, code = http.request{
-        url = url,
-        sink = ltn12.sink.table(response),
-        headers = {
-            ["User-Agent"] = "KOReader-Storefront",
-            ["Accept"] = "text/plain",
-        },
+    local http_mod = http
+    if url:match("^https://") then
+        local ok_https, https = pcall(require, "ssl.https")
+        if ok_https and https then http_mod = https end
+    end
+    local headers = {
+        ["User-Agent"] = "KOReader-Storefront",
+        ["Accept"] = "text/plain",
     }
+    local token = GitHub and GitHub.getToken and GitHub.getToken()
+    if token and token ~= "" then
+        local scheme = (StorefrontConfig and StorefrontConfig.auth and StorefrontConfig.auth.github and StorefrontConfig.auth.github.scheme) or "token"
+        headers["Authorization"] = string.format("%s %s", scheme, token)
+    end
+    local ok_su, socketutil = pcall(require, "socketutil")
+    if ok_su and socketutil and socketutil.set_timeout then
+        socketutil:set_timeout(5, 10)
+    end
+    local code
+    pcall(function()
+        local _
+        _, code = http_mod.request{
+            url = url,
+            sink = ltn12.sink.table(response),
+            headers = headers,
+        }
+    end)
+    if ok_su and socketutil and socketutil.reset_timeout then
+        socketutil:reset_timeout()
+    end
     code = tonumber(code)
     if code ~= 200 then
         return nil, string.format("HTTP %s", tostring(code))
@@ -4892,7 +5319,7 @@ function Storefront:promptPatchAction(repo, patch)
 end
 
 function StorefrontBrowserDialog:resetScroll()
-    if self.list_scroller then
+    if self.list_scroller and self.list_scroller.setScrolledOffset then
         self.list_scroller:setScrolledOffset({ x = 0, y = 0 })
     end
 end
@@ -5530,7 +5957,7 @@ local function truncateText(text, max_len)
     if not text or text == "" then
         return ""
     end
-    local trimmed = util.trim(text)
+    local trimmed = (util and util.trim and util.trim(text)) or (text:match("^%s*(.-)%s*$") or text)
     if #trimmed <= max_len then
         return trimmed
     end
@@ -5551,7 +5978,7 @@ local function isPatchFilename(filename)
     return filename:match("^%d+%-.+%.lua$") ~= nil
 end
 
-local function buildPatchDownloadUrl(owner, repo_name, branch, path)
+buildPatchDownloadUrl = function(owner, repo_name, branch, path)
     if not owner or not repo_name or not path then
         return nil
     end
@@ -5857,15 +6284,18 @@ end
 
 local function compareRepoWilsonScoreDesc(a, b)
     local StorefrontRatings = require("storefront_ratings")
-    local id_a = a and (a.id or a.repo_id)
-    local id_b = b and (b.id or b.repo_id)
-    local r_a = id_a and StorefrontRatings.getRating(id_a)
-    local r_b = id_b and StorefrontRatings.getRating(id_b)
+    local r_a = a and StorefrontRatings.getRating(a, a)
+    local r_b = b and StorefrontRatings.getRating(b, b)
 
     local sa = r_a and r_a.wilson or 0
     local sb = r_b and r_b.wilson or 0
     if sa ~= sb then
         return sa > sb
+    end
+    local ua = r_a and r_a.up or 0
+    local ub = r_b and r_b.up or 0
+    if ua ~= ub then
+        return ua > ub
     end
     return compareRepoStarsDesc(a, b)
 end
@@ -5874,16 +6304,18 @@ local function comparePatchWilsonScoreDesc(a, b)
     local StorefrontRatings = require("storefront_ratings")
     local r_item_a = a and (a.repo or a)
     local r_item_b = b and (b.repo or b)
-    local id_a = r_item_a and (r_item_a.id or r_item_a.repo_id)
-    local id_b = r_item_b and (r_item_b.id or r_item_b.repo_id)
-
-    local r_a = id_a and StorefrontRatings.getRating(id_a)
-    local r_b = id_b and StorefrontRatings.getRating(id_b)
+    local r_a = r_item_a and StorefrontRatings.getRating(r_item_a, r_item_a)
+    local r_b = r_item_b and StorefrontRatings.getRating(r_item_b, r_item_b)
 
     local sa = r_a and r_a.wilson or 0
     local sb = r_b and r_b.wilson or 0
     if sa ~= sb then
         return sa > sb
+    end
+    local ua = r_a and r_a.up or 0
+    local ub = r_b and r_b.up or 0
+    if ua ~= ub then
+        return ua > ub
     end
     return comparePatchStarsDesc(a, b)
 end
@@ -6023,8 +6455,8 @@ function Storefront:saveBrowserState(skip_flush)
         return
     end
     local state = {
-        kind = (self.browser_state.kind == "patch" and "patch") or (self.browser_state.kind == "font" and "font") or "plugin",
-        tab = self.browser_state.tab or (self.browser_state.kind == "patch" and "Patches" or (self.browser_state.kind == "font" and "Fonts" or "Plugins")),
+        kind = (self.browser_state.kind == "patch" and "patch") or (self.browser_state.kind == "font" and "font") or (self.browser_state.kind == "screensaver" and "screensaver") or "plugin",
+        tab = self.browser_state.tab or (self.browser_state.kind == "patch" and "Patches" or (self.browser_state.kind == "font" and "Fonts" or (self.browser_state.kind == "screensaver" and "Screensavers" or "Plugins"))),
         search_text = self.browser_state.search_text or "",
         owner = self.browser_state.owner or "",
         font_category = self.browser_state.font_category or "all",
@@ -6068,12 +6500,16 @@ function Storefront:ensureBrowserState()
             show_filter_bar_patches = false,
             show_filter_bar_fonts = false,
             show_filter_bar_installed = true,
+            screensaver_sources = {
+                storefront = true,
+                readerbackdrop = true,
+            },
         }
         self:saveBrowserState()
         return
     end
-    self.browser_state.kind = (self.browser_state.kind == "patch" and "patch") or (self.browser_state.kind == "font" and "font") or "plugin"
-    self.browser_state.tab = self.browser_state.tab or (self.browser_state.kind == "patch" and "Patches" or (self.browser_state.kind == "font" and "Fonts" or "Plugins"))
+    self.browser_state.kind = (self.browser_state.kind == "patch" and "patch") or (self.browser_state.kind == "font" and "font") or (self.browser_state.kind == "screensaver" and "screensaver") or "plugin"
+    self.browser_state.tab = self.browser_state.tab or (self.browser_state.kind == "patch" and "Patches" or (self.browser_state.kind == "font" and "Fonts" or (self.browser_state.kind == "screensaver" and "Screensavers" or "Plugins")))
     if type(self.browser_state.search_text) ~= "string" then
         self.browser_state.search_text = ""
     end
@@ -6103,6 +6539,12 @@ function Storefront:ensureBrowserState()
     end
     if type(self.browser_state.show_filter_bar_installed) ~= "boolean" then
         self.browser_state.show_filter_bar_installed = true
+    end
+    if type(self.browser_state.screensaver_sources) ~= "table" then
+        self.browser_state.screensaver_sources = {
+            storefront = true,
+            readerbackdrop = true,
+        }
     end
 end
 
@@ -6558,6 +7000,7 @@ end
 
 function Storefront:makeRepoMenuItem(repo, installed_lookup, installed_fonts_map)
     local is_installed = false
+    local installed_rec = nil
     local kind = repo.kind or (self.browser_state and self.browser_state.kind)
     if kind == "font" then
         if self.isFontInstalled then
@@ -6574,22 +7017,39 @@ function Storefront:makeRepoMenuItem(repo, installed_lookup, installed_fonts_map
                 end
             end
         end
-    elseif installed_lookup then
+    elseif installed_lookup and type(installed_lookup) == "table" then
+        local recs = installed_lookup.records or {}
         if repo.full_name and (installed_lookup[repo.full_name] or installed_lookup[repo.full_name:lower()]) then
             is_installed = true
+            installed_rec = recs[repo.full_name] or recs[repo.full_name:lower()]
         elseif repo.id and installed_lookup["id:" .. tostring(repo.id)] then
             is_installed = true
+            installed_rec = recs["id:" .. tostring(repo.id)]
         elseif installed_lookup.unmatched and repo.name then
             local low_name = repo.name:lower()
             local base_name = low_name:gsub("%.koplugin$", "")
             if installed_lookup.unmatched[low_name] or installed_lookup.unmatched[base_name] then
                 is_installed = true
+                installed_rec = recs[low_name] or recs[base_name] or recs[repo.name]
             end
+        end
+        if is_installed and not installed_rec and repo.name then
+            local low_name = repo.name:lower()
+            local base_name = low_name:gsub("%.koplugin$", "")
+            installed_rec = recs[repo.name] or recs[low_name] or recs[base_name]
         end
     end
     local stars = repoStarsValue(repo)
     local stars_fmt = stars >= 1000 and string.format("%.1fk", stars / 1000):gsub("%.0k", "k") or tostring(stars)
-    local badge = is_installed and _("Installed") or nil
+    local is_branch_inst = installed_rec and type(installed_rec) == "table" and installed_rec.source == "branch" and installed_rec.branch
+    local badge
+    if is_installed then
+        if is_branch_inst then
+            badge = string.format(_("branch: %s"), installed_rec.branch)
+        else
+            badge = _("Installed")
+        end
+    end
     local description = normalizeDescription(repo.description)
     local kind_label
     if (repo.kind or (self.browser_state and self.browser_state.kind)) == "font" then
@@ -7029,11 +7489,30 @@ function Storefront:buildInstalledEntries(available_list_height)
 
             if match_type and match_status and match_search then
                 local record = plugin_records[plugin.dirname]
+                local is_branch = record and record.source == "branch" and record.branch
                 local kind_parts = { _("Plugin") }
                 if is_default then
                     table.insert(kind_parts, _("Default"))
                 end
+                if is_branch then
+                    local short_sha = record.sha and record.sha:sub(1, 7)
+                    if short_sha and short_sha ~= "" then
+                        table.insert(kind_parts, string.format(_("branch: %s (%s)"), record.branch, short_sha))
+                    else
+                        table.insert(kind_parts, string.format(_("branch: %s (%s)"), record.branch, _("unknown")))
+                    end
+                end
                 local meta_kind = table.concat(kind_parts, " · ")
+
+                local badge_text = nil
+                if has_update then
+                    badge_text = is_branch and _("repull_from_branch") or _("Update")
+                end
+
+                local item_repo_id = record and (record.repo_id or record.id)
+                if not item_repo_id and (plugin.dirname == "storefront.koplugin" or plugin.dirname == "storefront") then
+                    item_repo_id = 1304319884
+                end
 
                 table.insert(items, {
                     name = display_name,
@@ -7044,13 +7523,23 @@ function Storefront:buildInstalledEntries(available_list_height)
                     kind_label = meta_kind,
                     description = record and record.repo_description or "",
                     badge_icon = getAssetPath(disabled and "square.svg" or "check-square.svg"),
-                    badge = has_update and _("Update") or nil,
+                    badge = badge_text,
                     is_entry = true,
                     is_installed_item = true,
                     is_plugin = true,
                     is_disabled = disabled,
                     is_default = is_default,
                     dirname = plugin.dirname,
+                    id = item_repo_id,
+                    repo_id = item_repo_id,
+                    full_name = record and record.repo_full_name or (record and record.owner and (record.owner .. "/" .. plugin.dirname)) or nil,
+                    repo = record and {
+                        id = item_repo_id,
+                        repo_id = item_repo_id,
+                        name = record.repo or plugin.dirname,
+                        owner = record.owner or "",
+                        full_name = record.repo_full_name,
+                    } or nil,
                     on_badge_tap = function()
                         self:togglePluginDisabled(plugin.dirname)
                     end,
@@ -7158,17 +7647,21 @@ function Storefront:buildInstalledEntries(available_list_height)
                             description = record and record.repo_description or "",
                             stars = 0,
                         }
+                        local remote_entry = self.patch_updates_state and self.patch_updates_state.remote_info and self.patch_updates_state.remote_info[patch.filename]
                         local patch_entry = {
                             filename = patch.filename,
-                            path = patch.path,
+                            path = (record and record.path) or patch.path,
                             display_path = record and record.path or patch.path,
+                            download_url = (remote_entry and remote_entry.download_url) or (record and record.download_url),
+                            branch = record and record.branch or "HEAD",
+                            sha = (remote_entry and remote_entry.remote_sha) or (record and record.sha),
                         }
                         local details_dialog = DetailsDialog:new{
                             Storefront = self,
                             repo = repo,
                             patch = patch_entry,
                             kind = "patch",
-                            update_item = { patch = patch, record = record, needs_update = has_update },
+                            update_item = { patch = patch, record = record, remote_entry = remote_entry, needs_update = has_update },
                         }
                         details_dialog:show()
                     end,
@@ -7179,10 +7672,24 @@ function Storefront:buildInstalledEntries(available_list_height)
 
     -- 3. Fonts
     if filter_type == "all" or filter_type == "font" then
-        local installed_fonts = listInstalledFonts()
+        local installed_fonts = (self and type(self.listInstalledFonts) == "function") and self:listInstalledFonts() or listInstalledFonts()
         for i, font_rec in ipairs(installed_fonts) do
             local font_name = font_rec.font_name or font_rec.repo or ""
             if font_name ~= "" then
+                local is_storefront = font_rec.is_storefront == true
+                if font_rec.is_storefront == nil then
+                    is_storefront = (font_rec.owner ~= nil and font_rec.owner ~= "") or (font_rec.download_url ~= nil and font_rec.download_url ~= "") or (font_rec.unmanaged == false)
+                end
+
+                local is_default = font_rec.is_default
+                if is_default == nil then
+                    is_default = not is_storefront or isDefaultFont(font_rec)
+                end
+
+                local match_type = true
+                if filter_default == "exclude_default" and not is_storefront then match_type = false end
+                if filter_default == "default_only" and (is_storefront or not is_default) then match_type = false end
+
                 local catalog_repo = nil
                 local ok_cache, Cache2 = pcall(require, "storefront_cache")
                 if ok_cache and Cache2 then
@@ -7216,7 +7723,12 @@ function Storefront:buildInstalledEntries(available_list_height)
                     end
                 end
 
-                if match_search then
+                if match_type and match_search then
+                    local kind_parts = { _("Font") }
+                    if is_default then
+                        table.insert(kind_parts, _("Default"))
+                    end
+                    local meta_kind = table.concat(kind_parts, " · ")
 
                     table.insert(items, {
                         name = font_name,
@@ -7224,12 +7736,13 @@ function Storefront:buildInstalledEntries(available_list_height)
                         stars_fmt = (catalog_repo and catalog_repo.stars and tonumber(catalog_repo.stars) and tonumber(catalog_repo.stars) > 0) and tostring(catalog_repo.stars) or nil,
                         updated = formatTimestamp(font_rec.installed_at),
                         mtime = font_rec.installed_at or 0,
-                        kind_label = _("Font"),
-                        description = (catalog_repo and catalog_repo.description) or "",
+                        kind_label = meta_kind,
+                        description = (catalog_repo and catalog_repo.description) or (is_default and _("Pre-installed core KOReader font.") or ""),
                         badge = font_rec.pending_download and _("Offline Regular") or nil,
                         is_entry = true,
                         is_installed_item = true,
                         is_font = true,
+                        is_default = is_default,
                         kind = "font",
                         font_name = font_name,
                         font_family = catalog_repo and catalog_repo.font_family or font_name,
@@ -7241,13 +7754,15 @@ function Storefront:buildInstalledEntries(available_list_height)
                                 owner = font_rec.owner or "",
                                 full_name = font_rec.full_name or font_name,
                                 download_url = font_rec.download_url,
-                                description = "",
+                                description = is_default and _("Pre-installed core KOReader font.") or "",
                                 stars = 0,
                                 font_family = font_name,
+                                is_default = is_default,
                             }
                             if not repo.download_url and catalog_repo then
                                 repo.download_url = catalog_repo.download_url
                             end
+                            repo.is_default = is_default
                             local details_dialog = DetailsDialog:new{
                                 Storefront = self,
                                 repo = repo,
@@ -7263,38 +7778,43 @@ function Storefront:buildInstalledEntries(available_list_height)
 
     -- 4. Screensavers
     if filter_type == "all" or filter_type == "screensaver" then
-        local StorefrontScreensaverMgr = require("storefront_screensaver_mgr")
-        local local_ss = StorefrontScreensaverMgr.listLocalScreensavers()
-        local ss_settings = StorefrontScreensaverMgr.getScreensaverSettings()
+        local match_type = true
+        if filter_default == "default_only" then match_type = false end
 
-        for i, ss_item in ipairs(local_ss) do
-            local is_active_single = ss_item.is_active_single and ss_settings.effective_mode == "single"
-            local is_in_shuffle = ss_settings.effective_mode == "shuffle"
-            local badge_str = is_active_single and _("Active Single") or (is_in_shuffle and _("Shuffle Pool") or nil)
+        if match_type then
+            local StorefrontScreensaverMgr = require("storefront_screensaver_mgr")
+            local local_ss = StorefrontScreensaverMgr.listLocalScreensavers()
+            local ss_settings = StorefrontScreensaverMgr.getScreensaverSettings()
 
-            local match_search = true
-            if search_text ~= "" then
-                local s_title = (ss_item.title or ""):lower()
-                local s_fname = (ss_item.filename or ""):lower()
-                if not (s_title:find(search_text, 1, true) or s_fname:find(search_text, 1, true)) then
-                    match_search = false
+            for i, ss_item in ipairs(local_ss) do
+                local is_active_single = ss_item.is_active_single and ss_settings.effective_mode == "single"
+                local is_in_shuffle = ss_settings.effective_mode == "shuffle"
+                local badge_str = is_active_single and _("Active Single") or (is_in_shuffle and _("Shuffle Pool") or nil)
+
+                local match_search = true
+                if search_text ~= "" then
+                    local s_title = (ss_item.title or ""):lower()
+                    local s_fname = (ss_item.filename or ""):lower()
+                    if not (s_title:find(search_text, 1, true) or s_fname:find(search_text, 1, true)) then
+                        match_search = false
+                    end
                 end
-            end
 
-            if match_search then
-                local desc_str = (ss_item.author and ss_item.author ~= "") and (_("By ") .. ss_item.author) or ss_item.filename
-                table.insert(items, {
-                    name = ss_item.title or ss_item.filename,
-                    owner = ss_item.author or "",
-                    updated = formatTimestamp(ss_item.mtime),
-                    mtime = ss_item.mtime or 0,
-                    kind_label = _("Screensaver"),
-                    description = desc_str,
-                    badge = badge_str,
-                    thumbnail_file = ss_item.thumbnail_file or ss_item.filepath,
-                    is_entry = true,
-                    is_installed_item = true,
-                    is_screensaver = true,
+                if match_search then
+                    local desc_str = (ss_item.author and ss_item.author ~= "") and (_("By ") .. ss_item.author) or ss_item.filename
+                    table.insert(items, {
+                        name = ss_item.title or ss_item.filename,
+                        owner = ss_item.author or "",
+                        updated = formatTimestamp(ss_item.mtime),
+                        mtime = ss_item.mtime or 0,
+                        kind_label = _("Screensaver"),
+                        description = desc_str,
+                        badge = badge_str,
+                        thumbnail_file = ss_item.thumbnail_file or ss_item.filepath,
+                        is_entry = true,
+                        is_installed_item = true,
+                        is_screensaver = true,
+                        is_default = false,
                     kind = "screensaver",
                     filepath = ss_item.filepath,
                     callback = function()
@@ -7324,6 +7844,7 @@ function Storefront:buildInstalledEntries(available_list_height)
                     end,
                 })
             end
+        end
         end
     end
 
@@ -7387,14 +7908,16 @@ function Storefront:hasActiveFilters(tab)
         local sm = self.installed_state.sort_mode or "name_asc"
         return st ~= "" or ft ~= "all" or fd ~= "all" or fs ~= "all" or sm ~= "name_asc"
     elseif tab == "Screensavers" then
+        local col = self.browser_state and self.browser_state.screensaver_collection
         local cat = (self.browser_state and self.browser_state.screensaver_category or ""):lower()
         local cats = self.browser_state and self.browser_state.screensaver_categories
         local has_cats = type(cats) == "table" and next(cats) and not cats["all"]
-        local sort = self.browser_state and self.browser_state.screensaver_sort or "downloads"
+        local sort = self.browser_state and self.browser_state.screensaver_sort or "featured"
+        if sort == "az" or sort == "za" then sort = "featured" end
         local st = util.trim(self.browser_state and self.browser_state.search_text or "")
         local ow = util.trim(self.browser_state and self.browser_state.owner or "")
         local srch = (self.browser_state and self.browser_state.screensaver_search or ""):lower()
-        return has_cats or (cat ~= "" and cat ~= "all") or (sort ~= "downloads") or (st ~= "") or (ow ~= "") or (srch ~= "")
+        return (col ~= nil and col ~= "") or has_cats or (cat ~= "" and cat ~= "all") or (sort ~= "featured") or (st ~= "") or (ow ~= "") or (srch ~= "")
     elseif tab == "Updates" then
         return false
     else
@@ -7430,6 +7953,7 @@ function Storefront:clearSearchAndFilters()
     self.browser_state.sort_mode = "stars_desc"
     self.browser_state.screensaver_category = ""
     self.browser_state.screensaver_categories = nil
+    self.browser_state.screensaver_collection = nil
     self.browser_state.page = 1
     self.browser_state.scroll_offset = nil
 
@@ -7451,23 +7975,447 @@ function Storefront:clearSearchAndFilters()
     self:reopenBrowser()
 end
 
+function Storefront:filterAndSortScreensavers(catalog, opts)
+    opts = opts or {}
+    local active_sources = opts.active_sources or { storefront = true, readerbackdrop = true }
+    local ss_cats = opts.ss_cats
+    local ss_cat = (opts.ss_cat or ""):lower()
+    local raw_search = opts.raw_search or ""
+    local raw_owner = opts.raw_owner or ""
+    local ss_sort = opts.ss_sort or "featured"
+    if ss_sort == "az" or ss_sort == "za" then ss_sort = "featured" end
+
+    local ss_col_id = opts.screensaver_collection or (self.browser_state and self.browser_state.screensaver_collection)
+    local col_item_order = nil
+    if ss_col_id and ss_col_id ~= "" then
+        local StorefrontScreensavers = require("storefront_screensavers_ui")
+        local collections = StorefrontScreensavers.getCachedCollections() or {}
+        local found_col = nil
+        for _, c in ipairs(collections) do
+            if c.id == ss_col_id then
+                found_col = c
+                break
+            end
+        end
+        if found_col and found_col.items then
+            col_item_order = {}
+            for pos, id in ipairs(found_col.items) do
+                col_item_order[tostring(id)] = pos
+            end
+        end
+    end
+
+    local search_terms = extractSearchTerms(raw_search)
+    local owner_term   = normalizedLower(raw_owner)
+
+    local both_sources_active = (active_sources.storefront ~= false and active_sources.readerbackdrop ~= false)
+    local is_category_empty = (not ss_cat or ss_cat == "" or ss_cat == "all") and (not ss_cats or ss_cats["all"] == true or not next(ss_cats))
+
+    local ok_ratings, StorefrontRatings = pcall(require, "storefront_ratings")
+    local liveRatings = (ok_ratings and StorefrontRatings and StorefrontRatings.liveRatings) or nil
+    local has_live = liveRatings and (next(liveRatings) ~= nil)
+
+    if not col_item_order and ss_sort == "featured" and both_sources_active and is_category_empty and (not search_terms or #search_terms == 0) and owner_term == "" then
+        local copy = {}
+        for idx, entry in ipairs(catalog) do
+            entry._catalog_index = entry._catalog_index or idx
+            copy[idx] = entry
+        end
+        return copy
+    end
+
+    local filtered = {}
+    for cat_idx, entry in ipairs(catalog) do
+        entry._catalog_index = entry._catalog_index or cat_idx
+        local pass = true
+
+        -- 0. Source filter
+        local s = (entry.source or "Storefront"):lower()
+        local is_rb = s:find("reader") ~= nil
+        if is_rb then
+            if active_sources.readerbackdrop == false then
+                pass = false
+            end
+        else
+            if active_sources.storefront == false then
+                pass = false
+            end
+        end
+
+        -- 0a. Collection membership filter
+        if pass and col_item_order then
+            if not col_item_order[tostring(entry.id)] then
+                pass = false
+            end
+        end
+
+        -- 1. Category filter
+        if pass then
+            if type(ss_cats) == "table" and next(ss_cats) and not ss_cats["all"] then
+                local mapped_cats = entry._mapped_cats
+                if not mapped_cats then
+                    mapped_cats = StorefrontUtils.getMappedScreensaverCategories(entry.category)
+                    entry._mapped_cats = mapped_cats
+                end
+                local match_found = false
+                for _, mc in ipairs(mapped_cats) do
+                    if ss_cats[mc:lower()] then
+                        match_found = true
+                        break
+                    end
+                end
+                if not match_found then pass = false end
+            elseif ss_cat ~= "" and ss_cat ~= "all" then
+                local mapped_cats = entry._mapped_cats
+                if not mapped_cats then
+                    mapped_cats = StorefrontUtils.getMappedScreensaverCategories(entry.category)
+                    entry._mapped_cats = mapped_cats
+                end
+                local match_found = false
+                for _, mc in ipairs(mapped_cats) do
+                    if mc:lower() == ss_cat then
+                        match_found = true
+                        break
+                    end
+                end
+                if not match_found then pass = false end
+            end
+        end
+
+        -- 2. Main search bar: matches titles and tags
+        if pass and search_terms then
+            local title_val = entry._title_lower
+            if not title_val then
+                title_val = normalizedLower(entry.title or entry.name or "")
+                entry._title_lower = title_val
+            end
+            local tag_haystacks = entry._tag_haystacks
+            if not tag_haystacks then
+                tag_haystacks = {}
+                if type(entry.tags) == "table" then
+                    for _, tag in ipairs(entry.tags) do
+                        local t_norm = normalizedLower(tag)
+                        if t_norm ~= "" then
+                            table.insert(tag_haystacks, t_norm)
+                        end
+                    end
+                elseif type(entry.tags) == "string" and entry.tags ~= "" then
+                    for tag in entry.tags:gmatch("[^,]+") do
+                        local t_norm = normalizedLower(tag)
+                        if t_norm ~= "" then
+                            table.insert(tag_haystacks, t_norm)
+                        end
+                    end
+                end
+                entry._tag_haystacks = tag_haystacks
+            end
+
+            for _, term in ipairs(search_terms) do
+                local term_match = false
+                if title_val:find(term, 1, true) then
+                    term_match = true
+                else
+                    for _, tag_val in ipairs(tag_haystacks) do
+                        if tag_val:find(term, 1, true) then
+                            term_match = true
+                            break
+                        end
+                    end
+                end
+                if not term_match then
+                    pass = false
+                    break
+                end
+            end
+        end
+
+        -- 3. Owner bar: matches submitter / author / attribution
+        if pass and owner_term ~= "" then
+            local owner_match = false
+            local author_val = normalizedLower(entry.author)
+            local submitter_val = normalizedLower(entry.submitter)
+            local attribution_val = normalizedLower(entry.attribution)
+
+            if (author_val ~= "" and author_val:find(owner_term, 1, true)) or
+               (submitter_val ~= "" and submitter_val:find(owner_term, 1, true)) or
+               (attribution_val ~= "" and attribution_val:find(owner_term, 1, true)) then
+                owner_match = true
+            end
+
+            if not owner_match then
+                pass = false
+            end
+        end
+
+        if pass then table.insert(filtered, entry) end
+    end
+
+    local both_sources_active = (active_sources.storefront ~= false and active_sources.readerbackdrop ~= false)
+
+    local function interleaveLists(list_a, list_b)
+        local interleaved = {}
+        local max_len = math.max(#list_a, #list_b)
+        for i = 1, max_len do
+            if list_a[i] then table.insert(interleaved, list_a[i]) end
+            if list_b[i] then table.insert(interleaved, list_b[i]) end
+        end
+        return interleaved
+    end
+
+    local ok_ratings, StorefrontRatings = pcall(require, "storefront_ratings")
+    local liveRatings = (ok_ratings and StorefrontRatings and StorefrontRatings.liveRatings) or nil
+    local has_live = liveRatings and (next(liveRatings) ~= nil)
+
+    local function getSortMetadata(list)
+        local dl_scores = {}
+        local scores = {}
+        local titles = {}
+        for _, entry in ipairs(list) do
+            dl_scores[entry] = (live_r and live_r.downloads) or entry.downloads or entry.download_count or entry.downloads_count or entry.installs or 0
+            scores[entry] = (live_r and (live_r.up - live_r.down)) or entry.likes or 0
+            titles[entry] = entry._title_lower or (entry.title or entry.name or ""):lower()
+            entry._title_lower = titles[entry]
+        end
+        return dl_scores, scores, titles
+    end
+
+    local function sortDownloads(list)
+        local dl_scores, scores, titles = getSortMetadata(list)
+        table.sort(list, function(a, b)
+            local dla = dl_scores[a] or 0
+            local dlb = dl_scores[b] or 0
+            if dla ~= dlb then return dla > dlb end
+            local sa = scores[a] or 0
+            local sb = scores[b] or 0
+            if sa ~= sb then return sa > sb end
+            local ta = titles[a] or ""
+            local tb = titles[b] or ""
+            if ta ~= tb then return ta < tb end
+            local ca = a._catalog_index or 0
+            local cb = b._catalog_index or 0
+            return ca < cb
+        end)
+        return list
+    end
+
+    local function sortPopular(list)
+        local dl_scores, scores, titles = getSortMetadata(list)
+        table.sort(list, function(a, b)
+            local sa = scores[a] or 0
+            local sb = scores[b] or 0
+            if sa ~= sb then return sa > sb end
+            local dla = dl_scores[a] or 0
+            local dlb = dl_scores[b] or 0
+            if dla ~= dlb then return dla > dlb end
+            local ta = titles[a] or ""
+            local tb = titles[b] or ""
+            if ta ~= tb then return ta < tb end
+            local ca = a._catalog_index or 0
+            local cb = b._catalog_index or 0
+            return ca < cb
+        end)
+        return list
+    end
+
+    local function sortRecent(list)
+        table.sort(list, function(a, b)
+            local da = a.dateAdded or a.date_added or a.added or a.created_at
+            local db = b.dateAdded or b.date_added or b.added or b.created_at
+            if da and db and da ~= db then return da > db end
+            local ca = a._catalog_index or 0
+            local cb = b._catalog_index or 0
+            if ca ~= cb then return ca > cb end
+            return (a.title or a.name or "") < (b.title or b.name or "")
+        end)
+        return list
+    end
+
+    local function splitBySource(items)
+        local sf_items = {}
+        local rb_items = {}
+        for _, item in ipairs(items) do
+            if item.source == "ReaderBackdrop" then
+                table.insert(rb_items, item)
+            else
+                table.insert(sf_items, item)
+            end
+        end
+        return sf_items, rb_items
+    end
+
+    if ss_sort == "popular" then
+        if both_sources_active then
+            local sf_items, rb_items = splitBySource(filtered)
+            sortPopular(sf_items)
+            sortPopular(rb_items)
+            filtered = interleaveLists(sf_items, rb_items)
+        else
+            sortPopular(filtered)
+        end
+    elseif ss_sort == "recent" or ss_sort == "newest" then
+        if both_sources_active then
+            local sf_items, rb_items = splitBySource(filtered)
+            sortRecent(sf_items)
+            sortRecent(rb_items)
+            filtered = interleaveLists(sf_items, rb_items)
+        else
+            sortRecent(filtered)
+        end
+    elseif ss_sort == "downloads" then
+        if both_sources_active then
+            local sf_items, rb_items = splitBySource(filtered)
+            sortDownloads(sf_items)
+            sortDownloads(rb_items)
+            filtered = interleaveLists(sf_items, rb_items)
+        else
+            sortDownloads(filtered)
+        end
+    else
+        -- "featured" (default sort mode)
+        local sf_featured = {}
+        local sf_regular = {}
+        local rb_items = {}
+        for _, item in ipairs(filtered) do
+            if item.source == "ReaderBackdrop" then
+                table.insert(rb_items, item)
+            else
+                local is_feat = (item.featured == true or item.featured == 1)
+                if is_feat then
+                    table.insert(sf_featured, item)
+                else
+                    table.insert(sf_regular, item)
+                end
+            end
+        end
+
+        table.sort(sf_featured, function(a, b)
+            local pa = a.featuredPriority or 0
+            local pb = b.featuredPriority or 0
+            if pa ~= pb then return pa > pb end
+            local da = a.dateAdded or a.date_added or a.added or a.created_at
+            local db = b.dateAdded or b.date_added or b.added or b.created_at
+            if da and db and da ~= db then return da > db end
+            local ca = a._catalog_index or 0
+            local cb = b._catalog_index or 0
+            return ca < cb
+        end)
+
+        sortDownloads(sf_regular)
+        sortDownloads(rb_items)
+
+        if both_sources_active then
+            local interleaved_rest = interleaveLists(sf_regular, rb_items)
+            local result = {}
+            for _, item in ipairs(sf_featured) do table.insert(result, item) end
+            for _, item in ipairs(interleaved_rest) do table.insert(result, item) end
+            filtered = result
+        else
+            local result = {}
+            for _, item in ipairs(sf_featured) do table.insert(result, item) end
+            for _, item in ipairs(sf_regular) do table.insert(result, item) end
+            for _, item in ipairs(rb_items) do table.insert(result, item) end
+            filtered = result
+        end
+    end
+
+    if col_item_order and ss_sort == "featured" then
+        table.sort(filtered, function(a, b)
+            local oa = col_item_order[tostring(a.id)] or 999
+            local ob = col_item_order[tostring(b.id)] or 999
+            if oa ~= ob then return oa < ob end
+            local ca = a._catalog_index or 0
+            local cb = b._catalog_index or 0
+            return ca < cb
+        end)
+    end
+
+    return filtered
+end
+
+function Storefront:warmupScreensaversCache()
+    if not self.browser_menu then return end
+    if self._filtered_screensavers_cache then return end
+    local StorefrontUtils = require("storefront_utils")
+    if StorefrontUtils.isLowMemory and StorefrontUtils.isLowMemory() then return end
+
+    if not self.screensavers_cache then
+        local ok_ss, StorefrontScreensavers = pcall(require, "storefront_screensavers_ui")
+        if ok_ss and StorefrontScreensavers and StorefrontScreensavers.getCachedCatalog then
+            self.screensavers_cache = StorefrontScreensavers.getCachedCatalog()
+        end
+    end
+    if not self.screensavers_cache or #self.screensavers_cache == 0 then return end
+
+    self:ensureBrowserState()
+    local ss_cat  = (self.browser_state.screensaver_category or ""):lower()
+    local ss_cats = self.browser_state.screensaver_categories
+    local ss_sort = self.browser_state.screensaver_sort or "featured"
+    if ss_sort == "az" or ss_sort == "za" then ss_sort = "featured" end
+    local raw_search = util.trim((self.browser_state.search_text and self.browser_state.search_text ~= "") and self.browser_state.search_text or (self.browser_state.screensaver_search or ""))
+    local raw_owner  = util.trim(self.browser_state.owner or "")
+    local active_sources = self.browser_state.screensaver_sources or { storefront = true, readerbackdrop = true }
+
+    local ss_col = tostring(self.browser_state.screensaver_collection or "")
+    local cats_key = ""
+    if type(ss_cats) == "table" then
+        local cat_keys = {}
+        for k, v in pairs(ss_cats) do
+            if v then table.insert(cat_keys, k) end
+        end
+        table.sort(cat_keys)
+        cats_key = table.concat(cat_keys, ",")
+    end
+    local src_key_str = string.format("sf:%s,rb:%s", tostring(active_sources.storefront ~= false), tostring(active_sources.readerbackdrop ~= false))
+    local ss_cache_key = string.format("%s|%s|%s|%s|%s|%s|%s|%d",
+        src_key_str, tostring(ss_cat), cats_key, tostring(ss_sort),
+        tostring(raw_search), tostring(raw_owner), ss_col, #self.screensavers_cache)
+
+    local filtered = self:filterAndSortScreensavers(self.screensavers_cache, {
+        active_sources = active_sources,
+        ss_cats = ss_cats,
+        ss_cat = ss_cat,
+        raw_search = raw_search,
+        raw_owner = raw_owner,
+        ss_sort = ss_sort,
+        screensaver_collection = ss_col,
+    })
+
+    self._filtered_screensavers_cache = {
+        key = ss_cache_key,
+        filtered = filtered,
+    }
+end
+
 function Storefront:buildScreensaverEntries(available_list_height, available_list_width)
     local StorefrontScreensavers = require("storefront_screensavers_ui")
-    local ok_ratings, StorefrontRatings = pcall(require, "storefront_ratings")
+    local StorefrontUtils = require("storefront_utils")
 
-    -- Fetch catalog (cached after first call)
+    -- Emergency memory guard for extreme low-memory situations (< 6MB available)
+    if StorefrontUtils.isLowMemory and StorefrontUtils.isLowMemory(6 * 1024) then
+        self.screensavers_cache = nil
+        self._filtered_screensavers_cache = nil
+        collectgarbage("step", 200)
+    end
+
+    -- Fetch catalog (cached after first call).
     if not self.screensavers_cache then
-        pcall(function()
-            StorefrontScreensavers.fetchCatalog(function(ok, catalog)
-                self.screensavers_cache = catalog
+        local local_mem = StorefrontScreensavers.getCachedCatalog and StorefrontScreensavers.getCachedCatalog()
+        if local_mem and #local_mem > 0 then
+            self.screensavers_cache = local_mem
+        else
+            pcall(function()
+                StorefrontScreensavers.fetchCatalog(function(ok, catalog)
+                    self.screensavers_cache = catalog
+                end)
             end)
-        end)
+        end
     end
     local catalog = self.screensavers_cache or {}
 
     -- ---- Widget helpers ---------------------------------------------------
     local sc       = function(val) return Device.screen:scaleBySize(val) end
     local sw       = Device.screen:getWidth()
+    local sh       = Device.screen:getHeight()
     local gap      = sc(10)
     local card_pad = sc(5)
     local usable_w = available_list_width or (sw - sc(24))
@@ -7504,12 +8452,12 @@ function Storefront:buildScreensaverEntries(available_list_height, available_lis
     self:ensureBrowserState()
     local ss_cat  = (self.browser_state.screensaver_category or ""):lower()
     local ss_cats = self.browser_state.screensaver_categories
-    local ss_sort = self.browser_state.screensaver_sort or "downloads"  -- "downloads" | "recent" | "popular" | "az" | "za"
+    local ss_sort = self.browser_state.screensaver_sort or "featured"  -- "featured" | "downloads" | "recent" | "popular"
+    if ss_sort == "az" or ss_sort == "za" then ss_sort = "featured" end
     local raw_search = util.trim((self.browser_state.search_text and self.browser_state.search_text ~= "") and self.browser_state.search_text or (self.browser_state.screensaver_search or ""))
     local raw_owner  = util.trim(self.browser_state.owner or "")
-    local search_terms = extractSearchTerms(raw_search)
-    local owner_term   = normalizedLower(raw_owner)
 
+    local ss_col = tostring(self.browser_state.screensaver_collection or "")
     local cats_key = ""
     if type(ss_cats) == "table" then
         local cat_keys = {}
@@ -7519,183 +8467,25 @@ function Storefront:buildScreensaverEntries(available_list_height, available_lis
         table.sort(cat_keys)
         cats_key = table.concat(cat_keys, ",")
     end
-    local ss_cache_key = string.format("%s|%s|%s|%s|%s|%d",
-        tostring(ss_cat), cats_key, tostring(ss_sort),
-        tostring(raw_search), tostring(raw_owner), #catalog)
+    local active_sources = self.browser_state.screensaver_sources or { storefront = true, readerbackdrop = true }
+    local src_key_str = string.format("sf:%s,rb:%s", tostring(active_sources.storefront ~= false), tostring(active_sources.readerbackdrop ~= false))
+    local ss_cache_key = string.format("%s|%s|%s|%s|%s|%s|%s|%d",
+        src_key_str, tostring(ss_cat), cats_key, tostring(ss_sort),
+        tostring(raw_search), tostring(raw_owner), ss_col, #catalog)
 
     local filtered
     if self._filtered_screensavers_cache and self._filtered_screensavers_cache.key == ss_cache_key then
         filtered = self._filtered_screensavers_cache.filtered
     else
-        filtered = {}
-        for cat_idx, entry in ipairs(catalog) do
-            entry._catalog_index = entry._catalog_index or cat_idx
-            local pass = true
-            -- 1. Category filter
-            if type(ss_cats) == "table" and next(ss_cats) and not ss_cats["all"] then
-                local mapped_cats = StorefrontUtils.getMappedScreensaverCategories(entry.category)
-                local match_found = false
-                for _, mc in ipairs(mapped_cats) do
-                    if ss_cats[mc:lower()] then
-                        match_found = true
-                        break
-                    end
-                end
-                if not match_found then pass = false end
-            elseif ss_cat ~= "" and ss_cat ~= "all" then
-                local mapped_cats = StorefrontUtils.getMappedScreensaverCategories(entry.category)
-                local match_found = false
-                for _, mc in ipairs(mapped_cats) do
-                    if mc:lower() == ss_cat then
-                        match_found = true
-                        break
-                    end
-                end
-                if not match_found then pass = false end
-            end
-
-            -- 2. Main search bar: matches titles and tags
-            if pass and search_terms then
-                local title_val = normalizedLower(entry.title or entry.name or "")
-                local tag_haystacks = {}
-                if type(entry.tags) == "table" then
-                    for _, tag in ipairs(entry.tags) do
-                        local t_norm = normalizedLower(tag)
-                        if t_norm ~= "" then
-                            table.insert(tag_haystacks, t_norm)
-                        end
-                    end
-                elseif type(entry.tags) == "string" and entry.tags ~= "" then
-                    for tag in entry.tags:gmatch("[^,]+") do
-                        local t_norm = normalizedLower(tag)
-                        if t_norm ~= "" then
-                            table.insert(tag_haystacks, t_norm)
-                        end
-                    end
-                end
-
-                for _, term in ipairs(search_terms) do
-                    local term_match = false
-                    if title_val:find(term, 1, true) then
-                        term_match = true
-                    else
-                        for _, tag_val in ipairs(tag_haystacks) do
-                            if tag_val:find(term, 1, true) then
-                                term_match = true
-                                break
-                            end
-                        end
-                    end
-                    if not term_match then
-                        pass = false
-                        break
-                    end
-                end
-            end
-
-            -- 3. Owner bar: matches submitter / author / attribution
-            if pass and owner_term ~= "" then
-                local owner_match = false
-                local author_val = normalizedLower(entry.author)
-                local submitter_val = normalizedLower(entry.submitter)
-                local attribution_val = normalizedLower(entry.attribution)
-
-                if (author_val ~= "" and author_val:find(owner_term, 1, true)) or
-                   (submitter_val ~= "" and submitter_val:find(owner_term, 1, true)) or
-                   (attribution_val ~= "" and attribution_val:find(owner_term, 1, true)) then
-                    owner_match = true
-                end
-
-                if not owner_match then
-                    pass = false
-                end
-            end
-
-            if pass then table.insert(filtered, entry) end
-        end
-
-        if ss_sort == "popular" then
-            local scores = {}
-            local dl_scores = {}
-            if ok_ratings and StorefrontRatings and StorefrontRatings.getRating then
-                for _, entry in ipairs(filtered) do
-                    local live_r = StorefrontRatings.getRating(entry)
-                    scores[entry] = (live_r and (live_r.up - live_r.down)) or entry.likes or 0
-                    dl_scores[entry] = (live_r and live_r.downloads) or entry.downloads or entry.download_count or entry.downloads_count or entry.installs or 0
-                end
-            else
-                for _, entry in ipairs(filtered) do
-                    scores[entry] = entry.likes or 0
-                    dl_scores[entry] = entry.downloads or entry.download_count or entry.downloads_count or entry.installs or 0
-                end
-            end
-            table.sort(filtered, function(a, b)
-                local sa = scores[a] or 0
-                local sb = scores[b] or 0
-                if sa ~= sb then return sa > sb end
-                local dla = dl_scores[a] or 0
-                local dlb = dl_scores[b] or 0
-                if dla ~= dlb then return dla > dlb end
-                local ca = a._catalog_index or 0
-                local cb = b._catalog_index or 0
-                if ca ~= cb then return ca > cb end
-                return (a.title or a.name or "") < (b.title or b.name or "")
-            end)
-        elseif ss_sort == "downloads" then
-            local dl_scores = {}
-            local scores = {}
-            if ok_ratings and StorefrontRatings and StorefrontRatings.getRating then
-                for _, entry in ipairs(filtered) do
-                    local live_r = StorefrontRatings.getRating(entry)
-                    dl_scores[entry] = (live_r and live_r.downloads) or entry.downloads or entry.download_count or entry.downloads_count or entry.installs or 0
-                    scores[entry] = (live_r and (live_r.up - live_r.down)) or entry.likes or 0
-                end
-            else
-                for _, entry in ipairs(filtered) do
-                    dl_scores[entry] = entry.downloads or entry.download_count or entry.downloads_count or entry.installs or 0
-                    scores[entry] = entry.likes or 0
-                end
-            end
-            table.sort(filtered, function(a, b)
-                local dla = dl_scores[a] or 0
-                local dlb = dl_scores[b] or 0
-                if dla ~= dlb then return dla > dlb end
-                local sa = scores[a] or 0
-                local sb = scores[b] or 0
-                if sa ~= sb then return sa > sb end
-                local ca = a._catalog_index or 0
-                local cb = b._catalog_index or 0
-                if ca ~= cb then return ca > cb end
-                return (a.title or a.name or "") < (b.title or b.name or "")
-            end)
-        elseif ss_sort == "recent" or ss_sort == "newest" then
-            table.sort(filtered, function(a, b)
-                local da = a.dateAdded or a.date_added or a.added or a.created_at
-                local db = b.dateAdded or b.date_added or b.added or b.created_at
-                if da and db and da ~= db then return da > db end
-                local ca = a._catalog_index or 0
-                local cb = b._catalog_index or 0
-                if ca ~= cb then return ca > cb end
-                return (a.title or a.name or "") < (b.title or b.name or "")
-            end)
-        elseif ss_sort == "az" then
-            local titles = {}
-            for _, entry in ipairs(filtered) do
-                titles[entry] = (entry.title or entry.name or ""):lower()
-            end
-            table.sort(filtered, function(a, b)
-                return (titles[a] or "") < (titles[b] or "")
-            end)
-        elseif ss_sort == "za" then
-            local titles = {}
-            for _, entry in ipairs(filtered) do
-                titles[entry] = (entry.title or entry.name or ""):lower()
-            end
-            table.sort(filtered, function(a, b)
-                return (titles[a] or "") > (titles[b] or "")
-            end)
-        end
-
+        filtered = self:filterAndSortScreensavers(catalog, {
+            active_sources = active_sources,
+            ss_cats = ss_cats,
+            ss_cat = ss_cat,
+            raw_search = raw_search,
+            raw_owner = raw_owner,
+            ss_sort = ss_sort,
+            screensaver_collection = ss_col,
+        })
         self._filtered_screensavers_cache = {
             key = ss_cache_key,
             filtered = filtered,
@@ -7734,6 +8524,9 @@ function Storefront:buildScreensaverEntries(available_list_height, available_lis
     local _ss_local_asset_cache = {}
 
     local function makeCard(entry)
+        if StorefrontScreensavers and StorefrontScreensavers.normalizeItem then
+            StorefrontScreensavers.normalizeItem(entry)
+        end
         -- Thumbnail image (or grey placeholder)
         local thumb_file = nil
         pcall(function()
@@ -7811,8 +8604,10 @@ function Storefront:buildScreensaverEntries(available_list_height, available_lis
         end
 
         -- Title (truncated)
+        local is_featured = (entry.featured == true or entry.featured == 1)
+        local display_title = (is_featured and "★ " or "") .. (entry.title or entry.name or "")
         local title_w = TextWidget:new{
-            text      = entry.title or entry.name or "",
+            text      = display_title,
             face      = name_face,
             bold      = true,
             fgcolor   = Blitbuffer.COLOR_BLACK,
@@ -7833,15 +8628,37 @@ function Storefront:buildScreensaverEntries(available_list_height, available_lis
             and string.format("%.1fk", dl_count / 1000):gsub("%.0k", "k")
             or tostring(dl_count)
 
-        local display_cat = table.concat(StorefrontUtils.getMappedScreensaverCategories(entry.category), ", ")
+        local cat_text = table.concat(StorefrontUtils.getMappedScreensaverCategories(entry.category), ", ")
+        local is_rb = (entry.source == "ReaderBackdrop")
         local meta_items = {
             TextWidget:new{
-                text      = display_cat,
+                text      = cat_text,
                 face      = meta_face,
                 fgcolor   = Blitbuffer.Color8(110),
-                max_width = math.floor(inner_w * 0.40),
+                max_width = math.floor(inner_w * 0.38),
             },
         }
+
+        if is_rb then
+            table.insert(meta_items, HorizontalSpan:new{ width = sc(2) })
+            table.insert(meta_items, TextWidget:new{ text = "·", face = meta_face, fgcolor = Blitbuffer.Color8(140) })
+            table.insert(meta_items, HorizontalSpan:new{ width = sc(2) })
+            table.insert(meta_items, TextWidget:new{
+                text    = "RB",
+                face    = meta_face,
+                bold    = true,
+                fgcolor = Blitbuffer.Color8(80),
+            })
+        else
+            table.insert(meta_items, HorizontalSpan:new{ width = sc(2) })
+            table.insert(meta_items, TextWidget:new{ text = "·", face = meta_face, fgcolor = Blitbuffer.Color8(140) })
+            table.insert(meta_items, HorizontalSpan:new{ width = sc(2) })
+            table.insert(meta_items, ImageWidget:new{
+                file = getAssetPath("zap-filled.svg"),
+                width = sc(11), height = sc(11),
+                scale_factor = 0, is_icon = true, alpha = true,
+            })
+        end
 
         if has_rating then
             local icon_file = (user_vote == "down") and getAssetPath("thumbs-down-filled.svg")
@@ -8000,57 +8817,175 @@ function Storefront:buildScreensaverEntries(available_list_height, available_lis
 
     if #missing_cards > 0 then
         local UIManager = require("ui/uimanager")
-        local function processQueue(idx)
-            if self_ref._ss_thumb_task_id ~= task_id then return end
-            if not self_ref.browser_menu or (self_ref.browser_state and self_ref.browser_state.tab ~= "Screensavers") then return end
-            if idx > #missing_cards then return end
+        local ok_ffi, ffiutil = pcall(require, "ffi/util")
+        if not ok_ffi then ok_ffi, ffiutil = pcall(require, "ffiutil") end
 
-            local card = missing_cards[idx]
-            local entry = card._entry
-            local c_inner_w = card._inner_w
-            local c_img_h = card._img_h
+        local queue_idx = 1
+        local current_worker = nil
 
-            -- Download thumbnail on next tick
-            UIManager:nextTick(function()
-                if self_ref._ss_thumb_task_id ~= task_id then return end
-                if not self_ref.browser_menu or (self_ref.browser_state and self_ref.browser_state.tab ~= "Screensavers") then return end
-
-                local thumb_path = nil
-                local ok_fetch, res = pcall(function()
-                    return StorefrontScreensavers.fetchThumbnail(entry)
-                end)
-                if ok_fetch and res then
-                    thumb_path = res
+        local function cleanupWorker(worker)
+            if not worker then return end
+            if worker.pid and ok_ffi and ffiutil and ffiutil.terminateSubProcess then
+                pcall(ffiutil.terminateSubProcess, worker.pid)
+                if ffiutil.isSubProcessDone then
+                    pcall(ffiutil.isSubProcessDone, worker.pid, true)
                 end
-
-                if self_ref._ss_thumb_task_id ~= task_id then return end
-                if not self_ref.browser_menu or (self_ref.browser_state and self_ref.browser_state.tab ~= "Screensavers") then return end
-
-                if thumb_path and card and card._img_widget then
-                    local ok_cov, res_cov = pcall(function()
-                        return StorefrontScreensavers.createCoverImageWidget(thumb_path, c_inner_w, c_img_h)
-                    end)
-                    if ok_cov and res_cov then
-                        card._img_widget[1] = res_cov
-                        if self_ref.browser_menu then
-                            UIManager:setDirty(self_ref.browser_menu, "ui")
-                        end
-                    else
-                        pcall(os.remove, thumb_path)
-                    end
-                end
-
-                -- Proceed sequentially to the next card in queue
-                UIManager:nextTick(function()
-                    processQueue(idx + 1)
+            end
+            if worker.fd and ok_ffi and ffiutil then
+                pcall(function()
+                    local read_func = ffiutil.readAllFromFD or ffiutil.readFromFD
+                    if read_func then read_func(worker.fd) end
                 end)
-            end)
+            end
+            if worker.pid and StorefrontScreensavers and StorefrontScreensavers.releaseThumbnailWorker then
+                StorefrontScreensavers.releaseThumbnailWorker(worker.pid)
+            end
         end
 
-        -- Start queue
-        UIManager:nextTick(function()
-            processQueue(1)
-        end)
+        local function applyThumbnail(card, path, inner_w, img_h)
+            if not (card and card._img_widget and path) then return end
+            local ok_dev, Device = pcall(require, "device")
+            if ok_dev and Device and (Device.screen_saver_mode or (Device.isSuspended and Device:isSuspended())) then
+                return
+            end
+            local ok_cov, res_cov = pcall(StorefrontScreensavers.createCoverImageWidget, path, inner_w, img_h)
+            if ok_cov and res_cov then
+                if card._img_widget[1] and card._img_widget[1].free then
+                    pcall(card._img_widget[1].free, card._img_widget[1])
+                end
+                card._img_widget[1] = res_cov
+                if self_ref.browser_menu then
+                    UIManager:setDirty(self_ref.browser_menu, "ui")
+                end
+            else
+                pcall(os.remove, path)
+            end
+        end
+
+        local pollQueue
+        pollQueue = function()
+            -- Abort if device entered suspend or screensaver mode
+            local Device = require("device")
+            if (Device.isSuspended and Device:isSuspended()) or Device.screen_saver_mode then
+                if current_worker then
+                    cleanupWorker(current_worker)
+                    current_worker = nil
+                    self_ref._active_thumb_worker = nil
+                end
+                return
+            end
+
+            -- Abort if page changed or user navigated away
+            if self_ref._ss_thumb_task_id ~= task_id or not self_ref.browser_menu or (self_ref.browser_state and self_ref.browser_state.tab ~= "Screensavers") then
+                if current_worker then
+                    cleanupWorker(current_worker)
+                    current_worker = nil
+                    self_ref._active_thumb_worker = nil
+                end
+                return
+            end
+
+            -- 1. Check if the active worker has finished
+            if current_worker then
+                local pid = current_worker.pid
+                local done = false
+                if ok_ffi and ffiutil and ffiutil.isSubProcessDone then
+                    done = ffiutil.isSubProcessDone(pid)
+                else
+                    done = true
+                end
+
+                if done then
+                    local read_func = ok_ffi and ffiutil and (ffiutil.readAllFromFD or ffiutil.readFromFD)
+                    local msg = nil
+                    if read_func and current_worker.fd then
+                        pcall(function() msg = read_func(current_worker.fd) end)
+                    end
+                    if pid and ok_ffi and ffiutil and ffiutil.isSubProcessDone then
+                        pcall(ffiutil.isSubProcessDone, pid, true)
+                    end
+                    if pid and StorefrontScreensavers and StorefrontScreensavers.releaseThumbnailWorker then
+                        StorefrontScreensavers.releaseThumbnailWorker(pid)
+                    end
+                    local thumb_path = current_worker.thumb_path
+                    if (msg and msg:find("^OK")) or (thumb_path and ok_lfs and lfs and lfs.attributes and lfs.attributes(thumb_path, "mode") == "file") then
+                        applyThumbnail(current_worker.card, thumb_path, current_worker.inner_w, current_worker.img_h)
+                        pcall(function()
+                            local ok_cl, StorefrontCacheLimit = pcall(require, "storefront_cache_limit")
+                            if ok_cl and StorefrontCacheLimit and StorefrontCacheLimit.enforce then
+                                StorefrontCacheLimit.enforce()
+                            end
+                        end)
+                    else
+                        if current_worker.entry then
+                            current_worker.entry._thumb_failed = true
+                        end
+                    end
+                    current_worker = nil
+                    self_ref._active_thumb_worker = nil
+                else
+                    -- Still in flight: poll again in 150ms without blocking UI
+                    UIManager:scheduleIn(0.15, pollQueue)
+                    return
+                end
+            end
+
+            -- Check for low memory before spawning next worker
+            local is_low, _ = StorefrontUtils.isLowMemory()
+            if is_low then
+                return
+            end
+
+            -- 2. Dispatch next card in queue (1 worker at a time for low memory / Kindle safety)
+            while queue_idx <= #missing_cards and not current_worker do
+                local card = missing_cards[queue_idx]
+                queue_idx = queue_idx + 1
+
+                local entry = card._entry
+                local c_inner_w = card._inner_w
+                local c_img_h = card._img_h
+                local t_path, _ = StorefrontScreensavers.getThumbnailPath and StorefrontScreensavers.getThumbnailPath(entry)
+
+                if StorefrontScreensavers.fetchThumbnailAsync then
+                    local pid, fd, direct_path = StorefrontScreensavers.fetchThumbnailAsync(entry)
+                    if direct_path then
+                        applyThumbnail(card, direct_path, c_inner_w, c_img_h)
+                    elseif pid and fd then
+                        current_worker = {
+                            pid = pid,
+                            fd = fd,
+                            card = card,
+                            entry = entry,
+                            inner_w = c_inner_w,
+                            img_h = c_img_h,
+                            thumb_path = t_path,
+                        }
+                        self_ref._active_thumb_worker = current_worker
+                        -- Poll for completion after 150ms
+                        UIManager:scheduleIn(0.15, pollQueue)
+                        return
+                    else
+                        local res = StorefrontScreensavers.fetchThumbnail(entry)
+                        if res then
+                            applyThumbnail(card, res, c_inner_w, c_img_h)
+                        end
+                    end
+                else
+                    local res = StorefrontScreensavers.fetchThumbnail(entry)
+                    if res then
+                        applyThumbnail(card, res, c_inner_w, c_img_h)
+                    end
+                end
+            end
+
+            -- 3. If there are still items or active worker, keep polling
+            if current_worker or queue_idx <= #missing_cards then
+                UIManager:scheduleIn(0.15, pollQueue)
+            end
+        end
+
+        -- Start the non-blocking loop
+        UIManager:nextTick(pollQueue)
     end
 
     return {
@@ -8262,7 +9197,8 @@ function Storefront:dismissProgressMessage(target)
     end
 end
 
-function Storefront:closeBrowserMenu()
+function Storefront:closeBrowserMenu(opts)
+    opts = opts or {}
     if _catalog_show_timer_fn then
         UIManager:unschedule(_catalog_show_timer_fn)
         _catalog_show_timer_fn = nil
@@ -8271,10 +9207,49 @@ function Storefront:closeBrowserMenu()
         UIManager:unschedule(_catalog_retry_timer_fn)
         _catalog_retry_timer_fn = nil
     end
+    if _screensaver_warmup_timer_fn then
+        UIManager:unschedule(_screensaver_warmup_timer_fn)
+        _screensaver_warmup_timer_fn = nil
+    end
     self:dismissProgressMessage()
+
+    -- Cancel any active thumbnail generation workers immediately
+    self._ss_thumb_task_id = (self._ss_thumb_task_id or 0) + 1
+    if self._active_thumb_worker then
+        local w = self._active_thumb_worker
+        self._active_thumb_worker = nil
+        pcall(function()
+            local ok_ffi, ffiutil = pcall(require, "ffi/util")
+            if not ok_ffi then ok_ffi, ffiutil = pcall(require, "ffiutil") end
+            if ok_ffi and ffiutil then
+                if w.pid and ffiutil.terminateSubProcess then
+                    pcall(ffiutil.terminateSubProcess, w.pid)
+                    if ffiutil.isSubProcessDone then
+                        pcall(ffiutil.isSubProcessDone, w.pid, true)
+                    end
+                end
+                if w.fd and (ffiutil.readAllFromFD or ffiutil.readFromFD) then
+                    local read_fn = ffiutil.readAllFromFD or ffiutil.readFromFD
+                    pcall(read_fn, w.fd)
+                end
+            end
+        end)
+    end
+
     if self.browser_menu then
         UIManager:close(self.browser_menu)
         self.browser_menu = nil
+    end
+    if not opts.keep_screensaver_cache then
+        self.screensavers_cache = nil
+        self._filtered_screensavers_cache = nil
+        pcall(function()
+            local ok_ss, StorefrontScreensavers = pcall(require, "storefront_screensavers_ui")
+            if ok_ss and StorefrontScreensavers and StorefrontScreensavers.invalidateMemCache then
+                StorefrontScreensavers.invalidateMemCache()
+            end
+        end)
+        collectgarbage("collect")
     end
 end
 
@@ -8318,6 +9293,425 @@ function Storefront:reopenBrowser(kind, callback)
     end)
 end
 
+function Storefront:buildBrowserToolbar(current_tab)
+    self:ensureBrowserState()
+    local is_catalog_search_active = util.trim(self.browser_state and self.browser_state.search_text or "") ~= ""
+    local raw_installed_st = (self.installed_state and self.installed_state.search_text ~= "" and self.installed_state.search_text) or (self.browser_state and self.browser_state.search_text) or ""
+    local is_installed_search_active = util.trim(raw_installed_st) ~= ""
+    local is_ss_filter_active = self:hasActiveFilters("Screensavers")
+
+    local toolbar_buttons
+    local show_plugins_bar = (current_tab == "Plugins" and ((self.browser_state and self.browser_state.show_filter_bar_plugins == true) or is_catalog_search_active))
+    local show_patches_bar = (current_tab == "Patches" and ((self.browser_state and self.browser_state.show_filter_bar_patches == true) or is_catalog_search_active))
+    local show_fonts_bar = (current_tab == "Fonts" and ((self.browser_state and self.browser_state.show_filter_bar_fonts == true) or is_catalog_search_active))
+    if show_plugins_bar or show_patches_bar or show_fonts_bar then
+        toolbar_buttons = {}
+        if (self.browser_state.search_text or "") ~= "" then
+            table.insert(toolbar_buttons, {
+                id = "search",
+                text = _("Search: ") .. self.browser_state.search_text,
+                callback = function() self:showFilterDialog() end
+            })
+        end
+        if (self.browser_state.owner or "") ~= "" then
+            table.insert(toolbar_buttons, {
+                id = "owner",
+                text = _("Owner: ") .. self.browser_state.owner,
+                callback = function() self:showFilterDialog() end
+            })
+        end
+        if current_tab == "Fonts" and self.browser_state.font_category and self.browser_state.font_category ~= "all" then
+            table.insert(toolbar_buttons, {
+                id = "font_style",
+                text = _("Style: ") .. self.browser_state.font_category:lower(),
+                callback = function() self:showCatalogFilter() end
+            })
+        end
+        if (self.browser_state.min_stars or 0) > 0 then
+            table.insert(toolbar_buttons, {
+                id = "stars",
+                text = "★ " .. tostring(self.browser_state.min_stars) .. "+",
+                callback = function() self:showCatalogFilter() end
+            })
+        end
+        local sort_opt = self:getSortOption(self.browser_state.sort_mode)
+        table.insert(toolbar_buttons, {
+            id = "sort",
+            text = sort_opt and sort_opt.summary or _("Sort"),
+            callback = function() self:browserAdvanceSort() end
+        })
+        table.insert(toolbar_buttons, {
+            id = "filter_dialog",
+            text = _("Filter..."),
+            callback = function() self:showCatalogFilter() end
+        })
+    elseif current_tab == "Updates" then
+        toolbar_buttons = {}
+        table.insert(toolbar_buttons, {
+            id = "check_updates",
+            text = _("Check Updates"),
+            text_font_bold = true,
+            callback = function()
+                self:checkAllUpdates()
+            end,
+        })
+        table.insert(toolbar_buttons, {
+            id = "update_all",
+            text = _("Update All"),
+            right_align = true,
+            is_primary = true,
+            callback = function() self:updateAllAvailable() end,
+        })
+    elseif current_tab == "Installed" then
+        self:ensureInstalledState()
+        if (self.browser_state and self.browser_state.show_filter_bar_installed ~= false) or is_installed_search_active then
+            toolbar_buttons = {}
+            local effective_installed_search = util.trim((self.installed_state.search_text and self.installed_state.search_text ~= "") and self.installed_state.search_text or (self.browser_state and self.browser_state.search_text or ""))
+            if effective_installed_search ~= "" then
+                table.insert(toolbar_buttons, {
+                    id = "search",
+                    text = _("Search: ") .. effective_installed_search,
+                    callback = function() self:showFilterDialog() end
+                })
+            end
+            if (self.browser_state and (self.browser_state.owner or "") ~= "") then
+                table.insert(toolbar_buttons, {
+                    id = "owner",
+                    text = _("Owner: ") .. self.browser_state.owner,
+                    callback = function() self:showFilterDialog() end
+                })
+            end
+            local type_label = _("All Types")
+            if self.installed_state.filter_type == "plugin" then type_label = _("Plugins")
+            elseif self.installed_state.filter_type == "patch" then type_label = _("Patches")
+            elseif self.installed_state.filter_type == "font" then type_label = _("Fonts")
+            elseif self.installed_state.filter_type == "screensaver" then type_label = _("Screensavers") end
+            table.insert(toolbar_buttons, {
+                id = "type",
+                text = type_label,
+                callback = function() self:showInstalledFilter() end
+            })
+            if self.installed_state.filter_default and self.installed_state.filter_default ~= "all" then
+                local def_label = (self.installed_state.filter_default == "default_only") and _("Default") or _("User Installed")
+                table.insert(toolbar_buttons, {
+                    id = "origin",
+                    text = def_label,
+                    callback = function() self:showInstalledFilter() end
+                })
+            end
+            if self.installed_state.filter_status and self.installed_state.filter_status ~= "all" then
+                local stat_label = (self.installed_state.filter_status == "enabled") and _("Enabled") or _("Disabled")
+                table.insert(toolbar_buttons, {
+                    id = "status",
+                    text = stat_label,
+                    callback = function() self:showInstalledFilter() end
+                })
+            end
+            local sort_map = {
+                name_asc = _("Sort: A-Z"),
+                name_desc = _("Sort: Z-A"),
+                date_desc = _("Sort: Updated"),
+                date_asc = _("Sort: Oldest"),
+                date = _("Sort: Updated"),
+                type = _("Sort: Type"),
+                status = _("Sort: Status"),
+            }
+            table.insert(toolbar_buttons, {
+                id = "sort",
+                text = sort_map[self.installed_state.sort_mode] or _("Sort"),
+                callback = function() self:browserAdvanceSort() end
+            })
+            table.insert(toolbar_buttons, {
+                id = "filter_dialog",
+                text = _("Filter..."),
+                callback = function() self:showInstalledFilter() end
+            })
+            table.insert(toolbar_buttons, {
+                id = "blueprints",
+                text = _("Blueprint"),
+                callback = function()
+                    UIManager:nextTick(function()
+                        local ok_bp, BlueprintUI = pcall(require, "storefront_blueprint_ui")
+                        if ok_bp and BlueprintUI and BlueprintUI.showBlueprintsMenu then
+                            BlueprintUI.showBlueprintsMenu(self)
+                        end
+                    end)
+                end
+            })
+        end
+    elseif current_tab == "Screensavers" then
+        is_ss_filter_active = self:hasActiveFilters("Screensavers")
+        if (self.browser_state and self.browser_state.show_filter_bar_screensavers ~= false) or is_ss_filter_active then
+            toolbar_buttons = {}
+            local effective_ss_search = util.trim((self.browser_state.search_text and self.browser_state.search_text ~= "") and self.browser_state.search_text or (self.browser_state.screensaver_search or ""))
+            local effective_ss_owner  = util.trim(self.browser_state.owner or "")
+            local ss_cat  = self.browser_state.screensaver_category or ""
+            local ss_cats = self.browser_state.screensaver_categories
+            local ss_sort = self.browser_state.screensaver_sort or "featured"
+            if ss_sort == "az" or ss_sort == "za" then ss_sort = "featured" end
+
+            if effective_ss_search ~= "" then
+                table.insert(toolbar_buttons, {
+                    id = "ss_srch",
+                    text = _("Search: ") .. effective_ss_search,
+                    callback = function() self:showFilterDialog() end
+                })
+            end
+            if effective_ss_owner ~= "" then
+                table.insert(toolbar_buttons, {
+                    id = "ss_owner",
+                    text = _("Owner: ") .. effective_ss_owner,
+                    callback = function() self:showFilterDialog() end
+                })
+            end
+
+            local active_cat_names = {}
+            if type(ss_cats) == "table" and next(ss_cats) and not ss_cats["all"] then
+                for k, v in pairs(ss_cats) do
+                    if v and k ~= "all" then
+                        local c_name = k:sub(1,1):upper() .. k:sub(2)
+                        if k == "scifi" or k == "sci-fi" then c_name = "Sci-Fi" end
+                        if k == "fine art" or k == "art" then c_name = "Art" end
+                        if k == "pop culture" then c_name = "Pop Culture" end
+                        local already_present = false
+                        for _, existing_c in ipairs(active_cat_names) do
+                            if existing_c == c_name then
+                                already_present = true
+                                break
+                            end
+                        end
+                        if not already_present then
+                            table.insert(active_cat_names, c_name)
+                        end
+                    end
+                end
+                table.sort(active_cat_names)
+            elseif ss_cat ~= "" and ss_cat ~= "all" then
+                table.insert(active_cat_names, ss_cat:sub(1,1):upper() .. ss_cat:sub(2))
+            end
+
+            if #active_cat_names > 0 then
+                local cat_str = #active_cat_names == 1 and active_cat_names[1] or string.format(_("%d Categories"), #active_cat_names)
+                table.insert(toolbar_buttons, {
+                    id = "ss_cat",
+                    text = _("Category: ") .. cat_str,
+                    callback = function() self:showScreensaverFilter() end
+                })
+            end
+
+            local ss_col_id = self.browser_state.screensaver_collection
+            if ss_col_id and ss_col_id ~= "" then
+                local StorefrontScreensavers = require("storefront_screensavers_ui")
+                local collections = StorefrontScreensavers.getCachedCollections() or {}
+                local col_title = _("Collection")
+                local col_obj = nil
+                for _, c in ipairs(collections) do
+                    if c.id == ss_col_id then
+                        col_title = c.title or col_title
+                        col_obj = c
+                        break
+                    end
+                end
+                table.insert(toolbar_buttons, {
+                    id = "ss_col_active",
+                    icon = "layers.svg",
+                    text = col_title .. " ✕",
+                    callback = function()
+                        self.browser_state.screensaver_collection = nil
+                        self.browser_state.page = 1
+                        if self.browser_menu and self.browser_menu.updateTabContent then
+                            self:updateBrowserTabInPlace("Screensavers", 1, nil, true)
+                        else
+                            self:reopenBrowser()
+                        end
+                    end
+                })
+                table.insert(toolbar_buttons, {
+                    id = "ss_col_download_all",
+                    icon = "download.svg",
+                    text = _("Download All"),
+                    callback = function()
+                        local StorefrontCollectionsDialog = require("storefront_collections_dialog")
+                        if col_obj and StorefrontCollectionsDialog.downloadAllInCollection then
+                            StorefrontCollectionsDialog.downloadAllInCollection(col_obj)
+                        end
+                    end
+                })
+            else
+                table.insert(toolbar_buttons, {
+                    id = "ss_collections",
+                    icon = "layers.svg",
+                    text = _("Collections"),
+                    callback = function()
+                        self:showCollectionsDialog()
+                    end
+                })
+            end
+            local sort_labels = {
+                featured  = _("Featured"),
+                downloads = _("Most Downloaded"),
+                recent    = _("Recently Added"),
+                popular   = _("Most Popular"),
+            }
+            local sort_cycle = { "featured", "downloads", "recent", "popular" }
+            table.insert(toolbar_buttons, {
+                id = "ss_sort",
+                text = sort_labels[ss_sort] or _("Featured"),
+                callback = function()
+                    local next_sort = "featured"
+                    for idx, s in ipairs(sort_cycle) do
+                        if ss_sort == s then
+                            next_sort = sort_cycle[(idx % #sort_cycle) + 1]
+                            break
+                        end
+                    end
+                    self.browser_state.screensaver_sort = next_sort
+                    self.browser_state.page = 1
+                    if self.browser_menu and self.browser_menu.updateTabContent then
+                        self:updateBrowserTabInPlace("Screensavers", 1, nil, true)
+                    else
+                        self:reopenBrowser()
+                    end
+                end
+            })
+            table.insert(toolbar_buttons, {
+                id = "ss_filter",
+                text = _("Filter..."),
+                callback = function() self:showScreensaverFilter() end
+            })
+            table.insert(toolbar_buttons, {
+                id = "ss_settings",
+                icon = "settings.svg",
+                text = _("Settings"),
+                callback = function()
+                    local StorefrontScreensaverConfig = require("storefront_screensaver_config")
+                    StorefrontScreensaverConfig.show(self, function()
+                        if self.browser_menu and self.browser_menu.updateTabContent then
+                            self:updateBrowserTabInPlace("Screensavers", self.browser_state.page or 1, nil, true)
+                        else
+                            self:reopenBrowser()
+                        end
+                    end)
+                end
+            })
+        end
+    end
+    return toolbar_buttons
+end
+
+function Storefront:getBrowserUpdatesCount()
+    local current_generation = InstallStore.getGeneration and InstallStore.getGeneration() or 0
+    local remote_info_key = self.updates_state and self.updates_state.last_checked
+    local patch_remote_info_key = self.patch_updates_state and self.patch_updates_state.last_checked
+
+    if not self._cached_updates_count
+       or self._cached_updates_gen ~= current_generation
+       or self._cached_remote_info ~= remote_info_key
+       or self._cached_patch_remote_info ~= patch_remote_info_key then
+
+        pcall(function()
+            local p_sum = self:collectUpdateSummary()
+            local pt_sum = self:collectPatchUpdateSummary()
+            self._cached_updates_count = (p_sum.updates or 0) + (pt_sum.updates or 0)
+        end)
+        self._cached_updates_gen = current_generation
+        self._cached_remote_info = remote_info_key
+        self._cached_patch_remote_info = patch_remote_info_key
+    end
+    return self._cached_updates_count or 0
+end
+
+function Storefront:updateBrowserTabInPlace(tab_name, target_page, initial_focus, force_update)
+    if not self.browser_menu or not self.browser_menu.updateTabContent then
+        self.browser_state.tab = tab_name
+        self.browser_state.kind = (tab_name == "Patches" and "patch") or (tab_name == "Fonts" and "font") or (tab_name == "Screensavers" and "screensaver") or "plugin"
+        self.browser_state.page = target_page or 1
+        self.browser_state.scroll_offset = nil
+        self:saveBrowserState(true)
+        self:resetBrowserScrollState()
+        self:reopenBrowser()
+        return
+    end
+
+    local prev_tab = self.browser_state.tab
+    target_page = target_page or 1
+    if not force_update and tab_name == prev_tab and (self.browser_state.page or 1) == target_page and not initial_focus then
+        return
+    end
+
+    self.browser_state.tab = tab_name
+    self.browser_state.kind = (tab_name == "Patches" and "patch") or (tab_name == "Fonts" and "font") or (tab_name == "Screensavers" and "screensaver") or "plugin"
+    self.browser_state.page = target_page
+    self.browser_state.scroll_offset = nil
+
+    if tab_name ~= prev_tab then
+        self:resetFiltersForRefresh()
+        -- Purge screensavers cache on tab leave ONLY if memory is critically low (< 6MB)
+        local StorefrontUtils = require("storefront_utils")
+        if prev_tab == "Screensavers" and StorefrontUtils.isLowMemory and StorefrontUtils.isLowMemory(6 * 1024) then
+            self.screensavers_cache = nil
+            self._filtered_screensavers_cache = nil
+            pcall(function()
+                local ok_ss, StorefrontScreensavers = pcall(require, "storefront_screensavers_ui")
+                if ok_ss and StorefrontScreensavers and StorefrontScreensavers.invalidateMemCache then
+                    StorefrontScreensavers.invalidateMemCache()
+                end
+            end)
+            collectgarbage("step", 200)
+        end
+    end
+
+    self:saveBrowserState(true)
+    self:resetBrowserScrollState()
+
+    local current_tab = self.browser_state.tab
+    local toolbar_buttons = self:buildBrowserToolbar(current_tab)
+    local updates_count = self:getBrowserUpdatesCount()
+
+    local is_catalog_search_active = util.trim(self.browser_state and self.browser_state.search_text or "") ~= ""
+    local raw_installed_st = (self.installed_state and self.installed_state.search_text ~= "" and self.installed_state.search_text) or (self.browser_state and self.browser_state.search_text) or ""
+    local is_installed_search_active = util.trim(raw_installed_st) ~= ""
+    local is_ss_filter_active = self:hasActiveFilters("Screensavers")
+
+    local active_search_text = ""
+    if current_tab == "Installed" then
+        active_search_text = util.trim(raw_installed_st)
+    elseif current_tab ~= "Updates" then
+        active_search_text = util.trim(self.browser_state.search_text or "")
+    end
+
+    local available_list_height, available_list_width = StorefrontBrowserDialog:measureListViewport{
+        title = "Storefront",
+        toolbar_buttons = toolbar_buttons,
+        current_tab = current_tab,
+        updates_count = updates_count,
+        show_filter_bar_plugins = (self.browser_state and self.browser_state.show_filter_bar_plugins == true) or is_catalog_search_active,
+        show_filter_bar_patches = (self.browser_state and self.browser_state.show_filter_bar_patches == true) or is_catalog_search_active,
+        show_filter_bar_fonts = (self.browser_state and self.browser_state.show_filter_bar_fonts == true) or is_catalog_search_active,
+        show_filter_bar_screensavers = (self.browser_state and self.browser_state.show_filter_bar_screensavers ~= false) or is_ss_filter_active,
+        show_filter_bar_installed = (self.browser_state and self.browser_state.show_filter_bar_installed ~= false) or is_installed_search_active,
+    }
+
+    local items, total_pages = self:buildBrowserEntries(available_list_height, available_list_width)
+
+    self.browser_menu:updateTabContent{
+        Storefront = self,
+        current_tab = current_tab,
+        page = self.browser_state.page,
+        total_pages = total_pages,
+        items = items,
+        toolbar_buttons = toolbar_buttons,
+        updates_count = updates_count,
+        active_search_text = active_search_text,
+        initial_focus = initial_focus,
+        show_filter_bar_plugins = (self.browser_state and self.browser_state.show_filter_bar_plugins == true) or is_catalog_search_active,
+        show_filter_bar_patches = (self.browser_state and self.browser_state.show_filter_bar_patches == true) or is_catalog_search_active,
+        show_filter_bar_fonts = (self.browser_state and self.browser_state.show_filter_bar_fonts == true) or is_catalog_search_active,
+        show_filter_bar_screensavers = (self.browser_state and self.browser_state.show_filter_bar_screensavers ~= false) or is_ss_filter_active,
+        show_filter_bar_installed = (self.browser_state and self.browser_state.show_filter_bar_installed ~= false) or is_installed_search_active,
+    }
+end
+
 -- Browser actions, shared by the gear menu, the Menu hardware key and the
 -- r/f/s/t hotkeys. Kept out of the list body so they are reachable from any
 -- scroll position / page without scrolling back to the top.
@@ -8337,16 +9731,20 @@ function Storefront:browserSwitchTab(tab_name)
             tab_name = "Plugins"
         end
     end
-    self.browser_state.tab = tab_name
-    self.browser_state.kind = (tab_name == "Patches" and "patch") or (tab_name == "Fonts" and "font") or "plugin"
-    self.browser_state.page = 1
-    self.browser_state.scroll_offset = nil
-    self:resetFiltersForRefresh()
-    self:saveBrowserState(true)
-    self:resetBrowserScrollState()
-    self:closeBrowserMenu()
-    self._browser_refresh_mode_hint = "partial"
-    self:showBrowser()
+    if self.browser_menu and self.browser_menu.updateTabContent then
+        self:updateBrowserTabInPlace(tab_name, 1)
+    else
+        self.browser_state.tab = tab_name
+        self.browser_state.kind = (tab_name == "Patches" and "patch") or (tab_name == "Fonts" and "font") or (tab_name == "Screensavers" and "screensaver") or "plugin"
+        self.browser_state.page = 1
+        self.browser_state.scroll_offset = nil
+        self:resetFiltersForRefresh()
+        self:saveBrowserState(true)
+        self:resetBrowserScrollState()
+        self:closeBrowserMenu()
+        self._browser_refresh_mode_hint = "partial"
+        self:showBrowser()
+    end
 end
 
 function Storefront:browserRefresh()
@@ -8357,8 +9755,21 @@ function Storefront:browserRefresh()
         return
     end
     local kind = self.browser_state.kind or "plugin"
+    if self.browser_state.tab == "Screensavers" then
+        kind = "screensaver"
+    end
     self:resetBrowserScrollState()
     self:resetFiltersForRefresh()
+    if kind == "screensaver" or self.browser_state.tab == "Screensavers" then
+        pcall(function()
+            local StorefrontScreensavers = require("storefront_screensavers_ui")
+            if StorefrontScreensavers and StorefrontScreensavers.clearCachedCatalog then
+                StorefrontScreensavers.clearCachedCatalog()
+            end
+        end)
+        self.screensavers_cache = nil
+        self._filtered_screensavers_cache = nil
+    end
     NetworkMgr:runWhenOnline(function()
         self:refreshCache(kind, function(ok)
             self:softRefreshCurrentBrowserView()
@@ -8415,6 +9826,13 @@ function Storefront:softRefreshCurrentBrowserView()
     self._repo_descriptors_cache = nil
     self._filtered_descriptors_cache = nil
     self._filtered_screensavers_cache = nil
+    self.screensavers_cache = nil
+    pcall(function()
+        local ok_ss, StorefrontScreensavers = pcall(require, "storefront_screensavers_ui")
+        if ok_ss and StorefrontScreensavers and StorefrontScreensavers.invalidateMemCache then
+            StorefrontScreensavers.invalidateMemCache()
+        end
+    end)
     self._cached_updates_count = nil
     self._cached_updates_gen = nil
     self._tab_menu_items_cache = nil
@@ -8471,9 +9889,22 @@ function Storefront:maybeCheckCatalogBackground()
 
     local Cache = require("storefront_cache")
     local current_tab = (self.browser_state and self.browser_state.tab) or "Plugins"
-    local check_kind = (current_tab == "Patches") and "patch" or "plugin"
-    local repo_count = Cache.countRepos(check_kind) or 0
-    local last_fetched = Cache.getLastFetched(check_kind) or 0
+    local check_kind = (current_tab == "Patches") and "patch" or (current_tab == "Screensavers" and "screensaver" or "plugin")
+    local repo_count = 0
+    local last_fetched = 0
+    if check_kind == "screensaver" then
+        local ok_ss, StorefrontScreensavers = pcall(require, "storefront_screensavers_ui")
+        if ok_ss and StorefrontScreensavers then
+            local cat = StorefrontScreensavers.getCachedCatalog and StorefrontScreensavers.getCachedCatalog()
+            if type(cat) == "table" then
+                repo_count = #cat
+            end
+            last_fetched = StorefrontScreensavers.getLastFetched and StorefrontScreensavers.getLastFetched() or 0
+        end
+    else
+        repo_count = Cache.countRepos(check_kind) or 0
+        last_fetched = Cache.getLastFetched(check_kind) or 0
+    end
     local age = (last_fetched > 0) and (now - last_fetched) or 999999
 
     local needs_fetch = (last_fetched == 0 or repo_count == 0 or age > 3600)
@@ -8486,23 +9917,29 @@ function Storefront:maybeCheckCatalogBackground()
     self._last_catalog_check_time = now
 
     if needs_fetch then
-        local msg = string.format("Storefront: catalog cache is stale/unfetched (count: %d, %ds old), triggering background fetch", repo_count, age)
+        local msg = string.format("Storefront: catalog cache is stale/unfetched (kind: %s, count: %d, %ds old), triggering background fetch", check_kind, repo_count, age)
         logger.info(msg)
         StorefrontLogger.info(msg)
 
         local CatalogClient = require("storefront_net_catalog")
-        CatalogClient.fetchAndUpdateCacheAsync(nil, function(ok, err)
+        CatalogClient.fetchAndUpdateCacheAsync(nil, function(ok, status_or_err)
             if ok then
-                logger.info("Storefront: background catalog update finished")
-                StorefrontLogger.info("Storefront: background catalog update finished")
-                self:softRefreshCurrentBrowserView()
+                logger.info("Storefront: background catalog update finished (" .. tostring(status_or_err) .. ")")
+                StorefrontLogger.info("Storefront: background catalog update finished (" .. tostring(status_or_err) .. ")")
+                if status_or_err == "updated" then
+                    self:refreshCurrentBrowserTab()
+                    local ok_toast, StorefrontToast = pcall(require, "storefront_toast")
+                    if ok_toast and StorefrontToast and StorefrontToast.show then
+                        StorefrontToast.show(_("Catalog updated"), 2)
+                    end
+                end
             else
-                logger.warn("Storefront: background catalog update failed: " .. tostring(err))
-                StorefrontLogger.warn("Storefront: background catalog update failed: " .. tostring(err))
+                logger.warn("Storefront: background catalog update failed: " .. tostring(status_or_err))
+                StorefrontLogger.warn("Storefront: background catalog update failed: " .. tostring(status_or_err))
             end
-        end)
+        end, true)
     else
-        local msg = string.format("Storefront: catalog cache is fresh (%ds old <= 3600s), skipping background fetch", age)
+        local msg = string.format("Storefront: catalog cache is fresh (kind: %s, %ds old <= 3600s), skipping background fetch", check_kind, age)
         logger.info(msg)
         StorefrontLogger.info(msg)
     end
@@ -8514,32 +9951,56 @@ function Storefront:showBrowser(kind)
     self:ensurePatchUpdatesState()
     self:ensureInstalledState()
     if self.browser_menu then
-        self:closeBrowserMenu()
+        self:closeBrowserMenu({ keep_screensaver_cache = (self.browser_state and self.browser_state.tab == "Screensavers") })
     end
     local current_tab = self.browser_state.tab or "Plugins"
     
-    -- Schedule deferred update and catalog background checks ONCE per session on launch (zero launch delay)
+    -- Populate remote_info from catalog cache if available and not yet synced for current catalog timestamp
+    local cat_plugin_fetched = (Cache and Cache.getLastFetched and Cache.getLastFetched("plugin")) or 0
+    if cat_plugin_fetched > 0 and self._last_catalog_populated_ts ~= cat_plugin_fetched then
+        self._last_catalog_populated_ts = cat_plugin_fetched
+        pcall(function() self:populateRemoteInfoFromCatalog() end)
+    end
+
+    -- Schedule deferred update checks ONCE per session on launch (zero launch delay)
     if not _session_bg_checks_done then
         _session_bg_checks_done = true
         UIManager:nextTick(function()
             pcall(function() self:syncPendingFontDownloads() end)
             pcall(function() self:maybeAutoCheckUpdates() end)
         end)
-
-        local now = os.time()
-        if not self._last_catalog_check_time or (now - self._last_catalog_check_time) >= MIN_CATALOG_CHECK_INTERVAL then
-            if _catalog_show_timer_fn then
-                UIManager:unschedule(_catalog_show_timer_fn)
-            end
-            _catalog_show_timer_fn = function()
-                _catalog_show_timer_fn = nil
-                pcall(function() self:maybeCheckCatalogBackground() end)
-            end
-            UIManager:scheduleIn(1.5, _catalog_show_timer_fn)
-        end
     end
 
-    local title = _("Storefront")
+    -- Pre-warm screensavers catalog and default sort in background idle time (skip on low-memory devices)
+    local StorefrontUtils = require("storefront_utils")
+    local is_low_mem = StorefrontUtils.isLowMemory and StorefrontUtils.isLowMemory()
+    if _screensaver_warmup_timer_fn then
+        UIManager:unschedule(_screensaver_warmup_timer_fn)
+        _screensaver_warmup_timer_fn = nil
+    end
+    if not is_low_mem and not self._filtered_screensavers_cache and current_tab ~= "Screensavers" then
+        _screensaver_warmup_timer_fn = function()
+            _screensaver_warmup_timer_fn = nil
+            if not self.browser_menu then return end
+            pcall(function() self:warmupScreensaversCache() end)
+        end
+        UIManager:scheduleIn(1.0, _screensaver_warmup_timer_fn)
+    end
+
+    -- Check catalog if never checked or if MIN_CATALOG_CHECK_INTERVAL has elapsed
+    local now = os.time()
+    if not self._last_catalog_check_time or (now - self._last_catalog_check_time) >= MIN_CATALOG_CHECK_INTERVAL then
+        if _catalog_show_timer_fn then
+            UIManager:unschedule(_catalog_show_timer_fn)
+        end
+        _catalog_show_timer_fn = function()
+            _catalog_show_timer_fn = nil
+            pcall(function() self:maybeCheckCatalogBackground() end)
+        end
+        UIManager:scheduleIn(1.5, _catalog_show_timer_fn)
+    end
+
+    local title = "Storefront"
     local Trapper = require("ui/trapper")
     Trapper:wrap(function()
         local ok, err = pcall(function()
@@ -8551,263 +10012,12 @@ function Storefront:showBrowser(kind)
             local is_installed_search_active = util.trim(raw_installed_st) ~= ""
             local is_ss_filter_active = self:hasActiveFilters("Screensavers")
 
-            local toolbar_buttons
-            local show_plugins_bar = (current_tab == "Plugins" and ((self.browser_state and self.browser_state.show_filter_bar_plugins == true) or is_catalog_search_active))
-            local show_patches_bar = (current_tab == "Patches" and ((self.browser_state and self.browser_state.show_filter_bar_patches == true) or is_catalog_search_active))
-            local show_fonts_bar = (current_tab == "Fonts" and ((self.browser_state and self.browser_state.show_filter_bar_fonts == true) or is_catalog_search_active))
-            if show_plugins_bar or show_patches_bar or show_fonts_bar then
-                toolbar_buttons = {}
-                if (self.browser_state.search_text or "") ~= "" then
-                    table.insert(toolbar_buttons, {
-                        id = "search",
-                        text = _("Search: ") .. self.browser_state.search_text,
-                        callback = function() self:showFilterDialog() end
-                    })
-                end
-                if (self.browser_state.owner or "") ~= "" then
-                    table.insert(toolbar_buttons, {
-                        id = "owner",
-                        text = _("Owner: ") .. self.browser_state.owner,
-                        callback = function() self:showFilterDialog() end
-                    })
-                end
-                if current_tab == "Fonts" and self.browser_state.font_category and self.browser_state.font_category ~= "all" then
-                    table.insert(toolbar_buttons, {
-                        id = "font_style",
-                        text = _("Style: ") .. self.browser_state.font_category:lower(),
-                        callback = function() self:showCatalogFilter() end
-                    })
-                end
-                if (self.browser_state.min_stars or 0) > 0 then
-                    table.insert(toolbar_buttons, {
-                        id = "stars",
-                        text = "★ " .. tostring(self.browser_state.min_stars) .. "+",
-                        callback = function() self:showCatalogFilter() end
-                    })
-                end
-                local sort_opt = self:getSortOption(self.browser_state.sort_mode)
-                table.insert(toolbar_buttons, {
-                    id = "sort",
-                    text = sort_opt and sort_opt.summary or _("Sort"),
-                    callback = function() self:browserAdvanceSort() end
-                })
-                table.insert(toolbar_buttons, {
-                    id = "filter_dialog",
-                    text = _("Filter..."),
-                    callback = function() self:showCatalogFilter() end
-                })
-            elseif current_tab == "Updates" then
-                toolbar_buttons = {}
-                table.insert(toolbar_buttons, {
-                    id = "check_updates",
-                    text = _("Check Updates"),
-                    text_font_bold = true,
-                    callback = function()
-                        local installed_plugins = listInstalledPlugins()
-                        local records = getInstallRecordsMap()
-                        local plugin_repos = {}
-                        for _, plugin in ipairs(installed_plugins) do
-                            local record = records[plugin.dirname]
-                            if record and record.owner and record.repo then
-                                record.dirname = plugin.dirname
-                                table.insert(plugin_repos, record)
-                            end
-                        end
-                        if #plugin_repos > 0 then
-                            self:_checkAllUpdatesInternal(plugin_repos)
-                        else
-                            UIManager:show(InfoMessage:new{ text = _("No tracked plugins to check."), timeout = 4 })
-                        end
-                    end,
-                })
-                table.insert(toolbar_buttons, {
-                    id = "update_all",
-                    text = _("Update All"),
-                    right_align = true,
-                    is_primary = true,
-                    callback = function() self:updateAllAvailable() end,
-                })
-            elseif current_tab == "Installed" then
-                self:ensureInstalledState()
-                if (self.browser_state and self.browser_state.show_filter_bar_installed ~= false) or is_installed_search_active then
-                toolbar_buttons = {}
-                local effective_installed_search = util.trim((self.installed_state.search_text and self.installed_state.search_text ~= "") and self.installed_state.search_text or (self.browser_state and self.browser_state.search_text or ""))
-                if effective_installed_search ~= "" then
-                    table.insert(toolbar_buttons, {
-                        id = "search",
-                        text = _("Search: ") .. effective_installed_search,
-                        callback = function() self:showFilterDialog() end
-                    })
-                end
-                if (self.browser_state and (self.browser_state.owner or "") ~= "") then
-                    table.insert(toolbar_buttons, {
-                        id = "owner",
-                        text = _("Owner: ") .. self.browser_state.owner,
-                        callback = function() self:showFilterDialog() end
-                    })
-                end
-                local type_label = _("All Types")
-                if self.installed_state.filter_type == "plugin" then type_label = _("Plugins")
-                elseif self.installed_state.filter_type == "patch" then type_label = _("Patches")
-                elseif self.installed_state.filter_type == "font" then type_label = _("Fonts")
-                elseif self.installed_state.filter_type == "screensaver" then type_label = _("Screensavers") end
-                table.insert(toolbar_buttons, {
-                    id = "type",
-                    text = type_label,
-                    callback = function() self:showInstalledFilter() end
-                })
-                if self.installed_state.filter_default and self.installed_state.filter_default ~= "all" then
-                    local def_label = (self.installed_state.filter_default == "default_only") and _("Default") or _("User Installed")
-                    table.insert(toolbar_buttons, {
-                        id = "origin",
-                        text = def_label,
-                        callback = function() self:showInstalledFilter() end
-                    })
-                end
-                if self.installed_state.filter_status and self.installed_state.filter_status ~= "all" then
-                    local stat_label = (self.installed_state.filter_status == "enabled") and _("Enabled") or _("Disabled")
-                    table.insert(toolbar_buttons, {
-                        id = "status",
-                        text = stat_label,
-                        callback = function() self:showInstalledFilter() end
-                    })
-                end
-                local sort_map = {
-                    name_asc = _("Sort: A-Z"),
-                    name_desc = _("Sort: Z-A"),
-                    date_desc = _("Sort: Updated"),
-                    date_asc = _("Sort: Oldest"),
-                    date = _("Sort: Updated"),
-                    type = _("Sort: Type"),
-                    status = _("Sort: Status"),
-                }
-                table.insert(toolbar_buttons, {
-                    id = "sort",
-                    text = sort_map[self.installed_state.sort_mode] or _("Sort"),
-                    callback = function() self:browserAdvanceSort() end
-                })
-                table.insert(toolbar_buttons, {
-                    id = "filter_dialog",
-                    text = _("Filter..."),
-                    callback = function() self:showInstalledFilter() end
-                })
-                end -- show_filter_bar_installed
-            elseif current_tab == "Screensavers" then
-                is_ss_filter_active = self:hasActiveFilters("Screensavers")
-                if (self.browser_state and self.browser_state.show_filter_bar_screensavers ~= false) or is_ss_filter_active then
-                    -- Build toolbar: active search/owner pills + active category pill + sort cycle + Filter... button
-                    toolbar_buttons = {}
-                    local effective_ss_search = util.trim((self.browser_state.search_text and self.browser_state.search_text ~= "") and self.browser_state.search_text or (self.browser_state.screensaver_search or ""))
-                    local effective_ss_owner  = util.trim(self.browser_state.owner or "")
-                    local ss_cat  = self.browser_state.screensaver_category or ""
-                    local ss_cats = self.browser_state.screensaver_categories
-                    local ss_sort = self.browser_state.screensaver_sort or "downloads"
-
-                    if effective_ss_search ~= "" then
-                        table.insert(toolbar_buttons, {
-                            id = "ss_srch",
-                            text = _("Search: ") .. effective_ss_search,
-                            callback = function() self:showFilterDialog() end
-                        })
-                    end
-                    if effective_ss_owner ~= "" then
-                        table.insert(toolbar_buttons, {
-                            id = "ss_owner",
-                            text = _("Owner: ") .. effective_ss_owner,
-                            callback = function() self:showFilterDialog() end
-                        })
-                    end
-
-                    local active_cat_names = {}
-                    if type(ss_cats) == "table" and next(ss_cats) and not ss_cats["all"] then
-                        for k, v in pairs(ss_cats) do
-                            if v and k ~= "all" then
-                                local c_name = k:sub(1,1):upper() .. k:sub(2)
-                                if k == "scifi" or k == "sci-fi" then c_name = "Sci-Fi" end
-                                if k == "fine art" then c_name = "Fine Art" end
-                                if k == "pop culture" then c_name = "Pop Culture" end
-                                table.insert(active_cat_names, c_name)
-                            end
-                        end
-                        table.sort(active_cat_names)
-                    elseif ss_cat ~= "" and ss_cat ~= "all" then
-                        table.insert(active_cat_names, ss_cat:sub(1,1):upper() .. ss_cat:sub(2))
-                    end
-
-                    if #active_cat_names > 0 then
-                        local cat_str = #active_cat_names == 1 and active_cat_names[1] or string.format(_("%d Categories"), #active_cat_names)
-                        table.insert(toolbar_buttons, {
-                            id = "ss_cat",
-                            text = _("Category: ") .. cat_str,
-                            callback = function() self:showScreensaverFilter() end
-                        })
-                    end
-                    local sort_labels = {
-                        downloads = _("Most Downloaded"),
-                        recent    = _("Recently Added"),
-                        popular   = _("Most Popular"),
-                        az        = _("A → Z"),
-                        za        = _("Z → A"),
-                    }
-                    local sort_cycle = { "downloads", "recent", "popular", "az", "za" }
-                    table.insert(toolbar_buttons, {
-                        id = "ss_sort",
-                        text = sort_labels[ss_sort] or _("Most Downloaded"),
-                        callback = function()
-                            local next_sort = "downloads"
-                            for idx, s in ipairs(sort_cycle) do
-                                if ss_sort == s then
-                                    next_sort = sort_cycle[(idx % #sort_cycle) + 1]
-                                    break
-                                end
-                            end
-                            self.browser_state.screensaver_sort = next_sort
-                            self.browser_state.page = 1
-                            self:reopenBrowser()
-                        end
-                    })
-                    table.insert(toolbar_buttons, {
-                        id = "ss_filter",
-                        text = _("Filter..."),
-                        callback = function() self:showScreensaverFilter() end
-                    })
-                    table.insert(toolbar_buttons, {
-                        id = "ss_settings",
-                        text = _("⚙ Settings"),
-                        callback = function()
-                            local StorefrontScreensaverConfig = require("storefront_screensaver_config")
-                            StorefrontScreensaverConfig.show(self, function()
-                                self:reopenBrowser()
-                            end)
-                        end
-                    })
-                end
-            end
-
-            local current_generation = InstallStore.getGeneration and InstallStore.getGeneration() or 0
-            local remote_info_key = self.updates_state and self.updates_state.remote_info
-            local patch_remote_info_key = self.patch_updates_state and self.patch_updates_state.remote_info
-            
-            if not self._cached_updates_count 
-               or self._cached_updates_gen ~= current_generation
-               or self._cached_remote_info ~= remote_info_key
-               or self._cached_patch_remote_info ~= patch_remote_info_key then
-               
-                pcall(function()
-                    local p_sum = self:collectUpdateSummary()
-                    local pt_sum = self:collectPatchUpdateSummary()
-                    self._cached_updates_count = (p_sum.updates or 0) + (pt_sum.updates or 0)
-                end)
-                self._cached_updates_gen = current_generation
-                self._cached_remote_info = remote_info_key
-                self._cached_patch_remote_info = patch_remote_info_key
-            end
-            local updates_count = self._cached_updates_count or 0
+            local toolbar_buttons = self:buildBrowserToolbar(current_tab)
+            local updates_count = self:getBrowserUpdatesCount()
 
             local active_search_text = ""
             if current_tab == "Installed" then
-                local raw_active_st = (self.installed_state and self.installed_state.search_text ~= "" and self.installed_state.search_text) or (self.browser_state and self.browser_state.search_text) or ""
-                active_search_text = util.trim(raw_active_st)
+                active_search_text = util.trim(raw_installed_st)
             elseif current_tab ~= "Updates" then
                 active_search_text = util.trim(self.browser_state.search_text or "")
             end
@@ -8826,6 +10036,7 @@ function Storefront:showBrowser(kind)
             local items, total_pages = self:buildBrowserEntries(available_list_height, available_list_width)
 
             local dialog = StorefrontBrowserDialog:new{
+                Storefront = self,
                 title = title,
                 items = items,
                 page = self.browser_state.page,
@@ -8845,115 +10056,162 @@ function Storefront:showBrowser(kind)
                 on_toggle_filter_bar = function(tab_name)
                     self:toggleFilterBar(tab_name)
                 end,
-        updates_filter_only_outdated = self.updates_state.filter_only_outdated,
-        on_updates_filter = function(outdated_only)
-            self.updates_state.filter_only_outdated = outdated_only
-            self.patch_updates_state.filter_only_outdated = outdated_only
-            self.browser_state.page = 1
-            self.browser_state.scroll_offset = nil
-            self:saveBrowserState()
-            self._browser_refresh_mode_hint = "partial"
-            self:reopenBrowser()
-        end,
-        on_tab_switch = function(tab_name)
-            self.browser_state.tab = tab_name
-            self.browser_state.kind = (tab_name == "Patches" and "patch") or (tab_name == "Fonts" and "font") or "plugin"
-            self.browser_state.page = 1
-            self.browser_state.scroll_offset = nil
-            self:saveBrowserState(true)
-            self._browser_refresh_mode_hint = "partial"
-            self:reopenBrowser()
-        end,
-        on_settings_tap = function()
-            self:showStorefrontSettingsDialog()
-        end,
-        on_refresh = function()
-            if self.browser_state.tab == "Updates" then
-                self:checkAllUpdates()
-            else
-                self:browserRefresh()
-            end
-        end,
-        on_search = function() self:showFilterDialog() end,
-        on_filter = function() self:browserOpenFilter() end,
-        on_sort = function() self:browserAdvanceSort() end,
-        on_switch_tab = function() self:browserSwitchTab() end,
-        on_first_page = function()
-            if self.browser_state.page > 1 then
-                self:resetBrowserScrollState()
-                self.browser_focus_hint = self:computePageFlipFocus(self.browser_menu, false)
-                self.browser_state.page = 1
-                self.browser_state.scroll_offset = nil
-                self:saveBrowserState()
-                self._browser_refresh_mode_hint = "partial"
-                self:reopenBrowser()
-            end
-        end,
-        on_prev_page = function()
-            if self.browser_state.page > 1 then
-                self:resetBrowserScrollState()
-                self.browser_focus_hint = self:computePageFlipFocus(self.browser_menu, false)
-                self.browser_state.page = self.browser_state.page - 1
-                self.browser_state.scroll_offset = nil
-                self:saveBrowserState()
-                self._browser_refresh_mode_hint = "partial"
-                self:reopenBrowser()
-            end
-        end,
-        on_next_page = function()
-            local current_kind = (self.browser_state.tab == "Installed") and "installed" or (self.browser_state.tab == "Screensavers") and "screensaver" or (self.browser_state.kind or "plugin")
-            local total_pages = (self._last_total_kind == current_kind) and (self._last_total_pages or 1) or 1
-            if self.browser_state.page < total_pages then
-                self:resetBrowserScrollState()
-                self.browser_focus_hint = self:computePageFlipFocus(self.browser_menu, true)
-                self.browser_state.page = self.browser_state.page + 1
-                self.browser_state.scroll_offset = nil
-                self:saveBrowserState()
-                self._browser_refresh_mode_hint = "partial"
-                self:reopenBrowser()
-            end
-        end,
-        on_last_page = function()
-            local current_kind = (self.browser_state.tab == "Installed") and "installed" or (self.browser_state.tab == "Screensavers") and "screensaver" or (self.browser_state.kind or "plugin")
-            local total_pages = (self._last_total_kind == current_kind) and (self._last_total_pages or 1) or 1
-            if self.browser_state.page < total_pages then
-                self:resetBrowserScrollState()
-                self.browser_focus_hint = self:computePageFlipFocus(self.browser_menu, true)
-                self.browser_state.page = total_pages
-                self.browser_state.scroll_offset = nil
-                self:saveBrowserState()
-                self._browser_refresh_mode_hint = "partial"
-                self:reopenBrowser()
-            end
-        end,
-        on_goto_page = function(page_num)
-            local current_kind = (self.browser_state.tab == "Installed") and "installed" or (self.browser_state.tab == "Screensavers") and "screensaver" or (self.browser_state.kind or "plugin")
-            local total_pages = (self._last_total_kind == current_kind) and (self._last_total_pages or 1) or 1
-            if page_num >= 1 and page_num <= total_pages and page_num ~= self.browser_state.page then
-                local forward = page_num > self.browser_state.page
-                self:resetBrowserScrollState()
-                self.browser_focus_hint = self:computePageFlipFocus(self.browser_menu, forward)
-                self.browser_state.page = page_num
-                self.browser_state.scroll_offset = nil
-                self:saveBrowserState()
-                self._browser_refresh_mode_hint = "partial"
-                self:reopenBrowser()
-            end
-        end,
-        on_dismiss = function(offset)
-            if self.skip_scroll_save then
-                self.browser_state.scroll_offset = nil
-                self.skip_scroll_save = nil
-            else
-                self.browser_state.scroll_offset = normalizeScrollOffset(offset)
-            end
-            self:saveBrowserState()
-            self:dismissProgressMessage()
-            self.browser_menu = nil
-            self._session_bg_checks_done = nil
-            self._ss_thumb_task_id = (self._ss_thumb_task_id or 0) + 1
-        end,
-    }
+                updates_filter_only_outdated = self.updates_state.filter_only_outdated,
+                on_updates_filter = function(outdated_only)
+                    self.updates_state.filter_only_outdated = outdated_only
+                    self.patch_updates_state.filter_only_outdated = outdated_only
+                    if self.browser_menu and self.browser_menu.updateTabContent then
+                        self:updateBrowserTabInPlace(self.browser_state.tab, 1, nil, true)
+                    else
+                        self.browser_state.page = 1
+                        self.browser_state.scroll_offset = nil
+                        self:saveBrowserState()
+                        self._browser_refresh_mode_hint = "partial"
+                        self:reopenBrowser()
+                    end
+                end,
+                on_tab_switch = function(tab_name)
+                    if self.browser_menu and self.browser_menu.updateTabContent then
+                        self:updateBrowserTabInPlace(tab_name, 1)
+                    else
+                        self.browser_state.tab = tab_name
+                        self.browser_state.kind = (tab_name == "Patches" and "patch") or (tab_name == "Fonts" and "font") or (tab_name == "Screensavers" and "screensaver") or "plugin"
+                        self.browser_state.page = 1
+                        self.browser_state.scroll_offset = nil
+                        self:saveBrowserState(true)
+                        self._browser_refresh_mode_hint = "partial"
+                        self:reopenBrowser()
+                    end
+                end,
+                on_settings_tap = function()
+                    self:showStorefrontSettingsDialog()
+                end,
+                on_refresh = function()
+                    if self.browser_state.tab == "Updates" then
+                        self:checkAllUpdates()
+                    else
+                        self:browserRefresh()
+                    end
+                end,
+                on_search = function() self:showFilterDialog() end,
+                on_filter = function() self:browserOpenFilter() end,
+                on_sort = function() self:browserAdvanceSort() end,
+                on_switch_tab = function() self:browserSwitchTab() end,
+                on_first_page = function()
+                    if self.browser_state.page > 1 then
+                        self:resetBrowserScrollState()
+                        local focus_hint = self:computePageFlipFocus(self.browser_menu, false)
+                        if self.browser_menu and self.browser_menu.updateTabContent then
+                            self:updateBrowserTabInPlace(self.browser_state.tab, 1, focus_hint)
+                        else
+                            self.browser_focus_hint = focus_hint
+                            self.browser_state.page = 1
+                            self.browser_state.scroll_offset = nil
+                            self:saveBrowserState()
+                            self._browser_refresh_mode_hint = "partial"
+                            self:reopenBrowser()
+                        end
+                    end
+                end,
+                on_prev_page = function()
+                    if self.browser_state.page > 1 then
+                        self:resetBrowserScrollState()
+                        local focus_hint = self:computePageFlipFocus(self.browser_menu, false)
+                        local target_page = self.browser_state.page - 1
+                        if self.browser_menu and self.browser_menu.updateTabContent then
+                            self:updateBrowserTabInPlace(self.browser_state.tab, target_page, focus_hint)
+                        else
+                            self.browser_focus_hint = focus_hint
+                            self.browser_state.page = target_page
+                            self.browser_state.scroll_offset = nil
+                            self:saveBrowserState()
+                            self._browser_refresh_mode_hint = "partial"
+                            self:reopenBrowser()
+                        end
+                    end
+                end,
+                on_next_page = function()
+                    local current_kind = (self.browser_state.tab == "Installed") and "installed" or (self.browser_state.tab == "Screensavers") and "screensaver" or (self.browser_state.kind or "plugin")
+                    local total_pages = (self._last_total_kind == current_kind) and (self._last_total_pages or 1) or 1
+                    if self.browser_state.page < total_pages then
+                        self:resetBrowserScrollState()
+                        local focus_hint = self:computePageFlipFocus(self.browser_menu, true)
+                        local target_page = self.browser_state.page + 1
+                        if self.browser_menu and self.browser_menu.updateTabContent then
+                            self:updateBrowserTabInPlace(self.browser_state.tab, target_page, focus_hint)
+                        else
+                            self.browser_focus_hint = focus_hint
+                            self.browser_state.page = target_page
+                            self.browser_state.scroll_offset = nil
+                            self:saveBrowserState()
+                            self._browser_refresh_mode_hint = "partial"
+                            self:reopenBrowser()
+                        end
+                    end
+                end,
+                on_last_page = function()
+                    local current_kind = (self.browser_state.tab == "Installed") and "installed" or (self.browser_state.tab == "Screensavers") and "screensaver" or (self.browser_state.kind or "plugin")
+                    local total_pages = (self._last_total_kind == current_kind) and (self._last_total_pages or 1) or 1
+                    if self.browser_state.page < total_pages then
+                        self:resetBrowserScrollState()
+                        local focus_hint = self:computePageFlipFocus(self.browser_menu, true)
+                        if self.browser_menu and self.browser_menu.updateTabContent then
+                            self:updateBrowserTabInPlace(self.browser_state.tab, total_pages, focus_hint)
+                        else
+                            self.browser_focus_hint = focus_hint
+                            self.browser_state.page = total_pages
+                            self.browser_state.scroll_offset = nil
+                            self:saveBrowserState()
+                            self._browser_refresh_mode_hint = "partial"
+                            self:reopenBrowser()
+                        end
+                    end
+                end,
+                on_goto_page = function(page_num)
+                    local current_kind = (self.browser_state.tab == "Installed") and "installed" or (self.browser_state.tab == "Screensavers") and "screensaver" or (self.browser_state.kind or "plugin")
+                    local total_pages = (self._last_total_kind == current_kind) and (self._last_total_pages or 1) or 1
+                    if page_num >= 1 and page_num <= total_pages and page_num ~= self.browser_state.page then
+                        local forward = page_num > self.browser_state.page
+                        self:resetBrowserScrollState()
+                        local focus_hint = self:computePageFlipFocus(self.browser_menu, forward)
+                        if self.browser_menu and self.browser_menu.updateTabContent then
+                            self:updateBrowserTabInPlace(self.browser_state.tab, page_num, focus_hint)
+                        else
+                            self.browser_focus_hint = focus_hint
+                            self.browser_state.page = page_num
+                            self.browser_state.scroll_offset = nil
+                            self:saveBrowserState()
+                            self._browser_refresh_mode_hint = "partial"
+                            self:reopenBrowser()
+                        end
+                    end
+                end,
+                on_dismiss = function(offset)
+                    if self.skip_scroll_save then
+                        self.browser_state.scroll_offset = nil
+                        self.skip_scroll_save = nil
+                    else
+                        self.browser_state.scroll_offset = normalizeScrollOffset(offset)
+                    end
+                    self:saveBrowserState()
+                    self:dismissProgressMessage()
+                    if _screensaver_warmup_timer_fn then
+                        UIManager:unschedule(_screensaver_warmup_timer_fn)
+                        _screensaver_warmup_timer_fn = nil
+                    end
+                    self.browser_menu = nil
+                    self._ss_thumb_task_id = (self._ss_thumb_task_id or 0) + 1
+                    self.screensavers_cache = nil
+                    self._filtered_screensavers_cache = nil
+                    pcall(function()
+                        local ok_ss, StorefrontScreensavers = pcall(require, "storefront_screensavers_ui")
+                        if ok_ss and StorefrontScreensavers and StorefrontScreensavers.invalidateMemCache then
+                            StorefrontScreensavers.invalidateMemCache()
+                        end
+                    end)
+                    collectgarbage("step", 200)
+                end,
+            }
     if dialog._used_trapper_progress then
         Trapper:reset()
     end
@@ -8965,8 +10223,9 @@ function Storefront:showBrowser(kind)
         end)
         if not ok then
             local InfoMessage = require("ui/widget/infomessage")
+            local err_msg = "Storefront Error:\n" .. tostring(err)
             UIManager:show(InfoMessage:new{
-                text = "Storefront Error:\n" .. tostring(err),
+                text = err_msg,
             })
         end
     end)
@@ -8980,6 +10239,20 @@ function Storefront:showScreensaverFilter()
     require("storefront_filter_dialog").showScreensaverFilter(self)
 end
 
+function Storefront:showCollectionsDialog(callback)
+    if self._stopScreensaverThumbPoll then
+        pcall(function() self:_stopScreensaverThumbPoll() end)
+    end
+    pcall(function()
+        local ok_ss, StorefrontScreensavers = pcall(require, "storefront_screensavers_ui")
+        if ok_ss and StorefrontScreensavers and StorefrontScreensavers.cancelAllThumbnailFetches then
+            StorefrontScreensavers.cancelAllThumbnailFetches()
+        end
+    end)
+    collectgarbage("step", 200)
+    require("storefront_collections_dialog").show(self, callback)
+end
+
 function Storefront:showInstalledFilter()
     require("storefront_filter_dialog"):showInstalledFilter(self)
 end
@@ -8991,6 +10264,7 @@ end
 
 function Storefront:toggleFilterBar(tab_name)
     self:ensureBrowserState()
+    tab_name = tab_name or (self.browser_state and self.browser_state.tab) or "Plugins"
     if tab_name == "Plugins" then
         self.browser_state.show_filter_bar_plugins = not self.browser_state.show_filter_bar_plugins
     elseif tab_name == "Patches" then
@@ -9003,7 +10277,11 @@ function Storefront:toggleFilterBar(tab_name)
         self.browser_state.show_filter_bar_screensavers = not (self.browser_state.show_filter_bar_screensavers ~= false)
     end
     self:saveBrowserState()
-    self:reopenBrowser()
+    if self.browser_menu and self.browser_menu.updateTabContent then
+        self:updateBrowserTabInPlace(self.browser_state.tab, self.browser_state.page or 1, nil, true)
+    else
+        self:reopenBrowser()
+    end
 end
 
 function Storefront:showStorefrontSettingsDialog()
@@ -9317,7 +10595,7 @@ function Storefront:showPatchSelectionDialogForInstall(repo, entries)
 end
 
 function Storefront:getStatusLines()
-    local status_lines = { _("Storefront") }
+    local status_lines = { "Storefront" }
     local plugin_count = Cache.countRepos and Cache.countRepos("plugin") or #Cache.listRepos("plugin")
     local patch_count = Cache.countRepos and Cache.countRepos("patch") or #Cache.listRepos("patch")
     local plugin_ts = Cache.getLastFetched("plugin")
@@ -9360,16 +10638,15 @@ function Storefront:buildListWidget(lines)
     if TextWidget.getDefaultFace then
         default_face = TextWidget:getDefaultFace()
     end
-    if (not default_face) and Font and Font.getFace then
-        default_face = Font:getFace("infofont")
+    if not default_face then
+        local StorefrontUtils = require("storefront_utils")
+        default_face = StorefrontUtils.getFace("infofont")
     end
     local text_box_args = {
         text = text,
         width = math.floor(Device.screen:getWidth() * 0.8),
+        face = default_face,
     }
-    if default_face then
-        text_box_args.face = default_face
-    end
     return CenterContainer:new{
         FrameContainer:new{
             padding = 20,
@@ -9402,7 +10679,7 @@ function Storefront:getInstalledLookup()
     if cache and cache.generation == generation then
         return cache.lookup
     end
-    local lookup = { exact = {}, unmatched = {} }
+    local lookup = { exact = {}, unmatched = {}, records = {} }
     for _, rec in pairs(getInstallRecordsMap()) do
         local full_name = rec.repo_full_name
         if not full_name and rec.owner and rec.repo then
@@ -9415,11 +10692,22 @@ function Storefront:getInstalledLookup()
             lookup[full_name:lower()] = true
             lookup.exact[full_name] = true
             lookup.exact[full_name:lower()] = true
+            lookup.records[full_name] = rec
+            lookup.records[full_name:lower()] = rec
         end
         if rec.repo_id then
             has_exact = true
             lookup["id:" .. tostring(rec.repo_id)] = true
             lookup.exact["id:" .. tostring(rec.repo_id)] = true
+            lookup.records["id:" .. tostring(rec.repo_id)] = rec
+        end
+
+        if rec.dirname then
+            local low = rec.dirname:lower()
+            local base = low:gsub("%.koplugin$", "")
+            lookup.records[rec.dirname] = lookup.records[rec.dirname] or rec
+            lookup.records[low] = lookup.records[low] or rec
+            lookup.records[base] = lookup.records[base] or rec
         end
 
         if not has_exact then
@@ -9799,6 +11087,8 @@ extractPluginToUserDir = function(reader, info, dest_root)
 
     -- Remove only the files that the archive will replace so stale code
     -- from a previous version does not linger.
+    -- Native libraries are NOT unlinked while KOReader is running; they are staged as .new.
+    local ok_inst, StorefrontInstaller = pcall(require, "storefront_installer")
     if lfs.attributes(target_dir, "mode") == "directory" then
         local function remove_archive_files(dir, prefix)
             for f in lfs.dir(dir) do
@@ -9806,9 +11096,10 @@ extractPluginToUserDir = function(reader, info, dest_root)
                     local rel = (prefix == "") and f or (prefix .. "/" .. f)
                     local full = dir .. "/" .. f
                     local mode = lfs.attributes(full, "mode")
+                    local is_native = ok_inst and StorefrontInstaller and StorefrontInstaller.isNativeLibraryPath and StorefrontInstaller.isNativeLibraryPath(rel)
                     if mode == "directory" then
                         remove_archive_files(full, rel)
-                    elseif mode == "file" and archive_relatives[rel] and not protected_configs[rel] then
+                    elseif mode == "file" and archive_relatives[rel] and not protected_configs[rel] and not is_native then
                         os.remove(full)
                     end
                 end
@@ -9834,9 +11125,30 @@ extractPluginToUserDir = function(reader, info, dest_root)
                     if parent and parent ~= "" then
                         util.makePath(parent)
                     end
-                    local ok = reader:extractToPath(entry.path, dest_path)
+
+                    local dst_to_extract = dest_path
+                    local is_native = ok_inst and StorefrontInstaller and StorefrontInstaller.isNativeLibraryPath and StorefrontInstaller.isNativeLibraryPath(relative)
+                    local target_exists = (lfs.attributes(dest_path, "mode") == "file")
+
+                    if is_native and target_exists then
+                        dst_to_extract = dest_path .. ".new"
+                        os.remove(dst_to_extract)
+                    end
+
+                    local ok = reader:extractToPath(entry.path, dst_to_extract)
                     if not ok then
                         return false, _("Failed to extract file: ") .. entry.path
+                    end
+
+                    if is_native and target_exists then
+                        if ok_inst and StorefrontInstaller and StorefrontInstaller.stageNativeLibrary then
+                            StorefrontInstaller.stageNativeLibrary(dst_to_extract, dest_path)
+                        end
+                        if ok_inst and StorefrontInstaller and StorefrontInstaller.installSafeExitHook then
+                            StorefrontInstaller.installSafeExitHook()
+                        end
+                    else
+                        os.remove(dest_path .. ".new")
                     end
                 end
             end
@@ -9917,14 +11229,30 @@ function Storefront:handlePostInstall(info, repo)
 
     self:rememberInstall(info, repo)
     self._cached_plugin_summary = nil
+    self._merged_updates_cache = nil
     UIManager:setDirty(nil, "full")
+
+    if info and info.plugin_dirname and info.source == "branch" then
+        self:ensureUpdatesState()
+        if info.sha and info.sha ~= "" then
+            self.updates_state.remote_info[info.plugin_dirname] = {
+                remote_version = info.sha,
+                release_tag_name = (info.branch or "branch") .. "@" .. info.sha:sub(1, 7),
+                last_checked = os.time(),
+                error = nil,
+            }
+        else
+            self.updates_state.remote_info[info.plugin_dirname] = nil
+        end
+        self:saveUpdatesState()
+    end
 
     if not self.pending_install_context then
         return
     end
     local context = self.pending_install_context
     self.pending_install_context = nil
-    if context.mode == "update" then
+    if context.mode == "update" and info and info.source ~= "branch" then
         local plugin = context.plugin
         local record = plugin and getRecordedInstall(plugin.dirname)
         if plugin and record then
@@ -10026,16 +11354,99 @@ end
 
 
 
+function Storefront:onReaderReady(ui)
+    self.ui = ui
+    if self.ui and self.ui.registerModule and not self.ui._sf_module_registered then
+        self.ui._sf_module_registered = true
+        pcall(self.ui.registerModule, self.ui, "storefront", self, true)
+    end
+end
+
 function Storefront:init()
-    Localization:init(self.path)
-    StorefrontLogger.reset()
+    Localization:ensureInit(self.path)
+    if not _G.G_session_init_done then
+        StorefrontLogger.reset()
+    end
     local mode_str = GitHub.isDirectApiEnabled() and "Direct API" or "Storefront Catalog"
-    local plugin_count = Cache.countRepos and Cache.countRepos("plugin") or #Cache.listRepos("plugin")
-    StorefrontLogger.info(string.format("Storefront initialized (Mode: %s, Cached plugins: %d)", mode_str, plugin_count or 0))
+    local plugin_count = (Cache.getCachedCount and Cache.getCachedCount("plugin"))
+        or (Cache.countRepos and Cache.countRepos("plugin"))
+        or 0
+    local patch_count = (Cache.getCachedCount and Cache.getCachedCount("patch"))
+        or (Cache.countRepos and Cache.countRepos("patch"))
+        or 0
+    local font_count = (Cache.getCachedCount and Cache.getCachedCount("font"))
+        or (Cache.countRepos and Cache.countRepos("font"))
+        or 0
+    local screensaver_count = 0
+    pcall(function()
+        local ok_ss, StorefrontScreensavers = pcall(require, "storefront_screensavers_ui")
+        if ok_ss and StorefrontScreensavers and StorefrontScreensavers.getCachedCount then
+            screensaver_count = StorefrontScreensavers.getCachedCount()
+        end
+    end)
+    if not _G.G_session_init_done then
+        StorefrontLogger.info(string.format("Storefront initialized (Mode: %s, Cached: %d plugins, %d patches, %d fonts, %d screensavers)", mode_str, plugin_count or 0, patch_count or 0, font_count or 0, screensaver_count or 0))
+    else
+        logger.dbg(string.format("Storefront initialized widget (Mode: %s, Cached: %d plugins, %d patches, %d fonts, %d screensavers)", mode_str, plugin_count or 0, patch_count or 0, font_count or 0, screensaver_count or 0))
+    end
     Storefront.instance = self
     self.cache_dir = ensureCacheDir()
     self:onDispatcherRegisterActions()
-    self.ui.menu:registerToMainMenu(self)
+    if self.ui and self.ui.menu and self.ui.menu.registerToMainMenu then
+        self.ui.menu:registerToMainMenu(self)
+    end
+    if self.ui and self.ui.registerModule and not self.ui._sf_module_registered then
+        self.ui._sf_module_registered = true
+        pcall(self.ui.registerModule, self.ui, "storefront", self, true)
+    end
+    pcall(function()
+        local UIManager = require("ui/uimanager")
+        if UIManager and UIManager.event_hook and UIManager.event_hook.registerWidget and not UIManager._sf_event_hooked then
+            UIManager._sf_event_hooked = true
+            local hook_proxy = {
+                onSuspend = function()
+                    local target = Storefront.instance or Storefront
+                    if target and target.onSuspend then target:onSuspend() end
+                end,
+                onResume = function()
+                    local target = Storefront.instance or Storefront
+                    if target and target.onResume then target:onResume() end
+                end,
+            }
+            UIManager.event_hook:registerWidget("Suspend", hook_proxy)
+            UIManager.event_hook:registerWidget("Resume", hook_proxy)
+        end
+    end)
+    -- Hook directly into Device power lifecycle so onSuspend/onResume always run regardless of active UI
+    pcall(function()
+        local ok_dev, Device = pcall(require, "device")
+        if ok_dev and Device then
+            if not Device._sf_into_hooked and Device.intoScreenSaver then
+                Device._sf_into_hooked = true
+                local orig_into = Device.intoScreenSaver
+                Device.intoScreenSaver = function(dev_self, ...)
+                    pcall(function()
+                        if Storefront.instance and Storefront.instance.onSuspend then
+                            Storefront.instance:onSuspend()
+                        end
+                    end)
+                    return orig_into(dev_self, ...)
+                end
+            end
+            if not Device._sf_out_hooked and Device.outofScreenSaver then
+                Device._sf_out_hooked = true
+                local orig_out = Device.outofScreenSaver
+                Device.outofScreenSaver = function(dev_self, ...)
+                    pcall(function()
+                        if Storefront.instance and Storefront.instance.onResume then
+                            Storefront.instance:onResume()
+                        end
+                    end)
+                    return orig_out(dev_self, ...)
+                end
+            end
+        end
+    end)
     
     -- Migrate settings to page size 5 if not set
     if StorefrontSettings:readSetting(BROWSER_PAGE_SIZE_KEY) ~= 5 or StorefrontSettings:readSetting(MANAGE_PAGE_SIZE_KEY) ~= 5 then
@@ -10159,12 +11570,42 @@ function Storefront:init()
         end
     end
 
-    -- Trigger non-blocking silent catalog update on startup if online and cache is older than 1 hour (3600s)
+    -- Non-blocking deferred cache limit enforcement on startup (deferred by 5s)
+    pcall(function()
+        local UIManager = require("ui/uimanager")
+        if UIManager and UIManager.scheduleIn then
+            UIManager:scheduleIn(5, function()
+                local ok_cl, StorefrontCacheLimit = pcall(require, "storefront_cache_limit")
+                if ok_cl and StorefrontCacheLimit and StorefrontCacheLimit.enforce then
+                    StorefrontCacheLimit.enforce()
+                end
+            end)
+        end
+    end)
+
+    -- Trigger non-blocking silent catalog update on startup (deferred by 60s so it doesn't collide with KOReader startup)
     -- NOTE: We intentionally do NOT use NetworkMgr:runWhenOnline here because that prompts the user
     -- to enable wifi when offline. This is a background operation; silently skip if not connected.
-    UIManager:nextTick(function()
-        local ok_nm, NetworkMgr = pcall(require, "ui/network/manager")
-        if not (ok_nm and NetworkMgr) then return end
+    local _bg_catalog_init_fn
+    _bg_catalog_init_fn = function()
+        _bg_catalog_init_fn = nil
+        Storefront._bg_catalog_init_timer_fn = nil
+
+        local ok_dev, Device = pcall(require, "device")
+        if ok_dev and Device and ((Device.isSuspended and Device:isSuspended()) or Device.screen_saver_mode) then
+            logger.info("Storefront init: skipping background catalog update — device suspended or in screensaver mode")
+            return
+        end
+
+        local ok_nm, NotificationMgr = pcall(require, "storefront_notification_mgr")
+        if ok_nm and NotificationMgr and not NotificationMgr.isEnabled() then
+            logger.info("Storefront init: skipping background catalog update — notifications disabled")
+            if StorefrontLogger then StorefrontLogger.info("Storefront init: skipping background catalog update — notifications disabled") end
+            return
+        end
+
+        local ok_net, NetworkMgr = pcall(require, "ui/network/manager")
+        if not (ok_net and NetworkMgr) then return end
 
         -- Silently check connectivity without prompting
         local is_online = false
@@ -10180,6 +11621,15 @@ function Storefront:init()
             return
         end
 
+        local StorefrontUtils = require("storefront_utils")
+        local is_low, avail_kb = StorefrontUtils.isLowMemory()
+        if is_low then
+            local msg = string.format("Storefront init: available memory is critically low (%d KB), skipping background catalog update to prevent OOM", avail_kb or 0)
+            logger.warn(msg)
+            if StorefrontLogger then StorefrontLogger.warn(msg) end
+            return
+        end
+
         local Cache = require("storefront_cache")
         local plugin_count = Cache.countRepos("plugin") or 0
         local patch_count = Cache.countRepos("patch") or 0
@@ -10188,26 +11638,43 @@ function Storefront:init()
         local last_fetched = (plugin_fetched > 0 and patch_fetched > 0) and math.min(plugin_fetched, patch_fetched) or 0
         local age = (last_fetched > 0) and (os.time() - last_fetched) or 999999
 
-        local needs_fetch = (last_fetched == 0 or plugin_count == 0 or patch_count == 0 or age > 3600)
+        local ss_count = 0
+        local ss_fetched = 0
+        local ok_ss, StorefrontScreensavers = pcall(require, "storefront_screensavers_ui")
+        if ok_ss and StorefrontScreensavers then
+            ss_count = StorefrontScreensavers.getCachedCount and StorefrontScreensavers.getCachedCount() or 0
+            ss_fetched = StorefrontScreensavers.getLastFetched and StorefrontScreensavers.getLastFetched() or 0
+        end
+        local ss_age = (ss_fetched > 0) and (os.time() - ss_fetched) or 999999
+
+        local needs_fetch = (last_fetched == 0 or plugin_count == 0 or patch_count == 0 or age > 3600 or ss_fetched == 0 or ss_count == 0 or ss_age > 3600)
         if Storefront.instance and needs_fetch then
             Storefront.instance._last_catalog_check_time = os.time()
         end
 
         if not GitHub.isDirectApiEnabled() and needs_fetch then
-            local msg = string.format("Storefront init: catalog cache is stale/unfetched (plugins: %d, patches: %d, %ds old), triggering background fetch", plugin_count, patch_count, age)
+            local msg = string.format("Storefront init: catalog cache is stale/unfetched (plugins: %d [%ds old], patches: %d, screensavers: %d [%ds old]), triggering background fetch", plugin_count, age, patch_count, ss_count, ss_age)
             logger.info(msg)
             StorefrontLogger.info(msg)
             local CatalogClient = require("storefront_net_catalog")
-            CatalogClient.fetchAndUpdateCacheAsync(nil, function(ok, err)
+            CatalogClient.fetchAndUpdateCacheAsync(nil, function(ok, status_or_err)
                 if ok then
-                    logger.info("Storefront init: background catalog update finished")
-                    StorefrontLogger.info("Storefront init: background catalog update finished")
-                    if Storefront.instance and Storefront.instance.browser_menu then
-                        Storefront.instance:reopenBrowser()
+                    logger.info("Storefront init: background catalog update finished (" .. tostring(status_or_err) .. ")")
+                    StorefrontLogger.info("Storefront init: background catalog update finished (" .. tostring(status_or_err) .. ")")
+                    if status_or_err == "updated" and Storefront.instance then
+                        pcall(function() Storefront.instance:populateRemoteInfoFromCatalog() end)
+                        if Storefront.instance.browser_menu then
+                            Storefront.instance:refreshCurrentBrowserTab()
+                        end
                     end
+                    pcall(function()
+                        if Storefront.checkStartupNotifications then
+                            Storefront:checkStartupNotifications(true)
+                        end
+                    end)
                 else
-                    logger.warn("Storefront init: background catalog update failed: " .. tostring(err))
-                    StorefrontLogger.warn("Storefront init: background catalog update failed: " .. tostring(err))
+                    logger.warn("Storefront init: background catalog update failed: " .. tostring(status_or_err))
+                    StorefrontLogger.warn("Storefront init: background catalog update failed: " .. tostring(status_or_err))
                     if Cache.countRepos("plugin") == 0 then
                         logger.info("Storefront init: catalog cache empty after fetch error, loading bundled catalog fallback")
                         CatalogClient.loadBundledCatalog()
@@ -10225,32 +11692,332 @@ function Storefront:init()
                             _catalog_retry_timer_fn = nil
                             logger.info("Storefront init: retrying background catalog update after delay...")
                             if StorefrontLogger then StorefrontLogger.info("Storefront init: retrying background catalog update after delay...") end
-                            CatalogClient.fetchAndUpdateCacheAsync(nil, function(retry_ok, retry_err)
+                            CatalogClient.fetchAndUpdateCacheAsync(nil, function(retry_ok, retry_status_or_err)
                                 if retry_ok then
-                                    logger.info("Storefront init: background catalog update retry succeeded")
-                                    if StorefrontLogger then StorefrontLogger.info("Storefront init: background catalog update retry succeeded") end
-                                    if Storefront.instance and Storefront.instance.browser_menu then
-                                        Storefront.instance:reopenBrowser()
+                                    logger.info("Storefront init: background catalog update retry succeeded (" .. tostring(retry_status_or_err) .. ")")
+                                    if StorefrontLogger then StorefrontLogger.info("Storefront init: background catalog update retry succeeded (" .. tostring(retry_status_or_err) .. ")") end
+                                    if retry_status_or_err == "updated" and Storefront.instance then
+                                        pcall(function() Storefront.instance:populateRemoteInfoFromCatalog() end)
+                                        if Storefront.instance.browser_menu then
+                                            Storefront.instance:refreshCurrentBrowserTab()
+                                        end
                                     end
+                                    pcall(function()
+                                        if Storefront.checkStartupNotifications then
+                                            Storefront:checkStartupNotifications(true)
+                                        end
+                                    end)
                                 else
-                                    logger.warn("Storefront init: background catalog update retry failed: " .. tostring(retry_err))
-                                    if StorefrontLogger then StorefrontLogger.warn("Storefront init: background catalog update retry failed: " .. tostring(retry_err)) end
+                                    logger.warn("Storefront init: background catalog update retry failed: " .. tostring(retry_status_or_err))
+                                    if StorefrontLogger then StorefrontLogger.warn("Storefront init: background catalog update retry failed: " .. tostring(retry_status_or_err)) end
                                     if Cache.countRepos("plugin") == 0 then
                                         CatalogClient.loadBundledCatalog()
                                     end
                                 end
-                            end)
+                            end, true)
                         end
                         UIManager:scheduleIn(60, _catalog_retry_timer_fn)
                     end
                 end
-            end)
+            end, true)
         else
-            local msg = string.format("Storefront init: catalog cache is fresh (%ds old <= 3600s), skipping background fetch", age)
+            local msg = string.format("Storefront init: catalog cache is fresh (plugins/patches: %ds old, screensavers: %ds old <= 3600s), skipping background fetch", age, ss_age)
             logger.info(msg)
             StorefrontLogger.info(msg)
+            pcall(function()
+                if Storefront.checkStartupNotifications then
+                    Storefront:checkStartupNotifications(true)
+                end
+            end)
+        end
+    end
+    if not _session_bg_catalog_timer_done then
+        _session_bg_catalog_timer_done = true
+        if Storefront._bg_catalog_init_timer_fn and UIManager and UIManager.unschedule then
+            UIManager:unschedule(Storefront._bg_catalog_init_timer_fn)
+        end
+        Storefront._bg_catalog_init_timer_fn = _bg_catalog_init_fn
+        UIManager:scheduleIn(60, _bg_catalog_init_fn)
+    end
+
+    pcall(function() self:scheduleNotificationTimer() end)
+end
+
+function Storefront:scheduleNotificationTimer()
+    local ok_nm, NotificationMgr = pcall(require, "storefront_notification_mgr")
+    if not (ok_nm and NotificationMgr) then return end
+
+    local UIManager = require("ui/uimanager")
+    if _notification_timer_fn then
+        UIManager:unschedule(_notification_timer_fn)
+        _notification_timer_fn = nil
+    end
+
+    if not NotificationMgr.isEnabled() then
+        return
+    end
+
+    local interval = NotificationMgr.getFrequencySeconds() or 86400
+    local last_check = NotificationMgr.getLastChecked()
+    local now = os.time()
+    local delay = interval
+    if last_check > 0 then
+        local elapsed = now - last_check
+        if elapsed < interval then
+            delay = math.max(60, interval - elapsed)
+        else
+            delay = 300
+        end
+    else
+        delay = 300
+    end
+
+    _notification_timer_fn = function()
+        _notification_timer_fn = nil
+        local ok_dev, Device = pcall(require, "device")
+        if ok_dev and Device and ((Device.isSuspended and Device:isSuspended()) or Device.screen_saver_mode) then
+            logger.info("Storefront: skipping notification timer — device suspended or in screensaver mode")
+            return
+        end
+        pcall(function()
+            if not NotificationMgr.isEnabled() then return end
+            local is_online = NotificationMgr.isNetworkConnected()
+            if is_online and NotificationMgr.shouldCheckNow() then
+                local CatalogClient = require("storefront_net_catalog")
+                CatalogClient.fetchAndUpdateCacheAsync(nil, function(ok, status)
+                    if ok then
+                        if status == "updated" and Storefront.instance and Storefront.instance.browser_menu then
+                            Storefront.instance:refreshCurrentBrowserTab()
+                        end
+                        pcall(function()
+                            if Storefront.checkStartupNotifications then
+                                Storefront:checkStartupNotifications(true)
+                            end
+                        end)
+                    end
+                end, true)
+            end
+        end)
+        if Storefront.instance and Storefront.instance.scheduleNotificationTimer then
+            Storefront.instance:scheduleNotificationTimer()
+        end
+    end
+
+    UIManager:scheduleIn(delay, _notification_timer_fn)
+end
+
+function Storefront:onNetworkConnected()
+    local ok_dev, Device = pcall(require, "device")
+    if ok_dev and Device and ((Device.isSuspended and Device:isSuspended()) or Device.screen_saver_mode) then
+        logger.info("Storefront: skipping onNetworkConnected sync — device suspended or in screensaver mode")
+        return
+    end
+    local ok_nm, NotificationMgr = pcall(require, "storefront_notification_mgr")
+    if ok_nm and NotificationMgr and NotificationMgr.isEnabled() and NotificationMgr.shouldCheckNow(nil, true) then
+        local CatalogClient = require("storefront_net_catalog")
+        CatalogClient.fetchAndUpdateCacheAsync(nil, function(ok, status)
+            if ok then
+                if status == "updated" and Storefront.instance and Storefront.instance.browser_menu then
+                    Storefront.instance:refreshCurrentBrowserTab()
+                end
+                pcall(function()
+                    if Storefront.checkStartupNotifications then
+                        Storefront:checkStartupNotifications(true)
+                    end
+                end)
+            end
+        end, true)
+    end
+end
+
+local function cleanupInstanceSuspendState(inst)
+    if type(inst) ~= "table" then return end
+    inst._ss_thumb_task_id = (inst._ss_thumb_task_id or 0) + 1
+    if inst._active_thumb_worker then
+        local w = inst._active_thumb_worker
+        inst._active_thumb_worker = nil
+        pcall(function()
+            local ok_ffi, ffiutil = pcall(require, "ffi/util")
+            if not ok_ffi then ok_ffi, ffiutil = pcall(require, "ffiutil") end
+            if ok_ffi and ffiutil then
+                if w.pid and ffiutil.terminateSubProcess then
+                    pcall(ffiutil.terminateSubProcess, w.pid)
+                    if ffiutil.isSubProcessDone then
+                        pcall(ffiutil.isSubProcessDone, w.pid, true)
+                    end
+                end
+                if w.fd and (ffiutil.readAllFromFD or ffiutil.readFromFD) then
+                    local read_fn = ffiutil.readAllFromFD or ffiutil.readFromFD
+                    pcall(read_fn, w.fd)
+                end
+            end
+        end)
+    end
+    inst.screensavers_cache = nil
+    inst._filtered_screensavers_cache = nil
+    inst._screensavers_all_cache = nil
+end
+
+local function setModuleSuspendedState(self_inst, state)
+    Storefront._is_suspended = state
+    if type(self_inst) == "table" and self_inst ~= Storefront then
+        rawset(self_inst, "_is_suspended", state)
+    end
+    if type(Storefront.instance) == "table" and Storefront.instance ~= Storefront then
+        rawset(Storefront.instance, "_is_suspended", state)
+    end
+end
+
+function Storefront:onSuspend(is_widget_close)
+    local UIManager = require("ui/uimanager")
+    if is_widget_close then
+        -- Widget close transition (e.g., closing FileManager to open a book, or closing ReaderUI).
+        -- Clean up instance-specific UI state and workers, but preserve module-level caches
+        -- (Cache and StorefrontScreensavers) and skip GC sweeps so book opens are instantaneous.
+        cleanupInstanceSuspendState(self)
+        if UIManager and UIManager.unschedule then
+            if _catalog_show_timer_fn then
+                UIManager:unschedule(_catalog_show_timer_fn)
+                _catalog_show_timer_fn = nil
+            end
+            if _screensaver_warmup_timer_fn then
+                UIManager:unschedule(_screensaver_warmup_timer_fn)
+                _screensaver_warmup_timer_fn = nil
+            end
+        else
+            _catalog_show_timer_fn = nil
+            _screensaver_warmup_timer_fn = nil
+        end
+        return
+    end
+
+    if Storefront._is_suspended or rawget(self, "_is_suspended") then
+        -- Fast-path deduplication: already suspended in this sleep cycle.
+        -- Ensure any tasks are cancelled idempotently, but skip duplicate logging and double-GC.
+        cleanupInstanceSuspendState(self)
+        if Storefront.instance and Storefront.instance ~= self then
+            cleanupInstanceSuspendState(Storefront.instance)
+        end
+        pcall(function()
+            local ok_cat, CatalogClient = pcall(require, "storefront_net_catalog")
+            if ok_cat and CatalogClient and CatalogClient.cancelCatalogFetch then
+                CatalogClient.cancelCatalogFetch()
+            end
+        end)
+        return
+    end
+
+    setModuleSuspendedState(self, true)
+
+    logger.info("Storefront: onSuspend received — aborting active tasks and purging memory")
+    if StorefrontLogger then StorefrontLogger.info("Storefront: onSuspend received — aborting active tasks and purging memory") end
+
+    -- 1. Cancel in-flight screensaver thumbnail queue & terminate active worker
+    cleanupInstanceSuspendState(self)
+    if Storefront.instance and Storefront.instance ~= self then
+        cleanupInstanceSuspendState(Storefront.instance)
+    end
+    if Storefront ~= self and Storefront ~= Storefront.instance then
+        cleanupInstanceSuspendState(Storefront)
+    end
+    pcall(function()
+        local ok_ss, StorefrontScreensavers = pcall(require, "storefront_screensavers_ui")
+        if ok_ss and StorefrontScreensavers and StorefrontScreensavers.cancelAllThumbnailFetches then
+            StorefrontScreensavers.cancelAllThumbnailFetches()
         end
     end)
+
+    -- 2. Cancel in-flight background catalog sync & any pending poll timers
+    pcall(function()
+        local ok_cat, CatalogClient = pcall(require, "storefront_net_catalog")
+        if ok_cat and CatalogClient then
+            if CatalogClient.cancelCatalogFetch then
+                CatalogClient.cancelCatalogFetch()
+            elseif CatalogClient.cancelAsyncFetch then
+                CatalogClient.cancelAsyncFetch()
+            end
+        end
+    end)
+
+    -- 3. Cancel ratings subprocesses
+    pcall(function()
+        local ok_rat, StorefrontRatings = pcall(require, "storefront_ratings")
+        if ok_rat and StorefrontRatings and StorefrontRatings.cancelPendingRequests then
+            StorefrontRatings.cancelPendingRequests()
+        end
+    end)
+
+    -- 4. Unschedule pending timers
+    if UIManager and UIManager.unschedule then
+        if Storefront._bg_catalog_init_timer_fn then
+            UIManager:unschedule(Storefront._bg_catalog_init_timer_fn)
+            Storefront._bg_catalog_init_timer_fn = nil
+        end
+        if _catalog_retry_timer_fn then
+            UIManager:unschedule(_catalog_retry_timer_fn)
+            _catalog_retry_timer_fn = nil
+        end
+        if _catalog_show_timer_fn then
+            UIManager:unschedule(_catalog_show_timer_fn)
+            _catalog_show_timer_fn = nil
+        end
+        if _screensaver_warmup_timer_fn then
+            UIManager:unschedule(_screensaver_warmup_timer_fn)
+            _screensaver_warmup_timer_fn = nil
+        end
+        if _notification_timer_fn then
+            UIManager:unschedule(_notification_timer_fn)
+            _notification_timer_fn = nil
+        end
+    else
+        Storefront._bg_catalog_init_timer_fn = nil
+        _catalog_retry_timer_fn = nil
+        _catalog_show_timer_fn = nil
+        _screensaver_warmup_timer_fn = nil
+        _notification_timer_fn = nil
+    end
+
+    -- 5. Free large in-memory caches to prevent Kindle OOM killer
+    pcall(function()
+        local ok_ss, StorefrontScreensavers = pcall(require, "storefront_screensavers_ui")
+        if ok_ss and StorefrontScreensavers and StorefrontScreensavers.invalidateMemCache then
+            StorefrontScreensavers.invalidateMemCache()
+        end
+    end)
+    pcall(function()
+        local ok_c, Cache = pcall(require, "storefront_cache")
+        if ok_c and Cache and Cache.purgeMem then
+            Cache.purgeMem()
+        end
+    end)
+
+    -- 6. Perform a single incremental GC step instead of blocking sleep with a full heap sweep
+    collectgarbage("step", 200)
+end
+
+function Storefront:onResume()
+    if Storefront._is_suspended == false or rawget(self, "_is_suspended") == false then
+        return
+    end
+    setModuleSuspendedState(self, false)
+    logger.info("Storefront: onResume received")
+    if StorefrontLogger then StorefrontLogger.info("Storefront: onResume received") end
+    pcall(function()
+        if self.scheduleNotificationTimer then
+            self:scheduleNotificationTimer()
+        end
+    end)
+end
+
+function Storefront:onCloseWidget()
+    if self._is_widget_closed then
+        return
+    end
+    self._is_widget_closed = true
+    if self.browser_menu then
+        self:closeBrowserMenu()
+    end
+    self:onSuspend(true)
 end
 
 
@@ -10287,7 +12054,7 @@ function Storefront:addToMainMenu(menu_items)
     injectStorefrontIntoToolsMenu()
     menu_items.Storefront = {
         sorting_hint = "tools",
-        text = _("Storefront"),
+        text = "Storefront",
         callback = function()
             self:showBrowser()
         end,
@@ -10295,6 +12062,12 @@ function Storefront:addToMainMenu(menu_items)
 end
 
 function Storefront:onDispatcherRegisterActions()
+    Dispatcher:registerAction("storefront_blueprints", {
+        category = "none",
+        event = "StorefrontBlueprints",
+        title = _("Storefront: Blueprints"),
+        general = true,
+    })
     Dispatcher:registerAction("storefront_open", {
         category = "none",
         event = "StorefrontOpen",
@@ -10308,6 +12081,29 @@ function Storefront:onStorefrontOpen()
         self:showBrowser()
     end)
     return true
+end
+
+function Storefront:onStorefrontBlueprints()
+    UIManager:nextTick(function()
+        local ok_bp, BlueprintUI = pcall(require, "storefront_blueprint_ui")
+        if ok_bp and BlueprintUI and BlueprintUI.showBlueprintsMenu then
+            BlueprintUI.showBlueprintsMenu(self)
+        end
+    end)
+    return true
+end
+
+function Storefront:applyBlueprintFile(filepath)
+    local ok_mgr, BlueprintMgr = pcall(require, "storefront_blueprint_mgr")
+    local ok_ui, BlueprintUI = pcall(require, "storefront_blueprint_ui")
+    if ok_mgr and ok_ui and BlueprintMgr and BlueprintUI then
+        local ok, bp = BlueprintMgr.loadFromFile(filepath)
+        if ok and bp then
+            BlueprintUI.showDiffDialog(self, bp)
+            return true
+        end
+    end
+    return false
 end
 
 Storefront.listInstalledPlugins = listInstalledPlugins

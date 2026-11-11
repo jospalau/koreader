@@ -24,6 +24,8 @@ local storefront_theme = require("storefront_theme")
 local StorefrontToast = require("storefront_toast")
 local RepoContent = require("storefront_repo_content")
 local StorefrontScreensavers = require("storefront_screensavers_ui")
+local StorefrontRatings = require("storefront_ratings")
+local StorefrontUtils = require("storefront_utils")
 
 local StorefrontClearCacheDialog = {}
 
@@ -67,7 +69,7 @@ end
 function StorefrontClearCacheDialog.show(Storefront, on_close_callback)
     local sw = Device.screen:getWidth()
     local sh = Device.screen:getHeight()
-    local dialog_w = math.min(sw - sc(20), sc(400))
+    local dialog_w = math.min(sw - sc(20), sc(460))
 
     local ui_font_size = storefront_theme.face_label_size or 18
     local subtext_font_size = storefront_theme.subtext_font_size or 16
@@ -99,15 +101,16 @@ function StorefrontClearCacheDialog.show(Storefront, on_close_callback)
         local readme_stats = RepoContent.getReadmeCacheStats()
         local wiki_stats = RepoContent.getWikiCacheStats()
         local thumb_stats = StorefrontScreensavers.getThumbnailsCacheStats()
+        local ratings_stats = StorefrontRatings.getCacheStats and StorefrontRatings.getCacheStats() or { files = 0, bytes = 0 }
 
-        local total_files = readme_stats.files + wiki_stats.files + thumb_stats.files
-        local total_bytes = readme_stats.bytes + wiki_stats.bytes + thumb_stats.bytes
+        local total_files = readme_stats.files + wiki_stats.files + thumb_stats.files + ratings_stats.files
+        local total_bytes = readme_stats.bytes + wiki_stats.bytes + thumb_stats.bytes + ratings_stats.bytes
         local total_stats = { files = total_files, bytes = total_bytes }
 
         -- Title Widget
         local title_label = TextWidget:new{
             text = _("Clear Cache"),
-            face = Font:getFace("NotoSerif-Regular.ttf", title_font_size),
+            face = StorefrontUtils.getTitleFace(title_font_size),
             bold = true,
             fgcolor = Blitbuffer.COLOR_BLACK,
         }
@@ -148,10 +151,26 @@ function StorefrontClearCacheDialog.show(Storefront, on_close_callback)
             width = dialog_w - sc(24),
             alignment = "left",
         }
+        local ok_cl, StorefrontCacheLimit = pcall(require, "storefront_cache_limit")
+        local limit_mb = (ok_cl and StorefrontCacheLimit and StorefrontCacheLimit.getLimitMB) and StorefrontCacheLimit.getLimitMB() or 100
+        local limit_str = (limit_mb == 0) and _("Unlimited") or string.format("%d MB", limit_mb)
+        local limit_info_txt = TextWidget:new{
+            text = string.format(_("Cache limit: %s · In use: %s"), limit_str, formatSize(total_bytes)),
+            face = Font:getFace("cfont", subtext_font_size),
+            bold = true,
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
         table.insert(content_vg, FrameContainer:new{
             padding = sc(10),
+            padding_bottom = sc(4),
             bordersize = 0,
             desc_txt,
+        })
+        table.insert(content_vg, FrameContainer:new{
+            padding = sc(10),
+            padding_top = 0,
+            bordersize = 0,
+            limit_info_txt,
         })
         table.insert(content_vg, LineWidget:new{
             dimen = Geom:new{ w = dialog_w - sc(4), h = sc(1) },
@@ -165,17 +184,40 @@ function StorefrontClearCacheDialog.show(Storefront, on_close_callback)
             local has_items = stats and (stats.files > 0 or stats.bytes > 0)
             local sub_str = formatStats(stats)
 
-            local title_w = TextWidget:new{
+            local action_btn_w = is_accent and sc(116) or sc(92)
+            local action_btn_h = sc(32)
+            local avail_w = dialog_w - sc(24)
+            local max_left_w = avail_w - action_btn_w - sc(12)
+
+            local row_bg = is_accent and Blitbuffer.Color8(240) or Blitbuffer.COLOR_WHITE
+            local test_face = Font:getFace("cfont", is_accent and (ui_font_size + 1) or ui_font_size)
+            local title_w
+            local test_tw = TextWidget:new{
                 text = title_str,
-                face = Font:getFace("cfont", is_accent and (ui_font_size + 1) or ui_font_size),
+                face = test_face,
                 bold = is_accent,
                 fgcolor = Blitbuffer.COLOR_BLACK,
             }
+            if test_tw:getSize().w <= max_left_w then
+                title_w = test_tw
+            else
+                test_tw:free()
+                title_w = TextBoxWidget:new{
+                    text = title_str,
+                    face = test_face,
+                    bold = is_accent,
+                    fgcolor = Blitbuffer.COLOR_BLACK,
+                    bgcolor = row_bg,
+                    width = max_left_w,
+                    alignment = "left",
+                }
+            end
 
             local sub_w = TextWidget:new{
                 text = sub_str,
                 face = Font:getFace("cfont", subtext_font_size),
                 fgcolor = storefront_theme.color_label_dim,
+                max_width = max_left_w,
             }
 
             local left_vg = VerticalGroup:new{
@@ -184,9 +226,6 @@ function StorefrontClearCacheDialog.show(Storefront, on_close_callback)
                 VerticalSpan:new{ width = sc(3) },
                 sub_w,
             }
-
-            local action_btn_w = sc(92)
-            local action_btn_h = sc(32)
 
             local right_action
             if not has_items then
@@ -203,6 +242,7 @@ function StorefrontClearCacheDialog.show(Storefront, on_close_callback)
                 right_action = StorefrontUtils.createButton{
                     text = is_accent and _("Clear All") or _("Clear"),
                     text_font_size = 14,
+                    min_font_size = 9,
                     bold = true,
                     bordersize = storefront_theme.border_btn or sc(1),
                     radius = storefront_theme.radius_btn or sc(4),
@@ -216,8 +256,9 @@ function StorefrontClearCacheDialog.show(Storefront, on_close_callback)
                 }
             end
 
-            local row_h = math.max(left_vg:getSize().h, right_action:getSize().h)
-            local avail_w = dialog_w - sc(24)
+            local left_h = (left_vg.getSize and left_vg:getSize().h) or action_btn_h
+            local right_h = (right_action.getSize and right_action:getSize().h) or action_btn_h
+            local row_h = math.max(left_h, right_h)
 
             local row_overlap = OverlapGroup:new{
                 dimen = Geom:new{ w = avail_w, h = row_h },
@@ -236,7 +277,7 @@ function StorefrontClearCacheDialog.show(Storefront, on_close_callback)
                 padding_left = sc(10),
                 padding_right = sc(10),
                 bordersize = 0,
-                background = is_accent and Blitbuffer.Color8(240) or Blitbuffer.COLOR_WHITE,
+                background = row_bg,
                 width = dialog_w - sc(4),
                 row_overlap,
             }
@@ -312,10 +353,21 @@ function StorefrontClearCacheDialog.show(Storefront, on_close_callback)
                         local r1 = RepoContent.clearReadmeCache()
                         local r2 = RepoContent.clearWikiCache()
                         local r3 = StorefrontScreensavers.clearThumbnailsCache()
-                        local freed_bytes = (r1.bytes or 0) + (r2.bytes or 0) + (r3.bytes or 0)
-                        local freed_files = (r1.removed or 0) + (r2.removed or 0) + (r3.removed or 0)
+                        local r4 = StorefrontRatings.clearCache and StorefrontRatings.clearCache() or { removed = 0, bytes = 0 }
+                        if StorefrontScreensavers.clearCachedCatalog then
+                            StorefrontScreensavers.clearCachedCatalog()
+                        end
+                        if Storefront then
+                            Storefront.screensavers_cache = nil
+                        end
+                        local freed_bytes = (r1.bytes or 0) + (r2.bytes or 0) + (r3.bytes or 0) + (r4.bytes or 0)
+                        local freed_files = (r1.removed or 0) + (r2.removed or 0) + (r3.removed or 0) + (r4.removed or 0)
                         refresh()
-                        StorefrontToast.show(string.format(_("Cleared all caches (%s freed, %d files)."), formatSize(freed_bytes), freed_files), 3)
+                        if r3 and r3.protected and r3.protected > 0 then
+                            StorefrontToast.show(string.format(_("Cleared all caches (%s freed, %d files, %d active thumbnails preserved)."), formatSize(freed_bytes), freed_files, r3.protected), 4)
+                        else
+                            StorefrontToast.show(string.format(_("Cleared all caches (%s freed, %d files)."), formatSize(freed_bytes), freed_files), 3)
+                        end
                     end
                 )
             end,
@@ -376,8 +428,37 @@ function StorefrontClearCacheDialog.show(Storefront, on_close_callback)
                     _("Clear"),
                     function()
                         local res = StorefrontScreensavers.clearThumbnailsCache()
+                        if StorefrontScreensavers.clearCachedCatalog then
+                            StorefrontScreensavers.clearCachedCatalog()
+                        end
+                        if Storefront then
+                            Storefront.screensavers_cache = nil
+                        end
                         refresh()
-                        StorefrontToast.show(string.format(_("Cleared screensaver thumbnails (%s freed)."), formatSize(res.bytes or 0)), 3)
+                        if res and res.protected and res.protected > 0 then
+                            StorefrontToast.show(string.format(_("Cleared screensaver thumbnails (%s freed, %d active preserved)."), formatSize(res.bytes or 0), res.protected), 4)
+                        else
+                            StorefrontToast.show(string.format(_("Cleared screensaver thumbnails (%s freed)."), formatSize(res.bytes or 0)), 3)
+                        end
+                    end
+                )
+            end,
+            false
+        ))
+
+        -- ROW 4: COMMUNITY RATINGS CACHE
+        table.insert(content_vg, create_cache_row(
+            _("Community ratings & stats"),
+            ratings_stats,
+            function()
+                showCustomConfirm(
+                    _("Clear Ratings Cache?"),
+                    string.format(_("This will delete cached community ratings and download counts (%s)."), formatSize(ratings_stats.bytes)),
+                    _("Clear"),
+                    function()
+                        local res = StorefrontRatings.clearCache and StorefrontRatings.clearCache() or { bytes = 0 }
+                        refresh()
+                        StorefrontToast.show(string.format(_("Cleared ratings cache (%s freed)."), formatSize(res.bytes or 0)), 3)
                     end
                 )
             end,

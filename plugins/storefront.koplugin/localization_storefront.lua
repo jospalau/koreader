@@ -218,9 +218,14 @@ function Localization:init(path)
     logger.info("Localization: Initialized with system language:", self.current_language)
 end
 
-function Localization:ensureInit()
+function Localization:ensureInit(path)
     if not self.initialized then
-        self:init()
+        self:init(path)
+    elseif path then
+        local norm_path = path:gsub("\\", "/")
+        if norm_path ~= self.path and next(self.translations) == nil then
+            self:init(path)
+        end
     end
 end
 
@@ -231,7 +236,7 @@ function Localization:discoverLanguages()
     
     if not lfs then
         logger.warn("Localization: lfs not available, using fallback language discovery")
-        self.available_languages = { "ar", "de", "en", "es", "fr", "hu", "id", "it", "ja", "ko", "nl", "pl", "pt_br", "ru", "sr", "tr", "uk", "zh_CN" }
+        self.available_languages = { "ar", "de", "en", "es", "fr", "hu", "id", "it", "ja", "ko", "nl", "pl", "pt_br", "ru", "sk", "sr", "tr", "uk", "zh_CN" }
         return
     end
 
@@ -239,7 +244,7 @@ function Localization:discoverLanguages()
     if not attr or attr.mode ~= "directory" then
         logger.warn("Localization: Languages directory not found at:", lang_dir)
         -- Fallback to default list
-        self.available_languages = { "ar", "de", "en", "es", "fr", "hu", "id", "it", "ja", "ko", "nl", "pl", "pt_br", "ru", "sr", "tr", "uk", "zh_CN" }
+        self.available_languages = { "ar", "de", "en", "es", "fr", "hu", "id", "it", "ja", "ko", "nl", "pl", "pt_br", "ru", "sk", "sr", "tr", "uk", "zh_CN" }
         return
     end
     
@@ -393,7 +398,10 @@ local FALLBACKS = {
     ["Solid fill for screen margins & letterboxing"] = "Solid fill for screen margins & letterboxing",
     ["Show reading progress banner overlay"] = "Show reading progress banner overlay",
     ["Stretch image to fill entire screen"] = "Stretch image to fill entire screen",
-    ["Invert colors (night mode / dark background)"] = "Invert colors (night mode / dark background)",
+    ["Invert colors (night mode/dark background)"] = "Invert colors (night mode/dark background)",
+    ["Border Fill/Background"] = "Border Fill/Background",
+    ["Reading Progress/Summary"] = "Reading Progress/Summary",
+    ["Include Wallpaper/Screensavers"] = "Include Wallpaper/Screensavers",
 
     -- Settings & About
     menu_settings = "Storefront Settings",
@@ -406,6 +414,24 @@ local FALLBACKS = {
     err_uninstall_failed = "Uninstallation failed for '%s'.",
     msg_catalog_updated = "Catalog updated successfully.",
     msg_no_results = "No items found matching search.",
+
+    -- Branch Installation
+    install_from_branch = "Install from branch…",
+    fetching_branches = "Fetching branches…",
+    no_branches_found = "No branches found for this repository.",
+    confirm_branch_install_title = "Install from branch '%s'?",
+    confirm_branch_install_body = "This is a developer/contributor build and may be unstable. Only install if you know what you're doing.",
+    tracking_branch = "Tracking branch: %s",
+    branch_label = "branch: %s",
+    tracked_badge = "TRACKED",
+    new_commit_on_branch = "New commit on '%s'",
+    repull_from_branch = "Re-pull from branch",
+
+    -- Deletion & Stale Record Notifications (#5086)
+    ["Plugin folder '%s' was not found on disk. Cleared stale install record."] = "Plugin folder '%s' was not found on disk. Cleared stale install record.",
+    ["'%s' is a built-in KOReader plugin and cannot be deleted. Cleared stale install record."] = "'%s' is a built-in KOReader plugin and cannot be deleted. Cleared stale install record.",
+    ["'%s' is a built-in KOReader plugin and cannot be deleted."] = "'%s' is a built-in KOReader plugin and cannot be deleted.",
+    ["Note: Archive contained extra plugin folder(s) that were skipped: %s"] = "Note: Archive contained extra plugin folder(s) that were skipped: %s",
 }
 
 local KEY_ALIASES = {
@@ -438,6 +464,9 @@ local KEY_ALIASES = {
 
 -- Translate string key with formatting support
 function Localization:t(key, ...)
+    if key == "Storefront" or key == "menu_storefront" or key == "storefront_title" then
+        return "Storefront"
+    end
     self:ensureInit()
     local translation = self.translations[key]
     if (not translation or translation == "") and KEY_ALIASES[key] then

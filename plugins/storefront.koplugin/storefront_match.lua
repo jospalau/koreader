@@ -55,7 +55,15 @@ Matcher.CORE_KOREADER_PLUGINS = {
 }
 
 function Matcher.isDefaultPlugin(plugin, maybe_plugin, StorefrontRef)
-    if type(plugin) == "table" and plugin.name == "storefront" then
+    -- Normalize arguments: extract the actual plugin table or string
+    if type(plugin) == "string" then
+        plugin = { dirname = plugin }
+    end
+    if type(maybe_plugin) == "table" and (maybe_plugin.dirname or maybe_plugin.dir or maybe_plugin.root or maybe_plugin.shortname) then
+        plugin = maybe_plugin
+    elseif type(plugin) == "table" and not (plugin.dirname or plugin.dir or plugin.root or plugin.shortname) and type(maybe_plugin) == "table" then
+        plugin = maybe_plugin
+    elseif type(plugin) == "table" and plugin.name == "storefront" and type(maybe_plugin) == "table" then
         plugin = maybe_plugin
     end
     if not plugin or type(plugin) ~= "table" then return false end
@@ -110,7 +118,7 @@ function Matcher.isDefaultPlugin(plugin, maybe_plugin, StorefrontRef)
         local clean = cand:gsub("%.koplugin$", ""):lower()
         local koplugin_key = clean .. ".koplugin"
         local rec = records[cand] or records[clean] or records[koplugin_key]
-        if rec and (rec.owner or rec.repo_full_name or rec.repo_id) then
+        if rec and (rec.owner or rec.repo or rec.repo_full_name or rec.repo_id) then
             return false
         end
     end
@@ -134,19 +142,172 @@ end
 
 
 
+Matcher.CORE_KOREADER_FONTS = {
+    ["droid"] = true,
+    ["droidsans"] = true,
+    ["droidserif"] = true,
+    ["droidsansfallback"] = true,
+    ["droidsansmono"] = true,
+    ["droidmono"] = true,
+    ["freefont"] = true,
+    ["freesans"] = true,
+    ["freeserif"] = true,
+    ["freemono"] = true,
+    ["nerdfonts"] = true,
+    ["symbolsnerdfont"] = true,
+    ["nerdfont"] = true,
+    ["fontawesome"] = true,
+    ["noto"] = true,
+    ["notosans"] = true,
+    ["notoserif"] = true,
+    ["notocjk"] = true,
+    ["notosanscjk"] = true,
+    ["notocoloremoji"] = true,
+    ["notosanscjksc"] = true,
+    ["notosanscjktc"] = true,
+    ["notosanscjkjp"] = true,
+    ["notosanscjk_sc"] = true,
+    ["notosanscjk_tc"] = true,
+    ["notosanscjk_jp"] = true,
+    ["libertine"] = true,
+    ["linuxlibertine"] = true,
+    ["ebgaramond"] = true,
+    ["garamond"] = true,
+    ["charis"] = true,
+    ["charissil"] = true,
+    ["crimson"] = true,
+    ["crimsonpro"] = true,
+    ["baskervald"] = true,
+    ["baskervaldx"] = true,
+    ["andika"] = true,
+    ["tinos"] = true,
+    ["arimo"] = true,
+    ["cousine"] = true,
+    ["xits"] = true,
+    ["c059"] = true,
+    ["d050000l"] = true,
+    ["n019003l"] = true,
+    ["n021003l"] = true,
+    ["n022003l"] = true,
+    ["s050000l"] = true,
+    ["z003034l"] = true,
+    ["host"] = true,
+}
+
+local function cleanFontNameStr(name)
+    if not name or type(name) ~= "string" then return "" end
+    local clean = name:gsub("%.ttf$", ""):gsub("%.otf$", ""):gsub("%.asset$", "")
+    clean = clean:gsub("[%-_%s]?[Ee]xtra[%-_%s]?[Bb]old[%-_%s]?[Ii]talic$", "")
+    clean = clean:gsub("[%-_%s]?[Ee]xtra[%-_%s]?[Bb]old[%-_%s]?[Oo]blique$", "")
+    clean = clean:gsub("[%-_%s]?[Uu]ltra[%-_%s]?[Bb]old[%-_%s]?[Ii]talic$", "")
+    clean = clean:gsub("[%-_%s]?[Uu]ltra[%-_%s]?[Bb]old[%-_%s]?[Oo]blique$", "")
+    clean = clean:gsub("[%-_%s]?[Ss]emi[%-_%s]?[Bb]old[%-_%s]?[Ii]talic$", "")
+    clean = clean:gsub("[%-_%s]?[Ss]emi[%-_%s]?[Bb]old[%-_%s]?[Oo]blique$", "")
+    clean = clean:gsub("[%-_%s]?[Dd]emi[%-_%s]?[Bb]old[%-_%s]?[Ii]talic$", "")
+    clean = clean:gsub("[%-_%s]?[Dd]emi[%-_%s]?[Bb]old[%-_%s]?[Oo]blique$", "")
+    clean = clean:gsub("[%-_%s]?[Bb]old[%-_%s]?[Ii]talic$", "")
+    clean = clean:gsub("[%-_%s]?[Bb]old[%-_%s]?[Oo]blique$", "")
+    clean = clean:gsub("[%-_%s]?[Bb]lack[%-_%s]?[Ii]talic$", "")
+    clean = clean:gsub("[%-_%s]?[Bb]lack[%-_%s]?[Oo]blique$", "")
+    clean = clean:gsub("[%-_%s]?[Mm]edium[%-_%s]?[Ii]talic$", "")
+    clean = clean:gsub("[%-_%s]?[Mm]edium[%-_%s]?[Oo]blique$", "")
+    clean = clean:gsub("[%-_%s]?[Ll]ight[%-_%s]?[Ii]talic$", "")
+    clean = clean:gsub("[%-_%s]?[Ll]ight[%-_%s]?[Oo]blique$", "")
+    clean = clean:gsub("[%-_%s]?[Tt]hin[%-_%s]?[Ii]talic$", "")
+    clean = clean:gsub("[%-_%s]?[Tt]hin[%-_%s]?[Oo]blique$", "")
+    clean = clean:gsub("[%-_%s]?[Bb]ook[%-_%s]?[Ii]talic$", "")
+    clean = clean:gsub("[%-_%s]?[Bb]ook[%-_%s]?[Oo]blique$", "")
+    clean = clean:gsub("[%-_%s]?[Ee]xtra[%-_%s]?[Bb]old$", "")
+    clean = clean:gsub("[%-_%s]?[Uu]ltra[%-_%s]?[Bb]old$", "")
+    clean = clean:gsub("[%-_%s]?[Ss]emi[%-_%s]?[Bb]old$", "")
+    clean = clean:gsub("[%-_%s]?[Dd]emi[%-_%s]?[Bb]old$", "")
+    clean = clean:gsub("[%-_%s]?[Ee]xtra[%-_%s]?[Ll]ight$", "")
+    clean = clean:gsub("[%-_%s]?[Uu]ltra[%-_%s]?[Ll]ight$", "")
+    clean = clean:gsub("[%-_%s]?[Bb]old$", "")
+    clean = clean:gsub("[%-_%s]?[Bb]lack$", "")
+    clean = clean:gsub("[%-_%s]?[Hh]eavy$", "")
+    clean = clean:gsub("[%-_%s]?[Mm]edium$", "")
+    clean = clean:gsub("[%-_%s]?[Ll]ight$", "")
+    clean = clean:gsub("[%-_%s]?[Tt]hin$", "")
+    clean = clean:gsub("[%-_%s]?[Hh]airline$", "")
+    clean = clean:gsub("[%-_%s]?[Bb]ook$", "")
+    clean = clean:gsub("[%-_%s]?[Rr]oman$", "")
+    clean = clean:gsub("[%-_%s]?[Nn]ormal$", "")
+    clean = clean:gsub("[%-_%s]?[Rr]egular$", "")
+    clean = clean:gsub("[%-_%s]?[Ii]talic$", "")
+    clean = clean:gsub("[%-_%s]?[Oo]blique$", "")
+    return clean:lower():gsub("[%s%-_]+", "")
+end
+
+function Matcher.isDefaultFont(font, maybe_font, StorefrontRef)
+    if type(font) == "string" then
+        font = { font_name = font }
+    end
+    if type(maybe_font) == "table" and (maybe_font.font_name or maybe_font.name or maybe_font.font_family or maybe_font.repo) then
+        font = maybe_font
+    elseif type(font) == "table" and not (font.font_name or font.name or font.font_family or font.repo) and type(maybe_font) == "table" then
+        font = maybe_font
+    elseif type(font) == "table" and font.name == "storefront" and type(maybe_font) == "table" then
+        font = maybe_font
+    end
+    if not font or type(font) ~= "table" then return false end
+
+    if font.is_default ~= nil then
+        return font.is_default == true
+    end
+
+    local candidates = {}
+    if font.font_name and font.font_name ~= "" then table.insert(candidates, font.font_name) end
+    if font.name and font.name ~= "" then table.insert(candidates, font.name) end
+    if font.font_family and font.font_family ~= "" then table.insert(candidates, font.font_family) end
+    if font.repo and font.repo ~= "" then table.insert(candidates, font.repo) end
+    if font.full_name and font.full_name ~= "" then table.insert(candidates, font.full_name) end
+    if font.font_file and font.font_file ~= "" then table.insert(candidates, font.font_file) end
+
+    if #candidates == 0 then return false end
+
+    local font_records = (InstallStore.listFonts and InstallStore.listFonts()) or {}
+
+    -- 1. Explicit override check in Storefront records
+    for _, cand in ipairs(candidates) do
+        local clean = cleanFontNameStr(cand)
+        local rec = font_records[cand] or font_records[cand:lower()] or (clean ~= "" and font_records[clean])
+        if rec then
+            if rec.installed_type == "user" or (rec.owner and rec.owner ~= "") or (rec.download_url and rec.download_url ~= "") then
+                return false
+            end
+            if rec.installed_type == "core" or rec.is_default == true then
+                return true
+            end
+        end
+    end
+
+    -- 2. Check known KOReader core bundled fonts set
+    for _, cand in ipairs(candidates) do
+        local low = cand:lower():gsub("%.ttf$", ""):gsub("%.otf$", ""):gsub("%.asset$", "")
+        local clean = cleanFontNameStr(cand)
+        if Matcher.CORE_KOREADER_FONTS[low] or Matcher.CORE_KOREADER_FONTS[clean] then
+            return true
+        end
+    end
+
+    return false
+end
+
 function Matcher.isDefaultPatch(patch)
     return false
 end
 
 function Matcher:init(Storefront)
     Storefront.CORE_KOREADER_PLUGINS = Matcher.CORE_KOREADER_PLUGINS
+    Storefront.CORE_KOREADER_FONTS = Matcher.CORE_KOREADER_FONTS
     
     Storefront.isDefaultPlugin = function(self_or_plugin, plugin, maybe_plugin)
-        if self_or_plugin == Storefront or (type(self_or_plugin) == "table" and self_or_plugin.name == "storefront") then
-            return Matcher.isDefaultPlugin(plugin or maybe_plugin, nil, self_or_plugin)
-        else
-            return Matcher.isDefaultPlugin(self_or_plugin, plugin, nil)
-        end
+        return Matcher.isDefaultPlugin(self_or_plugin, plugin, maybe_plugin)
+    end
+    
+    Storefront.isDefaultFont = function(self_or_font, font, maybe_font)
+        return Matcher.isDefaultFont(self_or_font, font, maybe_font)
     end
     
     Storefront.isDefaultPatch = function(sf, patch)
@@ -185,10 +346,47 @@ function Matcher:init(Storefront)
         local installed_plugins = sf:listInstalledPlugins()
         local records = (InstallStore.list and InstallStore.list()) or {}
 
+        -- Scrub orphan records from InstallStore that no longer exist on disk
+        local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
+        if not ok_lfs or not lfs then ok_lfs, lfs = pcall(require, "lfs") end
+        local disk_plugin_set = {}
+        for _, plugin in ipairs(installed_plugins) do
+            if plugin.dirname then
+                disk_plugin_set[plugin.dirname] = true
+                disk_plugin_set[plugin.dirname:gsub("%.koplugin$", "")] = true
+            end
+            if plugin.shortname then
+                disk_plugin_set[plugin.shortname] = true
+            end
+        end
+
+        local lookup_roots = (PluginPaths and PluginPaths.getLookupPaths and PluginPaths.getLookupPaths()) or {}
+        for rec_key, _ in pairs(records) do
+            local clean_key = rec_key:gsub("%.koplugin$", "")
+            if not disk_plugin_set[rec_key] and not disk_plugin_set[clean_key] then
+                local exists_on_disk = false
+                if ok_lfs and lfs and lfs.attributes then
+                    for _, root in ipairs(lookup_roots) do
+                        if lfs.attributes(root .. "/" .. rec_key, "mode") == "directory"
+                           or lfs.attributes(root .. "/" .. clean_key .. ".koplugin", "mode") == "directory" then
+                            exists_on_disk = true
+                            break
+                        end
+                    end
+                end
+                if not exists_on_disk then
+                    InstallStore.remove(rec_key)
+                    InstallStore.remove(clean_key)
+                end
+            end
+        end
+
         local unmatched_plugins = {}
         for _, plugin in ipairs(installed_plugins) do
             local record = records[plugin.dirname]
-            if not (record and record.owner and record.repo) or record.is_auto_matched then
+            if record and record.source == "branch" then
+                -- Explicitly branch-tracked plugins must not be auto-matched/overwritten
+            elseif not (record and record.owner and record.repo) or record.is_auto_matched then
                 table.insert(unmatched_plugins, plugin)
             end
         end
@@ -242,6 +440,7 @@ function Matcher:init(Storefront)
                         local existing_rec = records[plugin.dirname]
                         local matched_at = (existing_rec and existing_rec.matched_at) or os.time()
                         local record = {
+                            dirname = plugin.dirname,
                             owner = repo.owner,
                             repo = repo.name,
                             repo_full_name = repo.full_name,

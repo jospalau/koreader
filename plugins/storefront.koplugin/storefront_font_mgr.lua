@@ -193,6 +193,11 @@ local FONT_FAMILY_ALIASES = {
 
     ["lora"] = { "lora", "nv lora", "nv_lora", "nvlora" },
     ["nv lora"] = { "lora", "nv lora", "nv_lora", "nvlora" },
+
+    ["libron"] = { "libron", "libron r", "libron_r", "libronr" },
+    ["libron r"] = { "libron", "libron r", "libron_r", "libronr" },
+    ["libron_r"] = { "libron", "libron r", "libron_r", "libronr" },
+    ["libronr"] = { "libron", "libron r", "libron_r", "libronr" },
 }
 
 local function stripFontStyleSuffix(name)
@@ -396,11 +401,6 @@ local function getUserFontDirs()
         addDir(home .. "/.local/share/fonts")
         addDir(home .. "/.fonts")
         addDir(home .. "/.config/koreader/fonts")
-    end
-
-    -- 6. Check relative CWD 'fonts' folder if it exists as a directory
-    if lfs.attributes and lfs.attributes("fonts", "mode") == "directory" then
-        addDir("fonts")
     end
 
     return dirs
@@ -620,9 +620,18 @@ local function listInstalledFonts()
         if isFontInstalled(font_name, installed_map) or isFontInstalled(rec, installed_map) then
             if not isAlreadySeen(font_name) then
                 markSeen(font_name, rec)
+                rec.is_storefront = true
                 table.insert(result, rec)
             end
         end
+    end
+
+    local ok_match, Matcher = pcall(require, "storefront_match")
+    local function checkIsDefault(font_target)
+        if ok_match and Matcher and Matcher.isDefaultFont then
+            return Matcher.isDefaultFont(font_target)
+        end
+        return false
     end
 
     -- 2. Scan discovered font directories for unmanaged / user-installed fonts
@@ -649,6 +658,7 @@ local function listInstalledFonts()
                                 if has_font then
                                     local cat = findCatalogFont(base_name) or findCatalogFont(item)
                                     local display_name = cat and (cat.font_family or cat.name) or base_name
+                                    local is_def = checkIsDefault(display_name) or checkIsDefault(base_name) or checkIsDefault(item)
                                     markSeen(display_name, cat)
                                     table.insert(result, {
                                         font_name = display_name,
@@ -661,6 +671,9 @@ local function listInstalledFonts()
                                         download_url = cat and cat.download_url,
                                         installed_at = os.time(),
                                         version = cat and cat.version or "1.0",
+                                        is_default = true,
+                                        is_storefront = false,
+                                        unmanaged = true,
                                     })
                                 end
                             end
@@ -671,6 +684,7 @@ local function listInstalledFonts()
                                 if not isAlreadySeen(base_name) and not isAlreadySeen(name_no_ext) then
                                     local cat = findCatalogFont(base_name) or findCatalogFont(name_no_ext)
                                     local display_name = cat and (cat.font_family or cat.name) or base_name
+                                    local is_def = checkIsDefault(display_name) or checkIsDefault(base_name) or checkIsDefault(name_no_ext) or checkIsDefault(item)
                                     markSeen(display_name, cat)
                                     table.insert(result, {
                                         font_name = display_name,
@@ -684,6 +698,9 @@ local function listInstalledFonts()
                                         download_url = cat and cat.download_url,
                                         installed_at = os.time(),
                                         version = cat and cat.version or "1.0",
+                                        is_default = true,
+                                        is_storefront = false,
+                                        unmanaged = true,
                                     })
                                 end
                             end
@@ -707,6 +724,13 @@ function M:init(Storefront)
     Storefront.listInstalledFonts = function(sf) return listInstalledFonts() end
     Storefront.getInstalledFontsMap = function(sf) return getInstalledFontsMap() end
     Storefront.isFontInstalled = function(sf, font_target, map) return isFontInstalled(font_target, map) end
+    Storefront.isDefaultFont = function(sf, font_target, maybe_map)
+        local ok_m, Matcher2 = pcall(require, "storefront_match")
+        if ok_m and Matcher2 and Matcher2.isDefaultFont then
+            return Matcher2.isDefaultFont(sf, font_target, maybe_map)
+        end
+        return false
+    end
     Storefront.getUserFontDirs = function(sf) return getUserFontDirs() end
     Storefront.invalidateInstalledFontsCache = function(sf) return invalidateInstalledFontsCache() end
 
@@ -1307,6 +1331,10 @@ M.listInstalledFonts = listInstalledFonts
 M.getUserFontDirs = getUserFontDirs
 M.getInstalledFontsMap = getInstalledFontsMap
 M.isFontInstalled = isFontInstalled
+M.isDefaultFont = function(...)
+    local ok_m, Matcher2 = pcall(require, "storefront_match")
+    return ok_m and Matcher2 and Matcher2.isDefaultFont and Matcher2.isDefaultFont(...) or false
+end
 M.invalidateInstalledFontsCache = invalidateInstalledFontsCache
 M.stripFontStyleSuffix = stripFontStyleSuffix
 

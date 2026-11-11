@@ -17,5 +17,10 @@ return {
     -- ignored -- use an absolute path matching one of your actual
     -- "extra_plugin_paths" entries, like the example below.
     -- plugin_install_path = "/home/user/.config/koreader/plugins-ext/",
+
+    -- Optional: notification debugging & preview.
+    -- Set to true to show the 'Testing & Preview' section in Notification Settings
+    -- and force update notification checks on startup.
+    -- debug_notifications = true,
 }
 

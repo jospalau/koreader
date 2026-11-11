@@ -113,6 +113,10 @@ end
 
 local downloadImage
 
+RepoContent.pending_images = {}
+RepoContent.cumulative_page_bytes = 0
+RepoContent.cumulative_uncompressed_bytes = 0
+
 function RepoContent.cancelPendingImages()
     if RepoContent._pending_image_timer then
         local UIManager = require("ui/uimanager")
@@ -489,10 +493,11 @@ function RepoContent.fetchReadme(owner, repo)
     if not ok then
         return false, err or "write error"
     end
+    pcall(RepoContent.autoCleanCache)
     return true, path
 end
 
-function RepoContent.fetchReadmeHtml(owner, repo, force_refresh)
+function RepoContent.fetchReadmeHtml(owner, repo, force_refresh, opts)
     if not owner or not repo then
         return false, "missing owner/repo"
     end
@@ -536,6 +541,7 @@ function RepoContent.fetchReadmeHtml(owner, repo, force_refresh)
 
     -- Download inline images locally for MuPDF HTML viewer widget
     local valid_img_count = 0
+    local allow_sync_images = not (opts and opts.skip_sync_images)
     body = body:gsub('(<img[^>]+src=["\'])([^"\']+)(["\'][^>]*>)', function(prefix, raw_url, suffix)
         prefix = stripImgDimensions(prefix)
         suffix = stripImgDimensions(suffix)
@@ -564,8 +570,8 @@ function RepoContent.fetchReadmeHtml(owner, repo, force_refresh)
 
         local cached_sz = lfs.attributes(img_dest, "size") or 0
 
-        -- Synchronously fetch up to the first 4 valid content images at initial README load time
-        if cached_sz == 0 and valid_img_count <= 4 and RepoContent.cumulative_page_bytes < MAX_PAGE_PAYLOAD_BYTES then
+        -- Synchronously fetch up to the first 4 valid content images at initial README load time (unless skip_sync_images requested)
+        if allow_sync_images and cached_sz == 0 and valid_img_count <= 4 and RepoContent.cumulative_page_bytes < MAX_PAGE_PAYLOAD_BYTES then
             if type(downloadImage) == "function" then
                 local pcall_ok, dl_ok, final_dest = pcall(downloadImage, url, img_dest)
                 if pcall_ok and dl_ok then
@@ -613,6 +619,7 @@ function RepoContent.fetchReadmeHtml(owner, repo, force_refresh)
     if not ok then
         return false, write_err or "write error"
     end
+    pcall(RepoContent.autoCleanCache)
     return true, path
 end
 
@@ -787,10 +794,19 @@ function RepoContent.fetchReleaseNotesHtml(owner, repo, release_override)
     local clean_tag = tag_name and tag_name:gsub("^[vV]", "") or ""
     local clean_rel = rel_name and rel_name:gsub("^[vV]", "") or ""
 
-    local tag_fmt = clean_tag ~= "" and ("v" .. clean_tag) or ""
+    local tag_fmt = ""
+    if clean_tag ~= "" then
+        if clean_tag:match("^%d") then
+            tag_fmt = "v" .. clean_tag
+        else
+            tag_fmt = clean_tag
+        end
+    end
     local header_title = ""
 
-    if clean_rel == "" or clean_rel:lower() == clean_tag:lower() then
+    if tag_name and tag_name:find("@") then
+        header_title = (rel_name and rel_name ~= "") and rel_name or _("Latest Release")
+    elseif clean_rel == "" or clean_rel:lower() == clean_tag:lower() then
         header_title = tag_fmt ~= "" and tag_fmt or _("Latest Release")
     elseif rel_name and (rel_name:lower():find(clean_tag:lower(), 1, true) or (tag_fmt ~= "" and rel_name:lower():find(tag_fmt:lower(), 1, true))) then
         header_title = rel_name
@@ -1075,59 +1091,15 @@ function RepoContent.fetchWikiPageHtml(owner, repo, page_name, force_refresh)
     if not ok then
         return false, write_err or "write error"
     end
+    pcall(RepoContent.autoCleanCache)
     return true, path
 end
 
 function RepoContent.autoCleanCache(max_size_mb, max_age_days)
-    max_size_mb = max_size_mb or 50
-    max_age_days = max_age_days or 30
-    local max_bytes = max_size_mb * 1024 * 1024
-    local max_age_secs = max_age_days * 86400
-
-    local cache_dirs = {
-        DataStorage:getDataDir() .. "/cache/Storefront/readme",
-        DataStorage:getDataDir() .. "/cache/Storefront/wiki",
-    }
-
-    local files = {}
-    local total_size = 0
-    local now = os.time()
-
-    for _, base_dir in ipairs(cache_dirs) do
-        if lfs.attributes(base_dir, "mode") == "directory" then
-            local function scanDir(d)
-                for entry in lfs.dir(d) do
-                    if entry ~= "." and entry ~= ".." then
-                        local full = d .. "/" .. entry
-                        local attr = lfs.attributes(full)
-                        if attr then
-                            if attr.mode == "file" then
-                                local age = now - (attr.modification or 0)
-                                if age > max_age_secs then
-                                    os.remove(full)
-                                else
-                                    total_size = total_size + (attr.size or 0)
-                                    table.insert(files, { path = full, mtime = attr.modification or 0, size = attr.size or 0 })
-                                end
-                            elseif attr.mode == "directory" then
-                                scanDir(full)
-                            end
-                        end
-                    end
-                end
-            end
-            scanDir(base_dir)
-        end
-    end
-
-    if total_size > max_bytes then
-        table.sort(files, function(a, b) return a.mtime < b.mtime end)
-        for _, file in ipairs(files) do
-            if total_size <= max_bytes then break end
-            if os.remove(file.path) then
-                total_size = total_size - file.size
-            end
-        end
+    local ok_cl, StorefrontCacheLimit = pcall(require, "storefront_cache_limit")
+    if ok_cl and StorefrontCacheLimit and StorefrontCacheLimit.enforce then
+        local force = (max_size_mb ~= nil or max_age_days ~= nil)
+        return StorefrontCacheLimit.enforce(force, max_size_mb, max_age_days)
     end
 end
 

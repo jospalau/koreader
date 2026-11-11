@@ -11,6 +11,7 @@ local TextBoxWidget = require("ui/widget/textboxwidget")
 local TextWidget = require("ui/widget/textwidget")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
+local ImageWidget = require("ui/widget/imagewidget")
 local Font = require("ui/font")
 local Geom = require("ui/geometry")
 local GestureRange = require("ui/gesturerange")
@@ -25,16 +26,55 @@ local lfs = require("libs/libkoreader-lfs")
 local PluginPaths = require("storefront_plugin_paths")
 local InstallStore = require("storefront_installs")
 local ok_log, StorefrontLogger = pcall(require, "storefront_logger")
-if not ok_log then StorefrontLogger = { action = function() end, err = function() end } end
+if not ok_log then StorefrontLogger = { action = function() end, warn = function() end, err = function() end } end
 
-local SETTINGS_PATH = DataStorage:getSettingsDir() .. "/Storefront.lua"
-local StorefrontSettings = LuaSettings:open(SETTINGS_PATH)
+local StorefrontSettings = require("storefront_settings")
+
+local _asset_path_cache = {}
+local function getAssetPath(filename)
+    if not filename or filename == "" then return nil end
+    if _asset_path_cache[filename] ~= nil then
+        return _asset_path_cache[filename] or nil
+    end
+
+    local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
+    if not ok_lfs then ok_lfs, lfs = pcall(require, "lfs") end
+
+    local info = debug.getinfo(1, "S")
+    local dir = (info and info.source and info.source:match("^@(.*[/\\])")) or ""
+    local rel_path = dir .. "assets/" .. filename
+
+    local paths_to_try = { rel_path }
+    local ok_ds, DataStorage = pcall(require, "datastorage")
+    local data_dir = ok_ds and DataStorage and DataStorage.getDataDir and DataStorage:getDataDir()
+    if data_dir then
+        table.insert(paths_to_try, data_dir .. "/" .. rel_path)
+        table.insert(paths_to_try, data_dir .. "/plugins/storefront.koplugin/assets/" .. filename)
+    end
+
+    for _, p in ipairs(paths_to_try) do
+        if ok_lfs and lfs and lfs.attributes and lfs.attributes(p, "mode") == "file" then
+            _asset_path_cache[filename] = p
+            return p
+        end
+        local f = io.open(p, "r")
+        if f then
+            f:close()
+            _asset_path_cache[filename] = p
+            return p
+        end
+    end
+
+    _asset_path_cache[filename] = false
+    return nil
+end
 
 local DeleteUI = {}
 
 local function deleteDirectoryRecursive(path)
     if not path or path == "" then return false, "invalid path" end
     if lfs.attributes(path, "mode") ~= "directory" then return false, "not a directory" end
+    local ok_inst, StorefrontInstaller = pcall(require, "storefront_installer")
     for entry in lfs.dir(path) do
         if entry ~= "." and entry ~= ".." then
             local full_path = path .. "/" .. entry
@@ -43,6 +83,14 @@ local function deleteDirectoryRecursive(path)
                 local ok, err = deleteDirectoryRecursive(full_path)
                 if not ok then return false, err end
             elseif mode == "file" then
+                if ok_inst and StorefrontInstaller and StorefrontInstaller.isNativeLibraryPath and StorefrontInstaller.isNativeLibraryPath(entry) then
+                    if StorefrontInstaller.markNativeLibraryUnlinked then
+                        StorefrontInstaller.markNativeLibraryUnlinked(full_path)
+                    end
+                    if StorefrontInstaller.installSafeExitHook then
+                        StorefrontInstaller.installSafeExitHook()
+                    end
+                end
                 local ok, err = os.remove(full_path)
                 if not ok then return false, err end
             end
@@ -78,7 +126,7 @@ function DeleteUI.showDeleteConfirmationDialog(display_name, is_plugin, plugin_i
     local dynamic_title_size = StorefrontUtils.calcDynamicFontSize(title_text, inner_w, "NotoSerif-Regular.ttf", title_font_size, 12, true)
     local title_label = TextBoxWidget:new{
         text = title_text,
-        face = Font:getFace("NotoSerif-Regular.ttf", dynamic_title_size),
+        face = StorefrontUtils.getTitleFace(dynamic_title_size),
         bold = true,
         fgcolor = Blitbuffer.COLOR_BLACK,
         width = inner_w,
@@ -111,25 +159,75 @@ function DeleteUI.showDeleteConfirmationDialog(display_name, is_plugin, plugin_i
     local overlay
 
     if is_plugin == true then
-        local function get_check_text()
-            local icon = delete_settings and "☑ " or "☐ "
-            return icon .. _("Also delete plugin settings")
+        local check_icon_sz = ui_font_size + sc(2)
+        local icon_file = getAssetPath(delete_settings and "check-square.svg" or "square.svg")
+        local check_icon_widget
+        if icon_file then
+            check_icon_widget = ImageWidget:new{
+                file = icon_file,
+                width = check_icon_sz,
+                height = check_icon_sz,
+                scale_factor = 0,
+                is_icon = true,
+                alpha = true,
+            }
+        else
+            check_icon_widget = TextWidget:new{
+                text = delete_settings and "☑" or "☐",
+                face = Font:getFace("cfont", check_icon_sz),
+                fgcolor = Blitbuffer.COLOR_BLACK,
+            }
         end
 
-        local check_text_widget = TextBoxWidget:new{
-            text = get_check_text(),
+        local check_label_widget = TextWidget:new{
+            text = _("Also delete plugin settings"),
             face = Font:getFace("cfont", ui_font_size),
             fgcolor = Blitbuffer.COLOR_BLACK,
-            width = inner_w,
-            alignment = "center",
+        }
+
+        local check_row_hg = HorizontalGroup:new{
+            align = "center",
+            check_icon_widget,
+            HorizontalSpan:new{ width = sc(8) },
+            check_label_widget,
         }
 
         local check_frame = FrameContainer:new{
             padding = sc(4),
             bordersize = 0,
             background = Blitbuffer.COLOR_WHITE,
-            check_text_widget,
+            check_row_hg,
         }
+
+        local function update_check_display()
+            local new_icon_file = getAssetPath(delete_settings and "check-square.svg" or "square.svg")
+            if new_icon_file and check_icon_widget.setFile then
+                check_icon_widget:setFile(new_icon_file)
+            elseif check_icon_widget.setText then
+                check_icon_widget:setText(delete_settings and "☑" or "☐")
+            else
+                -- Recreate if widget type differs
+                local new_widget
+                if new_icon_file then
+                    new_widget = ImageWidget:new{
+                        file = new_icon_file,
+                        width = check_icon_sz,
+                        height = check_icon_sz,
+                        scale_factor = 0,
+                        is_icon = true,
+                        alpha = true,
+                    }
+                else
+                    new_widget = TextWidget:new{
+                        text = delete_settings and "☑" or "☐",
+                        face = Font:getFace("cfont", check_icon_sz),
+                        fgcolor = Blitbuffer.COLOR_BLACK,
+                    }
+                end
+                check_icon_widget = new_widget
+                check_row_hg[1] = check_icon_widget
+            end
+        end
 
         check_item = InputContainer:new{
             align = "center",
@@ -172,7 +270,7 @@ function DeleteUI.showDeleteConfirmationDialog(display_name, is_plugin, plugin_i
         end
         check_item.onTapSelect = function(self)
             delete_settings = not delete_settings
-            check_text_widget:setText(get_check_text())
+            update_check_display()
             UIManager:setDirty(self.show_parent or self, "ui")
             if delete_settings and not plugin_instance then
                 UIManager:show(InfoMessage:new{
@@ -341,6 +439,70 @@ function DeleteUI:init(Storefront)
         return true
     end
 
+    local function isCoreBundledPlugin(sf, dirname)
+        if not dirname or dirname == "" then return false end
+        local core_plugins = (sf and sf.CORE_KOREADER_PLUGINS)
+        if not core_plugins then
+            local ok_m, sm = pcall(require, "storefront_match")
+            if ok_m and sm then core_plugins = sm.CORE_KOREADER_PLUGINS end
+        end
+        if type(core_plugins) ~= "table" then return false end
+        local clean = dirname:gsub("%.koplugin$", ""):lower()
+        return (core_plugins[clean .. ".koplugin"] == true) or (core_plugins[clean] == true)
+    end
+
+    local function pluginDirExistsOnDisk(dir_name)
+        if not dir_name or dir_name == "" then return false end
+        local clean = dir_name:gsub("%.koplugin$", "")
+        local ext = clean .. ".koplugin"
+        local roots = PluginPaths.getLookupPaths() or {}
+        table.insert(roots, PluginPaths.getDefaultPluginsRoot())
+        local candidates = { ext, clean, dir_name }
+        for _, root in ipairs(roots) do
+            if root and root ~= "" then
+                for _, cand in ipairs(candidates) do
+                    local p = root .. "/" .. cand
+                    if lfs.attributes(p, "mode") == "directory" then
+                        return true
+                    end
+                end
+            end
+        end
+        return false
+    end
+
+    local function findExistingPluginDir(matched_plugin, dirname, record)
+        if matched_plugin and matched_plugin.path and lfs.attributes(matched_plugin.path, "mode") == "directory" then
+            return matched_plugin.path
+        end
+        local clean_dir = dirname:gsub("%.koplugin$", "")
+        local dir_with_ext = clean_dir .. ".koplugin"
+        local roots = PluginPaths.getLookupPaths() or {}
+        table.insert(roots, PluginPaths.getDefaultPluginsRoot())
+        local candidates = {
+            dir_with_ext,
+            clean_dir,
+            dirname,
+        }
+        if type(record) == "table" and type(record.dirname) == "string" and record.dirname ~= "" then
+            local rec_clean = record.dirname:gsub("%.koplugin$", "")
+            table.insert(candidates, rec_clean .. ".koplugin")
+            table.insert(candidates, rec_clean)
+            table.insert(candidates, record.dirname)
+        end
+        for _, root in ipairs(roots) do
+            if root and root ~= "" then
+                for _, cand in ipairs(candidates) do
+                    local p_cand = root .. "/" .. cand
+                    if lfs.attributes(p_cand, "mode") == "directory" then
+                        return p_cand
+                    end
+                end
+            end
+        end
+        return nil
+    end
+
     Storefront.performPluginDeletion = function(sf, dirname, record, plugin_instance_for_settings)
         StorefrontLogger.action(string.format("DELETE starting: plugin %s", tostring(dirname)))
         local plugin = sf.listInstalledPlugins and sf:listInstalledPlugins()
@@ -361,32 +523,107 @@ function DeleteUI:init(Storefront)
         end
 
         local display_name = matched_plugin and (matched_plugin.name or matched_plugin.dirname) or clean_dir
-        local plugin_path = matched_plugin and matched_plugin.path
-
-        if not plugin_path or lfs.attributes(plugin_path, "mode") ~= "directory" then
-            local roots = PluginPaths.getLookupPaths() or {}
-            table.insert(roots, PluginPaths.getDefaultPluginsRoot())
-            local candidates = {
-                dir_with_ext,
-                clean_dir,
-                dirname,
-            }
-            for _, root in ipairs(roots) do
-                if root and root ~= "" then
-                    for _, cand in ipairs(candidates) do
-                        local p_cand = root .. "/" .. cand
-                        if lfs.attributes(p_cand, "mode") == "directory" then
-                            plugin_path = p_cand
-                            break
-                        end
-                    end
-                end
-                if plugin_path then break end
-            end
+        local core_plugins = (sf and sf.CORE_KOREADER_PLUGINS)
+        if not core_plugins then
+            local ok_m, sm = pcall(require, "storefront_match")
+            if ok_m and sm then core_plugins = sm.CORE_KOREADER_PLUGINS end
         end
 
+        -- Guard 1: Core KOReader plugin protection
+        if isCoreBundledPlugin(sf, dirname) then
+            StorefrontLogger.warn(string.format("REFUSED deletion of core plugin %s from disk", tostring(dirname)))
+            local has_record = (type(record) == "table") or (InstallStore.get and (InstallStore.get(dirname) or InstallStore.get(dir_with_ext) or InstallStore.get(clean_dir)))
+            if has_record then
+                InstallStore.removePluginRecordsForDeletion(dirname, record, pluginDirExistsOnDisk, core_plugins)
+                if sf.invalidateInstalledPluginsCache then
+                    sf:invalidateInstalledPluginsCache()
+                end
+                sf._installed_tab_items_cache = nil
+                sf._installed_lookup_cache = nil
+                sf._tab_menu_items_cache = nil
+                if sf.updates_menu and sf.updateUpdatesDialog then
+                    sf:updateUpdatesDialog()
+                end
+                StorefrontLogger.action(string.format("CLEARED third-party install record for core plugin %s", tostring(dirname)))
+                local on_refreshed = function()
+                    UIManager:nextTick(function()
+                        UIManager:show(InfoMessage:new{
+                            text = string.format(_("'%s' is a built-in KOReader plugin and cannot be deleted. Cleared stale install record."), dir_with_ext),
+                            timeout = 5,
+                        })
+                    end)
+                end
+                if sf.refreshCurrentBrowserTab then
+                    sf:refreshCurrentBrowserTab(on_refreshed)
+                else
+                    if sf.softRefreshCurrentBrowserView then
+                        sf:softRefreshCurrentBrowserView()
+                    end
+                    on_refreshed()
+                end
+            else
+                UIManager:nextTick(function()
+                    UIManager:show(InfoMessage:new{
+                        text = string.format(_("'%s' is a built-in KOReader plugin and cannot be deleted."), dir_with_ext),
+                        timeout = 5,
+                    })
+                end)
+            end
+            return
+        end
+
+        local plugin_path = findExistingPluginDir(matched_plugin, dirname, record)
+
+        -- Guard 2: Missing folder on disk / stale install record cleanup
         if not plugin_path then
-            plugin_path = PluginPaths.getDefaultPluginsRoot() .. "/" .. dir_with_ext
+            StorefrontLogger.action(string.format("CLEARED stale install record for missing plugin %s", tostring(dirname)))
+            local G_reader_settings = _G.G_reader_settings
+            if plugin_instance_for_settings then
+                if type(plugin_instance_for_settings.deletePluginSettings) == "function" then
+                    pcall(plugin_instance_for_settings.deletePluginSettings, plugin_instance_for_settings)
+                end
+                if plugin_instance_for_settings.settings_file then
+                    os.remove(plugin_instance_for_settings.settings_file)
+                    os.remove(plugin_instance_for_settings.settings_file .. ".old")
+                end
+                if plugin_instance_for_settings.settings_key and G_reader_settings then
+                    G_reader_settings:delSetting(plugin_instance_for_settings.settings_key)
+                end
+                if G_reader_settings then
+                    G_reader_settings:flush()
+                end
+            end
+
+            InstallStore.removePluginRecordsForDeletion(dirname, record, pluginDirExistsOnDisk, core_plugins)
+
+            if sf.invalidateInstalledPluginsCache then
+                sf:invalidateInstalledPluginsCache()
+            end
+            sf._installed_tab_items_cache = nil
+            sf._installed_lookup_cache = nil
+            sf._tab_menu_items_cache = nil
+
+            if sf.updates_menu and sf.updateUpdatesDialog then
+                sf:updateUpdatesDialog()
+            end
+
+            local on_refreshed = function()
+                UIManager:nextTick(function()
+                    UIManager:show(InfoMessage:new{
+                        text = string.format(_("Plugin folder '%s' was not found on disk. Cleared stale install record."), dir_with_ext),
+                        timeout = 5,
+                    })
+                end)
+            end
+            if sf.refreshCurrentBrowserTab then
+                sf:refreshCurrentBrowserTab(on_refreshed)
+            else
+                if sf.softRefreshCurrentBrowserView then
+                    sf:softRefreshCurrentBrowserView()
+                end
+                on_refreshed()
+            end
+            return
         end
 
         local ok, err = deleteDirectoryRecursive(plugin_path)
@@ -411,12 +648,7 @@ function DeleteUI:init(Storefront)
                 end
             end
             
-            InstallStore.remove(dirname)
-            InstallStore.remove(clean_dir)
-            InstallStore.remove(dir_with_ext)
-            if record and type(record) == "table" and record.dirname then
-                InstallStore.remove(record.dirname)
-            end
+            InstallStore.removePluginRecordsForDeletion(dirname, record, pluginDirExistsOnDisk, core_plugins)
 
             if sf.invalidateInstalledPluginsCache then
                 sf:invalidateInstalledPluginsCache()
@@ -455,6 +687,10 @@ function DeleteUI:init(Storefront)
 
     Storefront.deletePlugin = function(sf, dirname, record)
         if not dirname or dirname == "" then
+            return
+        end
+        if isCoreBundledPlugin(sf, dirname) then
+            sf:performPluginDeletion(dirname, record, nil)
             return
         end
         local installed = sf.listInstalledPlugins and sf:listInstalledPlugins() or {}

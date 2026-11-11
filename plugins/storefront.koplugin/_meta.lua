@@ -1,6 +1,6 @@
 local ok_loc, Localization = pcall(require, "localization_storefront")
 if ok_loc and Localization then
-    Localization:init()
+    Localization:ensureInit()
 end
 local _ = function(key, ...)
     if ok_loc and Localization then
@@ -10,8 +10,8 @@ local _ = function(key, ...)
 end
 
 return {
-    fullname = _("menu_storefront"),
+    fullname = "Storefront",
     description = _("menu_storefront_desc"),
-    version = "26.9.9",
+    version = "26.11.9",
     author = "ultimatejimmy",
 }

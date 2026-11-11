@@ -75,6 +75,14 @@ end
 
 local _seeding_in_progress = false
 
+local function saveCachedCount(kind, count)
+    local ok_set, StorefrontSettings = pcall(require, "storefront_settings")
+    if ok_set and StorefrontSettings and StorefrontSettings.saveSetting then
+        StorefrontSettings:saveSetting("cached_" .. tostring(kind) .. "_count", count)
+        StorefrontSettings:flush()
+    end
+end
+
 local function buildIndices()
     _by_id = {}
     _by_name = {}
@@ -156,6 +164,24 @@ function Cache.init()
 
     buildIndices()
     _loaded = true
+    for _, k in ipairs({"plugin", "patch", "font"}) do
+        if _data[k] and _data[k].repos then
+            saveCachedCount(k, #_data[k].repos)
+        end
+    end
+end
+
+function Cache.purgeMem()
+    _data = {
+        plugin = { fetched_at = 0, repos = {} },
+        patch = { fetched_at = 0, repos = {} },
+        font = { fetched_at = 0, repos = {} },
+    }
+    _by_id = {}
+    _by_name = {}
+    _by_plugin_name = {}
+    _sorted_cache = {}
+    _loaded = false
 end
 
 function Cache.storeRepos(kind, repos, custom_fetched_at)
@@ -224,6 +250,10 @@ function Cache.storeRepos(kind, repos, custom_fetched_at)
             homepage = repo.homepage ~= json.null and tostring(repo.homepage or "") or "",
             version = version,
             latest_release = latest_rel,
+            user_thumbs_up = tonumber(repo.user_thumbs_up or (repo.data and repo.data.user_thumbs_up)) or 0,
+            user_thumbs_down = tonumber(repo.user_thumbs_down or (repo.data and repo.data.user_thumbs_down)) or 0,
+            wilson_score = tonumber(repo.wilson_score or (repo.data and repo.data.wilson_score)) or 0,
+            downloads = tonumber(repo.downloads or (repo.data and repo.data.downloads)) or 0,
             fetched_at = fetched_at,
             data = repo,
         }
@@ -243,6 +273,7 @@ function Cache.storeRepos(kind, repos, custom_fetched_at)
         fetched_at = fetched_at,
         repos = list,
     }
+    saveCachedCount(kind, #list)
     
     local file_path = (kind == "plugin" and PLUGINS_FILE) or (kind == "patch" and PATCHES_FILE) or FONTS_FILE
     writeJsonFile(file_path, _data[kind])
@@ -335,10 +366,50 @@ end
 function Cache.getLastFetched(kind)
     kind = kind or "plugin"
     Cache.init()
-    if Cache.countRepos(kind) == 0 then
-        return 0
-    end
     return _data[kind] and _data[kind].fetched_at or 0
+end
+
+function Cache.setLastFetched(kind, timestamp)
+    kind = kind or "plugin"
+    Cache.init()
+    timestamp = tonumber(timestamp) or os.time()
+    if _data[kind] then
+        _data[kind].fetched_at = timestamp
+        local file_map = {
+            plugin = PLUGINS_FILE,
+            patch = PATCHES_FILE,
+            font = FONTS_FILE,
+        }
+        if file_map[kind] then
+            writeJsonFile(file_map[kind], _data[kind])
+        end
+    end
+end
+
+function Cache.touchLastFetched(timestamp)
+    timestamp = tonumber(timestamp) or os.time()
+    for _, k in ipairs({"plugin", "patch", "font"}) do
+        Cache.setLastFetched(k, timestamp)
+    end
+end
+
+function Cache.isLoaded()
+    return _loaded == true
+end
+
+function Cache.getCachedCount(kind)
+    kind = kind or "plugin"
+    if _loaded and _data[kind] and _data[kind].repos then
+        return #_data[kind].repos
+    end
+    local ok_set, StorefrontSettings = pcall(require, "storefront_settings")
+    if ok_set and StorefrontSettings and StorefrontSettings.readSetting then
+        local count = StorefrontSettings:readSetting("cached_" .. tostring(kind) .. "_count")
+        if count and tonumber(count) and tonumber(count) >= 0 then
+            return tonumber(count)
+        end
+    end
+    return 0
 end
 
 function Cache.countRepos(kind)
@@ -524,6 +595,13 @@ function Cache.clear()
     os.remove(PLUGINS_FILE)
     os.remove(PATCHES_FILE)
     os.remove(FONTS_FILE)
+    local ok_set, StorefrontSettings = pcall(require, "storefront_settings")
+    if ok_set and StorefrontSettings and StorefrontSettings.delSetting then
+        StorefrontSettings:delSetting("cached_plugin_count")
+        StorefrontSettings:delSetting("cached_patch_count")
+        StorefrontSettings:delSetting("cached_font_count")
+        StorefrontSettings:flush()
+    end
 end
 
 return Cache
