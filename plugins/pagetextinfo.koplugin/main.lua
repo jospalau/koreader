@@ -1473,6 +1473,19 @@ function PageTextInfo:addToMainMenu(menu_items)
                     end,
                 },
                 {
+                    text = _("Diagnostic timing"),
+                    checked_func = function() return G_reader_settings:isTrue("diagtiming_enabled") end,
+                    help_text = _([[Log (as warnings) any require(), scheduled callback, event dispatch or screen refresh slower than 15 ms.]]),
+                    callback = function()
+                        local enable = not G_reader_settings:isTrue("diagtiming_enabled")
+                        G_reader_settings:saveSetting("diagtiming_enabled", enable)
+                        G_reader_settings:flush()
+                        local Event = require("ui/event")
+                        UIManager:broadcastEvent(Event:new("DiagTimingToggled", enable))
+                        return true
+                    end,
+                },
+                {
                     text = _("Enable devices flashes tweaks"),
                     checked_func = function() return self.settings:isTrue("enable_devices_flashes_tweaks") end,
                     help_text = _([[Some tweaks to fix the different issues for the different devices when flashing elements in the UI.
@@ -1811,6 +1824,19 @@ This is to be active only if the option flash buttons and menu items or the opti
                         G_reader_settings:saveSetting("show_page_turn_time", show)
                         G_reader_settings:flush()
 
+                        return true
+                    end,
+                },
+                {
+                    text = _("Diagnostic timing"),
+                    checked_func = function() return G_reader_settings:isTrue("diagtiming_enabled") end,
+                    help_text = _([[Log (as warnings) any require(), scheduled callback, event dispatch or screen refresh slower than 15 ms.]]),
+                    callback = function()
+                        local enable = not G_reader_settings:isTrue("diagtiming_enabled")
+                        G_reader_settings:saveSetting("diagtiming_enabled", enable)
+                        G_reader_settings:flush()
+                        local Event = require("ui/event")
+                        UIManager:broadcastEvent(Event:new("DiagTimingToggled", enable))
                         return true
                     end,
                 },

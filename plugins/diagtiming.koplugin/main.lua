@@ -1,144 +1,507 @@
 -- plugins/diagtiming.koplugin/main.lua
 --[[
-Diagnostic-only plugin: times require() calls for other plugins' modules,
-how long each event dispatch takes across all registered event handlers,
-and how long each Screen:refresh* call takes. Purely additive/logging —
-does not change behavior. Remove/disable once you've found the slow spot.
+Diagnostic-only plugin: times require(), UIManager scheduled callbacks,
+event dispatch, event handlers and Screen:refresh* calls. Logging only;
+it does not change behavior.
+
+Toggled from the pagetextinfo menu, which saves the "diagtiming_enabled"
+setting and emits the "DiagTimingToggled" event.
+
+All times are SELF times (exclusive): the time an item took minus the time of
+the measured items nested inside it. This way categories do not overlap and
+the numbers can be added up. The log also shows the inclusive time when it
+differs from the self time.
+
+When a document finishes opening (ReaderReady + SUMMARY_DELAY_S) it shows an
+InfoMessage with a top list of the slowest items measured during the opening.
+Each item in the top shows "at file:line", the source line where it hooks in:
+  - scheduleIn/nextTick : the line that scheduled the callback
+  - require             : the line that requested the module
+  - event               : the line that sent the event
+  - handler             : the line where the handler function is defined
+  - Screen:refresh*     : the line that triggered the refresh
+The log also has the full list of callers (and a stack for events/refreshes).
 ]]
 
-
--- This is a debug plugin, remove the following if block to enable it
-if true then
-    return { disabled = true, }
-end
-
-local logger  = require("logger")
+local Device = require("device")
 local UIManager = require("ui/uimanager")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
+local EventListener = require("ui/widget/eventlistener")
+local InfoMessage = require("ui/widget/infomessage")
+local logger = require("logger")
+local time = require("ui/time")
 
-local THRESHOLD_MS = 15 -- only log things slower than this, to cut noise
+local SETTING = "diagtiming_enabled"
+local THRESHOLD_MS = 15      -- only log/record anything slower than this
+local SUMMARY_DELAY_S = 1    -- wait after ReaderReady to catch the first repaint
+local TOP_N = 8              -- number of slowest entries in the summary
+local TRACE = true           -- log the full stack of slow events/refreshes
+local TRACE_LINES = 14       -- max stack lines per entry
+local CALLSITE_DEPTH = 3     -- how many callers to list in the log
 
-local UIManager = require("ui/uimanager")
+-- LuaJIT / Lua 5.2+ compatibility
+local pack = table.pack or function(...) return { n = select("#", ...), ... } end
+local unpack = table.unpack or unpack
 
-local orig_scheduleIn = UIManager.scheduleIn
+local function now() return time.now() end
+local function since_ms(t0) return time.to_ms(time.since(t0)) end
 
-UIManager.scheduleIn = function(self, delay, callback, ...)
-    local info = debug.getinfo(callback, "Sl")
-
-    local wrapped = function(...)
-        local t0 = os.clock()
-
-        print(string.format(
-            "[diag] scheduleIn START %s:%d",
-            info.short_src or "?",
-            info.linedefined or 0
-        ))
-
-        local ret = { callback(...) }
-
-        local dt = (os.clock() - t0) * 1000
-
-        print(string.format(
-            "[diag] scheduleIn END %.1fms %s:%d",
-            dt,
-            info.short_src or "?",
-            info.linedefined or 0
-        ))
-
-        return unpack(ret)
-    end
-
-    return orig_scheduleIn(self, delay, wrapped, ...)
+-- "file:line" where a function is defined.
+local function describe(fn)
+    local info = type(fn) == "function" and debug.getinfo(fn, "S")
+    if not info then return tostring(fn) end
+    return string.format("%s:%d", info.short_src, info.linedefined)
 end
 
-local orig_nextTick = UIManager.nextTick
-
-UIManager.nextTick = function(self, callback, ...)
-    local info = debug.getinfo(callback, "Sl")
-
-    local wrapped = function(...)
-        local t0 = os.clock()
-
-        print(string.format(
-            "[diag] nextTick START %s:%d",
-            info.short_src or "?",
-            info.linedefined or 0
-        ))
-
-        local ret = { callback(...) }
-
-        local dt = (os.clock() - t0) * 1000
-
-        print(string.format(
-            "[diag] nextTick END %.1fms %s:%d",
-            dt,
-            info.short_src or "?",
-            info.linedefined or 0
-        ))
-
-        return unpack(ret)
+-- Readable name for the widget that owns a handler: its "name" field if it has
+-- one, otherwise the file where the handler is defined (e.g. "readerfooter").
+local function widgetName(widget, fn)
+    if widget.name then return tostring(widget.name) end
+    local info = type(fn) == "function" and debug.getinfo(fn, "S")
+    if info then
+        local base = info.short_src:match("([^/\\]+)%.lua$")
+        if base then return base end
     end
-
-    return orig_nextTick(self, wrapped, ...)
+    return "?"
 end
 
--- 1) Time require() calls
-local orig_require = require
-_G.require = function(name)
-    local t0 = os.clock()
-    local ok, result = pcall(orig_require, name)
-    local dt = (os.clock() - t0) * 1000
-    if dt > THRESHOLD_MS then
-        logger.warn(string.format("[diag] require(%s) took %.1fms", name, dt))
+-- Source of this file, so its own wrapper frames are never reported as callers.
+local SELF_SRC = debug.getinfo(1, "S").short_src
+
+-- List of "file:line" callers, innermost first, skipping this file's own frames.
+-- level=2 means the function that called the one that calls callsites().
+local function callsites(level, depth)
+    local list = {}
+    local lvl = level + 1
+    while #list < (depth or CALLSITE_DEPTH) do
+        local info = debug.getinfo(lvl, "Sl")
+        if not info then break end
+        if info.short_src ~= SELF_SRC then
+            list[#list + 1] = string.format("%s:%d", info.short_src, info.currentline or 0)
+        end
+        lvl = lvl + 1
     end
-    if not ok then error(result) end
-    return result
+    return list
 end
 
--- 2) Time UIManager:sendEvent
-local orig_sendEvent = UIManager.sendEvent
-UIManager.sendEvent = function(self, event)
-    local t0 = os.clock()
-    local ret = orig_sendEvent(self, event)
-    local dt = (os.clock() - t0) * 1000
-    if dt > THRESHOLD_MS then
-        local ev_name = (event and event.handler) or (event and event.name) or "?"
-        logger.warn(string.format("[diag] event %s took %.1fms total", tostring(ev_name), dt))
-    end
-    return ret
+-- Multi-line text with the callers, for the log.
+local function callersText(list)
+    if #list == 0 then return nil end
+    return "[diag]   called from:\n[diag]     " .. table.concat(list, "\n[diag]     ")
 end
 
--- 3) Time every Screen:refresh* call
-local Device = require("device")
-local Screen = Device.screen
-for name, fn in pairs(Screen) do
-    if type(fn) == "function" and name:match("^refresh") then
-        Screen[name] = function(self, ...)
-            local t0 = os.clock()
-            local a, b, c, d, e = fn(self, ...)
-            local dt = (os.clock() - t0) * 1000
-            if dt > 15 then
-                logger.warn(string.format("[diag] Screen:%s took %.1fms", name, dt))
-            end
-            return a, b, c, d, e
+-- Truncated traceback (at most TRACE_LINES lines).
+local function stack(level)
+    local tb = debug.traceback("", level + 1)
+    local out, n = {}, 0
+    for line in tb:gmatch("[^\n]+") do
+        n = n + 1
+        if n > TRACE_LINES then
+            out[#out + 1] = "\t..."
+            break
+        end
+        out[#out + 1] = line
+    end
+    return table.concat(out, "\n")
+end
+
+local function isEnabled()
+    return G_reader_settings:isTrue(SETTING)
+end
+
+---------------------------------------------------------------------------
+-- Self-time measurement
+---------------------------------------------------------------------------
+-- Shared stack: each level accumulates the total time of its measured children.
+local tstack = {}
+
+-- Collection state (declared here because timed() accounts self time).
+local collecting = false
+local open_t0 = nil      -- when stats were reset
+local first_t0 = nil     -- start of the earliest item measured since the reset
+local self_total = 0     -- sum of ALL self times (any size) since the reset
+
+-- Runs f(), returns its packed results (xpcall style: res[1] is the status),
+-- the total (inclusive) time and the own (exclusive) time, both in ms.
+local function timed(f)
+    local depth = #tstack + 1
+    tstack[depth] = 0
+    local t0 = now()
+    local r = pack(xpcall(f, debug.traceback))
+    local total = since_ms(t0)
+    local child = tstack[depth]
+    -- Pop this level (and anything left above it, to be safe after errors).
+    for i = #tstack, depth, -1 do tstack[i] = nil end
+    -- Our total counts as child time for the parent level.
+    if depth > 1 then tstack[depth - 1] = tstack[depth - 1] + total end
+    local own = total - child
+    if collecting then
+        -- Items that started before the reset (e.g. the callback that is opening
+        -- the document) still count, so the timeline starts at the earliest one.
+        if not first_t0 or t0 < first_t0 then first_t0 = t0 end
+        self_total = self_total + own
+    end
+    return r, total, own
+end
+
+---------------------------------------------------------------------------
+-- Data collection for the summary
+---------------------------------------------------------------------------
+local by_kind = {}   -- kind -> { count = n, total = ms }
+local by_item = {}   -- "kind label" -> { kind, label, where, count, total, max }
+
+local function resetStats()
+    by_kind = {}
+    by_item = {}
+    open_t0 = now()
+    first_t0 = nil
+    self_total = 0
+    collecting = true
+end
+
+local function record(kind, label, dt, where)
+    local k = by_kind[kind]
+    if not k then k = { count = 0, total = 0 }; by_kind[kind] = k end
+    k.count = k.count + 1
+    k.total = k.total + dt
+
+    local key = kind .. " " .. label
+    local it = by_item[key]
+    if not it then
+        it = { kind = kind, label = label, where = where, count = 0, total = 0, max = 0 }
+        by_item[key] = it
+    end
+    it.count = it.count + 1
+    it.total = it.total + dt
+    if dt > it.max then it.max = dt end
+end
+
+-- dt: own (self) time in ms
+-- where: one "file:line" string (shown in the summary and the log)
+-- extra: optional multi-line text for the log only (callers, chain, stack)
+-- total: optional inclusive time in ms, shown in the log only
+local function report(kind, label, dt, where, extra, total)
+    if dt <= THRESHOLD_MS then return end
+    local msg = string.format("[diag] %s %s took %.1fms (own)", kind, label, dt)
+    if total and math.abs(total - dt) > 0.5 then
+        msg = msg .. string.format(", %.1fms inclusive", total)
+    end
+    if where and where ~= "" then
+        msg = msg .. "\n[diag]   at " .. where
+    end
+    if extra then
+        msg = msg .. "\n" .. extra
+    end
+    logger.dbg(msg)
+    if collecting then record(kind, label, dt, where) end
+end
+
+-- Keep the tail of a string, which is the most informative part of a path.
+local function shorten(s, n)
+    if #s <= n then return s end
+    return "…" .. s:sub(-(n - 1))
+end
+
+local function buildSummary()
+    local start = first_t0 or open_t0
+    local elapsed = start and since_ms(start) or 0
+    local lines = {
+        string.format("Diag timing: %.0fms elapsed (self time per item)", elapsed),
+        string.format("(only items slower than %dms)", THRESHOLD_MS),
+        "",
+    }
+
+    -- Totals per kind, slowest first
+    local kinds = {}
+    for kind, k in pairs(by_kind) do
+        kinds[#kinds + 1] = { kind = kind, count = k.count, total = k.total }
+    end
+    table.sort(kinds, function(a, b) return a.total > b.total end)
+
+    if #kinds == 0 then
+        lines[#lines + 1] = "Nothing went over the threshold."
+        return table.concat(lines, "\n")
+    end
+
+    local recorded = 0
+    for _, k in ipairs(kinds) do
+        recorded = recorded + k.total
+        lines[#lines + 1] = string.format("%s: %d times, %.0fms", k.kind, k.count, k.total)
+    end
+    -- The rest, so that everything adds up to the elapsed time.
+    local small = math.max(0, self_total - recorded)
+    local idle = math.max(0, elapsed - self_total)
+    lines[#lines + 1] = string.format("small items (<%dms each): %.0fms", THRESHOLD_MS, small)
+    lines[#lines + 1] = string.format("idle/unmeasured: %.0fms", idle)
+
+    -- Top N individual items
+    local items = {}
+    for _, it in pairs(by_item) do items[#items + 1] = it end
+    table.sort(items, function(a, b) return a.total > b.total end)
+
+    lines[#lines + 1] = ""
+    lines[#lines + 1] = string.format("Top %d slowest:", math.min(TOP_N, #items))
+    for i = 1, math.min(TOP_N, #items) do
+        local it = items[i]
+        local name = it.label ~= "" and (it.kind .. " " .. shorten(it.label, 34)) or it.kind
+        if it.count > 1 then
+            lines[#lines + 1] = string.format("%d. %.0fms (%d times, max %.0fms) %s",
+                i, it.total, it.count, it.max, name)
+        else
+            lines[#lines + 1] = string.format("%d. %.0fms %s", i, it.total, name)
+        end
+        if it.where and it.where ~= "" then
+            lines[#lines + 1] = "    at " .. shorten(it.where, 56)
         end
     end
+    return table.concat(lines, "\n")
 end
 
+local function showSummary()
+    local text = buildSummary()
+    -- Stop collecting: the InfoMessage itself triggers refreshes, don't measure them.
+    collecting = false
+    logger.dbg("[diag] summary:\n" .. text)
+    UIManager:show(InfoMessage:new{ text = text })
+end
+
+---------------------------------------------------------------------------
+-- Hook state
+---------------------------------------------------------------------------
+-- Already-created wrappers check this flag, so they go transparent when disabled.
+local active = false
+local originals = nil                                  -- originals to restore
+local wrapped_for = setmetatable({}, { __mode = "k" }) -- original -> wrapper
+local origin_for = setmetatable({}, { __mode = "k" })  -- original -> latest scheduling site
+local our_wrappers = setmetatable({}, { __mode = "k" }) -- set of wrappers created here
+-- Installed once and left in place (it is cheap).
+local unschedule_hooked = false
+
+-- Wrap a callback, caching the wrapper so unschedule() can find it later.
+local function wrap_callback(kind, fn, origin)
+    if type(fn) ~= "function" then return fn end
+    -- UIManager may call scheduleIn/nextTick from inside each other: never wrap
+    -- a wrapper again, or the time is counted twice and points at this file.
+    if our_wrappers[fn] then return fn end
+    origin_for[fn] = origin
+    local w = wrapped_for[fn]
+    if w then return w end
+    local label = describe(fn)
+    w = function(...)
+        if not active then return fn(...) end
+        -- Forward arguments with a closure and give back the callback's own return
+        -- values, so the wrapped callback behaves exactly like the original.
+        local args = pack(...)
+        local res, total, own = timed(function() return fn(unpack(args, 1, args.n)) end)
+        local sites = origin_for[fn] or {}
+        report(kind, label, own, sites[1], callersText(sites), total)
+        if not res[1] then error(res[2], 0) end
+        return unpack(res, 2, res.n)
+    end
+    wrapped_for[fn] = w
+    our_wrappers[w] = true
+    return w
+end
+
+local function install()
+    if active then return end
+    active = true
+    originals = {}
+
+    -- 1) scheduleIn / nextTick (records where each callback was scheduled)
+    local orig_scheduleIn = UIManager.scheduleIn
+    local orig_nextTick = UIManager.nextTick
+    originals.scheduleIn = orig_scheduleIn
+    originals.nextTick = orig_nextTick
+
+    UIManager.scheduleIn = function(self, delay, cb, ...)
+        return orig_scheduleIn(self, delay, wrap_callback("scheduleIn", cb, callsites(2)), ...)
+    end
+    UIManager.nextTick = function(self, cb, ...)
+        return orig_nextTick(self, wrap_callback("nextTick", cb, callsites(2)), ...)
+    end
+
+    -- unschedule stays hooked even after disabling, so callbacks that were
+    -- already wrapped can still be cancelled.
+    if not unschedule_hooked then
+        unschedule_hooked = true
+        local orig_unschedule = UIManager.unschedule
+        UIManager.unschedule = function(self, fn, ...)
+            return orig_unschedule(self, wrapped_for[fn] or fn, ...)
+        end
+    end
+
+    -- 2) require() with own time (excludes nested requires)
+    local orig_require = require
+    originals.require = orig_require
+    local chain = {}   -- stack of modules being loaded
+    _G.require = function(name)
+        if package.loaded[name] then return orig_require(name) end
+        local sites = callsites(2, CALLSITE_DEPTH)
+        chain[#chain + 1] = name
+        local res, total, own = timed(function() return orig_require(name) end)
+        -- Modules that were being loaded when this one was requested (outer ones)
+        local outer = {}
+        for i = 1, #chain - 1 do outer[#outer + 1] = chain[i] end
+        chain[#chain] = nil
+        if own > THRESHOLD_MS then
+            local extra = string.format("[diag]   own %.1fms, total %.1fms", own, total)
+            if #outer > 0 then
+                extra = extra .. "\n[diag]   loaded while loading: " .. table.concat(outer, ", ")
+            end
+            local c = callersText(sites)
+            if c then extra = extra .. "\n" .. c end
+            report("require", name, own, sites[1], extra, total)
+        end
+        if not res[1] then error(res[2], 0) end
+        return unpack(res, 2, res.n)
+    end
+
+    -- 3) Events (where they are sent from, plus a stack if slow)
+    local orig_sendEvent = UIManager.sendEvent
+    originals.sendEvent = orig_sendEvent
+    UIManager.sendEvent = function(self, event)
+        local res, total, own = timed(function() return orig_sendEvent(self, event) end)
+        if own > THRESHOLD_MS then
+            local sites = callsites(2, CALLSITE_DEPTH)
+            local extra = callersText(sites)
+            if TRACE then
+                extra = (extra and (extra .. "\n") or "") .. stack(2)
+            end
+            report("event", tostring(event and (event.handler or event.name) or "?"),
+                own, sites[1], extra, total)
+        end
+        if not res[1] then error(res[2], 0) end
+        return unpack(res, 2, res.n)
+    end
+
+    -- 3b) Which widget/function runs each handler (self handler time)
+    local orig_handleEvent = EventListener.handleEvent
+    originals.handleEvent = orig_handleEvent
+    EventListener.handleEvent = function(self, event, ...)
+        if not active then return orig_handleEvent(self, event, ...) end
+        local args = pack(...)
+        local res, total, own = timed(function()
+            return orig_handleEvent(self, event, unpack(args, 1, args.n))
+        end)
+        if own > THRESHOLD_MS then
+            local h = event and event.handler
+            local fn = h and self[h]
+            report("handler",
+                string.format("%s:%s", widgetName(self, fn), tostring(h or "?")),
+                own, describe(fn), nil, total)
+        end
+        if not res[1] then error(res[2], 0) end
+        return unpack(res, 2, res.n)
+    end
+
+    -- 4) Screen:refresh* (also walking the metatable chain)
+    local Screen = Device.screen
+    originals.screen = {}
+
+    -- Collect first, assign afterwards (never modify a table while iterating it).
+    local found = {}
+    local seen = {}
+    local obj = Screen
+    while obj do
+        for name, fn in pairs(obj) do
+            if type(fn) == "function" and type(name) == "string"
+                and name:match("^refresh") and not seen[name] then
+                seen[name] = true
+                found[name] = fn
+            end
+        end
+        local mt = getmetatable(obj)
+        obj = mt and type(mt.__index) == "table" and mt.__index or nil
+    end
+
+    for name, fn in pairs(found) do
+        -- own = nil if the method was inherited
+        originals.screen[name] = { own = rawget(Screen, name) }
+        Screen[name] = function(self, ...)
+            if not active then return fn(self, ...) end
+            local args = pack(...)
+            local res, total, own = timed(function()
+                return fn(self, unpack(args, 1, args.n))
+            end)
+            if own > THRESHOLD_MS then
+                local sites = callsites(2, CALLSITE_DEPTH)
+                local extra = callersText(sites)
+                if TRACE then
+                    extra = (extra and (extra .. "\n") or "") .. stack(2)
+                end
+                report("Screen:" .. name, "", own, sites[1], extra, total)
+            end
+            if not res[1] then error(res[2], 0) end
+            return unpack(res, 2, res.n)
+        end
+    end
+
+    logger.dbg("[diag] timing hooks installed")
+end
+
+local function uninstall()
+    if not active then return end
+    -- Already-scheduled callback wrappers become transparent.
+    active = false
+    collecting = false
+
+    UIManager.scheduleIn = originals.scheduleIn
+    UIManager.nextTick = originals.nextTick
+    UIManager.sendEvent = originals.sendEvent
+    EventListener.handleEvent = originals.handleEvent
+    _G.require = originals.require
+
+    -- If the method was inherited, setting it back to nil lets the metatable resolve it again.
+    local Screen = Device.screen
+    for name, saved in pairs(originals.screen) do
+        Screen[name] = saved.own
+    end
+
+    originals = nil
+    logger.dbg("[diag] timing hooks removed")
+end
+
+-- If it was already enabled in a previous session, hook in as early as
+-- possible (so require() calls from plugins loaded later are captured).
+if isEnabled() then
+    install()
+    resetStats()
+end
+
+---------------------------------------------------------------------------
+-- Plugin
+---------------------------------------------------------------------------
 local DiagTiming = WidgetContainer:extend{
     name = "diagtiming",
     is_doc_only = false,
 }
 
-function DiagTiming:onReaderReady()
-    logger.warn("[diag] onReaderReady fired at clock=", os.clock())
-    UIManager:nextTick(function()
-        logger.warn("[diag] first tick after ready at clock=", os.clock())
-    end)
+function DiagTiming:init()
+    -- Every time a ReaderUI is created (a document is opened) start from scratch.
+    if active then
+        resetStats()
+    end
 end
 
-function DiagTiming:onGesture(ges)
-    logger.warn("[diag] gesture:", ges and ges.ges, "at clock=", os.clock())
+-- Emitted from the pagetextinfo menu.
+function DiagTiming:onDiagTimingToggled(enable)
+    if enable then
+        install()
+        resetStats()
+    else
+        uninstall()
+    end
+    return true
+end
+
+function DiagTiming:onReaderReady()
+    if not active then return end
+    logger.dbg("[diag] onReaderReady")
+    -- Wait a bit so the first page repaint is included.
+    UIManager:scheduleIn(SUMMARY_DELAY_S, function()
+        if active then showSummary() end
+    end)
 end
 
 return DiagTiming
