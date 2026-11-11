@@ -2178,8 +2178,105 @@ function PageTextInfo:paintTo(bb, x, y)
         end
     end
     if self.is_enabled and self.vertical_frame then
-        local WordCount = require("wordcount_overlay")
-        WordCount.paint(self, bb, x, y)
+        local res = self.document:getTextFromPositions({x = 0, y = 0},
+        {x = Screen:getWidth(), y = Screen:getHeight()}, true) -- do not highlight
+        if res and res.pos0 and res.pos1 then
+            local boxes = self.ui.document:getScreenBoxesFromPositions(res.pos0, res.pos1, true)
+            if boxes then
+                -- local last_word = ""
+                for _, box in ipairs(boxes) do
+                    if box.h ~= 0 then
+                        -- local t = TextWidget:new{
+                        --     text =  "New line",
+                        --     face = Font:getFace("myfont4", 6),
+                        --     fgcolor = Blitbuffer.COLOR_BLACK,
+                        -- }
+                        -- t:paintTo(bb, x, box.y)
+                            -- text line
+                            local text = self.ui.document._document:getTextFromPositions(box.x, box.y, Screen:getWidth(), box.y, false, false).text
+                            -- text_line = text_line:gsub("’", ""):gsub("‘", ""):gsub("–", ""):gsub("— ", ""):gsub(" ", ""):gsub("”", ""):gsub("“", ""):gsub("”", "…")
+                            -- smart quotes
+                            text = text:gsub("\226\128\152", "")   -- ‘
+                            text = text:gsub("\226\128\156", "")   -- “
+                            text = text:gsub("\226\128\157", "")   -- ”
+                            text = text:gsub("\226\128\153", "'")  -- ’ -> '
+
+                            -- dashes / ellipsis
+                            text = text:gsub("\226\128\148", " ")  -- —
+                            text = text:gsub("\226\128\147", " ")  -- –
+                            text = text:gsub("\226\128\166", " ")  -- …
+
+                            text = text:gsub("[!\"#%$%%&%(%)%*%+,%-%./:;<=>%?@%[%]%^_`{|}~]", " ")
+                            local words_nb = 0
+
+                            for word in text:gmatch("[%w\194-\244]+['’]?[%w\194-\244]*") do
+                                words_nb = words_nb + 1
+                            end
+                            -- for i = #wordst, 1, -1 do
+                            --     if wordst[i] == "’" or wordst[i] == "–" or wordst[i] == " " or wordst[i] == "”" or wordst[i] == "…" or wordst[i] == "…’" then
+                            --       table.remove(wordst, i)
+                            --     end
+                            -- end
+                            local words = words_nb
+                            -- local dump = require("dump")
+                            -- print(dump(wordst))
+                            -- Hyphenated words are counted twice since getTextFromPositions returns the whole word for the line.
+                            -- They can be removed but it is fine to count them twice
+                            -- if last_word:find(util.splitToWords2(text_line)[1]) then
+                            -- if util.splitToWords2(text_line)[1] == last_word then
+                            --     words = words - 1
+                            -- end
+                            -- last_word = util.splitToWords2(text_line)[#util.splitToWords2(text_line)]
+                            -- print(text_line:sub(1, 10))
+                            -- print(text_line:sub(#text_line-10, #text_line))
+                            -- if text_line:sub(#text_line, #text_line) == "-" then
+                            --     words = words - 1
+                            -- end
+                            total_words = total_words + words
+                            local t = TextWidget:new{
+                                text =  words,
+                                face = Font:getFace("myfont4", self.ui.document.configurable.font_size),
+                                fgcolor = Blitbuffer.COLOR_BLACK,
+                            }
+                            t:paintTo(bb, x, box.y)
+                            local t2 = TextWidget:new{
+                                text =  total_words,
+                                face = Font:getFace("myfont4", self.ui.document.configurable.font_size),
+                                fgcolor = Blitbuffer.COLOR_BLACK,
+                            }
+                            t2:paintTo(bb, x + Screen:getWidth() - t2:getSize().w, box.y)
+                    end
+                    self.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+                end
+            end
+        end
+        -- logger.warn(res.text)
+        local nblines, nbwords = self.ui.view:getCurrentPageLineWordCounts()
+        local res = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), 1, false, true)
+        local chars_first_line = 0
+        if res and res.text then
+            local words = res.text
+            chars_first_line = #words
+        end
+
+        self.vg1[1][1]:setText("Lines      " .. nblines)
+        self.vg1[3][1]:setText("Words      " .. nbwords)
+        self.vg1[5][1]:setText("CFL        " .. chars_first_line)
+
+        if self.ui.statistics then
+            local duration_raw =  math.floor(((os.time() - self.ui.statistics.start_current_period)/60)* 100) / 100
+            local wpm = 0
+            if self.ui.statistics._total_words > 0 then
+                wpm = math.floor(self.ui.statistics._total_words/duration_raw)
+            end
+            self.vg2[1][1]:setText("Total words session " .. self.ui.statistics._total_words)
+            self.vg2[3][1]:setText("Total pages session " .. self.ui.statistics._total_pages)
+            self.vg2[5][1]:setText("Wpm session         " .. wpm)
+        else
+            self.vg2[1][1]:setText("Statistics plugin not enabled")
+        end
+
+        self.vertical_frame:paintTo(bb, x + Screen:getWidth() - self.vertical_frame[1][1]:getSize().w - self.vertical_frame[1].padding, y)
         -- -- This is painted before some other stuff like for instance the dogear widget. This is the way to paint it just after all in the next UI tick.
         -- -- But we leave it commented since sometimes it is painted even over the application menus
         -- UIManager:scheduleIn(0, function()
@@ -2759,10 +2856,10 @@ local Blitbuffer = require("ffi/blitbuffer")
 -- Style constants
 local VOCAB_MIN_TRANSLATION_SIZE = 7   -- minimum font size for the gloss
 local GLOSS_MAX_CHARS = 14             -- max visible characters before truncating with "…"
-local GLOSS_SCALE = 0.75   -- gloss size relative to the book text (lower = smaller)
+local GLOSS_SCALE = 0.70   -- gloss size relative to the book text (lower = smaller)
 local GLOSS_MIN_GAP   = Screen:scaleBySize(3)  -- min horizontal gap between two glosses on the same line
 local GLOSS_INVERTED  = false          -- true = black background, white text
-local GLOSS_PAD_X     = Screen:scaleBySize(4)  -- horizontal padding inside the chip
+local GLOSS_PAD_X     = Screen:scaleBySize(3)  -- horizontal padding inside the chip
 local GLOSS_PAD_Y     = Screen:scaleBySize(1)  -- vertical padding inside the chip
 
 -- Keep only the last word of the text returned by the engine.
@@ -2815,7 +2912,7 @@ end
 -- It is centered on the word, clamped to the screen, and shifted right
 -- (or skipped) if it would overlap the previous gloss on the same line.
 -- `line_end` maps a line's y position to the right edge of the last gloss painted there.
-local function paintGloss(bb, box, gloss, face, line_end)
+local function paintGloss(bb, box, gloss, face)
     -- Measure the text and the font height/ascender
     local size = RenderText:sizeUtf8Text(0, Screen:getWidth(), face, gloss, true, true)
     local text_w = size.x
@@ -2826,20 +2923,12 @@ local function paintGloss(bb, box, gloss, face, line_end)
     local chip_h = height + 2 * GLOSS_PAD_Y
     local margin = Screen:scaleBySize(2)
 
-    -- Center over the word and keep inside the screen
+    -- Center the chip directly above the word
     local x = box.x + math.floor((box.w - chip_w) / 2)
     x = math.max(margin, math.min(x, Screen:getWidth() - chip_w - margin))
 
-    -- Anti-overlap: push right of the previous gloss, or skip if it doesn't fit
-    local prev_end = line_end[box.y]
-    if prev_end and x < prev_end + GLOSS_MIN_GAP then
-        x = prev_end + GLOSS_MIN_GAP
-        if x + chip_w > Screen:getWidth() - margin then return end
-    end
-    line_end[box.y] = x + chip_w
-
     -- Place the chip just above the word; skip if it would go off the top
-    local y = box.y - chip_h - Screen:scaleBySize(1)
+    local y = box.y - chip_h + Screen:scaleBySize(3)
     if y < 0 then return end
 
     local bg = GLOSS_INVERTED and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE
@@ -2926,8 +3015,6 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
     end
 
     -- Painting (cheap: only uses already computed data)
-    local line_end = {}   -- reset on every paint
-
     for _, entry in ipairs(self._draw_cache.entries) do
         if entry.fallback then
             paintBaselines(bb, entry.fallback, current_font)
@@ -2948,7 +3035,7 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                             end
                         end
                         if gloss then
-                            paintGloss(bb, box, gloss, translation_face, line_end)
+                            paintGloss(bb, box, gloss, translation_face)
                         end
                     end
 
