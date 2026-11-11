@@ -473,12 +473,12 @@ local function patchProjectTitleCollections()
                 empty_item.dim = true
                 dirs = { empty_item }
             end
-            return self:genItemTable(dirs, {}, path)
+            return self:genItemTable(dirs, {}, path), true
         end
         local collection_name = getCollectionFromPath(path)
         if collection_name then
             local files = buildCollectionFileItems(self, path, collection_name)
-            return self:genItemTable({}, files, path)
+            return self:genItemTable({}, files, path), true
         end
         return orig_genItemTableFromPath(self, path)
     end
