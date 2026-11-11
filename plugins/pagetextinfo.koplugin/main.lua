@@ -740,26 +740,27 @@ function PageTextInfo:onSwipe(_, ges)
         end
     elseif direction == "north" then
         if self.ui and self.ui.bookends and self.ui.bookends.enabled then
-            local statistics = self.ui and self.ui.statistics
-            if statistics and statistics.isEnabled and statistics:isEnabled() then
-                pcall(statistics.insertDB, statistics)
-            end
-            local ok, Screen = pcall(require, "book_rewind/ui/screen")
-            if not ok then
-                require("logger").warn("Book Rewind: require failed", Screen)
-                return true
-            end
-            local ok2, screen = pcall(Screen.new, Screen, {})
-            if not ok2 then
-                require("logger").warn("Book Rewind: could not open", screen)
-                return true
-            end
-            -- Solo si hay tarjetas (si no hay datos, el modo es "empty" y cards es nil)
-            if screen.mode == "cards" and screen.cards and #screen.cards > 0 then
-                screen.index = math.min(8, #screen.cards)
-            end
-            UIManager:show(screen)
-            return true
+            -- local statistics = self.ui and self.ui.statistics
+            -- if statistics and statistics.isEnabled and statistics:isEnabled() then
+            --     pcall(statistics.insertDB, statistics)
+            -- end
+            -- local ok, Screen = pcall(require, "book_rewind/ui/screen")
+            -- if not ok then
+            --     require("logger").warn("Book Rewind: require failed", Screen)
+            --     return true
+            -- end
+            -- local ok2, screen = pcall(Screen.new, Screen, {})
+            -- if not ok2 then
+            --     require("logger").warn("Book Rewind: could not open", screen)
+            --     return true
+            -- end
+            -- -- Solo si hay tarjetas (si no hay datos, el modo es "empty" y cards es nil)
+            -- if screen.mode == "cards" and screen.cards and #screen.cards > 0 then
+            --     screen.index = math.min(8, #screen.cards)
+            -- end
+            -- UIManager:show(screen)
+            -- return true
+            return UIManager:sendEvent(Event:new("ReadingLogDashboard"))
         end
         if self.view.topbar.is_enabled == nil or self.view.topbar.is_enabled == false then
             self.view.topbar:quickToggleOnOff(true)
