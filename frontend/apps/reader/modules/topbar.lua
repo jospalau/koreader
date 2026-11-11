@@ -1557,26 +1557,36 @@ function TopBar:toggleBar(light_on)
         local font_face = self.ui.document._document:getFontFace()
         local current_face = font_face:gsub("%s+", "") .. "-Regular"
         local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-        local size_px = (display_dpi * self.ui.document.configurable.font_size)/72
-        local size_pt = (size_px/display_dpi) * 72
-        local face_base = Font:getFace(current_face, size_px, 0, false);
+        -- Rounded to an integer px, same as ptToPx() in the popup
+        local size_px = math.floor(display_dpi * self.ui.document.configurable.font_size / 72 + 0.5)
+        -- Configured pt used directly (going through the rounded px would shift it slightly)
+        local size_pt = self.ui.document.configurable.font_size
+        -- 4th arg true, same as the popup
+        local face_base = Font:getFace(current_face, size_px, 0, true)
         local x_height = 0
         local x_height_mm = 0
         local x_height_with_range = "N/A"
         local line_height = 0
         local leading_factor_text = "N/A"
         if face_base ~= nil then
-            x_height = Math.round(face_base.ftsize:getXHeight() * size_px)
-            x_height_mm = Math.round((x_height * (25.4 / display_dpi) * 100)) / 100
+            -- If getXHeight() < 1 it is a ratio, otherwise it is already in px.
+            -- Kept fractional: no intermediate rounding.
+            local xh = face_base.ftsize:getXHeight()
+            x_height = (xh < 1) and (xh * size_px) or xh
+            -- Unrounded; getXHeightRangeLabel already formats with %.2f
+            x_height_mm = x_height * 25.4 / display_dpi
             x_height_with_range = self:getXHeightRangeLabel(size_pt, x_height_mm)
-            local line_spacing_factor = self.ui.document.configurable.line_spacing / 100
+            -- Falls back to 100 (no extra spacing) if line_spacing is nil
+            local line_spacing_factor = (self.ui.document.configurable.line_spacing or 100) / 100
             local x_height2, ascender, descender = face_base.ftsize:getAscDesc()
             -- How many times the x_height fits in the line height
             -- The line height is the distance from one baseline line to the other
-            local leading_factor = math.floor(((1.2 * size_px * line_spacing_factor) / x_height ) * 100) / 100 -- 1.2em hardcoded as it is in all books in Calibre
-            leading_factor_text = leading_factor .. " (" .. self:classifyLeading(leading_factor, x_height2, ascender, descender) .. ")"
+            -- Unrounded here; rounding happens only in the %.2f below
+            local leading_factor = (1.2 * size_px * line_spacing_factor) / x_height -- 1.2em hardcoded as it is in all books in Calibre
+            -- %.2f rounds (1.679 -> 1.68), same as the popup
+            leading_factor_text = string.format("%.2f (%s)", leading_factor,
+                self:classifyLeading(leading_factor, x_height2, ascender, descender))
         end
-
 
         local hours_to_read = tonumber(self.total_words)/(self.avg_wpm * 60)
         local progress =  math.floor(100/hours_to_read * 10)/10
