@@ -21,6 +21,9 @@ local Cards = require("book_rewind/cards")
 local CardView = require("book_rewind/ui/card_view")
 local GeneratedCover = require("book_rewind/ui/generated_cover")
 local ShareScreen = require("book_rewind/ui/share_screen")
+local BookSettings = require("book_rewind/book_settings")
+local Marked = require("book_rewind/marked")
+local StablePages = require("book_rewind/stable_pages")
 local I18n = require("book_rewind/i18n")
 local Stats = require("book_rewind/stats")
 local Store = require("book_rewind/store")
@@ -40,6 +43,12 @@ local Screen = InputContainer:extend{
     language = nil,
     theme = nil,
     now = nil,
+    -- The settings of the book open in KOReader, if any, which can be newer than the file on disk, and its path.
+    doc_settings = nil,
+    doc_file = nil,
+    -- For tests: the reading history and how a book's settings are opened (see BookSettings.collect).
+    history = nil,
+    open_doc_settings = nil,
 }
 
 function Screen:init()
@@ -98,6 +107,47 @@ function Screen:setup()
     self:open_year(self:first_year())
 end
 
+-- The settings KOReader keeps for the books opened in the year (stable page numbers, finished status). Anything
+-- that goes wrong leaves the recap as it is with the statistics alone.
+function Screen:book_entries(year)
+    local ok, entries = pcall(BookSettings.collect, os.time{ year = year, month = 1, day = 1, hour = 0 }, {
+        current = self.doc_settings, current_file = self.doc_file, history = self.history, open = self.open_doc_settings,
+    })
+    if not ok then
+        logger.warn("Book Rewind: could not read the book settings", entries)
+        return {}
+    end
+    return entries
+end
+
+-- Books marked as finished in KOReader that the statistics do not show as finished (see Marked).
+function Screen:add_marked(entries, year)
+    local ok, err = pcall(function()
+        local finished_before = {}
+        local ids = Store.book_ids_by_md5(self.db_path, Marked.to_check(self.metrics, entries, self.book_data, year))
+        for md5, book_ids in pairs(ids) do
+            for _, book_id in ipairs(book_ids) do
+                local history = Store.book_history(self.db_path, book_id, year)
+                if history and Stats.count_passes(history) > 0 then
+                    finished_before[md5] = true
+                end
+            end
+        end
+        for _, book in ipairs(Marked.add(self.metrics, entries, self.book_data, year, finished_before)) do
+            if not self.book_data[book.id] then
+                self.book_data[book.id] = { title = book.stored_title, authors = book.authors, pages = book.total_pages }
+            end
+        end
+    end)
+    if not ok then
+        self.metrics.marked_books = nil
+        for _, book in ipairs(self.metrics.books or {}) do
+            book.marked_finished = nil
+        end
+        logger.warn("Book Rewind: could not read the books marked as finished", err)
+    end
+end
+
 -- Early in a year, the one that just ended is the recap worth seeing.
 function Screen:first_year()
     if self.years[1] == self.current_year and self.today.yday <= NEW_YEAR_DAYS then
@@ -114,6 +164,10 @@ function Screen:open_year(year)
     self.year = year
     self:free_covers()
     local data = Store.load_year(self.db_path, year, self.now)
+    local entries = data and self:book_entries(year) or {}
+    if data then
+        StablePages.apply(data.books, StablePages.totals(entries))
+    end
     self.metrics = data and Stats.compute{
         year = year,
         rows = data.rows,
@@ -132,6 +186,7 @@ function Screen:open_year(year)
         return
     end
     self.book_data = data.books
+    self:add_marked(entries, year)
     self:rebuild_cards()
     self.mode = "cards"
     self:show_card(1)

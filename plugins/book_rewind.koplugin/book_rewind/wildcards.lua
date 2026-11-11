@@ -420,7 +420,8 @@ function Detect.almost_there(metrics)
         return nil
     end
     local book = best_book(metrics, function(candidate)
-        return candidate.title and not candidate.finished and not candidate.read_later and candidate.seconds >= LONG_BOOK_SECONDS
+        return candidate.title and not candidate.finished and not candidate.marked_finished and not candidate.read_later
+            and candidate.seconds >= LONG_BOOK_SECONDS
             and candidate.overall >= ALMOST_MIN and candidate.overall < ALMOST_MAX and candidate.total_pages > 0
     end, function(a, b) return a.overall > b.overall end)
     if not book then

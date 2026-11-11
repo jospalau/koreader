@@ -8,7 +8,7 @@ local PluginScreensaver = require("book_rewind/screensaver")
 local Screen = require("book_rewind/ui/screen")
 local ShareScreen = require("book_rewind/ui/share_screen")
 
-PluginScreensaver.install(debug.getinfo(1, "S").source:gsub("^@", ""):match("(.*)/") or ".")
+PluginScreensaver.install(debug.getinfo(1, "S").source:gsub("^@", ""):match("(.*)/") or ".", "book_rewind")
 
 local function strings()
     return I18n[I18n.language_from(G_reader_settings:readSetting("language"))]
@@ -39,7 +39,11 @@ function BookRewind:addToMainMenu(menu_items)
             if statistics and statistics.isEnabled and statistics:isEnabled() then
                 pcall(statistics.insertDB, statistics)
             end
-            local ok, screen = pcall(Screen.new, Screen, {})
+            local document = self.ui.document
+            local ok, screen = pcall(Screen.new, Screen, {
+                doc_settings = document and self.ui.doc_settings or nil,
+                doc_file = document and document.file or nil,
+            })
             if ok then
                 UIManager:show(screen)
             else

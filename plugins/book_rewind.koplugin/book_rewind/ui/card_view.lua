@@ -617,7 +617,7 @@ function Paint.books(c, card, t, provider)
         local x = 46
         for _, item in ipairs(row) do
             local h = 110 + item.book.total_pages % 37
-            local tone = item.book.finished and "black" or (item.book.finished_earlier and "dots" or "hatch")
+            local tone = (item.book.finished or item.book.marked_finished) and "black" or (item.book.finished_earlier and "dots" or "hatch")
             shelf_has_earlier = shelf_has_earlier or tone == "dots"
             spine(c, x, base, item.w, h, tone)
             x = x + item.w + gap

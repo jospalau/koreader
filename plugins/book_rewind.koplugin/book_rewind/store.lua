@@ -106,12 +106,13 @@ function Store.load_year(path, year, now)
         local year_books = string.format("SELECT id_book FROM page_stat_data WHERE start_time >= %d AND start_time < %d", first, after)
         local in_year = "id_book IN (" .. year_books .. ")"
         local books = {}
-        result = conn:exec("SELECT id, title, authors, pages, series, highlights, notes FROM book WHERE id IN (" .. year_books .. ")")
+        result = conn:exec("SELECT id, title, authors, pages, series, highlights, notes, md5 FROM book WHERE id IN (" .. year_books .. ")")
         if result then
             for i = 1, #result[1] do
                 books[number(result[1][i])] = {
                     title = result[2][i], authors = result[3][i], pages = number(result[4][i]),
                     series = result[5][i], highlights = number(result[6][i]), notes = number(result[7][i]),
+                    md5 = type(result[8][i]) == "string" and result[8][i] ~= "" and result[8][i] or nil,
                 }
             end
         end
@@ -155,6 +156,31 @@ function Store.load_year(path, year, now)
             previous_seconds = previous_seconds or 0, year = year,
         }
     end)
+end
+
+-- The ids of the books with these partial MD5s, as { [md5] = { id, ... } }. Only hexadecimal MD5s are asked for.
+function Store.book_ids_by_md5(path, md5s)
+    local quoted = {}
+    for _, md5 in ipairs(md5s or {}) do
+        if type(md5) == "string" and md5:match("^%x+$") then
+            quoted[#quoted + 1] = "'" .. md5 .. "'"
+        end
+    end
+    if #quoted == 0 then
+        return {}
+    end
+    return with_connection(path, function(conn)
+        local ids = {}
+        local result = conn:exec("SELECT md5, id FROM book WHERE md5 IN (" .. table.concat(quoted, ",") .. ")")
+        if result then
+            for i = 1, #result[1] do
+                local md5 = result[1][i]
+                ids[md5] = ids[md5] or {}
+                table.insert(ids[md5], number(result[2][i]))
+            end
+        end
+        return ids
+    end) or {}
 end
 
 -- The pages of one book read before the year, in time order, to count how many times it was read to the end.

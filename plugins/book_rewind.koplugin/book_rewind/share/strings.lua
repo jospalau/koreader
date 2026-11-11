@@ -3,7 +3,7 @@ return {
     pt = {
         html_lang = "pt-BR",
         title = "Compartilhar",
-        scan_hint = "Na mesma rede Wi-Fi, aponte a câmera do celular:",
+        scan_hint = "Na mesma rede Wi-Fi, leia o código com o celular ou digite o endereço num navegador:",
         waiting = "Aguardando conexão",
         connected = "Conectado",
         connected_ip = "Aparelho: %s",
@@ -49,7 +49,7 @@ return {
     en = {
         html_lang = "en",
         title = "Share",
-        scan_hint = "On the same Wi-Fi network, point your phone camera:",
+        scan_hint = "On the same Wi-Fi network, scan the code with your phone or type the address in a browser:",
         waiting = "Waiting for a connection",
         connected = "Connected",
         connected_ip = "Device: %s",
@@ -95,7 +95,7 @@ return {
     es = {
         html_lang = "es",
         title = "Compartir",
-        scan_hint = "En la misma red Wi-Fi, apunta la cámara del móvil:",
+        scan_hint = "En la misma red Wi-Fi, escanea el código con el móvil o escribe la dirección en un navegador:",
         waiting = "Esperando conexión",
         connected = "Conectado",
         connected_ip = "Dispositivo: %s",

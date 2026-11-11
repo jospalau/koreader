@@ -83,6 +83,25 @@ function Cards.profile_text(profile, t)
     return entry[1], string.format(entry[2], unpack(profile.values))
 end
 
+-- The books of the year with the ones marked as finished in KOReader and missing from the statistics: the shelf
+-- (opened books) and the finished books. A marked book already in the year's lists counts once on the shelf.
+function Cards.book_lists(metrics)
+    local shelf, finished = {}, {}
+    for _, book in ipairs(metrics.books or {}) do
+        shelf[#shelf + 1] = book
+    end
+    for _, book in ipairs(metrics.finished_books or {}) do
+        finished[#finished + 1] = book
+    end
+    for _, book in ipairs(metrics.marked_books or {}) do
+        if not book.in_books then
+            shelf[#shelf + 1] = book
+        end
+        finished[#finished + 1] = book
+    end
+    return shelf, finished
+end
+
 -- Cards without enough data are left out, so a short reading history still makes a coherent story.
 function Cards.build(metrics, opts)
     local t = opts.strings
@@ -142,7 +161,8 @@ function Cards.build(metrics, opts)
             body = books_equivalent >= 1 and string.format(t.pages_body, decimal(books_equivalent, t.decimal)) or nil,
         }
     end
-    if #metrics.books > 0 then
+    local shelf, finished_books = Cards.book_lists(metrics)
+    if #shelf > 0 then
         local ranks = {}
         for i = 1, math.min(3, #metrics.books) do
             local book = metrics.books[i]
@@ -150,21 +170,21 @@ function Cards.build(metrics, opts)
         end
         add{
             id = "books",
-            books = metrics.books,
+            books = shelf,
             kicker = t.books_kicker,
-            big = tostring(#metrics.books),
-            label = t.books_label(#metrics.books),
-            body = #metrics.finished_books > 0 and string.format(t.books_body, #metrics.finished_books) or nil,
+            big = tostring(#shelf),
+            label = t.books_label(#shelf),
+            body = #finished_books > 0 and string.format(t.books_body, #finished_books) or nil,
             ranks = ranks,
         }
     end
-    if #metrics.finished_books >= 2 then
+    if #finished_books >= 2 then
         local by_month = {}
         for month = 1, 12 do
             by_month[month] = {}
         end
         local finished = {}
-        for i, book in ipairs(metrics.finished_books) do
+        for i, book in ipairs(finished_books) do
             finished[i] = book
         end
         table.sort(finished, function(a, b) return a.finish_time < b.finish_time end)
@@ -310,7 +330,7 @@ function Cards.build(metrics, opts)
     local summary = {
         { title = t.summary_time, meta = Cards.duration(metrics.total_seconds) },
         { title = t.summary_pages, meta = number(metrics.total_pages) },
-        { title = t.summary_books, meta = t.summary_books_value(#metrics.books, #metrics.finished_books) },
+        { title = t.summary_books, meta = t.summary_books_value(#shelf, #finished_books) },
         { title = t.summary_streak, meta = t.summary_streak_value(metrics.longest_streak) },
         { title = t.summary_profile, meta = profile_name },
     }
