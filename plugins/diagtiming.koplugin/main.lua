@@ -86,7 +86,9 @@ local function callsites(level, depth)
     while #list < (depth or CALLSITE_DEPTH) do
         local info = debug.getinfo(lvl, "Sl")
         if not info then break end
-        if info.short_src ~= SELF_SRC then
+        -- OLD: if info.short_src ~= SELF_SRC then
+        -- NEW: also skip C frames ("[C]:-1"), they say nothing useful about the caller
+        if info.short_src ~= SELF_SRC and info.what ~= "C" then
             list[#list + 1] = string.format("%s:%d", info.short_src, info.currentline or 0)
         end
         lvl = lvl + 1
@@ -122,22 +124,48 @@ end
 ---------------------------------------------------------------------------
 -- Self-time measurement
 ---------------------------------------------------------------------------
--- Shared stack: each level accumulates the total time of its measured children.
-local tstack = {}
+-- OLD: -- Shared stack: each level accumulates the total time of its measured children.
+-- OLD: local tstack = {}
+-- NEW: one stack per coroutine. Each level accumulates the total time of its
+-- measured children. Time spent yielded is still counted in the item (it is
+-- wall-clock time), but other coroutines no longer corrupt its accounting.
+local MAIN = {}
+local tstacks = setmetatable({}, { __mode = "k" })
+local function curStack()
+    local co = coroutine.running() or MAIN
+    local s = tstacks[co]
+    if not s then s = {}; tstacks[co] = s end
+    return s
+end
 
 -- Collection state (declared here because timed() accounts self time).
 local collecting = false
 local open_t0 = nil      -- when stats were reset
 local first_t0 = nil     -- start of the earliest item measured since the reset
 local self_total = 0     -- sum of ALL self times (any size) since the reset
+-- NEW: when ReaderReady fired, so the deliberate SUMMARY_DELAY_S wait is not
+-- counted as idle time in the summary
+local ready_t = nil
+
+-- NEW: error handler that adds the traceback only once. Nested wrappers
+-- (callback -> event -> handler) rethrow the error, and with debug.traceback
+-- directly each level appended another traceback and changed the message.
+local function errhandler(e)
+    if type(e) == "string" and not e:find("stack traceback:", 1, true) then
+        return debug.traceback(e, 2)
+    end
+    return e
+end
 
 -- Runs f(), returns its packed results (xpcall style: res[1] is the status),
 -- the total (inclusive) time and the own (exclusive) time, both in ms.
 local function timed(f)
+    local tstack = curStack()   -- NEW: per-coroutine stack
     local depth = #tstack + 1
     tstack[depth] = 0
     local t0 = now()
-    local r = pack(xpcall(f, debug.traceback))
+    -- OLD: local r = pack(xpcall(f, debug.traceback))
+    local r = pack(xpcall(f, errhandler))
     local total = since_ms(t0)
     local child = tstack[depth]
     -- Pop this level (and anything left above it, to be safe after errors).
@@ -166,6 +194,7 @@ local function resetStats()
     open_t0 = now()
     first_t0 = nil
     self_total = 0
+    ready_t = nil   -- NEW: a new document starts clean
     collecting = true
 end
 
@@ -262,7 +291,11 @@ local function buildSummary()
     end
     -- The rest, so that everything adds up to the elapsed time.
     local small = math.max(0, self_total - recorded)
-    local idle = math.max(0, elapsed - self_total)
+    -- OLD: local idle = math.max(0, elapsed - self_total)
+    -- NEW: the SUMMARY_DELAY_S wait is not idle time. This is approximate, since the
+    -- repaint measured inside that window is also in self_total, hence the clamp.
+    local waited = ready_t and since_ms(ready_t) or 0
+    local idle = math.max(0, elapsed - self_total - waited)
     lines[#lines + 1] = string.format("small items (below threshold): %.0fms", small)
     lines[#lines + 1] = string.format("idle/unmeasured: %.0fms", idle)
 
@@ -310,7 +343,10 @@ end
 -- Already-created wrappers check this flag, so they go transparent when disabled.
 local active = false
 local originals = nil                                  -- originals to restore
-local wrapped_for = setmetatable({}, { __mode = "k" }) -- original -> wrapper
+-- OLD: local wrapped_for = setmetatable({}, { __mode = "k" }) -- original -> wrapper
+-- NEW: "kv" because the wrapper closes over its own key, which pins it under LuaJIT's
+-- weak-table semantics. The scheduler holds pending wrappers strongly, so unschedule() still works.
+local wrapped_for = setmetatable({}, { __mode = "kv" }) -- original -> wrapper
 local origin_for = setmetatable({}, { __mode = "k" })  -- original -> latest scheduling site
 local our_wrappers = setmetatable({}, { __mode = "k" }) -- set of wrappers created here
 -- Installed once and left in place (it is cheap).
@@ -418,13 +454,21 @@ local function install()
     local orig_handleEvent = EventListener.handleEvent
     originals.handleEvent = orig_handleEvent
     EventListener.handleEvent = function(self, event, ...)
-        if not active then return orig_handleEvent(self, event, ...) end
+        -- OLD: if not active then return orig_handleEvent(self, event, ...) end
+        -- NEW: also bail out early when this widget has no handler for the event, so most
+        -- calls skip pack/closure/xpcall and the probe disturbs the timings less.
+        -- Note: handleEvent forwards to children inside orig_handleEvent, so skipping
+        -- the timer here only drops the entry for widgets that don't handle the event.
+        local h = event and event.handler
+        if not active or not (h and self[h]) then
+            return orig_handleEvent(self, event, ...)
+        end
         local args = pack(...)
         local res, total, own = timed(function()
             return orig_handleEvent(self, event, unpack(args, 1, args.n))
         end)
         if own > HANDLER_THRESHOLD_MS then
-            local h = event and event.handler
+            -- OLD: local h = event and event.handler   (now declared above)
             local fn = h and self[h]
             report("handler",
                 string.format("%s:%s", widgetName(self, fn), tostring(h or "?")),
@@ -566,6 +610,8 @@ end
 function DiagTiming:onReaderReady()
     if not active then return end
     logger.dbg("[diag] onReaderReady")
+    -- NEW: remember when ReaderReady fired, so buildSummary() can exclude the wait below
+    ready_t = now()
     -- Wait a bit so the first page repaint is included.
     UIManager:scheduleIn(SUMMARY_DELAY_S, function()
         if active then showSummary() end
