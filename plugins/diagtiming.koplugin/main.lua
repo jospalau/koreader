@@ -38,10 +38,20 @@ local TOP_N = 8              -- number of slowest entries in the summary
 local TRACE = true           -- log the full stack of slow events/refreshes
 local TRACE_LINES = 14       -- max stack lines per entry
 local CALLSITE_DEPTH = 3     -- how many callers to list in the log
+-- Handlers (and the anonymous callbacks ReaderUI runs after init/ReaderReady) use
+-- a lower threshold, as there are many of them and each one is usually small.
+local HANDLER_THRESHOLD_MS = 3
+local TOP_HANDLERS = 8       -- number of entries in the handlers section of the summary
+-- The handlers section only lists handlers of this event (plus the anonymous
+-- post-ReaderReady callbacks). Set to nil to list every handler.
+local FOCUS_EVENT = "onReaderReady"
 
 -- LuaJIT / Lua 5.2+ compatibility
 local pack = table.pack or function(...) return { n = select("#", ...), ... } end
 local unpack = table.unpack or unpack
+
+-- Kinds that use HANDLER_THRESHOLD_MS and go in the handlers section.
+local HANDLER_KINDS = { handler = true, postInit = true, postReaderReady = true }
 
 local function now() return time.now() end
 local function since_ms(t0) return time.to_ms(time.since(t0)) end
@@ -181,7 +191,7 @@ end
 -- extra: optional multi-line text for the log only (callers, chain, stack)
 -- total: optional inclusive time in ms, shown in the log only
 local function report(kind, label, dt, where, extra, total)
-    if dt <= THRESHOLD_MS then return end
+    if dt <= (HANDLER_KINDS[kind] and HANDLER_THRESHOLD_MS or THRESHOLD_MS) then return end
     local msg = string.format("[diag] %s %s took %.1fms (own)", kind, label, dt)
     if total and math.abs(total - dt) > 0.5 then
         msg = msg .. string.format(", %.1fms inclusive", total)
@@ -202,12 +212,34 @@ local function shorten(s, n)
     return "…" .. s:sub(-(n - 1))
 end
 
+-- Appends the lines of one item of a top list.
+local function addItem(lines, i, it)
+    local name = it.label ~= "" and (it.kind .. " " .. shorten(it.label, 34)) or it.kind
+    if it.count > 1 then
+        lines[#lines + 1] = string.format("%d. %.0fms (%d times, max %.0fms) %s",
+            i, it.total, it.count, it.max, name)
+    else
+        lines[#lines + 1] = string.format("%d. %.0fms %s", i, it.total, name)
+    end
+    if it.where and it.where ~= "" then
+        lines[#lines + 1] = "    at " .. shorten(it.where, 56)
+    end
+end
+
+-- Is this item part of the handlers section?
+local function inHandlerSection(it)
+    if not HANDLER_KINDS[it.kind] then return false end
+    if not FOCUS_EVENT then return true end
+    if it.kind == "postReaderReady" then return FOCUS_EVENT == "onReaderReady" end
+    return it.kind == "handler" and it.label:sub(-(#FOCUS_EVENT + 1)) == ":" .. FOCUS_EVENT
+end
+
 local function buildSummary()
     local start = first_t0 or open_t0
     local elapsed = start and since_ms(start) or 0
     local lines = {
         string.format("Diag timing: %.0fms elapsed (self time per item)", elapsed),
-        string.format("(only items slower than %dms)", THRESHOLD_MS),
+        string.format("(only items slower than %dms; handlers %dms)", THRESHOLD_MS, HANDLER_THRESHOLD_MS),
         "",
     }
 
@@ -231,7 +263,7 @@ local function buildSummary()
     -- The rest, so that everything adds up to the elapsed time.
     local small = math.max(0, self_total - recorded)
     local idle = math.max(0, elapsed - self_total)
-    lines[#lines + 1] = string.format("small items (<%dms each): %.0fms", THRESHOLD_MS, small)
+    lines[#lines + 1] = string.format("small items (below threshold): %.0fms", small)
     lines[#lines + 1] = string.format("idle/unmeasured: %.0fms", idle)
 
     -- Top N individual items
@@ -242,16 +274,23 @@ local function buildSummary()
     lines[#lines + 1] = ""
     lines[#lines + 1] = string.format("Top %d slowest:", math.min(TOP_N, #items))
     for i = 1, math.min(TOP_N, #items) do
-        local it = items[i]
-        local name = it.label ~= "" and (it.kind .. " " .. shorten(it.label, 34)) or it.kind
-        if it.count > 1 then
-            lines[#lines + 1] = string.format("%d. %.0fms (%d times, max %.0fms) %s",
-                i, it.total, it.count, it.max, name)
-        else
-            lines[#lines + 1] = string.format("%d. %.0fms %s", i, it.total, name)
-        end
-        if it.where and it.where ~= "" then
-            lines[#lines + 1] = "    at " .. shorten(it.where, 56)
+        addItem(lines, i, items[i])
+    end
+
+    -- Handlers section (ranked on their own, not mixed with nextTick and co.)
+    local hitems = {}
+    for _, it in ipairs(items) do   -- items is already sorted, slowest first
+        if inHandlerSection(it) then hitems[#hitems + 1] = it end
+    end
+    lines[#lines + 1] = ""
+    if #hitems == 0 then
+        lines[#lines + 1] = string.format("No %s handlers over %dms.",
+            FOCUS_EVENT or "", HANDLER_THRESHOLD_MS)
+    else
+        lines[#lines + 1] = string.format("Top %d %s handlers (over %dms):",
+            math.min(TOP_HANDLERS, #hitems), FOCUS_EVENT or "", HANDLER_THRESHOLD_MS)
+        for i = 1, math.min(TOP_HANDLERS, #hitems) do
+            addItem(lines, i, hitems[i])
         end
     end
     return table.concat(lines, "\n")
@@ -384,7 +423,7 @@ local function install()
         local res, total, own = timed(function()
             return orig_handleEvent(self, event, unpack(args, 1, args.n))
         end)
-        if own > THRESHOLD_MS then
+        if own > HANDLER_THRESHOLD_MS then
             local h = event and event.handler
             local fn = h and self[h]
             report("handler",
@@ -393,6 +432,29 @@ local function install()
         end
         if not res[1] then error(res[2], 0) end
         return unpack(res, 2, res.n)
+    end
+
+    -- 3c) Anonymous callbacks that ReaderUI runs right after init and right after
+    -- ReaderReady (registerPostInitCallback / registerPostReaderReadyCallback).
+    -- They are called as plain functions, not through handleEvent, so without this
+    -- their time would be counted inside the enclosing scheduled callback.
+    -- Only callbacks registered after this point are seen.
+    local ok, ReaderUI = pcall(orig_require, "apps/reader/readerui")
+    if ok and type(ReaderUI) == "table" then
+        originals.readerui = { class = ReaderUI, methods = {} }
+        local hooks = {
+            registerPostInitCallback = "postInit",
+            registerPostReaderReadyCallback = "postReaderReady",
+        }
+        for method, kind in pairs(hooks) do
+            local orig = ReaderUI[method]
+            if type(orig) == "function" then
+                originals.readerui.methods[method] = { own = rawget(ReaderUI, method) }
+                ReaderUI[method] = function(self, cb, ...)
+                    return orig(self, wrap_callback(kind, cb, callsites(2)), ...)
+                end
+            end
+        end
     end
 
     -- 4) Screen:refresh* (also walking the metatable chain)
@@ -451,6 +513,12 @@ local function uninstall()
     UIManager.sendEvent = originals.sendEvent
     EventListener.handleEvent = originals.handleEvent
     _G.require = originals.require
+
+    if originals.readerui then
+        for method, saved in pairs(originals.readerui.methods) do
+            originals.readerui.class[method] = saved.own
+        end
+    end
 
     -- If the method was inherited, setting it back to nil lets the metatable resolve it again.
     local Screen = Device.screen
