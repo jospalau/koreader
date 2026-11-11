@@ -25,7 +25,6 @@ local TextWidget = require("ui/widget/textwidget")
 local UIManager = require("ui/uimanager")
 local VerticalGroup = require("ui/widget/verticalgroup")
 local VerticalSpan = require("ui/widget/verticalspan")
-local datetime = require("datetime")
 local _ = require("gettext")
 
 local DEVICE_NAMES = {
@@ -93,270 +92,195 @@ local function makeSeparator(w_width)
     }
 end
 
--- ── View builders ──────────────────────────────────────────────────────────────
-
-local function buildSessionsRows(w_width, w_font_face, w_font_size_small, w_padding_internal)
-    local scrollbar_width = ScrollableContainer:getScrollbarWidth()
-    local padding = Screen:scaleBySize(10) * 2
-    local time_widget_width = Screen:scaleBySize(90)
-    local bar_max_width = w_width - scrollbar_width - padding - time_widget_width - Screen:scaleBySize(10)
-
+-- Runs a query on the statistics database and returns its rows, each one
+-- turned into an item by `map` (which gets the row table, reused between
+-- rows, so it must copy what it needs). Returns nil and a message when the
+-- database cannot be read; the connection is closed in every case.
+local function queryAll(sql_stmt, map)
     local SQ3 = require("lua-ljsqlite3/init")
     local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
-    local conn = SQ3.open(db_location)
-
-    local sql_stmt = [[
-        SELECT book.title, wpm_stat_data.duration, wpm_stat_data.start_time
-        FROM wpm_stat_data
-        INNER JOIN book ON wpm_stat_data.id_book = book.id
-        WHERE wpm_stat_data.start_time > 0
-        ORDER BY wpm_stat_data.duration DESC
-        LIMIT 200;
-    ]]
-
-    local sessions = {}
-    local stmt = conn:prepare(sql_stmt)
-    local row = {}
-    while stmt:step(row) do
-        table.insert(sessions, { title = row[1], duration = tonumber(row[2]), start_time = tonumber(row[3]) })
+    local items = {}
+    local ok, err = pcall(function()
+        local conn = SQ3.open(db_location)
+        local ok_query, err_query = pcall(function()
+            local stmt = conn:prepare(sql_stmt)
+            local row = {}
+            while stmt:step(row) do
+                items[#items + 1] = map(row)
+            end
+            stmt:close()
+        end)
+        conn:close()
+        if not ok_query then error(err_query, 0) end
+    end)
+    if not ok then
+        logger.warn("longest sessions: query failed:", err)
+        return nil, "Could not read the statistics database"
     end
-    conn:close()
-
-    if #sessions == 0 then return nil, "No session data found" end
-
-    local rows = VerticalGroup:new({})
-
-    for i, session in ipairs(sessions) do
-        local row_item = HorizontalGroup:new({
-            align = "center",
-            LeftContainer:new({
-                dimen = Geom:new({ w = bar_max_width, h = ROW_HEIGHT_TALL }),
-                VerticalGroup:new({
-                    align = "left",
-                    TextWidget:new({
-                        text = session.title,
-                        face = Font:getFace(w_font_face, w_font_size_small),
-                        max_width = bar_max_width,
-                        ellipsis = true,
-                    }),
-                    TextWidget:new({
-                        text = formatDateTime(session.start_time),
-                        face = Font:getFace(w_font_face, w_font_size_small - 2),
-                        fgcolor = Blitbuffer.COLOR_DARK_GRAY,
-                    }),
-                }),
-            }),
-            HorizontalSpan:new({ width = Screen:scaleBySize(10) }),
-            RightContainer:new({
-                dimen = Geom:new({ w = time_widget_width, h = ROW_HEIGHT_TALL }),
-                TextWidget:new({
-                    text = secondsToHMS(session.duration),
-                    face = Font:getFace(w_font_face, w_font_size_small),
-                }),
-            }),
-        })
-        table.insert(rows, row_item)
-        if i < #sessions then
-            table.insert(rows, makeSeparator(w_width))
-        end
-    end
-
-    return rows, #sessions, ROW_HEIGHT_TALL
+    return items
 end
 
-local function buildDevicesRows(w_width, w_font_face, w_font_size_small, w_padding_internal)
-    local scrollbar_width = ScrollableContainer:getScrollbarWidth()
-    local padding = Screen:scaleBySize(10) * 2
-    local time_widget_width = Screen:scaleBySize(90)
-    local bar_max_width = w_width - scrollbar_width - padding - time_widget_width - Screen:scaleBySize(10)
+-- Swipes left and right change the view, so the list must not take them.
+local SwipePassthroughScrollable = ScrollableContainer:extend{}
 
-    local SQ3 = require("lua-ljsqlite3/init")
-    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
-    local conn = SQ3.open(db_location)
-
-    local sql_stmt = [[
-        SELECT id_device, SUM(duration) as total_duration
-        FROM wpm_stat_data
-        GROUP BY id_device
-        ORDER BY total_duration DESC
-    ]]
-
-    local devices = {}
-    local stmt = conn:prepare(sql_stmt)
-    local row = {}
-    while stmt:step(row) do
-        table.insert(devices, { id = tonumber(row[1]), duration = tonumber(row[2]) })
+function SwipePassthroughScrollable:onScrollableSwipe(arg, ges)
+    if ges.direction == "east" or ges.direction == "west" then
+        return false
     end
-    conn:close()
-
-    if #devices == 0 then return nil, "No device data found" end
-
-    local rows = VerticalGroup:new({})
-
-    for i, device in ipairs(devices) do
-        local name = DEVICE_NAMES[device.id] or ("Device " .. tostring(device.id))
-        local row_item = HorizontalGroup:new({
-            align = "center",
-            LeftContainer:new({
-                dimen = Geom:new({ w = bar_max_width, h = ROW_HEIGHT_NORMAL }),
-                TextWidget:new({
-                    text = name,
-                    face = Font:getFace(w_font_face, w_font_size_small),
-                    max_width = bar_max_width,
-                    ellipsis = true,
-                }),
-            }),
-            HorizontalSpan:new({ width = Screen:scaleBySize(10) }),
-            RightContainer:new({
-                dimen = Geom:new({ w = time_widget_width, h = ROW_HEIGHT_NORMAL }),
-                TextWidget:new({
-                    text = secondsToHMS(device.duration),
-                    face = Font:getFace(w_font_face, w_font_size_small),
-                }),
-            }),
-        })
-        table.insert(rows, row_item)
-        if i < #devices then
-            table.insert(rows, makeSeparator(w_width))
-        end
-    end
-
-    return rows, #devices, ROW_HEIGHT_NORMAL
+    return ScrollableContainer.onScrollableSwipe(self, arg, ges)
 end
 
-local function buildFontsRows(w_width, w_font_face, w_font_size_small, w_padding_internal)
+-- ── View builder ───────────────────────────────────────────────────────────────
+-- Every view is the same list: something on the left, the time on the right.
+-- A view says its query (sql), how a row becomes an item (map), what to show
+-- on the left (left) and how tall a row is; this builds the rows from that.
+
+local function buildRows(view, w_width, w_font_face, w_font_size_small)
     local scrollbar_width = ScrollableContainer:getScrollbarWidth()
     local padding = Screen:scaleBySize(10) * 2
     local time_widget_width = Screen:scaleBySize(90)
     local bar_max_width = w_width - scrollbar_width - padding - time_widget_width - Screen:scaleBySize(10)
 
-    local SQ3 = require("lua-ljsqlite3/init")
-    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
-    local conn = SQ3.open(db_location)
+    local items, err = queryAll(view.sql, view.map)
+    if not items then return nil, err end
+    if #items == 0 then return nil, view.empty end
 
-    local sql_stmt = [[
-        SELECT COALESCE(font_name, 'Unknown'), SUM(duration) as total_duration
-        FROM wpm_stat_data
-        GROUP BY font_name
-        ORDER BY total_duration DESC
-    ]]
-
-    local fonts = {}
-    local stmt = conn:prepare(sql_stmt)
-    local row = {}
-    while stmt:step(row) do
-        table.insert(fonts, { name = row[1], duration = tonumber(row[2]) })
-    end
-    conn:close()
-
-    if #fonts == 0 then return nil, "No font data found" end
-
+    local ctx = { font_face = w_font_face, font_size = w_font_size_small, max_width = bar_max_width }
+    local row_height = view.row_height
     local rows = VerticalGroup:new({})
 
-    for i, font in ipairs(fonts) do
+    for i, item in ipairs(items) do
         local row_item = HorizontalGroup:new({
             align = "center",
             LeftContainer:new({
-                dimen = Geom:new({ w = bar_max_width, h = ROW_HEIGHT_NORMAL }),
-                TextWidget:new({
-                    text = font.name,
-                    face = Font:getFace(w_font_face, w_font_size_small),
-                    max_width = bar_max_width,
-                    ellipsis = true,
-                }),
+                dimen = Geom:new({ w = bar_max_width, h = row_height }),
+                view.left(item, ctx),
             }),
             HorizontalSpan:new({ width = Screen:scaleBySize(10) }),
             RightContainer:new({
-                dimen = Geom:new({ w = time_widget_width, h = ROW_HEIGHT_NORMAL }),
+                dimen = Geom:new({ w = time_widget_width, h = row_height }),
                 TextWidget:new({
-                    text = secondsToHMS(font.duration),
+                    text = secondsToHMS(item.duration),
                     face = Font:getFace(w_font_face, w_font_size_small),
                 }),
             }),
         })
         table.insert(rows, row_item)
-        if i < #fonts then
+        if i < #items then
             table.insert(rows, makeSeparator(w_width))
         end
     end
 
-    return rows, #fonts, ROW_HEIGHT_NORMAL
-end
-
-local function buildMonthlyRows(w_width, w_font_face, w_font_size_small, w_padding_internal)
-    local scrollbar_width = ScrollableContainer:getScrollbarWidth()
-    local padding = Screen:scaleBySize(10) * 2
-    local time_widget_width = Screen:scaleBySize(90)
-    local bar_max_width = w_width - scrollbar_width - padding - time_widget_width - Screen:scaleBySize(10)
-
-    local SQ3 = require("lua-ljsqlite3/init")
-    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
-    local conn = SQ3.open(db_location)
-
-    local sql_stmt = [[
-        SELECT
-            strftime('%Y', datetime(start_time, 'unixepoch')) AS year,
-            CAST(strftime('%m', datetime(start_time, 'unixepoch')) AS INTEGER) AS month,
-            SUM(duration) AS total_duration
-        FROM wpm_stat_data
-        WHERE start_time > 0
-        GROUP BY year, month
-        ORDER BY year DESC, month DESC
-    ]]
-
-    local months = {}
-    local stmt = conn:prepare(sql_stmt)
-    local row = {}
-    while stmt:step(row) do
-        table.insert(months, {
-            label = string.format("%s %d", row[1], tonumber(row[2])),
-            duration = tonumber(row[3]),
-        })
-    end
-    conn:close()
-
-    if #months == 0 then return nil, "No monthly data found" end
-
-    local rows = VerticalGroup:new({})
-
-    for i, entry in ipairs(months) do
-        local row_item = HorizontalGroup:new({
-            align = "center",
-            LeftContainer:new({
-                dimen = Geom:new({ w = bar_max_width, h = ROW_HEIGHT_NORMAL }),
-                TextWidget:new({
-                    text = entry.label,
-                    face = Font:getFace(w_font_face, w_font_size_small),
-                    max_width = bar_max_width,
-                    ellipsis = true,
-                }),
-            }),
-            HorizontalSpan:new({ width = Screen:scaleBySize(10) }),
-            RightContainer:new({
-                dimen = Geom:new({ w = time_widget_width, h = ROW_HEIGHT_NORMAL }),
-                TextWidget:new({
-                    text = secondsToHMS(entry.duration),
-                    face = Font:getFace(w_font_face, w_font_size_small),
-                }),
-            }),
-        })
-        table.insert(rows, row_item)
-        if i < #months then
-            table.insert(rows, makeSeparator(w_width))
-        end
-    end
-
-    return rows, #months, ROW_HEIGHT_NORMAL
+    return rows, #items, row_height
 end
 
 -- ── View definitions ───────────────────────────────────────────────────────────
 
+-- One line of text on the left: the item's `field`, cut with "…" if too long.
+local function textLabel(field)
+    return function(item, ctx)
+        return TextWidget:new({
+            text = item[field],
+            face = Font:getFace(ctx.font_face, ctx.font_size),
+            max_width = ctx.max_width,
+            ellipsis = true,
+        })
+    end
+end
+
 local VIEWS = {
-    { title = "Time per Month",           builder = buildMonthlyRows },
-    { title = "Longest Reading Sessions", builder = buildSessionsRows },
-    { title = "Time per Device",          builder = buildDevicesRows },
-    { title = "Time per Font",            builder = buildFontsRows },
+    {
+        title = "Time per Month",
+        empty = "No monthly data found",
+        row_height = ROW_HEIGHT_NORMAL,
+        -- local time, as the dates of the sessions list (not UTC)
+        sql = [[
+            SELECT
+                strftime('%Y', start_time, 'unixepoch', 'localtime') AS year,
+                CAST(strftime('%m', start_time, 'unixepoch', 'localtime') AS INTEGER) AS month,
+                SUM(duration) AS total_duration
+            FROM wpm_stat_data
+            WHERE start_time > 0
+            GROUP BY year, month
+            ORDER BY year DESC, month DESC
+        ]],
+        map = function(row)
+            return {
+                label = string.format("%s %d", row[1], tonumber(row[2])),
+                duration = tonumber(row[3]),
+            }
+        end,
+        left = textLabel("label"),
+    },
+    {
+        title = "Longest Reading Sessions",
+        empty = "No session data found",
+        row_height = ROW_HEIGHT_TALL,
+        sql = [[
+            SELECT book.title, wpm_stat_data.duration, wpm_stat_data.start_time
+            FROM wpm_stat_data
+            INNER JOIN book ON wpm_stat_data.id_book = book.id
+            WHERE wpm_stat_data.start_time > 0
+            ORDER BY wpm_stat_data.duration DESC
+            LIMIT 200;
+        ]],
+        map = function(row)
+            return { title = row[1] or "Unknown", duration = tonumber(row[2]), start_time = tonumber(row[3]) }
+        end,
+        -- two lines: the book's title and the date
+        left = function(item, ctx)
+            return VerticalGroup:new({
+                align = "left",
+                TextWidget:new({
+                    text = item.title,
+                    face = Font:getFace(ctx.font_face, ctx.font_size),
+                    max_width = ctx.max_width,
+                    ellipsis = true,
+                }),
+                TextWidget:new({
+                    text = formatDateTime(item.start_time),
+                    face = Font:getFace(ctx.font_face, ctx.font_size - 2),
+                    fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+                }),
+            })
+        end,
+    },
+    {
+        title = "Time per Device",
+        empty = "No device data found",
+        row_height = ROW_HEIGHT_NORMAL,
+        sql = [[
+            SELECT id_device, SUM(duration) as total_duration
+            FROM wpm_stat_data
+            GROUP BY id_device
+            ORDER BY total_duration DESC
+        ]],
+        map = function(row)
+            local id = tonumber(row[1])
+            return {
+                name = DEVICE_NAMES[id] or ("Device " .. tostring(id)),
+                duration = tonumber(row[2]),
+            }
+        end,
+        left = textLabel("name"),
+    },
+    {
+        title = "Time per Font",
+        empty = "No font data found",
+        row_height = ROW_HEIGHT_NORMAL,
+        sql = [[
+            SELECT COALESCE(font_name, 'Unknown'), SUM(duration) as total_duration
+            FROM wpm_stat_data
+            GROUP BY font_name
+            ORDER BY total_duration DESC
+        ]],
+        map = function(row)
+            return { name = row[1], duration = tonumber(row[2]) }
+        end,
+        left = textLabel("name"),
+    },
 }
+
 -- ── Main window ────────────────────────────────────────────────────────────────
 
 function ShowLongestSessionsWindow:init()
@@ -378,16 +302,13 @@ function ShowLongestSessionsWindow:_buildUI()
     local w_padding_internal = Screen:scaleBySize(10)
     local w_padding_external = Screen:scaleBySize(10)
 
-    local function vertical_spacing(h)
-        h = h or 1
-        return VerticalSpan:new({ width = math.floor(w_padding_internal * h) })
-    end
-
     local view_def = VIEWS[self.current_view]
-    local rows, num_items, row_height = view_def.builder(w_width, w_font_face, w_font_size_small, w_padding_internal)
+    local rows, num_items, row_height = buildRows(view_def, w_width, w_font_face, w_font_size_small)
 
     if not rows then
+        -- on failure the second value is the message
         UIManager:show(InfoMessage:new({ text = _(num_items or "Unknown error") }))
+        self.failed = true -- nothing to show: see showWindow
         return
     end
 
@@ -408,15 +329,6 @@ function ShowLongestSessionsWindow:_buildUI()
         title_widget,
     })
 
-    local SwipePassthroughScrollable = ScrollableContainer:extend{}
-
-    function SwipePassthroughScrollable:onScrollableSwipe(_, ges)
-        if ges.direction == "east" or ges.direction == "west" then
-            return false
-        end
-        return ScrollableContainer.onScrollableSwipe(self, _, ges)
-    end
-
     local scrollable = SwipePassthroughScrollable:new({
         dimen = Geom:new({ w = w_width, h = scrollable_height }),
         show_parent = self,
@@ -425,7 +337,7 @@ function ShowLongestSessionsWindow:_buildUI()
 
     local content = VerticalGroup:new({
         title_frame,
-        vertical_spacing(),
+        makeVerticalSpacing(w_padding_internal),
         scrollable,
     })
 
@@ -457,18 +369,30 @@ function ShowLongestSessionsWindow:_buildUI()
     end
 end
 
+-- Builds the window for a view and shows it. Returns the window, or nil when
+-- it could not be built (the user has been told why).
+local function showWindow(current_view)
+    local widget = ShowLongestSessionsWindow:new({ current_view = current_view })
+    if widget.failed then return nil end
+    UIManager:show(widget, "ui", widget.dimen)
+    return widget
+end
+
 function ShowLongestSessionsWindow:onSwipe(arg, ges)
     local BD = require("ui/bidi")
     local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
+    local next_view
     if direction == "west" then
-        self.current_view = (self.current_view % #VIEWS) + 1
+        next_view = (self.current_view % #VIEWS) + 1
     elseif direction == "east" then
-        self.current_view = ((self.current_view - 2) % #VIEWS) + 1
+        next_view = ((self.current_view - 2) % #VIEWS) + 1
     else
         return false
     end
+    -- the new view first: if it fails, this one stays
+    local widget = ShowLongestSessionsWindow:new({ current_view = next_view })
+    if widget.failed then return true end
     UIManager:close(self)
-    local widget = ShowLongestSessionsWindow:new({ current_view = self.current_view })
     UIManager:show(widget, "ui", widget.dimen)
     return true
 end
@@ -500,18 +424,17 @@ Dispatcher:registerAction("show_longest_sessions", {
 })
 
 function ReaderUI:onShowLongestSessions()
+    -- save the session in progress first, so it is in the lists
     if self.statistics then
         self.statistics:insertDB()
     end
-    local widget = ShowLongestSessionsWindow:new()
-    UIManager:show(widget, "ui", widget.dimen)
+    showWindow()
 end
 
 local FileManager = require("apps/filemanager/filemanager")
 
 function FileManager:onShowLongestSessions()
-    local widget = ShowLongestSessionsWindow:new()
-    UIManager:show(widget, "ui", widget.dimen)
+    showWindow()
 end
 
 logger.info("Longest sessions patch applied")
