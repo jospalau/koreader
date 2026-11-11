@@ -131,9 +131,10 @@ function SwipePassthroughScrollable:onScrollableSwipe(arg, ges)
 end
 
 -- ── View builder ───────────────────────────────────────────────────────────────
--- Every view is the same list: something on the left, the time on the right.
+-- Most views are the same list: something on the left, the time on the right.
 -- A view says its query (sql), how a row becomes an item (map), what to show
 -- on the left (left) and how tall a row is; this builds the rows from that.
+-- (A view with its own `build` function, like the heatmap, does not use it.)
 
 local function buildRows(view, w_width, w_font_face, w_font_size_small)
     local scrollbar_width = ScrollableContainer:getScrollbarWidth()
@@ -172,6 +173,163 @@ local function buildRows(view, w_width, w_font_face, w_font_size_small)
     end
 
     return rows, #items, row_height
+end
+
+-- ── Reading Insights heatmap ───────────────────────────────────────────────────
+-- The calendar heatmap of the Reading Insights plugin. Its own layout code
+-- (views/heatmap_view.lua) is loaded from the plugin's folder and given the
+-- daily reading time from the statistics database. The plugin's colours,
+-- settings and language helpers live in modules this patch cannot reach, so
+-- the few the heatmap needs are replaced by small stand-ins below: the
+-- colours, the period and the first day of the week follow these settings,
+-- not the plugin's.
+
+local HEATMAP_MONTHS = 6                    -- period shown, ending today: 3, 4, 6 or 12 months
+local HEATMAP_WEEK_STARTS_ON_SUNDAY = false
+
+local HEATMAP_MONTH_NAMES = {
+    _("Jan"), _("Feb"), _("Mar"), _("Apr"), _("May"), _("Jun"),
+    _("Jul"), _("Aug"), _("Sep"), _("Oct"), _("Nov"), _("Dec"),
+}
+
+-- A folder of any plugin that has views/heatmap_view.lua (the plugin's own
+-- folder name is not assumed).
+local function findHeatmapFile()
+    local lfs = require("libs/libkoreader-lfs")
+    local found
+    pcall(function()
+        for _i, dir in ipairs({ DataStorage:getDataDir() .. "/plugins", "plugins" }) do
+            if lfs.attributes(dir, "mode") == "directory" then
+                for name in lfs.dir(dir) do
+                    if name:match("%.koplugin$") then
+                        local path = dir .. "/" .. name .. "/views/heatmap_view.lua"
+                        if lfs.attributes(path, "mode") == "file" then
+                            found = path
+                            return
+                        end
+                    end
+                end
+            end
+        end
+    end)
+    return found
+end
+
+local function parseDateYMD(dstr)
+    local y, m, d = tostring(dstr):match("^(%d+)-(%d+)-(%d+)$")
+    return tonumber(y), tonumber(m), tonumber(d)
+end
+
+-- What the heatmap module takes from the plugin: only these three are used
+-- by the calendar grid, the period maths and the legend.
+local function heatmapDeps()
+    local function gray(v) return Blitbuffer.Color8(v) end
+    local Colors = {
+        -- no reading, then 0-25%, 25-50%, 50-75% and 75-100% of the busiest day
+        heatmap0   = function() return gray(240) end,
+        heatmap25  = function() return gray(195) end,
+        heatmap50  = function() return gray(150) end,
+        heatmap75  = function() return gray(100) end,
+        heatmap100 = function() return gray(40) end,
+        separator  = function() return gray(215) end,
+        small      = function() return Blitbuffer.COLOR_DARK_GRAY end,
+        label      = function() return Blitbuffer.COLOR_DARK_GRAY end,
+        -- a solid rectangle
+        newBar = function(w, h, color)
+            return LineWidget:new{ dimen = Geom:new{ w = w, h = h }, background = color }
+        end,
+    }
+    local VS = {
+        readHeatmapMonthsSetting = function() return HEATMAP_MONTHS end,
+        weekStartWday = function() return HEATMAP_WEEK_STARTS_ON_SUNDAY and 0 or 1 end, -- 0 = Sunday
+        readWeekStartSetting = function() return HEATMAP_WEEK_STARTS_ON_SUNDAY and "sunday" or "monday" end,
+    }
+    local Locale = {
+        _ = _,
+        shortMonthNames = HEATMAP_MONTH_NAMES,
+        monthAxisLabel = function(_m, name) return name end,
+        formatYearShortMonth = function(year, month)
+            return string.format("%d %s", year, HEATMAP_MONTH_NAMES[month])
+        end,
+    }
+    return { Colors = Colors, VS = VS, Locale = Locale }
+end
+
+local heatmap_module -- loaded once; false when it could not be
+local heatmap_error
+
+local function loadHeatmap()
+    if heatmap_module ~= nil then return heatmap_module or nil, heatmap_error end
+    heatmap_module = false
+    local path = findHeatmapFile()
+    if not path then
+        heatmap_error = "Reading Insights plugin not found"
+        return nil, heatmap_error
+    end
+    local chunk, load_err = loadfile(path)
+    if not chunk then
+        logger.warn("longest sessions: cannot load", path, load_err)
+        heatmap_error = "Could not load the Reading Insights heatmap"
+        return nil, heatmap_error
+    end
+    local ok, module = pcall(chunk, heatmapDeps())
+    if not ok or type(module) ~= "table" or not module.buildRangeHeatmapWidget then
+        logger.warn("longest sessions: heatmap module failed:", tostring(module))
+        heatmap_error = "Could not load the Reading Insights heatmap"
+        return nil, heatmap_error
+    end
+    module.bind({ parseDateYMD = parseDateYMD, getCachedFonts = function() return nil end })
+    heatmap_module = module
+    return module
+end
+
+-- The widgets of the heatmap view (the window puts them under its title).
+local function buildHeatmapView(w_width, w_font_face, w_font_size_small)
+    local Heatmap, err = loadHeatmap()
+    if not Heatmap then return nil, err end
+
+    local start_t, end_t = Heatmap.getHeatmapPeriodRange(0)
+
+    -- seconds read on each day of the period (sessions, by local date)
+    local items, query_err = queryAll(string.format([[
+        SELECT strftime('%%Y-%%m-%%d', start_time, 'unixepoch', 'localtime') AS day, SUM(duration)
+        FROM wpm_stat_data
+        WHERE start_time >= %d
+        GROUP BY day
+    ]], start_t - 2 * 86400), function(row)
+        return { day = row[1], seconds = tonumber(row[2]) or 0 }
+    end)
+    if not items then return nil, query_err end
+    if #items == 0 then return nil, "No reading data found" end
+
+    local daily_map = {}
+    for _i, item in ipairs(items) do daily_map[item.day] = item.seconds end
+
+    local fonts = {
+        small   = Font:getFace(w_font_face, w_font_size_small - 3),
+        label   = Font:getFace(w_font_face, w_font_size_small - 1),
+        section = Font:getFace(w_font_face, w_font_size_small),
+    }
+
+    local grid = Heatmap.buildRangeHeatmapWidget(daily_map, start_t, end_t, fonts, w_width)
+    local legend = Heatmap.buildHeatmapLegendWidget(fonts, 0)
+
+    local st, et = os.date("*t", start_t), os.date("*t", end_t)
+    local range = string.format("%s \xE2\x80\x93 %s",
+        string.format("%d %s", st.year, HEATMAP_MONTH_NAMES[st.month]),
+        string.format("%d %s", et.year, HEATMAP_MONTH_NAMES[et.month]))
+    local caption = TextWidget:new{ text = range, face = fonts.label, fgcolor = Blitbuffer.COLOR_DARK_GRAY }
+
+    -- Flat list, like the plugin builds its own popup: the grid sits in a
+    -- container and the spacers are direct children of the window's column.
+    local gap = Screen:scaleBySize(6)
+    return {
+        caption,
+        makeVerticalSpacing(gap),
+        LeftContainer:new{ dimen = Geom:new{ w = w_width, h = grid:getSize().h }, grid },
+        makeVerticalSpacing(gap),
+        RightContainer:new{ dimen = Geom:new{ w = w_width, h = legend:getSize().h }, legend },
+    }
 end
 
 -- ── View definitions ───────────────────────────────────────────────────────────
@@ -279,6 +437,11 @@ local VIEWS = {
         end,
         left = textLabel("name"),
     },
+    {
+        -- not a list: it builds its own widgets
+        title = "Reading Heatmap",
+        build = buildHeatmapView,
+    },
 }
 
 -- ── Main window ────────────────────────────────────────────────────────────────
@@ -302,18 +465,35 @@ function ShowLongestSessionsWindow:_buildUI()
     local w_padding_internal = Screen:scaleBySize(10)
     local w_padding_external = Screen:scaleBySize(10)
 
-    local view_def = VIEWS[self.current_view]
-    local rows, num_items, row_height = buildRows(view_def, w_width, w_font_face, w_font_size_small)
-
-    if not rows then
-        -- on failure the second value is the message
-        UIManager:show(InfoMessage:new({ text = _(num_items or "Unknown error") }))
-        self.failed = true -- nothing to show: see showWindow
-        return
+    -- Nothing to show: tell the user why, and see showWindow.
+    local function fail(message)
+        UIManager:show(InfoMessage:new({ text = _(message or "Unknown error") }))
+        self.failed = true
     end
 
-    local effective_row_height = row_height + Size.line.thick
-    local scrollable_height = math.min(num_items, 12) * effective_row_height
+    -- The widgets that go under the title: a list in a scrollable
+    -- container, or whatever the view builds itself.
+    local view_def = VIEWS[self.current_view]
+    local body
+    if view_def.build then
+        local widgets, err = view_def.build(w_width, w_font_face, w_font_size_small)
+        if not widgets then return fail(err) end
+        body = widgets
+    else
+        local rows, num_items, row_height = buildRows(view_def, w_width, w_font_face, w_font_size_small)
+        -- on failure the second value is the message
+        if not rows then return fail(num_items) end
+
+        local effective_row_height = row_height + Size.line.thick
+        local scrollable_height = math.min(num_items, 12) * effective_row_height
+        body = {
+            SwipePassthroughScrollable:new({
+                dimen = Geom:new({ w = w_width, h = scrollable_height }),
+                show_parent = self,
+                rows,
+            }),
+        }
+    end
 
     local title_widget = TextWidget:new({
         text = view_def.title,
@@ -329,17 +509,13 @@ function ShowLongestSessionsWindow:_buildUI()
         title_widget,
     })
 
-    local scrollable = SwipePassthroughScrollable:new({
-        dimen = Geom:new({ w = w_width, h = scrollable_height }),
-        show_parent = self,
-        rows,
-    })
-
     local content = VerticalGroup:new({
         title_frame,
         makeVerticalSpacing(w_padding_internal),
-        scrollable,
     })
+    for _i, widget in ipairs(body) do
+        table.insert(content, widget)
+    end
 
     local frame = FrameContainer:new({
         radius = Screen:scaleBySize(22),
