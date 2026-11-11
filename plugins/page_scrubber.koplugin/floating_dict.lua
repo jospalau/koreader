@@ -3120,20 +3120,13 @@ function FloatingDictionaryPopup:onCloseWidget()
         end
     end
 
-    local dirty_rect = self.popup_rect or self.dimen
-    if self.plugin and self.plugin.ui then
-        UIManager:setDirty(self.plugin.ui, function() return "ui", dirty_rect end)
-    else
-        UIManager:setDirty(nil, function() return "ui", dirty_rect end)
-    end
-    local refresh_mode = "flashui"
     local target = (self.plugin and self.plugin.ui) or nil
     UIManager:setDirty(target, function()
-        return "flashui", Geom:new({
+        return "flashui", Geom:new{
             x = 0, y = 0,
             w = Screen:getWidth(),
             h = Screen:getHeight(),
-        })
+        }
     end)
 end
 function FloatingActionMenu:onShow() UIManager:setDirty(self, function() return "ui", self.dimen end) end
