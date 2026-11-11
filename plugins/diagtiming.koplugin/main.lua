@@ -21,6 +21,15 @@ Each item in the top shows "at file:line", the source line where it hooks in:
   - handler             : the line where the handler function is defined
   - Screen:refresh*     : the line that triggered the refresh
 The log also has the full list of callers (and a stack for events/refreshes).
+
+NEW: the same is done when the document is CLOSED. ReaderUI:onClose is hooked:
+a new measurement starts when it is called and, SUMMARY_DELAY_S after it returns
+(to catch the first repaint of the file manager), a second InfoMessage shows the
+slowest items of the closing. Extra kind in that summary:
+  - close               : ReaderUI methods and document:close() timed one by one
+                          (saveSettings, notifyCloseDocument, document:close...)
+Handlers of every event (onCloseDocument, onSaveSettings, onFlushSettings,
+onCloseWidget...) are listed in the handlers section, see FOCUS_EVENT_CLOSE.
 ]]
 
 local Device = require("device")
@@ -44,7 +53,22 @@ local HANDLER_THRESHOLD_MS = 3
 local TOP_HANDLERS = 8       -- number of entries in the handlers section of the summary
 -- The handlers section only lists handlers of this event (plus the anonymous
 -- post-ReaderReady callbacks). Set to nil to list every handler.
-local FOCUS_EVENT = "onReaderReady"
+-- OLD: local FOCUS_EVENT = "onReaderReady"
+-- NEW: nil = every handler that runs while opening, not only onReaderReady's.
+-- Put "onReaderReady" back to focus on that event only.
+local FOCUS_EVENT = nil
+-- NEW: same as FOCUS_EVENT but for the closing summary. nil = every handler,
+-- since all the events sent while closing (CloseDocument, SaveSettings,
+-- FlushSettings, CloseWidget...) are of interest.
+local FOCUS_EVENT_CLOSE = nil
+-- NEW: show a summary when the document is closed (set to false to disable)
+local SHOW_CLOSE_SUMMARY = true
+-- NEW: threshold for the "close" kind (methods timed one by one while closing)
+local CLOSE_THRESHOLD_MS = 5
+-- NEW: ReaderUI instance methods timed while closing. Only the ones that exist
+-- are wrapped (type-checked), so a name that is missing in your KOReader
+-- version is simply skipped. document:close() is wrapped separately.
+local CLOSE_METHODS = { "saveSettings", "notifyCloseDocument", "onCloseDocument", "showFileManager" }
 
 -- LuaJIT / Lua 5.2+ compatibility
 local pack = table.pack or function(...) return { n = select("#", ...), ... } end
@@ -143,9 +167,15 @@ local collecting = false
 local open_t0 = nil      -- when stats were reset
 local first_t0 = nil     -- start of the earliest item measured since the reset
 local self_total = 0     -- sum of ALL self times (any size) since the reset
--- NEW: when ReaderReady fired, so the deliberate SUMMARY_DELAY_S wait is not
--- counted as idle time in the summary
+-- NEW: when ReaderReady fired (or, for the closing phase, when ReaderUI:onClose
+-- returned), so the deliberate SUMMARY_DELAY_S wait is not counted as idle
+-- time in the summary
 local ready_t = nil
+-- NEW: "open" or "close": which part of the document life is being measured
+local phase = "open"
+-- NEW: incremented on every reset, so a summary scheduled for an earlier
+-- measurement (e.g. another book was opened meanwhile) is never shown
+local session_id = 0
 
 -- NEW: error handler that adds the traceback only once. Nested wrappers
 -- (callback -> event -> handler) rethrow the error, and with debug.traceback
@@ -188,13 +218,16 @@ end
 local by_kind = {}   -- kind -> { count = n, total = ms }
 local by_item = {}   -- "kind label" -> { kind, label, where, count, total, max }
 
-local function resetStats()
+-- NEW: new_phase is optional ("open" by default)
+local function resetStats(new_phase)
     by_kind = {}
     by_item = {}
     open_t0 = now()
     first_t0 = nil
     self_total = 0
     ready_t = nil   -- NEW: a new document starts clean
+    phase = new_phase or "open"
+    session_id = session_id + 1
     collecting = true
 end
 
@@ -220,7 +253,15 @@ end
 -- extra: optional multi-line text for the log only (callers, chain, stack)
 -- total: optional inclusive time in ms, shown in the log only
 local function report(kind, label, dt, where, extra, total)
-    if dt <= (HANDLER_KINDS[kind] and HANDLER_THRESHOLD_MS or THRESHOLD_MS) then return end
+    -- OLD: if dt <= (HANDLER_KINDS[kind] and HANDLER_THRESHOLD_MS or THRESHOLD_MS) then return end
+    -- NEW: the "close" kind has its own threshold
+    local threshold = THRESHOLD_MS
+    if HANDLER_KINDS[kind] then
+        threshold = HANDLER_THRESHOLD_MS
+    elseif kind == "close" then
+        threshold = CLOSE_THRESHOLD_MS
+    end
+    if dt <= threshold then return end
     local msg = string.format("[diag] %s %s took %.1fms (own)", kind, label, dt)
     if total and math.abs(total - dt) > 0.5 then
         msg = msg .. string.format(", %.1fms inclusive", total)
@@ -255,19 +296,30 @@ local function addItem(lines, i, it)
     end
 end
 
+-- NEW: event the handlers section is focused on, depending on the phase
+local function focusEvent()
+    if phase == "close" then return FOCUS_EVENT_CLOSE end
+    return FOCUS_EVENT
+end
+
 -- Is this item part of the handlers section?
 local function inHandlerSection(it)
+    -- OLD: used FOCUS_EVENT directly
+    -- NEW: focusEvent() gives FOCUS_EVENT or FOCUS_EVENT_CLOSE
+    local focus = focusEvent()
     if not HANDLER_KINDS[it.kind] then return false end
-    if not FOCUS_EVENT then return true end
-    if it.kind == "postReaderReady" then return FOCUS_EVENT == "onReaderReady" end
-    return it.kind == "handler" and it.label:sub(-(#FOCUS_EVENT + 1)) == ":" .. FOCUS_EVENT
+    if not focus then return true end
+    if it.kind == "postReaderReady" then return focus == "onReaderReady" end
+    return it.kind == "handler" and it.label:sub(-(#focus + 1)) == ":" .. focus
 end
 
 local function buildSummary()
     local start = first_t0 or open_t0
     local elapsed = start and since_ms(start) or 0
     local lines = {
-        string.format("Diag timing: %.0fms elapsed (self time per item)", elapsed),
+        -- OLD: string.format("Diag timing: %.0fms elapsed (self time per item)", elapsed),
+        -- NEW: says whether it is the opening or the closing
+        string.format("Diag timing (%s): %.0fms elapsed (self time per item)", phase, elapsed),
         string.format("(only items slower than %dms; handlers %dms)", THRESHOLD_MS, HANDLER_THRESHOLD_MS),
         "",
     }
@@ -315,13 +367,18 @@ local function buildSummary()
     for _, it in ipairs(items) do   -- items is already sorted, slowest first
         if inHandlerSection(it) then hitems[#hitems + 1] = it end
     end
+    -- NEW: the focused event depends on the phase
+    local focus = focusEvent()
+    -- NEW: readable title with and without a focused event
+    local what = focus and (focus .. " handlers") or "handlers (any event)"
     lines[#lines + 1] = ""
     if #hitems == 0 then
-        lines[#lines + 1] = string.format("No %s handlers over %dms.",
-            FOCUS_EVENT or "", HANDLER_THRESHOLD_MS)
+        -- OLD: string.format("No %s handlers over %dms.", focus or "", HANDLER_THRESHOLD_MS)
+        lines[#lines + 1] = string.format("No %s over %dms.", what, HANDLER_THRESHOLD_MS)
     else
-        lines[#lines + 1] = string.format("Top %d %s handlers (over %dms):",
-            math.min(TOP_HANDLERS, #hitems), FOCUS_EVENT or "", HANDLER_THRESHOLD_MS)
+        -- OLD: string.format("Top %d %s handlers (over %dms):", math.min(TOP_HANDLERS, #hitems), focus or "", HANDLER_THRESHOLD_MS)
+        lines[#lines + 1] = string.format("Top %d %s (over %dms):",
+            math.min(TOP_HANDLERS, #hitems), what, HANDLER_THRESHOLD_MS)
         for i = 1, math.min(TOP_HANDLERS, #hitems) do
             addItem(lines, i, hitems[i])
         end
@@ -376,6 +433,36 @@ local function wrap_callback(kind, fn, origin)
     wrapped_for[fn] = w
     our_wrappers[w] = true
     return w
+end
+
+-- NEW: temporarily wraps obj[name] (an instance method) so its self time is
+-- reported as kind "close". The function that undoes it is added to `restores`.
+-- Methods that do not exist are skipped. Arguments and return values are
+-- forwarded as they are, like in wrap_callback.
+local function wrapInstanceMethod(obj, name, label, restores)
+    if type(obj) ~= "table" then return end
+    local fn = obj[name]
+    if type(fn) ~= "function" then return end
+    local own_value = rawget(obj, name)   -- nil if it was inherited from the class
+    obj[name] = function(self, ...)
+        local args = pack(...)
+        local res, total, own = timed(function() return fn(self, unpack(args, 1, args.n)) end)
+        report("close", label, own, describe(fn), nil, total)
+        if not res[1] then error(res[2], 0) end
+        return unpack(res, 2, res.n)
+    end
+    restores[#restores + 1] = function() obj[name] = own_value end
+end
+
+-- NEW: shows the closing summary SUMMARY_DELAY_S after ReaderUI:onClose
+-- returned, so the first repaint of the file manager is included.
+local function scheduleCloseSummary()
+    ready_t = now()   -- the wait below is not idle time
+    local id = session_id
+    UIManager:scheduleIn(SUMMARY_DELAY_S, function()
+        -- Not shown if another document was opened in the meantime (new session)
+        if active and phase == "close" and id == session_id then showSummary() end
+    end)
 end
 
 local function install()
@@ -499,6 +586,39 @@ local function install()
                 end
             end
         end
+
+        -- 3d) NEW: closing the document. ReaderUI:onClose starts a new measurement
+        -- (phase "close"), times the closing methods one by one while it runs
+        -- and schedules the closing summary when it returns. Everything else
+        -- (handlers of CloseDocument/SaveSettings/FlushSettings/CloseWidget,
+        -- refreshes, scheduled callbacks...) is already measured by the hooks above.
+        local orig_onClose = ReaderUI.onClose
+        if SHOW_CLOSE_SUMMARY and type(orig_onClose) == "function" then
+            originals.readerui.methods.onClose = { own = rawget(ReaderUI, "onClose") }
+            ReaderUI.onClose = function(self, ...)
+                if not active then return orig_onClose(self, ...) end
+                logger.dbg("[diag] ReaderUI:onClose hook fired")   -- NEW: to check in the log that the hook runs
+                -- Starts from scratch. The handleEvent/sendEvent call that is running
+                -- this very function started before the reset: timed() takes that
+                -- into account (see first_t0), as it does when opening a document.
+                resetStats("close")
+                local restores = {}
+                for _, name in ipairs(CLOSE_METHODS) do
+                    wrapInstanceMethod(self, name, "ReaderUI:" .. name, restores)
+                end
+                wrapInstanceMethod(self.document, "close", "document:close", restores)
+                local args = pack(...)
+                local res, total, own = timed(function()
+                    return orig_onClose(self, unpack(args, 1, args.n))
+                end)
+                -- Remove the temporary instance wrappers (pcall: never break closing)
+                for _, undo in ipairs(restores) do pcall(undo) end
+                report("close", "ReaderUI:onClose", own, describe(orig_onClose), nil, total)
+                scheduleCloseSummary()
+                if not res[1] then error(res[2], 0) end
+                return unpack(res, 2, res.n)
+            end
+        end
     end
 
     -- 4) Screen:refresh* (also walking the metatable chain)
@@ -558,6 +678,7 @@ local function uninstall()
     EventListener.handleEvent = originals.handleEvent
     _G.require = originals.require
 
+    -- NEW: this loop also restores ReaderUI.onClose (saved in methods.onClose)
     if originals.readerui then
         for method, saved in pairs(originals.readerui.methods) do
             originals.readerui.class[method] = saved.own
@@ -591,7 +712,12 @@ local DiagTiming = WidgetContainer:extend{
 
 function DiagTiming:init()
     -- Every time a ReaderUI is created (a document is opened) start from scratch.
-    if active then
+    -- OLD: if active then
+    -- NEW: only when a document is open. The plugin is also created in the
+    -- FileManager (is_doc_only = false), which is shown right when a document
+    -- is closed: resetting there threw away the closing stats, switched the
+    -- phase back to "open" and invalidated the pending closing summary.
+    if active and self.ui and self.ui.document then
         resetStats()
     end
 end
@@ -612,9 +738,13 @@ function DiagTiming:onReaderReady()
     logger.dbg("[diag] onReaderReady")
     -- NEW: remember when ReaderReady fired, so buildSummary() can exclude the wait below
     ready_t = now()
+    -- NEW: the summary is only shown if nothing started a new measurement meanwhile
+    -- (e.g. the document was closed before SUMMARY_DELAY_S elapsed)
+    local id = session_id
     -- Wait a bit so the first page repaint is included.
     UIManager:scheduleIn(SUMMARY_DELAY_S, function()
-        if active then showSummary() end
+        -- OLD: if active then showSummary() end
+        if active and phase == "open" and id == session_id then showSummary() end
     end)
 end
 
