@@ -23,6 +23,7 @@ local Blitbuffer = require("ffi/blitbuffer")
 local left_container = require("ui/widget/container/leftcontainer")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local TextViewer = require("ui/widget/textviewer")
+local CrashLog = require("crashlog_overlay")
 local Geom = require("ui/geometry")
 local Size = require("ui/size")
 local Screen = require("device").screen
@@ -1286,6 +1287,7 @@ function PageTextInfo:init()
             }
         end
     end
+    CrashLog.setEnabled(G_reader_settings:isTrue("crashlog_enabled"))
 end
 
 -- function PageTextInfo:_postInit()
@@ -1483,6 +1485,19 @@ function PageTextInfo:addToMainMenu(menu_items)
                         G_reader_settings:flush()
                         local Event = require("ui/event")
                         UIManager:broadcastEvent(Event:new("DiagTimingToggled", enable))
+                        return true
+                    end,
+                },
+                {
+                    text = _("Crash log overlay"),
+                    checked_func = function() return G_reader_settings:isTrue("crashlog_enabled") end,
+                    help_text = _([[Show the last lines of crash.log, updated live, on every screen.]]),
+                    callback = function()
+                        local enable = not G_reader_settings:isTrue("crashlog_enabled")
+                        G_reader_settings:saveSetting("crashlog_enabled", enable)
+                        G_reader_settings:flush()
+                        local Event = require("ui/event")
+                        UIManager:broadcastEvent(Event:new("CrashLogToggled", enable))
                         return true
                     end,
                 },
@@ -1838,6 +1853,19 @@ This is to be active only if the option flash buttons and menu items or the opti
                         G_reader_settings:flush()
                         local Event = require("ui/event")
                         UIManager:broadcastEvent(Event:new("DiagTimingToggled", enable))
+                        return true
+                    end,
+                },
+                {
+                    text = _("Crash log overlay"),
+                    checked_func = function() return G_reader_settings:isTrue("crashlog_enabled") end,
+                    help_text = _([[Show the last lines of crash.log, updated live, on every screen.]]),
+                    callback = function()
+                        local enable = not G_reader_settings:isTrue("crashlog_enabled")
+                        G_reader_settings:saveSetting("crashlog_enabled", enable)
+                        G_reader_settings:flush()
+                        local Event = require("ui/event")
+                        UIManager:broadcastEvent(Event:new("CrashLogToggled", enable))
                         return true
                     end,
                 },
@@ -5833,8 +5861,9 @@ function PageTextInfo:getMenuActions()
         { label = "Push conf",  callback = function() self:onPushConfig() end },
     }
 
-    table.insert(actions, { header = "Various", label = "Toggle SSH server", callback = function() self.ui:handleEvent(Event:new("ToggleSSHServer")) end })
-    table.insert(actions, { label = "Toogle RSync server", callback = function() self.ui:handleEvent(Event:new("ToggleRsyncdService")) end })
+    table.insert(actions, { header = "Toggle services", label = "SSH server", callback = function() self.ui:handleEvent(Event:new("ToggleSSHServer")) end })
+    table.insert(actions, { label = "RSync server", callback = function() self.ui:handleEvent(Event:new("ToggleRsyncdService")) end })
+    table.insert(actions, { label = "Crash log overlay", full_width = true, callback = function() self.ui:handleEvent(Event:new("CrashLogToggled")) end })
 
     local last = self:getLastBook()
     if last then
@@ -6810,6 +6839,17 @@ function PageTextInfo:onShowSettingsMenu()
     if old_region then region = region:combine(old_region) end
     UIManager:show(dialog, "ui", region)
     if old_dialog then UIManager:close(old_dialog, "ui", region) end
+    return true
+end
+
+function PageTextInfo:onCrashLogToggled(enable)
+    if enable == nil then
+        -- no value given (e.g. from an action): flip the saved flag
+        enable = not G_reader_settings:isTrue("crashlog_enabled")
+        G_reader_settings:saveSetting("crashlog_enabled", enable)
+        G_reader_settings:flush()
+    end
+    CrashLog.setEnabled(enable)
     return true
 end
 
