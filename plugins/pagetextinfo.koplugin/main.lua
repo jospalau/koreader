@@ -5851,9 +5851,16 @@ function PageTextInfo:getLastBook()
     end
 end
 
--- Menu actions: { label, callback }
+-- Menu actions: { label, callback, active }
 function PageTextInfo:getMenuActions()
     local Event = require("ui/event")
+
+    -- Returns true if a process with this name is running
+    local function isProcessRunning(name)
+        local ok = os.execute("pidof " .. name .. " >/dev/null 2>&1")
+        return ok == 0 or ok == true  -- LuaJIT returns 0, Lua 5.2+ returns true
+    end
+
     local actions = {
         { header = "KOReader sync", label = "Sync code",  callback = function() self:onSynchronizeCode() end },
         { label = "Sync books", callback = function() self:onSyncBooks() end },
@@ -5861,9 +5868,27 @@ function PageTextInfo:getMenuActions()
         { label = "Push conf",  callback = function() self:onPushConfig() end },
     }
 
-    table.insert(actions, { header = "Toggle services", label = "SSH server", callback = function() self.ui:handleEvent(Event:new("ToggleSSHServer")) end })
-    table.insert(actions, { label = "RSync server", callback = function() self.ui:handleEvent(Event:new("ToggleRsyncdService")) end })
-    table.insert(actions, { label = "Crash log overlay", full_width = true, callback = function() self.ui:handleEvent(Event:new("CrashLogToggled")) end })
+    table.insert(actions, {
+        header = "Toggle services",
+        label = "SSH server",
+        active = function() return isProcessRunning("dropbear") end,
+        callback = function() self.ui:handleEvent(Event:new("ToggleSSHServer")) end,
+    })
+    table.insert(actions, {
+        label = "RSync server",
+        active = function() return isProcessRunning("rsync") end,
+        callback = function() self.ui:handleEvent(Event:new("ToggleRsyncdService")) end,
+    })
+    table.insert(actions, {
+        label = "Crash log overlay",
+        full_width = true,
+        -- Tracks the overlay state locally (see note below)
+        active = function() return self.crash_log_overlay_on == true end,
+        callback = function()
+            self.crash_log_overlay_on = not self.crash_log_overlay_on
+            self.ui:handleEvent(Event:new("CrashLogToggled"))
+        end,
+    })
 
     local last = self:getLastBook()
     if last then
@@ -6010,17 +6035,20 @@ function PageTextInfo:onShowActionsMenu()
             row = HorizontalGroup:new{}
         end
         local this_w = action.full_width and (cell_w * COLUMNS) or cell_w
+        -- Active toggles are drawn inverted: white text on black background
+        local is_active = action.active and action.active() or false
         local text_widget = TextWidget:new{
             text = action.label,
             face = self:getMenuFace(FONT_SIZE),
+            fgcolor = is_active and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK,
             forced_height = text_h,
             forced_baseline = baseline,
             max_width = this_w - 2 * Size.padding.small,
         }
         local cell_frame = FrameContainer:new{
             bordersize = thin,
-            color = Blitbuffer.COLOR_BLACK,
-            background = Blitbuffer.COLOR_WHITE,
+            color = is_active and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK,
+            background = is_active and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
             margin = 0,
             padding = 0,
             CenterContainer:new{
