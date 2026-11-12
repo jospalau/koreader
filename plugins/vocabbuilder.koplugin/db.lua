@@ -280,6 +280,7 @@ function VocabularyBuilder:batchUpdateItems(items)
 end
 
 function VocabularyBuilder:insertOrUpdate(entry)
+    entry.word = require("ffi/utf8proc").lowercase(entry.word)
     local conn = SQ3.open(db_location)
     local stmt = conn:prepare("INSERT OR IGNORE INTO title (name) VALUES (?);")
     stmt:bind(entry.book_title)
