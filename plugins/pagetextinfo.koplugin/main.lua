@@ -6582,6 +6582,69 @@ local function buildRows(ui)
     return rows
 end
 
+local function effectiveScale(ui, face_base)
+    local doc = ui.document
+    local RenderText = require("ui/rendertext")
+    local W, H = Screen:getWidth(), Screen:getHeight()
+    local ratios = {}
+    for i = 1, 16 do
+        local x = math.floor(W * (0.15 + 0.7 * ((i * 37) % 10) / 10))
+        local y = math.floor(H * (0.12 + 0.76 * i / 17))
+        local w = doc._document:getTextFromPositions(x, y, x, y, false, false)
+        -- solo palabras enteras, sin guiones ni espacios
+        if w and w.text and w.text:match("^%a%a%a%a+$") and w.pos0 and w.pos1 then
+            local boxes = doc:getScreenBoxesFromPositions(w.pos0, w.pos1, true)
+            if boxes and #boxes == 1 and boxes[1].w > 0 then
+                local expected = RenderText:sizeUtf8Text(0, W, face_base, w.text, true, false).x
+                if expected > 0 then ratios[#ratios + 1] = boxes[1].w / expected end
+            end
+        end
+    end
+    if #ratios < 3 then return nil end
+    table.sort(ratios)
+    local cre_size = ui.document._document:getFontSize()
+    local median = ratios[math.ceil(#ratios / 2)]
+    if not cre_size or cre_size <= 0 or not face_base.size then return nil end
+    return median * face_base.size / cre_size
+end
+
+local _css_cache = {}
+
+-- Devuelve { value=0.88, unit="rem", share=1.0 } del font-size más repetido en los .css del EPUB
+local function bookFontSizeStats(doc)
+    local file = doc.file
+    if not file then return nil end
+    if _css_cache[file] ~= nil then return _css_cache[file] or nil end
+    local ok, res = pcall(function()
+        local Archiver = require("ffi/archiver")
+        local arc = Archiver.Reader:new()
+        if not arc:open(file) then return nil end
+        local counts, total = {}, 0
+        for entry in arc:iterate() do
+            if entry.mode == "file" and entry.path:lower():match("%.css$") then
+                local css = arc:extractToMemory(entry.path)
+                if css then
+                    for v, u in css:gmatch("font%-size%s*:%s*([%d%.]+)%s*(%a*%%?)") do
+                        local k = v .. "|" .. u
+                        counts[k] = (counts[k] or 0) + 1
+                        total = total + 1
+                    end
+                end
+            end
+        end
+        arc:close()
+        if total == 0 then return nil end
+        local best_k, best_n = nil, 0
+        for k, n in pairs(counts) do
+            if n > best_n then best_k, best_n = k, n end
+        end
+        local v, u = best_k:match("^(.-)|(.*)$")
+        return { value = tonumber(v), unit = u, share = best_n / total }
+    end)
+    _css_cache[file] = (ok and res) or false
+    return (ok and res) or nil
+end
+
 local function buildTitleSegments(ui)
     local doc = ui.document
     local configurable = doc.configurable
@@ -6599,6 +6662,13 @@ local function buildTitleSegments(ui)
 
     local xh = face_base.ftsize:getXHeight()
     local xh_px = (xh < 1) and (xh * px) or xh
+    local scale = effectiveScale(ui, face_base)
+    local scale_applied = nil
+    if scale and scale > 0.5 and scale < 1.5 then
+        xh_px = xh_px * scale
+        scale_applied = scale
+    end
+
     if xh_px <= 0 then return na end
 
     local xh_mm = xh_px * 25.4 / display_dpi
@@ -6641,6 +6711,23 @@ local function buildTitleSegments(ui)
         table.insert(segments, { text = "N/A" })
     end
 
+    if scale_applied and math.abs(scale_applied - 1) > 0.03 then
+        local st = bookFontSizeStats(ui.document)
+        table.insert(segments, { text = "  |  " })
+        if st and st.unit and st.value then
+            local unit = st.unit == "%" and "%" or (" " .. st.unit)
+            local label = st.unit == "%" and string.format("%g%%", st.value)
+                        or string.format("%s %g", st.unit, st.value)
+            local expected = (st.unit == "%") and st.value / 100 or st.value
+            local match = math.abs(expected - scale_applied) < 0.05
+            table.insert(segments, { text = label .. " " })
+            table.insert(segments, { text = match and "[confirmed]" or "[mixed]", bold = true })
+            table.insert(segments, { text = string.format("  ×%.2f", scale_applied) })
+        else
+            table.insert(segments, { text = string.format("Book font ×%.2f ", scale_applied) })
+            table.insert(segments, { text = "[publisher size]", bold = true })
+        end
+    end
     return segments
 end
 
@@ -6696,6 +6783,11 @@ function PageTextInfo:onShowSettingsMenu()
 
         local xh = face_base.ftsize:getXHeight()
         local xh_px = (xh < 1) and (xh * px) or xh
+
+        local scale = effectiveScale(ui, face_base)
+        if scale and scale > 0.5 and scale < 1.5 then
+            xh_px = xh_px * scale
+        end
 
         if xh_px <= 0 then
             return "Angle @40cm: N/A  |  Leading: N/A"
@@ -6848,7 +6940,7 @@ function PageTextInfo:onShowSettingsMenu()
                 local ok, err = pcall(b.callback, self.plugin.ui)
                 require("logger").dbg("settings menu tap:", b.text, ok and "OK" or err)
                 -- Reopen after the reflow so the active state is refreshed
-                UIManager:nextTick(function() self.plugin:onShowSettingsMenu() end)
+                UIManager:tickAfterNext(function() self.plugin:onShowSettingsMenu() end)
                 return true
             end
         end
