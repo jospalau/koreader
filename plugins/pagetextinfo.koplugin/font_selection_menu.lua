@@ -7,8 +7,9 @@
 -- It adds these methods to PageTextInfo:
 --     closeFontsMenu, applyFontAndReopen, showFontInfo, onShowFonts
 --
--- applyFontAndReopen needs the methods added by pagetextinfo_settings.lua
--- (getXHeightMm, ptForXHeight, applyFontSizePt), so load that module too.
+-- applyFontAndReopen needs the methods added by settings_menu.lua
+-- (getXHeightMm, ptForXHeight, applyFontSizePt, getActivePreset, applyPreset),
+-- so load that module too.
 
 local Blitbuffer = require("ffi/blitbuffer")
 local Device = require("device")
@@ -64,6 +65,9 @@ function PageTextInfo:applyFontAndReopen(face)
     local page = self.fonts_page
 
     local scale = PageTextInfo:isScaleByXHeight()
+    -- Active font preset (small / normal / big) before the face changes, so it
+    -- stays selected on the new face
+    local preset = scale and self:getActivePreset() or nil
 
     local function debugFont(stage)
         logger.dbg(string.format(
@@ -89,7 +93,11 @@ function PageTextInfo:applyFontAndReopen(face)
     debugFont("AFTER SetFont")
 
     -- Keep the same x-height with the new face (skipped if scaling is disabled or it can't be measured)
-    if target_mm then
+    if preset then
+        -- A preset was active: apply the same preset (same target mm) on the new face
+        self:applyPreset(preset)
+        debugFont("AFTER applyPreset")
+    elseif target_mm then
         local pt = self:ptForXHeight(target_mm)
         logger.dbg("[FontChange] calculated size:", pt)
         if pt then
@@ -328,23 +336,27 @@ local function getFontStats()
         if not lfs.attributes(db_path, "mode") then return end
 
         local conn = SQ3.open(db_path)
-        local stmt = conn:prepare([[
-            SELECT COALESCE(font_name, 'Unknown'), SUM(duration) as total_duration
-            FROM wpm_stat_data
-            GROUP BY font_name
-            ORDER BY total_duration DESC
-        ]])
-        for row in stmt:rows() do
-            local name = row[1]
-            if name and name ~= "" and name ~= "Unknown" then
-                local key = (name:gsub("%s+", ""):lower())
-                stats.order[#stats.order + 1] = name
-                -- sum in case two DB names normalize to the same key
-                stats.secs[key] = (stats.secs[key] or 0) + (tonumber(row[2]) or 0)
+        -- Close the connection even if the query fails
+        local ok, err = pcall(function()
+            local stmt = conn:prepare([[
+                SELECT COALESCE(font_name, 'Unknown'), SUM(duration) as total_duration
+                FROM wpm_stat_data
+                GROUP BY font_name
+                ORDER BY total_duration DESC
+            ]])
+            for row in stmt:rows() do
+                local name = row[1]
+                if name and name ~= "" and name ~= "Unknown" then
+                    local key = (name:gsub("%s+", ""):lower())
+                    stats.order[#stats.order + 1] = name
+                    -- sum in case two DB names normalize to the same key
+                    stats.secs[key] = (stats.secs[key] or 0) + (tonumber(row[2]) or 0)
+                end
             end
-        end
-        stmt:close()
+            stmt:close()
+        end)
         conn:close()
+        if not ok then require("logger").warn("getFontStats failed:", err) end
     end)
     return stats
 end
@@ -461,7 +473,7 @@ function PageTextInfo:onShowFonts(page)
     local text_h = math.floor(font_px * 1.6)
     local baseline = math.floor(font_px * 1.15)
     local cells = {}   -- font cells: { frame, face, label }
-     local btn_prev, btn_next   -- declared here so dialog:onHold can see them
+    local btn_prev, btn_next   -- declared here so dialog:onHold can see them
 
     local dialog = InputContainer:new{
         dimen = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
@@ -647,7 +659,10 @@ function PageTextInfo:onShowFonts(page)
         -- Font cells
         for __, cell in ipairs(cells) do
             if cell.frame.dimen and ges.pos:intersectWith(cell.frame.dimen) then
-                self.plugin:applyFontAndReopen(cell.face)
+                -- Same face already applied: skip the extra SetFont and reflow
+                if cell.face ~= current then
+                    self.plugin:applyFontAndReopen(cell.face)
+                end
                 return true
             end
         end
