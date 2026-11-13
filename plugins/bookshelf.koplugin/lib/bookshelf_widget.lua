@@ -24596,14 +24596,11 @@ function BookshelfWidget:_commitBookStatus(book, status)
     if status == "tbr" then
         local ReadHistory = require("readhistory")
         local date = os.date("%Y-%m-%d")
-        ds:saveSetting("stats", {})
-        ds:delSetting("percent_finished")
-        ds:delSetting("last_xp")
-        ds:delSetting("last_page")
-        local summary2 = ds:readSetting("summary") or {}
-        summary2.status = "tbr"
-        summary2.modified = date
-        ds:saveSetting("summary", summary2)
+        -- Delete the whole sidecar (position, highlights, bookmarks, per-book
+        -- settings...) and start a fresh one that only holds the "tbr" status
+        ds:purge()
+        ds = DocSettings:open(book.filepath)
+        ds:saveSetting("summary", { status = "tbr", modified = date })
         ds:flush()
         ReadHistory:removeItemByPath(book.filepath)
         ReadHistory:addItem(book.filepath, os.time())
