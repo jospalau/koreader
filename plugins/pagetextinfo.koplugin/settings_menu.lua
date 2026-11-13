@@ -11,10 +11,24 @@ local Device = require("device")
 local Font = require("ui/font")
 local Screen = Device.screen
 
+-- Debug logging: every message of this file starts with the same tag, so a
+-- single grep shows the whole flow:
+--     ./kodev run | grep -F "[PTI]"
+-- Set DEBUG_LOG to false to silence it (warnings and errors are always logged).
+local DEBUG_LOG = false
+local PTI_TAG = "[PTI]"
+local function dlog(...)
+    if DEBUG_LOG then require("logger").dbg(PTI_TAG, ...) end
+end
+
 return function(PageTextInfo)
+
+dlog("settings_menu module loaded")
 
 -- Font presets: EFFECTIVE x-height in millimetres (same "mm" shown in the menu title).
 -- small / big: used as is.
+-- In x-height mode each preset is rounded to the closest whole-pixel size
+-- (see ptForXHeight), so the mm shown is the one that is really drawn.
 -- normal: only a fallback. Normally it is taken from KOReader's configured
 -- default font and size (see presetMm).
 
@@ -98,24 +112,44 @@ end
 -- Without rem/em styles in the book the compensation does nothing (factor 1).
 local function remScale(ui)
     local ok, scale = pcall(function()
-        if not hasRelativeStyles(ui.document) then return 1 end
+        if not hasRelativeStyles(ui.document) then
+            dlog("remScale: no relative styles -> factor 1")
+            return 1
+        end
         local __, face_name = xHeightRatio(ui.document)
         local face = face_name and Font:getFace(face_name, 100, 0, true)
         local factor, source = bookScale(ui, face)
+        dlog("remScale: factor=", factor, "source=", source)
         if source == "none" then return 1 end
         return factor
     end)
+    if not ok then dlog("remScale ERROR:", scale) end
     return ok and scale or 1
 end
 
 -- pt to apply so the EFFECTIVE size (pt x book factor) equals `pt`
 local function compensate(ui, pt)
-    return math.floor(pt / remScale(ui) * 100 + 0.5) / 100
+    local scale = remScale(ui)
+    local res = math.floor(pt / scale * 100 + 0.5) / 100
+    dlog("compensate: pt=", pt, "book factor=", scale, "-> pt to apply=", res)
+    return res
+end
+
+-- True if the book factor is applied to sizes: always with x-height scaling,
+-- otherwise only when "Compensate rem/em" is on AND the book has rem/em styles
+-- (same rule as the button, which is greyed out and unchecked without them).
+local function compensationActive(ui)
+    if PageTextInfo:isScaleByXHeight() then return true end
+    if not PageTextInfo:isCompensateRem() then return false end
+    return PageTextInfo.hasRemStyles({ ui = ui }) and true or false
 end
 
 -- pt to apply for a desired pt, according to the active mode
 local function presetPtFor(ui, pt)
-    if PageTextInfo:isCompensateRem() then
+    local active = compensationActive(ui)
+    dlog("presetPtFor: pt=", pt, "compensate_rem=", PageTextInfo:isCompensateRem(),
+        "compensation active=", active)
+    if active then
         return compensate(ui, pt)
     end
     return pt
@@ -125,6 +159,7 @@ local function close(self)
     local UIManager = require("ui/uimanager")
     local d = self.settings_dialog
     self.settings_dialog = nil
+    dlog("settings menu closed")
     if d then UIManager:close(d, "ui", d.frame_rect) end
 end
 
@@ -132,17 +167,21 @@ end
 
 local function setFontFace(ui, face)
     if not face or face == "" then return end
+    dlog("setFontFace:", face, "rolling=", ui.rolling and true or false)
     if ui.rolling then  -- only reflowable (CRE) documents support font faces
         ui.font:onSetFont(face)
     end
 end
 
 local function setFontSize(ui, pt)
+    local requested = pt
     pt = math.max(4, math.min(pt, 255))
     ui.font:onSetFontSize(pt, true)
     -- Keep both configurables in sync (harmless if they are the same table)
     ui.document.configurable.font_size = pt
     ui.font.configurable.font_size = pt
+    dlog("setFontSize: requested=", requested, "applied=", pt,
+        "cre size=", ui.document._document:getFontSize())
 end
 
 -- Step the font size by `delta` pt, repeating until the rendering engine
@@ -156,14 +195,19 @@ local function stepFontSize(ui, delta)
     local function cre_size() return ui.document._document:getFontSize() end
     local before = cre_size()
     local pt = ui.font.configurable.font_size
+    dlog("stepFontSize: delta=", delta, "start pt=", pt, "cre size=", before)
+    local iterations = 0
     for __ = 1, 40 do
+        iterations = iterations + 1
         pt = math.floor((pt + delta) * 100 + 0.5) / 100
         setFontSize(ui, pt)
         if cre_size() ~= before then break end
     end
+    dlog("stepFontSize: end pt=", pt, "cre size=", cre_size(), "iterations=", iterations)
 end
 
 local function setLineSpacing(ui, percent)
+    dlog("setLineSpacing: percent=", percent)
     ui.document:setInterlineSpacePercent(percent)
     ui.document.configurable.line_spacing = percent
     ui:handleEvent(require("ui/event"):new("UpdatePos"))
@@ -171,6 +215,7 @@ end
 
 local function setMargins(ui, m)
     -- m = {left, top, right, bottom}. The event does not store them, so do it here
+    dlog("setMargins: l,t,r,b=", m[1], m[2], m[3], m[4])
     local conf = ui.document.configurable
     conf.h_page_margins = { m[1], m[3] }
     conf.t_page_margin  = m[2]
@@ -180,6 +225,7 @@ end
 
 local function setWeight(ui, w)
     w = math.max(-3, math.min(w, 5))
+    dlog("setWeight:", w)
     ui.document.configurable.font_base_weight = w
     ui.font:onSetFontBaseWeight(w)
 end
@@ -193,6 +239,7 @@ end
 
 local function setContrast(ui, g)
     g = math.floor(math.max(CONTRAST_MIN, math.min(g, CONTRAST_MAX)) + 0.5)
+    dlog("setContrast: index=", g, "gamma=", GAMMA_TABLE[g + 1])
     ui.document.configurable.font_gamma = g
     ui.font.configurable.font_gamma = g
 
@@ -220,13 +267,17 @@ local function saveCurrentFontAsDefault(ui)
     local face = ui.document._document:getFontFace()
     local pt = ui.font.configurable.font_size
     if not face or not pt then return nil end
-    -- Without x-height scaling the presets are EFFECTIVE sizes and get the rem/em
-    -- compensation applied on top (see presetPtFor). The size in use is already
-    -- compensated, so store it uncompensated, otherwise "Font default" would
-    -- compensate it twice.
-    if not PageTextInfo:isScaleByXHeight() and PageTextInfo:isCompensateRem() then
+    dlog("saveCurrentFontAsDefault: face=", face, "pt in use=", pt,
+        "scale_by_xheight=", PageTextInfo:isScaleByXHeight(),
+        "compensate_rem=", PageTextInfo:isCompensateRem())
+    -- The presets are EFFECTIVE sizes and get the book factor applied on top
+    -- (rem/em compensation, or x-height scaling, which always compensates). The
+    -- size in use is already compensated, so store it uncompensated, otherwise
+    -- "Font default" would compensate it twice.
+    if compensationActive(ui) then
         pt = math.floor(pt * remScale(ui) * 100 + 0.5) / 100
     end
+    dlog("saveCurrentFontAsDefault: saving face=", face, "pt=", pt)
     G_reader_settings:saveSetting("cre_font", face)
     G_reader_settings:saveSetting("copt_font_size", pt)
     G_reader_settings:flush()
@@ -246,24 +297,33 @@ local function configuredXHeightMm(ui)
         local ratio, face_name = xHeightRatio(ui.document, face)
         if not ratio then ratio, face_name = xHeightRatio(ui.document) end
         if not ratio then return nil end
-        local scale = bookScale(ui, Font:getFace(face_name, 100, 0, true))
 
-        -- x_mm = ratio * scale * px / px_per_mm, with px = dpi * pt / 72,
+        -- The saved size is an EFFECTIVE size (see saveCurrentFontAsDefault), so
+        -- the book factor is not applied here: ptForXHeight adds it when it
+        -- converts this x-height back to the pt to apply.
+        -- x_mm = ratio * px / px_per_mm, with px = dpi * pt / 72,
         -- so the dpi cancels out
-        return ratio * scale * pt * 25.4 / 72
+        local mm = ratio * pt * 25.4 / 72
+        dlog("configuredXHeightMm: face=", face_name, "pt=", pt, "ratio=", ratio,
+            "-> mm=", mm)
+        return mm
     end)
     if ok then return res end
-    require("logger").warn("configuredXHeightMm failed:", res)
+    require("logger").warn("[PTI] configuredXHeightMm failed:", res)
     return nil
 end
 
 -- Target x-height in mm for a preset. "normal" follows KOReader's configured
 -- size; small/big use the fixed values in FONT_PRESETS.
 local function presetMm(ui, name)
+    local mm
     if name == "normal" then
-        return configuredXHeightMm(ui) or FONT_PRESETS.normal
+        mm = configuredXHeightMm(ui) or FONT_PRESETS.normal
+    else
+        mm = FONT_PRESETS[name]
     end
-    return FONT_PRESETS[name]
+    dlog("presetMm:", name, "->", mm)
+    return mm
 end
 
 -- pt of each font preset in the CURRENT mode (x-height or fixed pt, with or
@@ -280,10 +340,14 @@ local function computePresetPts(ui)
             pts[name] = presetPtFor(ui, fx[name])
         end
     end
+    dlog("computePresetPts: scale_by_xheight=", PageTextInfo:isScaleByXHeight(),
+        "small=", pts.small, "normal=", pts.normal, "big=", pts.big)
     return pts
 end
 
 local function resetDefaults(ui)
+    dlog("resetDefaults: scale_by_xheight=", PageTextInfo:isScaleByXHeight(),
+        "compensate_rem=", PageTextInfo:isCompensateRem())
     -- Use the face saved with the long press; fall back to DEFAULTS.font_face
     setFontFace(ui, G_reader_settings:readSetting("cre_font") or DEFAULTS.font_face)
     if PageTextInfo:isScaleByXHeight() then
@@ -301,6 +365,7 @@ end
 -- whatever you meant (e.g. footer toggle) in this one function.
 local function toggleLayout(ui)
     local Event = require("ui/event")
+    dlog("toggleLayout: SwapRotation")
     ui:handleEvent(Event:new("SwapRotation"))
 end
 
@@ -318,7 +383,7 @@ end
 local function buildRows(ui, plugin)
     local conf = ui.document.configurable
     local fs = ui.font.configurable.font_size
-    require("logger").dbg("settings menu state: font_size=", fs,
+    dlog("settings menu state: font_size=", fs,
         "line_spacing=", conf.line_spacing, "weight=", conf.font_base_weight,
         "h_margins=", conf.h_page_margins and (conf.h_page_margins[1] .. "," .. conf.h_page_margins[2]) or "nil",
         "t=", conf.t_page_margin, "b=", conf.b_page_margin)
@@ -328,7 +393,7 @@ local function buildRows(ui, plugin)
     local function presetPt(name)
         local target_mm = presetMm(ui, name)
         local pt, mm = ptForXHeight(ui, target_mm)
-        require("logger").dbg("font preset", name, "target mm=", target_mm,
+        dlog("font preset", name, "target mm=", target_mm,
             "-> pt=", pt, "achieved mm=", mm)
         return pt or FONT_FALLBACK[name], mm
     end
@@ -372,6 +437,10 @@ local function buildRows(ui, plugin)
             { text = "Font big",     callback = function(u) setFontSize(u, fx.big) end,    active = near(fs, fx.big) },
         }
     end
+    for __, b in ipairs(font_preset_row) do
+        dlog("buildRows: preset button", b.text, "active=", b.active and true or false,
+            "fs=", fs)
+    end
     local rows = {
         { -- 1
             { text = "Reset defaults",      callback = resetDefaults },
@@ -414,12 +483,16 @@ local function buildRows(ui, plugin)
     local scale_on = PageTextInfo:isScaleByXHeight() and true or false
     local has_rem = plugin:hasRemStyles()
     local compensate_on = has_rem and (scale_on or PageTextInfo:isCompensateRem()) and true or false
+    dlog("buildRows: scale_on=", scale_on, "has_rem=", has_rem,
+        "compensate_rem setting=", PageTextInfo:isCompensateRem(),
+        "compensate_on (button)=", compensate_on)
     table.insert(rows, 1, {
         { text = "Scale by x-height",
           active = scale_on,
           callback = function()
               -- Keep the selected font preset (small / default / big) in the new mode
               local preset = plugin:getActivePreset()
+              dlog("toggle scale_by_xheight:", scale_on, "->", not scale_on, "active preset=", preset)
               G_reader_settings:saveSetting("pagetextinfo_scale_by_xheight", not scale_on)
               G_reader_settings:flush()
               plugin:applyPreset(preset)
@@ -429,7 +502,11 @@ local function buildRows(ui, plugin)
           -- Always on with x-height scaling; unavailable without rem/em styles
           disabled = scale_on or not has_rem,
           callback = function()
-              if scale_on or not has_rem then return end
+              if scale_on or not has_rem then
+                  dlog("toggle compensate_rem ignored: scale_on=", scale_on, "has_rem=", has_rem)
+                  return
+              end
+              dlog("toggle compensate_rem:", PageTextInfo:isCompensateRem(), "->", not PageTextInfo:isCompensateRem())
               G_reader_settings:saveSetting("pagetextinfo_compensate_rem", not PageTextInfo:isCompensateRem())
               G_reader_settings:flush()
               -- Re-apply the current effective size so the new mode takes effect
@@ -461,12 +538,18 @@ local function effectiveScale(ui, face_base)
             end
         end
     end
-    if #ratios < 3 then return nil end
+    if #ratios < 3 then
+        dlog("effectiveScale: only", #ratios, "valid samples -> nil")
+        return nil
+    end
     table.sort(ratios)
     local cre_size = ui.document._document:getFontSize()
     local median = ratios[math.ceil(#ratios / 2)]
     if not cre_size or cre_size <= 0 or not face_base.size then return nil end
-    return median * face_base.size / cre_size
+    local res = median * face_base.size / cre_size
+    dlog("effectiveScale: samples=", #ratios, "median=", median, "cre size=", cre_size,
+        "face size=", face_base.size, "-> factor=", res)
+    return res
 end
 
 local _css_cache = {}
@@ -502,8 +585,10 @@ local function resolveFace(raw_name)
     -- (the font list may not be ready yet).
     if best or any then
         _face_cache[raw_name] = best or any
+        dlog("resolveFace:", raw_name, "->", best or any, best and "(regular)" or "(non-regular)")
         return best or any
     end
+    dlog("resolveFace:", raw_name, "-> not found, guessing Name-Regular")
     return (raw_name:gsub("%s+", "") .. "-Regular")
 end
 
@@ -521,21 +606,30 @@ ptForXHeight = function(ui, target_mm)
         -- Book font-size factor (same helper the title uses)
         local face = Font:getFace(face_name, 100, 0, true)
         local scale, source = bookScale(ui, face)
-        require("logger").dbg("font preset scale=", scale, "source=", source,
+        dlog("font preset scale=", scale, "source=", source,
             "face=", face_name, "ratio=", ratio)
 
         -- x_mm = ratio * scale * px / px_per_mm, with px = dpi * pt / 72.
-        -- Solve for pt, then round to 0.01 pt (KOReader's resolution).
-        local px = target_mm * px_per_mm / (ratio * scale)
-        local pt = math.floor(px * 72 / dpi * 100 + 0.5) / 100
+        -- crengine only draws whole-pixel sizes (it drops the fraction), so the
+        -- exact pt would land between two real sizes and render the smaller
+        -- one. Pick the closest whole-pixel size instead, then the smallest pt
+        -- (0.01 pt, KOReader's resolution) that renders it.
+        local px_exact = target_mm * px_per_mm / (ratio * scale)
+        local px = math.max(1, math.floor(px_exact + 0.5))
+        local pt = math.ceil(px * 72 / dpi * 100 + 0.001) / 100
         pt = math.max(4, math.min(pt, 255))
 
-        local achieved_mm = ratio * scale * (dpi * pt / 72) / px_per_mm
+        -- Achieved x-height of the size that is really drawn
+        local px_drawn = math.floor(dpi * pt / 72 + 1e-6)
+        local achieved_mm = ratio * scale * px_drawn / px_per_mm
+        dlog("ptForXHeight: target_mm=", target_mm, "book factor=", scale,
+            "px exact=", px_exact, "px drawn=", px_drawn, "-> pt=", pt,
+            "achieved_mm=", achieved_mm)
         return pt, achieved_mm
     end)
     if ok then return pt_res, mm_res end
     -- pt_res holds the error message when pcall fails
-    require("logger").warn("ptForXHeight failed:", pt_res)
+    require("logger").warn("[PTI] ptForXHeight failed:", pt_res)
     return nil
 end
 
@@ -650,7 +744,10 @@ bookFontSizeStats = function(doc)
                 end
             end
         end
-        if total == 0 then return nil end
+        if total == 0 then
+            dlog("bookFontSizeStats: no font-size in the CSS, rules=", #rules)
+            return nil
+        end
         -- Use the highest-priority group that has any declaration
         local found = false
         local tier_name = "global"  -- no body rule: a guess from all the rules
@@ -681,9 +778,14 @@ bookFontSizeStats = function(doc)
             end
         end
         local v, u = best_k:match("^(.-)|(.*)$")
+        dlog("bookFontSizeStats: file=", file, "tier=", tier_name, "value=", v, "unit=", u,
+            "share=", best_n / total, "paragraph class=", para_class,
+            "sampled files=", sampled, "<p> found=", p_total, "css rules=", #rules,
+            "any_rem=", any_rem, "decls per tier=", table.concat(tier_total, ","))
         return { value = tonumber(v), unit = u, share = best_n / total, tier = tier_name,
                  any_rem = any_rem, para_class = para_class }
     end)
+    if not ok then dlog("bookFontSizeStats ERROR:", res) end
     _css_cache[file] = (ok and res) or false
     return (ok and res) or nil
 end
@@ -698,7 +800,7 @@ xHeightRatio = function(doc, raw_name)
 
     local face = Font:getFace(face_name, 200, 0, true)
     if not face or not face.ftsize then
-        require("logger").warn("xHeightRatio: cannot load face", raw_name, face_name)
+        require("logger").warn("[PTI] xHeightRatio: cannot load face", raw_name, face_name)
         return nil
     end
     -- Divide by the size the face was really loaded at (it may be DPI-scaled)
@@ -706,13 +808,14 @@ xHeightRatio = function(doc, raw_name)
     -- Protected: a 0/nil x-height means the face can't be measured
     local okx, xh = pcall(function() return face.ftsize:getXHeight() end)
     if not okx or not xh or xh <= 0 then
-        require("logger").warn("xHeightRatio: no x-height for", face_name)
+        require("logger").warn("[PTI] xHeightRatio: no x-height for", face_name)
         return nil
     end
     local xh_px = (xh < 1) and (xh * real_size) or xh
     if xh_px <= 0 or real_size <= 0 then return nil end
 
     local ratio = xh_px / real_size
+    dlog("xHeightRatio: measured face=", face_name, "ratio=", ratio, "real size=", real_size)
     _ratio_cache[face_name] = ratio
     return ratio, face_name
 end
@@ -736,6 +839,7 @@ bookScale = function(ui, face_base)
     -- ignores the CSS, so the real factor is 1 (embedded_css: 1 = enabled).
     -- Not cached: the setting can change while the book is open.
     if conf and conf.embedded_css == 0 then
+        dlog("bookScale: Book styles are off -> factor 1 (nocss)")
         return 1, "nocss"
     end
 
@@ -751,6 +855,8 @@ bookScale = function(ui, face_base)
         if measured and measured > 0.5 and measured < 1.5 then scale, source = measured, "measured" end
     end
 
+    dlog("bookScale: computed factor=", scale, "source=", source, "css value=", st and st.value,
+        "unit=", st and st.unit, "share=", st and st.share, "css is guess=", st and cssIsGuess(st) or false)
     -- Don't cache "none": it may be a failed measurement, so retry next time
     if key and source ~= "none" then _scale_cache[key] = { scale, source } end
     return scale, source
@@ -769,7 +875,10 @@ function PageTextInfo:getXHeightMm()
         local face = Font:getFace(face_name, 100, 0, true)
         local scale = bookScale(ui, face)
         local px = dpi * ui.document.configurable.font_size / 72  -- unrounded, like KOReader
-        return ratio * scale * px / (dpi / 25.4)
+        local res = ratio * scale * px / (dpi / 25.4)
+        dlog("getXHeightMm: pt=", ui.document.configurable.font_size, "ratio=", ratio,
+            "book factor=", scale, "-> mm=", res)
+        return res
     end)
     return ok and mm or nil
 end
@@ -780,7 +889,7 @@ function PageTextInfo:hasRemStyles()
     local ui = self.ui
     local ok, res = pcall(function()
         local st = bookFontSizeStats(ui.document)
-        require("logger").dbg("hasRemStyles: stats unit=", st and st.unit,
+        dlog("hasRemStyles: stats unit=", st and st.unit,
             "value=", st and st.value, "share=", st and st.share, "tier=", st and st.tier,
             "class=", st and st.para_class)
         if not hasRelativeStyles(ui.document) then return false end
@@ -793,6 +902,7 @@ function PageTextInfo:hasRemStyles()
         end
         return true
     end)
+    dlog("hasRemStyles: result=", ok and res or false)
     return ok and res or false
 end
 
@@ -817,8 +927,12 @@ function PageTextInfo:getActivePreset()
         local fs = ui.font.configurable.font_size
         local pts = computePresetPts(ui)
         for __, n in ipairs({ "small", "normal", "big" }) do
-            if pts[n] and math.abs(fs - pts[n]) < 0.011 then return n end
+            if pts[n] and math.abs(fs - pts[n]) < 0.011 then
+                dlog("getActivePreset: fs=", fs, "->", n)
+                return n
+            end
         end
+        dlog("getActivePreset: fs=", fs, "-> none")
     end)
     return ok and name or nil
 end
@@ -829,38 +943,103 @@ function PageTextInfo:applyPreset(name)
     local ui = self.ui
     local ok, err = pcall(function()
         local pt = computePresetPts(ui)[name]
+        dlog("applyPreset:", name, "pt=", pt)
         if pt then setFontSize(ui, pt) end
     end)
-    if not ok then require("logger").warn("applyPreset failed:", err) end
+    if not ok then require("logger").warn("[PTI] applyPreset failed:", err) end
 end
 
 -- Set the font size without a notification, keeping configurables in sync.
 function PageTextInfo:applyFontSizePt(pt)
+    dlog("applyFontSizePt:", pt)
     setFontSize(self.ui, pt)
 end
 
--- Book opened for the first time: KOReader gives it its plain default size
--- (copt_font_size), but with a compensation active (x-height scaling or rem/em)
--- "Font default" applies the compensated size, so the preset would not be
--- highlighted. Move the book to that preset so it starts on "Font default".
--- Books that already have a font size of their own are left untouched.
+-- Book opened for the first time: KOReader gives it its plain defaults, but
+-- the menu presets are not those:
+--  * with a compensation active (x-height scaling or rem/em) "Font default"
+--    applies the compensated size, so the preset would not be highlighted;
+--  * the "Default (small)" margins preset (DEFAULTS.margins) would not match.
+-- Move the book to those presets so it starts on "Font default" and on the
+-- default margins. Settings the book already has of its own are left untouched.
 function PageTextInfo:applyDefaultOnOpen()
     local ui = self.ui
     local ok, err = pcall(function()
-        if not ui or not ui.document or ui.paging or not ui.font then return end
-        -- Fresh book: no font size saved in the book's own settings
-        local ds = ui.doc_settings
-        if ds and ds:readSetting("copt_font_size") ~= nil then return end
-        if not (PageTextInfo:isScaleByXHeight() or PageTextInfo:isCompensateRem()) then
+        if not ui or not ui.document or ui.paging or not ui.font then
+            dlog("applyDefaultOnOpen: skipped, not a reflowable book")
             return
         end
-        -- Only if the book is still at KOReader's plain default size
-        local fs = ui.font.configurable.font_size
-        if not fs or math.abs(fs - defaultFontSize()) >= 0.011 then return end
-        local pt = computePresetPts(ui).normal
-        if pt and math.abs(pt - fs) >= 0.011 then setFontSize(ui, pt) end
+        local ds = ui.doc_settings
+
+        -- Font size ---------------------------------------------------------
+        local function applyFontDefault()
+            -- Fresh book: no font size saved in the book's own settings
+            local saved = ds and ds:readSetting("copt_font_size")
+            local fs = ui.font.configurable.font_size
+            local scale_on = PageTextInfo:isScaleByXHeight()
+            local comp_on = compensationActive(ui)
+            dlog("applyDefaultOnOpen: font: saved in book=", saved, "current=", fs,
+                "default=", defaultFontSize(), "scale_by_xheight=", scale_on,
+                "compensate_rem=", comp_on)
+            if saved ~= nil then
+                dlog("applyDefaultOnOpen: font: skipped, the book has its own size")
+                return
+            end
+            if not (scale_on or comp_on) then
+                dlog("applyDefaultOnOpen: font: skipped, no compensation active")
+                return
+            end
+            -- Only if the book is still at KOReader's plain default size
+            if not fs or math.abs(fs - defaultFontSize()) >= 0.011 then
+                dlog("applyDefaultOnOpen: font: skipped, not at the default size")
+                return
+            end
+            local pt = computePresetPts(ui).normal
+            dlog("applyDefaultOnOpen: font: preset normal pt=", pt)
+            if pt and math.abs(pt - fs) >= 0.011 then
+                setFontSize(ui, pt)
+                dlog("applyDefaultOnOpen: font: applied", pt, "(was", fs, ")")
+            else
+                dlog("applyDefaultOnOpen: font: already on the preset, nothing to do")
+            end
+        end
+
+        -- Margins -----------------------------------------------------------
+        local function applyMarginsDefault()
+            local conf = ui.document.configurable
+            -- Fresh book: same test as the font size (no font size saved in the
+            -- book's own settings). KOReader can write margin keys even for a
+            -- book that was never configured, so those are not a reliable test.
+            local saved_font = ds and ds:readSetting("copt_font_size")
+            local saved_h = ds and ds:readSetting("copt_h_page_margins")
+            local saved_t = ds and ds:readSetting("copt_t_page_margin")
+            local saved_b = ds and ds:readSetting("copt_b_page_margin")
+            dlog("applyDefaultOnOpen: margins: font size saved in book=", saved_font,
+                "margins saved in book=", saved_h and saved_h[1], saved_h and saved_h[2],
+                saved_t, saved_b, "current h=",
+                conf.h_page_margins and conf.h_page_margins[1],
+                conf.h_page_margins and conf.h_page_margins[2],
+                "t=", conf.t_page_margin, "b=", conf.b_page_margin)
+            if saved_font ~= nil then
+                dlog("applyDefaultOnOpen: margins: skipped, the book has its own settings")
+                return
+            end
+            if not ui.typeset then
+                dlog("applyDefaultOnOpen: margins: skipped, no typeset module")
+                return
+            end
+            if marginsMatch(conf, DEFAULTS.margins) then
+                dlog("applyDefaultOnOpen: margins: already on the default, nothing to do")
+                return
+            end
+            setMargins(ui, DEFAULTS.margins)
+            dlog("applyDefaultOnOpen: margins: applied the default")
+        end
+
+        applyFontDefault()
+        applyMarginsDefault()
     end)
-    if not ok then require("logger").warn("applyDefaultOnOpen failed:", err) end
+    if not ok then require("logger").warn("[PTI] applyDefaultOnOpen failed:", err) end
 end
 
 -- Run it every time a book is opened. ReaderFont reads the book's settings on
@@ -870,15 +1049,19 @@ do
     local ok_rf, ReaderFont = pcall(require, "apps/reader/modules/readerfont")
     if ok_rf and ReaderFont and not ReaderFont._pagetextinfo_hooked then
         ReaderFont._pagetextinfo_hooked = true
+        dlog("ReaderFont:onReadSettings hook installed")
         local orig_read_settings = ReaderFont.onReadSettings
         ReaderFont.onReadSettings = function(font_self, ...)
             local res = orig_read_settings and orig_read_settings(font_self, ...)
+            dlog("book opened: ReaderFont:onReadSettings hook fired")
             -- Only needs .ui
             require("ui/uimanager"):tickAfterNext(function()
                 PageTextInfo.applyDefaultOnOpen({ ui = font_self.ui })
             end)
             return res
         end
+    elseif not ok_rf then
+        dlog("ReaderFont hook NOT installed: require failed")
     end
 end
 
@@ -972,6 +1155,9 @@ local function buildTitleSegments(ui)
     table.insert(line2, { text = "  |  " })
     table.insert(line2, { text = "contrast " .. (gamma and string.format("%g", gamma) or tostring(idx)), bold = true })
 
+    dlog("title: pt=", pt, "face=", font_name, "x-height mm=", xh_mm, "angle'=", angle,
+        "book factor=", scale, "source=", scale_source, "line spacing=", configurable.line_spacing,
+        "weight=", weight, "contrast index=", idx, "gamma=", gamma)
     return { line1, line2 }
 end
 
@@ -996,8 +1182,10 @@ function PageTextInfo:onShowSettingsMenu()
 
     local ui = self.ui
     if not ui or not ui.document or ui.paging or not ui.font or not ui.typeset then
+        dlog("onShowSettingsMenu: skipped, not a reflowable book")
         return true
     end
+    dlog("onShowSettingsMenu: open, reopen=", self.settings_dialog ~= nil)
 
     local old_dialog = self.settings_dialog
     local old_region = old_dialog and old_dialog.frame_rect and old_dialog.frame_rect:copy()
@@ -1146,15 +1334,16 @@ function PageTextInfo:onShowSettingsMenu()
     }
 
     function dialog:onTap(arg, ges)
-        require("logger").info("settings tap", ges.pos.x, ges.pos.y)
+        dlog("settings tap", ges.pos.x, ges.pos.y)
 
         -- Tap on the title: open the reference popup from typography_popup.lua
         if title_frame.dimen and ges.pos:intersectWith(title_frame.dimen) then
+            dlog("settings: tap on the title -> typography reference")
             local plugin_ui = self.plugin.ui
             if plugin_ui and plugin_ui.onShowTypographyReference then
                 plugin_ui:onShowTypographyReference()
             else
-                require("logger").warn("onShowTypographyReference not available")
+                require("logger").warn("[PTI] onShowTypographyReference not available")
             end
             return true
         end
@@ -1162,7 +1351,7 @@ function PageTextInfo:onShowSettingsMenu()
         for __, b in ipairs(buttons) do
             if b.frame.dimen and ges.pos:intersectWith(b.frame.dimen) then
                 local ok, err = pcall(b.callback, self.plugin.ui)
-                require("logger").dbg("settings menu tap:", b.text, ok and "OK" or err)
+                dlog("settings menu tap:", b.text, ok and "OK" or err)
                 -- Reopen after the reflow so the active state is refreshed
                 UIManager:nextTick(function()
                     local plugin = self.plugin
@@ -1185,6 +1374,7 @@ function PageTextInfo:onShowSettingsMenu()
         if not (title_frame.dimen and ges.pos:intersectWith(title_frame.dimen)) then
             return true
         end
+        dlog("settings: long press on the title -> save current font as default")
         local plugin = self.plugin
         local ok, face, pt = pcall(saveCurrentFontAsDefault, plugin.ui)
         local text
@@ -1195,7 +1385,7 @@ function PageTextInfo:onShowSettingsMenu()
                 or string.format("Default font saved:\n%s, %.2f pt", face, pt)
         else
             -- face holds the error message when pcall fails
-            require("logger").warn("saveCurrentFontAsDefault failed:", face)
+            require("logger").warn("[PTI] saveCurrentFontAsDefault failed:", face)
             text = "Could not save the default font"
         end
 
@@ -1232,7 +1422,11 @@ function PageTextInfo:reapplyFontCompensation(enabled)
 
     -- Ignore a repeated call with the same value (it would apply the factor twice)
     enabled = enabled and true or false
-    if self._comp_applied == enabled then return end
+    dlog("reapplyFontCompensation: enabled=", enabled, "previous=", self._comp_applied)
+    if self._comp_applied == enabled then
+        dlog("reapplyFontCompensation: same value as last time, ignored")
+        return
+    end
     self._comp_applied = enabled
 
     local cur = ui.font.configurable.font_size
@@ -1245,7 +1439,7 @@ function PageTextInfo:reapplyFontCompensation(enabled)
         and compensate(ui, cur)
         or math.floor(cur * scale * 100 + 0.5) / 100
 
-    logger.dbg("reapply", "enabled", enabled, "cur", cur,
+    dlog("reapply", "enabled", enabled, "cur", cur,
         "scale", scale, "new_pt", new_pt)
 
     setFontSize(ui, new_pt)
