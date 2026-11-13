@@ -893,13 +893,14 @@ function PageTextInfo:onShowSettingsMenu()
     local screen = Screen:getSize()
 
     -- Layout metrics (scaled to the screen DPI)
-    local frame_w = math.floor(screen.w * 0.92)
-    local outer_pad = Screen:scaleBySize(10)
+    local frame_w = math.floor(screen.w * 0.8)
+    local outer_pad = Screen:scaleBySize(5)
     -- Inner width available for rows (window width minus padding and border)
     local dialog_w = frame_w - 2 * (outer_pad + Size.border.window)
-    local font_px = Screen:scaleBySize(18)
-    local cell_h = math.floor(font_px * 2.4)
-    local gap = Screen:scaleBySize(6)   -- space between buttons and between rows
+    local BTN_FONT_SIZE = 14            -- button text size (compact layout)
+    local font_px = Screen:scaleBySize(BTN_FONT_SIZE)
+    local cell_h = math.floor(font_px * 1.85)
+    local gap = Screen:scaleBySize(3)   -- space between buttons and between rows
     local thin = Screen:scaleBySize(1)
     local buttons = {}
 
@@ -919,8 +920,8 @@ function PageTextInfo:onShowSettingsMenu()
         "Font scaling", "General", "Font presets", "Font size (fine step)",
         "Line spacing", "Margins", "Weight", "Contrast",
     }
-    local label_face = Font:getFace("cfont", 13)
-    local label_h = math.floor(Screen:scaleBySize(13) * 1.8)
+    local label_face = Font:getFace("cfont", 11)
+    local label_h = math.floor(Screen:scaleBySize(11) * 1.4)
 
     local grid = VerticalGroup:new{ align = "center" }
     for i, row_def in ipairs(buildRows(ui, self)) do
@@ -959,7 +960,7 @@ function PageTextInfo:onShowSettingsMenu()
                         dimen = Geom:new{ w = cell_w - 2 * thin, h = cell_h - 2 * thin },
                         TextWidget:new{
                             text = b.text,
-                            face = Font:getFace("cfont", 18),
+                            face = Font:getFace("cfont", BTN_FONT_SIZE),
                             fgcolor = b.active and Blitbuffer.COLOR_WHITE
                                 or (b.disabled and Blitbuffer.COLOR_DARK_GRAY or Blitbuffer.COLOR_BLACK),
                             bold = b.active and true or false,
@@ -975,8 +976,8 @@ function PageTextInfo:onShowSettingsMenu()
         end
     end
 
-    local title_face = Font:getFace("cfont", 14)
-    local line_h = math.floor(cell_h * 0.7)
+    local title_face = Font:getFace("cfont", 12)
+    local line_h = math.floor(cell_h * 0.75)
     local title_rows = VerticalGroup:new{ align = "center" }
     for __, line in ipairs(buildTitleSegments(ui)) do
         local group = HorizontalGroup:new{}
