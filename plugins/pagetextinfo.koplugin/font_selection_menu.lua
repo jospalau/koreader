@@ -419,6 +419,10 @@ function PageTextInfo:onShowFonts(page)
     local InputContainer = require("ui/widget/container/inputcontainer")
     local HorizontalGroup = require("ui/widget/horizontalgroup")
     local VerticalGroup = require("ui/widget/verticalgroup")
+    local HorizontalSpan = require("ui/widget/horizontalspan")
+    local VerticalSpan = require("ui/widget/verticalspan")
+    local LineWidget = require("ui/widget/linewidget")
+    local LeftContainer = require("ui/widget/container/leftcontainer")
 
     -- Grid settings
     local COLUMNS = 2
@@ -466,8 +470,14 @@ function PageTextInfo:onShowFonts(page)
 
     -- Sizes
     local screen = Screen:getSize()
-    local dialog_w = math.floor(screen.w * 0.7)
-    local cell_w = math.floor(dialog_w / COLUMNS)
+    local frame_w = math.floor(screen.w * 0.8)
+    local outer_pad = Screen:scaleBySize(10)
+    -- Inner width available for the grid (window width minus padding and border)
+    local dialog_w = frame_w - 2 * (outer_pad + Size.border.window)
+    local gap = Screen:scaleBySize(6)   -- space between cells and between rows
+    local thin = Screen:scaleBySize(1)
+    local cell_w = math.floor((dialog_w - gap * (COLUMNS - 1)) / COLUMNS)
+    local label_h = math.floor(Screen:scaleBySize(13) * 1.8)
     local font_px = Screen:scaleBySize(FONT_SIZE)
     local cell_h = math.floor(font_px * 2.2)
     local text_h = math.floor(font_px * 1.6)
@@ -534,9 +544,32 @@ function PageTextInfo:onShowFonts(page)
     end
 
     local grid = VerticalGroup:new{ align = "center" }
+
+    -- Small caption with a thin separator below it (same look as the settings menu)
+    table.insert(grid, LeftContainer:new{
+        dimen = Geom:new{ w = dialog_w, h = label_h },
+        HorizontalGroup:new{
+            HorizontalSpan:new{ width = gap },
+            TextWidget:new{
+                text = "Fonts  |  long press for info",
+                face = Font:getFace("cfont", 13),
+                fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+            },
+        },
+    })
+    table.insert(grid, LineWidget:new{
+        dimen = Geom:new{ w = dialog_w, h = thin },
+        background = Blitbuffer.COLOR_DARK_GRAY,
+    })
+    table.insert(grid, VerticalSpan:new{ width = gap })
+
     local row = HorizontalGroup:new{}
+    local col = 0   -- cells in the current row (spacers don't count)
 
     local function addCell(face, label)
+        local is_current = face ~= nil and face == current
+        -- The active cell is inverted (white text on black)
+        local fg = is_current and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
         local text_widget
         local path = face and self.font_paths[face]
         if path then
@@ -545,6 +578,7 @@ function PageTextInfo:onShowFonts(page)
                 text_widget = TextWidget:new{
                     text = label,
                     face = font_face,
+                    fgcolor = fg,
                     forced_height = text_h,
                     forced_baseline = baseline,
                     max_width = cell_w - 2 * Size.padding.small,
@@ -556,89 +590,99 @@ function PageTextInfo:onShowFonts(page)
             text_widget = TextWidget:new{
                 text = label,
                 face = Font:getFace("cfont", FONT_SIZE),
+                fgcolor = fg,
                 forced_height = text_h,
                 forced_baseline = baseline,
                 max_width = cell_w - 2 * Size.padding.small,
             }
         end
-        local is_current = face ~= nil and face == current
-        local thin  = Screen:scaleBySize(1)   -- original grid line
-        local thick = Screen:scaleBySize(3)   -- total border of the active cell
 
+        -- Rounded cell; the empty padding cells have no visible border
         local cell_frame = FrameContainer:new{
-            -- Outer frame: thin black line, identical on every cell
             bordersize = thin,
-            color = Blitbuffer.COLOR_BLACK,
+            color = is_current and Blitbuffer.COLOR_BLACK
+                or (face and Blitbuffer.COLOR_DARK_GRAY or Blitbuffer.COLOR_WHITE),
+            background = is_current and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
+            radius = Size.radius.button,
             margin = 0,
             padding = 0,
-            FrameContainer:new{
-                -- Inner frame: grows the border inward, black only on the active cell
-                bordersize = thick - thin,
-                color = is_current and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
-                background = Blitbuffer.COLOR_WHITE,
-                margin = 0,
-                padding = 0,
-                CenterContainer:new{
-                    dimen = Geom:new{
-                        w = cell_w - 2 * thick,
-                        h = cell_h - 2 * thick,
-                    },
-                    text_widget,
+            CenterContainer:new{
+                dimen = Geom:new{
+                    w = cell_w - 2 * thin,
+                    h = cell_h - 2 * thin,
                 },
+                text_widget,
             },
         }
+        if col > 0 then table.insert(row, HorizontalSpan:new{ width = gap }) end
         table.insert(row, cell_frame)
+        col = col + 1
         if face then
             table.insert(cells, { frame = cell_frame, face = face, label = label })
         end
     end
 
+    local function flushRow()
+        table.insert(grid, row)
+        table.insert(grid, VerticalSpan:new{ width = gap })
+        row = HorizontalGroup:new{}
+        col = 0
+    end
+
     for i = first, last do
         local face = fonts[i]
         addCell(face, (names and names[i]) or face)
-        if #row == COLUMNS then
-            table.insert(grid, row)
-            row = HorizontalGroup:new{}
-        end
+        if col == COLUMNS then flushRow() end
     end
     -- Pad the last row with empty cells
-    if #row > 0 then
-        while #row < COLUMNS do
+    if col > 0 then
+        while col < COLUMNS do
             addCell(nil, "")
         end
-        table.insert(grid, row)
+        flushRow()
     end
 
     -- Navigation row
-    local nav_w = math.floor(dialog_w / 3)
-    local nav_h = math.floor(font_px * 1.8)
+    local nav_w = math.floor((dialog_w - 2 * gap) / 3)
+    local nav_h = math.floor(font_px * 2)
 
-    local function navCell(text, enabled)
+    -- boxed: rounded outline (arrows); the page counter has none
+    local function navCell(text, enabled, boxed, size)
+        local bs = boxed and thin or 0
         return FrameContainer:new{
-            bordersize = 0,
+            bordersize = bs,
+            color = enabled and Blitbuffer.COLOR_DARK_GRAY or Blitbuffer.COLOR_LIGHT_GRAY,
+            radius = Size.radius.button,
             padding = 0,
             margin = 0,
             CenterContainer:new{
-                dimen = Geom:new{ w = nav_w, h = nav_h },
+                dimen = Geom:new{ w = nav_w - 2 * bs, h = nav_h - 2 * bs },
                 TextWidget:new{
                     text = text,
-                    face = Font:getFace("cfont", 26),
+                    face = Font:getFace("cfont", size),
                     fgcolor = enabled and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_LIGHT_GRAY,
                 },
             },
         }
     end
 
-    btn_prev = navCell("‹", has_prev)
-    local btn_info = navCell(string.format("%d / %d", page, total_pages), true)
-    btn_next = navCell("›", has_next)
-    table.insert(grid, HorizontalGroup:new{ btn_prev, btn_info, btn_next })
+    btn_prev = navCell("‹", has_prev, true, 26)
+    local btn_info = navCell(string.format("%d / %d", page, total_pages), true, false, 18)
+    btn_next = navCell("›", has_next, true, 26)
+    table.insert(grid, HorizontalGroup:new{
+        btn_prev,
+        HorizontalSpan:new{ width = gap },
+        btn_info,
+        HorizontalSpan:new{ width = gap },
+        btn_next,
+    })
 
     local frame = FrameContainer:new{
         background = Blitbuffer.COLOR_WHITE,
         bordersize = Size.border.window,
         radius = Size.radius.window,
-        padding = Size.padding.small,
+        padding = outer_pad,
+        margin = 0,
         grid,
     }
     dialog[1] = CenterContainer:new{
@@ -668,20 +712,14 @@ function PageTextInfo:onShowFonts(page)
         end
 
         if ges.pos:intersectWith(frame_rect) then
-            -- Navigation row
-            local nav_top = frame_rect.y + frame_rect.h
-                            - Size.border.window - Size.padding.small - nav_h
-            if ges.pos.y >= nav_top then
-                local third = frame_rect.w / 3
-                local rel_x = ges.pos.x - frame_rect.x
-                if rel_x < third then
-                    if has_prev then
-                        UIManager:nextTick(function() self.plugin:onShowFonts(page - 1) end)
-                    end
-                elseif rel_x > 2 * third then
-                    if has_next then
-                        UIManager:nextTick(function() self.plugin:onShowFonts(page + 1) end)
-                    end
+            -- Navigation buttons: use the real on-screen area of each one
+            if btn_prev.dimen and ges.pos:intersectWith(btn_prev.dimen) then
+                if has_prev then
+                    UIManager:nextTick(function() self.plugin:onShowFonts(page - 1) end)
+                end
+            elseif btn_next.dimen and ges.pos:intersectWith(btn_next.dimen) then
+                if has_next then
+                    UIManager:nextTick(function() self.plugin:onShowFonts(page + 1) end)
                 end
             end
             return true

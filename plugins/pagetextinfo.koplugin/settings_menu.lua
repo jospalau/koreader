@@ -815,6 +815,10 @@ function PageTextInfo:onShowSettingsMenu()
     local InputContainer = require("ui/widget/container/inputcontainer")
     local HorizontalGroup = require("ui/widget/horizontalgroup")
     local VerticalGroup = require("ui/widget/verticalgroup")
+    local HorizontalSpan = require("ui/widget/horizontalspan")
+    local VerticalSpan = require("ui/widget/verticalspan")
+    local LineWidget = require("ui/widget/linewidget")
+    local LeftContainer = require("ui/widget/container/leftcontainer")
 
     local ui = self.ui
     if not ui or not ui.document or ui.paging or not ui.font or not ui.typeset then
@@ -826,11 +830,16 @@ function PageTextInfo:onShowSettingsMenu()
     self.settings_dialog = nil
 
     local screen = Screen:getSize()
-    local dialog_w = math.floor(screen.w * 0.9)
+
+    -- Layout metrics (scaled to the screen DPI)
+    local frame_w = math.floor(screen.w * 0.92)
+    local outer_pad = Screen:scaleBySize(10)
+    -- Inner width available for rows (window width minus padding and border)
+    local dialog_w = frame_w - 2 * (outer_pad + Size.border.window)
     local font_px = Screen:scaleBySize(18)
     local cell_h = math.floor(font_px * 2.4)
-    local thin  = Screen:scaleBySize(1)
-    local thick = Screen:scaleBySize(3)
+    local gap = Screen:scaleBySize(6)   -- space between buttons and between rows
+    local thin = Screen:scaleBySize(1)
     local buttons = {}
 
     local dialog = InputContainer:new{
@@ -844,31 +853,55 @@ function PageTextInfo:onShowSettingsMenu()
         key_events = Device:hasKeys() and { Close = { { Device.input.group.Back } } } or {},
     }
 
+    -- Small caption shown above each row of buttons (same order as buildRows)
+    local SECTION_TITLES = {
+        "General", "Font presets", "Font size (fine step)",
+        "Line spacing", "Margins", "Weight", "Contrast",
+    }
+    local label_face = Font:getFace("cfont", 13)
+    local label_h = math.floor(Screen:scaleBySize(13) * 1.8)
+
     local grid = VerticalGroup:new{ align = "center" }
-    for __, row_def in ipairs(buildRows(ui)) do
+    for i, row_def in ipairs(buildRows(ui)) do
         local n = #row_def
         if n > 0 then
-            local cell_w = math.floor(dialog_w / n)
+            local cell_w = math.floor((dialog_w - gap * (n - 1)) / n)
+
+            -- Section caption, left aligned
+            if SECTION_TITLES[i] then
+                table.insert(grid, LeftContainer:new{
+                    dimen = Geom:new{ w = dialog_w, h = label_h },
+                    HorizontalGroup:new{
+                        HorizontalSpan:new{ width = gap },
+                        TextWidget:new{
+                            text = SECTION_TITLES[i],
+                            face = label_face,
+                            fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+                        },
+                    },
+                })
+            end
+
             local row = HorizontalGroup:new{}
-            for __, b in ipairs(row_def) do
+            for j, b in ipairs(row_def) do
+                if j > 1 then table.insert(row, HorizontalSpan:new{ width = gap }) end
+                -- Rounded buttons. The active one is inverted (white text on black),
+                -- which reads much better on e-ink than a thicker border.
                 local frame = FrameContainer:new{
                     bordersize = thin,
-                    color = Blitbuffer.COLOR_BLACK,
+                    color = b.active and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY,
+                    background = b.active and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
+                    radius = Size.radius.button,
                     margin = 0,
                     padding = 0,
-                    FrameContainer:new{
-                        bordersize = thick - thin,
-                        color = b.active and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
-                        background = Blitbuffer.COLOR_WHITE,
-                        margin = 0,
-                        padding = 0,
-                        CenterContainer:new{
-                            dimen = Geom:new{ w = cell_w - 2 * thick, h = cell_h - 2 * thick },
-                            TextWidget:new{
-                                text = b.text,
-                                face = Font:getFace("cfont", 18),
-                                max_width = cell_w - 2 * Size.padding.small,
-                            },
+                    CenterContainer:new{
+                        dimen = Geom:new{ w = cell_w - 2 * thin, h = cell_h - 2 * thin },
+                        TextWidget:new{
+                            text = b.text,
+                            face = Font:getFace("cfont", 18),
+                            fgcolor = b.active and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK,
+                            bold = b.active and true or false,
+                            max_width = cell_w - 2 * Size.padding.small,
                         },
                     },
                 }
@@ -876,6 +909,7 @@ function PageTextInfo:onShowSettingsMenu()
                 table.insert(buttons, { frame = frame, callback = b.callback, text = b.text })
             end
             table.insert(grid, row)
+            table.insert(grid, VerticalSpan:new{ width = gap })
         end
     end
 
@@ -896,16 +930,27 @@ function PageTextInfo:onShowSettingsMenu()
             group,
         })
     end
+    -- Title block with a thin separator below it (tap / long press target)
     local title_frame = FrameContainer:new{
         bordersize = 0, margin = 0, padding = 0,
-        title_rows,
+        VerticalGroup:new{
+            align = "center",
+            title_rows,
+            VerticalSpan:new{ width = gap },
+            LineWidget:new{
+                dimen = Geom:new{ w = dialog_w, h = thin },
+                background = Blitbuffer.COLOR_DARK_GRAY,
+            },
+            VerticalSpan:new{ width = gap },
+        },
     }
 
     local frame = FrameContainer:new{
         background = Blitbuffer.COLOR_WHITE,
         bordersize = Size.border.window,
         radius = Size.radius.window,
-        padding = Size.padding.small,
+        padding = outer_pad,
+        margin = 0,
         VerticalGroup:new{
             align = "center",
             title_frame,
