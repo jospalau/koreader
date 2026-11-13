@@ -49,6 +49,7 @@ end
 function PageTextInfo:closeFontsMenu()
     local d = self.fonts_dialog
     self.fonts_dialog = nil
+    self.fonts_stats = nil
     if d then
         UIManager:close(d, "ui", d.frame_rect)
     end
@@ -254,43 +255,95 @@ end
 
 -- Fonts shown first in the fonts menu, in this order.
 -- Matching ignores case and spaces ("Chare Ink 7SP" == "chareink7sp").
+-- local PINNED_FONTS = {
+--     "Alegreya",
+--     "AmasisMTW1G",
+--     "AndadaPro",
+--     "Average",
+--     "BitterPro",
+--     "Bookerly",
+--     "PMNCaeciliaLT",
+--     "CanelaText",
+--     "Capita",
+--     "ChareInk7SP",
+--     "Constantia",
+--     "CrimsonPro",
+--     "EBGaramond",
+--     "GentiumBookPlus",
+--     "Georgia",
+--     "GoudyOldStyle",
+--     "IBMPlexSerif",
+--     "IowanOldStBT",
+--     "LexiaDaMa",
+--     "LiberationSerif",
+--     "LibreBaskerville",
+--     "Literata7pt",
+--     "Luciole",
+--     "Merriweather",
+--     "Palatino",
+--     "Souvenir",
+--     "Spectral",
+--     "Vollkorn",
+-- }
+
 local PINNED_FONTS = {
-    "Alegreya",
-    "AmasisMTW1G",
-    "AndadaPro",
-    "Average",
-    "BitterPro",
-    "Bookerly",
-    "PMNCaeciliaLT",
-    "CanelaText",
-    "Capita",
-    "ChareInk7SP",
-    "Constantia",
-    "CrimsonPro",
-    "EBGaramond",
-    "GentiumBookPlus",
-    "Georgia",
-    "GoudyOldStyle",
-    "IBMPlexSerif",
-    "IowanOldStBT",
-    "LexiaDaMa",
-    "LiberationSerif",
-    "LibreBaskerville",
-    "Literata7pt",
-    "Luciole",
-    "Merriweather",
-    "Palatino",
-    "Souvenir",
-    "Spectral",
-    "Vollkorn",
 }
+
+-- Reading time per font, most-read first (same query as "Time per Font").
+-- Returns { order = {names...}, secs = {normalized_name = seconds} }.
+-- Empty if the DB or the table/column doesn't exist.
+local function getFontStats()
+    local stats = { order = {}, secs = {} }
+    pcall(function()
+        local SQ3 = require("lua-ljsqlite3/init")
+        local DataStorage = require("datastorage")
+        local lfs = require("libs/libkoreader-lfs")
+
+        local db_path = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+        if not lfs.attributes(db_path, "mode") then return end
+
+        local conn = SQ3.open(db_path)
+        local stmt = conn:prepare([[
+            SELECT COALESCE(font_name, 'Unknown'), SUM(duration) as total_duration
+            FROM wpm_stat_data
+            GROUP BY font_name
+            ORDER BY total_duration DESC
+        ]])
+        for row in stmt:rows() do
+            local name = row[1]
+            if name and name ~= "" and name ~= "Unknown" then
+                local key = (name:gsub("%s+", ""):lower())
+                stats.order[#stats.order + 1] = name
+                -- sum in case two DB names normalize to the same key
+                stats.secs[key] = (stats.secs[key] or 0) + (tonumber(row[2]) or 0)
+            end
+        end
+        stmt:close()
+        conn:close()
+    end)
+    return stats
+end
+
+-- 25 min  /  12.5 h  /  2 d 5 h (days from 24 h up)
+local function formatReadTime(secs)
+    if not secs or secs <= 0 then return nil end
+    if secs < 3600 then
+        return string.format("%d min", math.max(1, math.floor(secs / 60 + 0.5)))
+    elseif secs < 86400 then
+        return string.format("%.1f h", secs / 3600)
+    end
+    local d = math.floor(secs / 86400)
+    local h = math.floor((secs % 86400) / 3600)
+    return string.format("%d d %d h", d, h)
+end
 
 -- Marker shown before pinned fonts. "*" exists in every font; "★" usually
 -- renders through KOReader's fallback fonts, but "📌" often won't on e-ink.
 local PIN_MARK = "★ "
 
-local function pinFonts(fonts, names)
+local function pinFonts(fonts, names, stats)
     local function norm(s) return (s:gsub("%s+", ""):lower()) end
+    stats = stats or { order = {}, secs = {} }
 
     local index = {}
     for i, face in ipairs(fonts) do index[norm(face)] = i end
@@ -299,16 +352,23 @@ local function pinFonts(fonts, names)
     local function add(i, pinned)
         used[i] = true
         local label = (names and names[i]) or fonts[i]
+        local t = formatReadTime(stats.secs[norm(fonts[i])])
+        if t then label = label .. " (" .. t .. ")" end
         new_fonts[#new_fonts + 1] = fonts[i]
         new_names[#new_names + 1] = pinned and (PIN_MARK .. label) or label
     end
 
-    -- Pinned ones first, in the configured order (skip those not installed)
+    -- 1) Fixed pinned list, in the configured order (skip those not installed)
     for __, pinned in ipairs(PINNED_FONTS) do
         local i = index[norm(pinned)]
         if i and not used[i] then add(i, true) end
     end
-    -- Then everything else, keeping the original (alphabetical) order
+    -- 2) Fonts from the database, most-read first
+    for __, pinned in ipairs(stats.order) do
+        local i = index[norm(pinned)]
+        if i and not used[i] then add(i, true) end
+    end
+    -- 3) Everything else, keeping the original (alphabetical) order
     for i = 1, #fonts do
         if not used[i] then add(i, false) end
     end
@@ -326,7 +386,7 @@ function PageTextInfo:onShowFonts(page)
     -- Grid settings
     local COLUMNS = 2
     local ROWS_PER_PAGE = 5
-    local FONT_SIZE = 20
+    local FONT_SIZE = 16
     local PER_PAGE = COLUMNS * ROWS_PER_PAGE
 
     local ui = self.ui
@@ -342,7 +402,8 @@ function PageTextInfo:onShowFonts(page)
     self.fonts_dialog = nil
 
     local fonts, names = FontList.getFontArgFunc()
-    fonts, names = pinFonts(fonts, names)
+    self.fonts_stats = self.fonts_stats or getFontStats()
+    fonts, names = pinFonts(fonts, names, self.fonts_stats)
     local current = ui.document._document:getFontFace()
     self.font_paths = self.font_paths or buildFacePathMap()
 
@@ -375,6 +436,7 @@ function PageTextInfo:onShowFonts(page)
     local text_h = math.floor(font_px * 1.6)
     local baseline = math.floor(font_px * 1.15)
     local cells = {}   -- font cells: { frame, face, label }
+     local btn_prev, btn_next   -- declared here so dialog:onHold can see them
 
     local dialog = InputContainer:new{
         dimen = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
@@ -410,13 +472,26 @@ function PageTextInfo:onShowFonts(page)
         return true
     end
 
-    -- Long press on a font cell: show font info
+    -- Long press: on a font cell shows its info; on the arrows jumps to the
+    -- first / last page
     function dialog:onHold(arg, ges)
+        -- Font cells
         for __, cell in ipairs(cells) do
             if cell.frame.dimen and ges.pos:intersectWith(cell.frame.dimen) then
                 self.plugin:showFontInfo(cell.face, cell.label)
-                break
+                return true
             end
+        end
+
+        -- Arrows: use the real on-screen area of each button
+        local target
+        if btn_prev.dimen and ges.pos:intersectWith(btn_prev.dimen) then
+            target = 1                -- first page
+        elseif btn_next.dimen and ges.pos:intersectWith(btn_next.dimen) then
+            target = total_pages      -- last page
+        end
+        if target and target ~= page then
+            UIManager:nextTick(function() self.plugin:onShowFonts(target) end)
         end
         return true
     end
@@ -517,9 +592,9 @@ function PageTextInfo:onShowFonts(page)
         }
     end
 
-    local btn_prev = navCell("‹", has_prev)
+    btn_prev = navCell("‹", has_prev)
     local btn_info = navCell(string.format("%d / %d", page, total_pages), true)
-    local btn_next = navCell("›", has_next)
+    btn_next = navCell("›", has_next)
     table.insert(grid, HorizontalGroup:new{ btn_prev, btn_info, btn_next })
 
     local frame = FrameContainer:new{
