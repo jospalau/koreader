@@ -63,24 +63,25 @@ function PageTextInfo:applyFontAndReopen(face)
     local logger = require("logger")
     local page = self.fonts_page
 
+    local scale = PageTextInfo:isScaleByXHeight()
+
     local function debugFont(stage)
         logger.dbg(string.format(
             "[FontChange] %s | face=%s | size=%s pt | x-height=%s mm",
             stage,
             tostring(self.ui.document._document:getFontFace()),
             tostring(self.ui.font.configurable.font_size),
-            tostring(self:getXHeightMm())
+            scale and tostring(self:getXHeightMm()) or "n/a"
         ))
     end
 
-    debugFont("BEFORE")
-
-    -- Measure the effective x-height with the old face, before switching
     local target_mm
-    if PageTextInfo.SCALE_FONT_BY_XHEIGHT ~= false then
+    if scale then
         target_mm = self:getXHeightMm()
         logger.dbg("[FontChange] target x-height:", target_mm)
     end
+
+    debugFont("BEFORE")
 
     -- Don't close the dialog: the new one replaces it
     self.ui:handleEvent(Event:new("SetFont", face))

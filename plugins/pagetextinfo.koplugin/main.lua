@@ -1294,7 +1294,10 @@ end
 --     self.initialized = true
 -- end
 
-PageTextInfo.SCALE_FONT_BY_XHEIGHT = false
+function PageTextInfo:isScaleByXHeight()
+    -- default off (matches the committed behaviour); use nilOrTrue for default on
+    return G_reader_settings:isTrue("pagetextinfo_scale_by_xheight")
+end
 require("settings_menu")(PageTextInfo)
 require("font_selection_menu")(PageTextInfo)
 
@@ -1820,6 +1823,16 @@ This is to be active only if the option flash buttons and menu items or the opti
                         local enable_extra_tweaks = not self.settings:isTrue("enable_extra_tweaks")
                         self.settings:saveSetting("enable_extra_tweaks", enable_extra_tweaks)
                         self.settings:flush()
+                        return true
+                    end,
+                },
+                {
+                    text = _("Scale font by x-height"),
+                    checked_func = function() return self:isScaleByXHeight() end,
+                    help_text = _([[Keep the same x-height (mm) when changing font face, and show mm-based font presets. When off, presets are fixed point sizes.]]),
+                    callback = function()
+                        G_reader_settings:saveSetting("pagetextinfo_scale_by_xheight", not self:isScaleByXHeight())
+                        G_reader_settings:flush()
                         return true
                     end,
                 },

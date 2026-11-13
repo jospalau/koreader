@@ -17,16 +17,10 @@ return function(PageTextInfo)
 -- small / big: used as is.
 -- normal: only a fallback. Normally it is taken from KOReader's configured
 -- default font and size (see presetMm).
-local FONT_PRESETS
-local FONT_FALLBACK
 
-if PageTextInfo.SCALE_FONT_BY_XHEIGHT ~= false then
-    FONT_PRESETS = { small = 1.45, normal = 1.65, big = 1.90 }
-    -- Fallback pt values, used only if the font can't be measured.
-    FONT_FALLBACK = { small = 8.5, normal = 9.5, big = 11 }
-else
-    FONT_PRESETS = { small = 8.5, normal = 9.5, big = 11 }
-end
+local FONT_PRESETS = { small = 1.45, normal = 1.65, big = 1.90 }
+local FONT_FALLBACK = { small = 8.5, normal = 9.5, big = 11 }
+
 -- Font size steps in KOReader pt, used by the increase/decrease buttons
 local FONT_STEPS = { 0.5, 0.1 }
 local WEIGHT_STEP = 0.5
@@ -68,6 +62,15 @@ local GAMMA_TABLE = { 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8
     0.95, 0.98, 1, 1.02, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45,
     1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9,
     3, 3.5, 4, 4.5, 5, 5.5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 }
+
+-- KOReader's configured default size; falls back to this file's DEFAULTS
+local function defaultFontSize()
+    return G_reader_settings:readSetting("copt_font_size") or DEFAULTS.font_size
+end
+
+local function fixedPresets()
+    return { small = 8.5, normal = defaultFontSize(), big = 11 }
+end
 
 local function close(self)
     local UIManager = require("ui/uimanager")
@@ -193,13 +196,13 @@ local function presetMm(ui, name)
 end
 
 local function resetDefaults(ui)
-     -- Use the face saved with the long press; fall back to DEFAULTS.font_face
+    -- Use the face saved with the long press; fall back to DEFAULTS.font_face
     setFontFace(ui, G_reader_settings:readSetting("cre_font") or DEFAULTS.font_face)
-    if PageTextInfo.SCALE_FONT_BY_XHEIGHT ~= false then
+    if PageTextInfo:isScaleByXHeight() then
         -- Use the mm-based "normal" preset; fall back to the fixed pt value
-        setFontSize(ui, (ptForXHeight and ptForXHeight(ui, presetMm(ui, "normal"))) or DEFAULTS.font_size)
+        setFontSize(ui, (ptForXHeight and ptForXHeight(ui, presetMm(ui, "normal"))) or defaultFontSize())
     else
-        setFontSize(ui, DEFAULTS.font_size)
+        setFontSize(ui, defaultFontSize())
     end
     setLineSpacing(ui, DEFAULTS.line_spacing)
     setMargins(ui, DEFAULTS.margins)
@@ -242,8 +245,10 @@ local function buildRows(ui)
         return pt or FONT_FALLBACK[name], mm
     end
     local pts, mms = {}, {}
-    for __, name in ipairs({ "small", "normal", "big" }) do
-        pts[name], mms[name] = presetPt(name)
+    if PageTextInfo:isScaleByXHeight() then
+        for __, name in ipairs({ "small", "normal", "big" }) do
+            pts[name], mms[name] = presetPt(name)
+        end
     end
 
     -- Button text with the x-height in mm (plain text if it couldn't be measured)
@@ -255,30 +260,24 @@ local function buildRows(ui)
     local function near(a, b) return a and b and math.abs(a - b) < 0.011 end
 
     local font_preset_row
-
-    if PageTextInfo.SCALE_FONT_BY_XHEIGHT ~= false then
+    if PageTextInfo:isScaleByXHeight() then
         font_preset_row = {
             { text = withMm("Font small", mms.small),
-            callback = function(u) setFontSize(u, pts.small) end,
-            active = near(fs, pts.small) },
+              callback = function(u) setFontSize(u, pts.small) end,
+              active = near(fs, pts.small) },
             { text = withMm("Font default", mms.normal),
-            callback = function(u) setFontSize(u, pts.normal) end,
-            active = near(fs, pts.normal) },
+              callback = function(u) setFontSize(u, pts.normal) end,
+              active = near(fs, pts.normal) },
             { text = withMm("Font big", mms.big),
-            callback = function(u) setFontSize(u, pts.big) end,
-            active = near(fs, pts.big) },
+              callback = function(u) setFontSize(u, pts.big) end,
+              active = near(fs, pts.big) },
         }
     else
+        local fx = fixedPresets()
         font_preset_row = {
-            { text = "Font small",
-              callback = function(u) setFontSize(u, FONT_PRESETS.small) end,
-              active = approx(fs, FONT_PRESETS.small) },
-            { text = "Font default",
-              callback = function(u) setFontSize(u, FONT_PRESETS.normal) end,
-              active = approx(fs, FONT_PRESETS.normal) },
-            { text = "Font big",
-              callback = function(u) setFontSize(u, FONT_PRESETS.big) end,
-              active = approx(fs, FONT_PRESETS.big) },
+            { text = "Font small",   callback = function(u) setFontSize(u, fx.small) end,  active = near(fs, fx.small) },
+            { text = "Font default", callback = function(u) setFontSize(u, fx.normal) end, active = near(fs, fx.normal) },
+            { text = "Font big",     callback = function(u) setFontSize(u, fx.big) end,    active = near(fs, fx.big) },
         }
     end
     local rows = {
