@@ -1057,6 +1057,142 @@ function ReaderUI:dealWithLoadDocumentFailure()
     error("crengine failed recognizing or parsing this file: unsupported or invalid document")
 end
 
+-- Modern replacement for MultiConfirmBox. It takes the same arguments
+-- (text, choiceN_text / choiceN_callback, third_choice, cancel_callback) and
+-- has the same look as the settings and fonts menus: rounded buttons, a thin
+-- separator under the question, the choices stacked full width.
+-- Returns the dialog without showing it (the caller does UIManager:show).
+local function newChoiceBox(args)
+    local Blitbuffer = require("ffi/blitbuffer")
+    local Device = require("device")
+    local Font = require("ui/font")
+    local Geom = require("ui/geometry")
+    local GestureRange = require("ui/gesturerange")
+    local Size = require("ui/size")
+    local UIManager = require("ui/uimanager")
+    local TextBoxWidget = require("ui/widget/textboxwidget")
+    local TextWidget = require("ui/widget/textwidget")
+    local FrameContainer = require("ui/widget/container/framecontainer")
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local InputContainer = require("ui/widget/container/inputcontainer")
+    local VerticalGroup = require("ui/widget/verticalgroup")
+    local VerticalSpan = require("ui/widget/verticalspan")
+    local LineWidget = require("ui/widget/linewidget")
+    local Screen = Device.screen
+
+    local screen = Screen:getSize()
+
+    -- Layout metrics (scaled to the screen DPI)
+    local frame_w = math.floor(screen.w * 0.8)
+    local outer_pad = Screen:scaleBySize(12)
+    local inner_w = frame_w - 2 * (outer_pad + Size.border.window)
+    local gap = Screen:scaleBySize(6)
+    local thin = Screen:scaleBySize(1)
+    local btn_h = math.floor(Screen:scaleBySize(18) * 2.4)
+
+    -- Choices in the original order (the third one only if enabled)
+    local choices = {
+        { text = args.choice1_text, callback = args.choice1_callback },
+        { text = args.choice2_text, callback = args.choice2_callback },
+    }
+    if args.third_choice then
+        table.insert(choices, { text = args.choice3_text, callback = args.choice3_callback })
+    end
+
+    local dialog = InputContainer:new{
+        dimen = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
+        ges_events = {
+            Tap = { GestureRange:new{ ges = "tap",
+                range = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h } } },
+        },
+        key_events = Device:hasKeys() and { Close = { { Device.input.group.Back } } } or {},
+    }
+
+    -- Question + thin separator
+    local content = VerticalGroup:new{ align = "center" }
+    table.insert(content, TextBoxWidget:new{
+        text = args.text,
+        face = Font:getFace("cfont", 20),
+        width = inner_w,
+        alignment = "center",
+    })
+    table.insert(content, VerticalSpan:new{ width = gap * 2 })
+    table.insert(content, LineWidget:new{
+        dimen = Geom:new{ w = inner_w, h = thin },
+        background = Blitbuffer.COLOR_DARK_GRAY,
+    })
+    table.insert(content, VerticalSpan:new{ width = gap * 2 })
+
+    -- Rounded buttons, stacked
+    local buttons = {}
+    for i, c in ipairs(choices) do
+        if i > 1 then table.insert(content, VerticalSpan:new{ width = gap }) end
+        local frame = FrameContainer:new{
+            bordersize = thin,
+            color = Blitbuffer.COLOR_DARK_GRAY,
+            background = Blitbuffer.COLOR_WHITE,
+            radius = Size.radius.button,
+            margin = 0,
+            padding = 0,
+            CenterContainer:new{
+                dimen = Geom:new{ w = inner_w - 2 * thin, h = btn_h - 2 * thin },
+                TextWidget:new{
+                    text = c.text or "",
+                    face = Font:getFace("cfont", 18),
+                    max_width = inner_w - 2 * Size.padding.small,
+                },
+            },
+        }
+        table.insert(content, frame)
+        table.insert(buttons, { frame = frame, callback = c.callback })
+    end
+
+    local frame = FrameContainer:new{
+        background = Blitbuffer.COLOR_WHITE,
+        bordersize = Size.border.window,
+        radius = Size.radius.window,
+        padding = outer_pad,
+        margin = 0,
+        content,
+    }
+    dialog[1] = CenterContainer:new{
+        dimen = Geom:new{ w = screen.w, h = screen.h },
+        frame,
+    }
+
+    local fsize = frame:getSize()
+    dialog.frame_rect = Geom:new{
+        x = math.floor((screen.w - fsize.w) / 2),
+        y = math.floor((screen.h - fsize.h) / 2),
+        w = fsize.w, h = fsize.h,
+    }
+
+    function dialog:onTap(arg, ges)
+        for __, b in ipairs(buttons) do
+            if b.frame.dimen and ges.pos:intersectWith(b.frame.dimen) then
+                -- Same order as MultiConfirmBox: run the callback, then close
+                if b.callback then b.callback() end
+                UIManager:close(self, "ui", self.frame_rect)
+                return true
+            end
+        end
+        -- Tap outside the window: cancel
+        if not ges.pos:intersectWith(self.frame_rect) then
+            UIManager:close(self, "ui", self.frame_rect)
+            if args.cancel_callback then args.cancel_callback() end
+        end
+        return true
+    end
+
+    function dialog:onClose()
+        UIManager:close(self, "ui", self.frame_rect)
+        if args.cancel_callback then args.cancel_callback() end
+        return true
+    end
+
+    return dialog
+end
+
 function ReaderUI:onHome()
     UIManager:setSuspendRepaints(false)
     local file = self.document.file
@@ -1080,10 +1216,12 @@ function ReaderUI:onHome()
             -- end
         end
     else
+        -- Stock widget, replaced by newChoiceBox (same arguments, modern look)
+        -- local MultiConfirmBox = require("ui/widget/multiconfirmbox")
 
-        local MultiConfirmBox = require("ui/widget/multiconfirmbox")
-
-        local multi_box= MultiConfirmBox:new{
+        -- Declared first so the callbacks below can see it (UIManager:close(multi_box))
+        local multi_box
+        multi_box = newChoiceBox{
             third_choice = true,
             text = "Add to history and reset settings?",
             choice1_text = _("Yes"),
@@ -1214,7 +1352,7 @@ function ReaderUI:onHome()
             flash_yes = true,
             flash_no = true,
         }
-        UIManager:show(multi_box)
+        UIManager:show(multi_box, "ui", multi_box.frame_rect)
     end
     return true
 end
