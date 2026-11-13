@@ -1298,6 +1298,9 @@ function PageTextInfo:isScaleByXHeight()
     -- default off (matches the committed behaviour); use nilOrTrue for default on
     return G_reader_settings:isTrue("pagetextinfo_scale_by_xheight")
 end
+function PageTextInfo:isCompensateRem()
+    return G_reader_settings:isTrue("pagetextinfo_compensate_rem")
+end
 require("settings_menu")(PageTextInfo)
 require("font_selection_menu")(PageTextInfo)
 
@@ -1833,6 +1836,22 @@ This is to be active only if the option flash buttons and menu items or the opti
                     callback = function()
                         G_reader_settings:saveSetting("pagetextinfo_scale_by_xheight", not self:isScaleByXHeight())
                         G_reader_settings:flush()
+                        -- The compensation is implicitly on/off with this mode too
+                        self:reapplyFontCompensation(self:isScaleByXHeight() or self:isCompensateRem())
+                        return true
+                    end,
+                },
+                {
+                    text = _("Compensate book rem/em"),
+                    checked_func = function() return self:isScaleByXHeight() or self:isCompensateRem() end,
+                    help_text = _([[Divide the small and big font presets by the book's font-size factor (rem/em/%) so the effective size matches. Always on when "Scale font by x-height" is on.]]),
+                    enabled_func = function() return not self:isScaleByXHeight() end,
+                    callback = function()
+                        G_reader_settings:saveSetting("pagetextinfo_compensate_rem", not self:isCompensateRem())
+                        G_reader_settings:flush()
+                        -- Re-apply the current effective size so the new mode takes effect
+                        -- immediately (re-renders without losing the reading position).
+                        self:reapplyFontCompensation(self:isCompensateRem())
                         return true
                     end,
                 },

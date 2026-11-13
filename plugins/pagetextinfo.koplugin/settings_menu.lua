@@ -21,8 +21,6 @@ return function(PageTextInfo)
 local FONT_PRESETS = { small = 1.45, normal = 1.65, big = 1.90 }
 local FONT_FALLBACK = { small = 8.5, normal = 9.5, big = 11 }
 
--- Font size steps in KOReader pt, used by the increase/decrease buttons
-local FONT_STEPS = { 0.5, 0.1 }
 local WEIGHT_STEP = 0.5
 
 local CONTRAST_MIN, CONTRAST_MAX = 0, 56
@@ -72,6 +70,29 @@ local function fixedPresets()
     return { small = 8.5, normal = defaultFontSize(), big = 11 }
 end
 
+-- Book font-size factor (rem/em/%), 1 if unknown
+local function remScale(ui)
+    local ok, scale = pcall(function()
+        local __, face_name = xHeightRatio(ui.document)
+        if not face_name then return 1 end
+        return (bookScale(ui, Font:getFace(face_name, 100, 0, true)))
+    end)
+    return ok and scale or 1
+end
+
+-- pt to apply so the EFFECTIVE size (pt x book factor) equals `pt`
+local function compensate(ui, pt)
+    return math.floor(pt / remScale(ui) * 100 + 0.5) / 100
+end
+
+-- pt to apply for a desired pt, according to the active mode
+local function presetPtFor(ui, pt)
+    if PageTextInfo:isCompensateRem() then
+        return compensate(ui, pt)
+    end
+    return pt
+end
+
 local function close(self)
     local UIManager = require("ui/uimanager")
     local d = self.settings_dialog
@@ -96,10 +117,22 @@ local function setFontSize(ui, pt)
     ui.font.configurable.font_size = pt
 end
 
--- Change the font size by `delta` pt, rounded to 0.01 to avoid float drift
+-- Step the font size by `delta` pt, repeating until the rendering engine
+-- actually changes size. CREngine only distinguishes discrete sizes, so a
+-- small step (e.g. 0.1 pt, or the fractional values produced by the rem/em
+-- compensation) may leave the effective size unchanged. Each call therefore
+-- keeps adding `delta` (rounded to 0.01 to avoid float drift) until
+-- getFontSize() reports a new value. The 40 iterations cap avoids an endless
+-- loop when the minimum or maximum font size is reached.
 local function stepFontSize(ui, delta)
-    local pt = ui.font.configurable.font_size + delta
-    setFontSize(ui, math.floor(pt * 100 + 0.5) / 100)
+    local function cre_size() return ui.document._document:getFontSize() end
+    local before = cre_size()
+    local pt = ui.font.configurable.font_size
+    for __ = 1, 40 do
+        pt = math.floor((pt + delta) * 100 + 0.5) / 100
+        setFontSize(ui, pt)
+        if cre_size() ~= before then break end
+    end
 end
 
 local function setLineSpacing(ui, percent)
@@ -274,6 +307,8 @@ local function buildRows(ui)
         }
     else
         local fx = fixedPresets()
+        fx.small = presetPtFor(ui, fx.small)
+        fx.big   = presetPtFor(ui, fx.big)
         font_preset_row = {
             { text = "Font small",   callback = function(u) setFontSize(u, fx.small) end,  active = near(fs, fx.small) },
             { text = "Font default", callback = function(u) setFontSize(u, fx.normal) end, active = near(fs, fx.normal) },
@@ -287,10 +322,8 @@ local function buildRows(ui)
         },
             font_preset_row, -- 2
         { -- 3
-            { text = "Font -0.5", callback = function(u) stepFontSize(u, -FONT_STEPS[1]) end },
-            { text = "Font -0.1", callback = function(u) stepFontSize(u, -FONT_STEPS[2]) end },
-            { text = "Font +0.1", callback = function(u) stepFontSize(u,  FONT_STEPS[2]) end },
-            { text = "Font +0.5", callback = function(u) stepFontSize(u,  FONT_STEPS[1]) end },
+            { text = "Font ▼", callback = function(u) stepFontSize(u, -0.1) end },
+            { text = "Font ▲", callback = function(u) stepFontSize(u,  0.1) end },
         },
         {}, -- 4: line spacing (filled below)
         {}, -- 5: margins (filled below)
@@ -819,6 +852,30 @@ function PageTextInfo:onShowSettingsMenu()
     UIManager:show(dialog, "ui", region)
     if old_dialog then UIManager:close(old_dialog, "ui", region) end
     return true
+end
+
+local logger = require("logger")
+-- Re-apply the current font size after the rem compensation setting changes,
+-- so the effective size matches the new mode.
+function PageTextInfo:reapplyFontCompensation(enabled)
+    local ui = self.ui
+
+    -- Keep the unmodified font size as the reference.
+    self._font_size_before_compensation =
+        self._font_size_before_compensation
+        or ui.font.configurable.font_size
+
+    local pt = self._font_size_before_compensation
+    local scale = remScale(ui)
+
+    local new_pt = enabled
+        and compensate(ui, pt)
+        or pt
+
+    logger.dbg("reapply", "enabled", enabled, "base", pt,
+        "scale", scale, "new_pt", new_pt)
+
+    setFontSize(ui, new_pt)
 end
 
 end -- return function(PageTextInfo)
