@@ -60,21 +60,45 @@ end
 -- the pt size for the new face.
 function PageTextInfo:applyFontAndReopen(face)
     local Event = require("ui/event")
+    local logger = require("logger")
     local page = self.fonts_page
 
+    local function debugFont(stage)
+        logger.dbg(string.format(
+            "[FontChange] %s | face=%s | size=%s pt | x-height=%s mm",
+            stage,
+            tostring(self.ui.document._document:getFontFace()),
+            tostring(self.ui.font.configurable.font_size),
+            tostring(self:getXHeightMm())
+        ))
+    end
+
+    debugFont("BEFORE")
+
     -- Measure the effective x-height with the old face, before switching
-    local target_mm = self:getXHeightMm()
+    local target_mm
+    if PageTextInfo.SCALE_FONT_BY_XHEIGHT ~= false then
+        target_mm = self:getXHeightMm()
+        logger.dbg("[FontChange] target x-height:", target_mm)
+    end
 
     -- Don't close the dialog: the new one replaces it
     self.ui:handleEvent(Event:new("SetFont", face))
 
-    -- Keep the same x-height with the new face (skipped if it can't be measured)
+    debugFont("AFTER SetFont")
+
+    -- Keep the same x-height with the new face (skipped if scaling is disabled or it can't be measured)
     if target_mm then
         local pt = self:ptForXHeight(target_mm)
-        if pt then self:applyFontSizePt(pt) end
+        logger.dbg("[FontChange] calculated size:", pt)
+        if pt then
+            self:applyFontSizePt(pt)
+            debugFont("AFTER applyFontSizePt")
+        end
     end
 
     UIManager:nextTick(function()
+        debugFont("NEXT TICK")
         self:onShowFonts(page)
     end)
 end

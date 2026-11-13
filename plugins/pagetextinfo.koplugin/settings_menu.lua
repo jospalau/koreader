@@ -17,10 +17,16 @@ return function(PageTextInfo)
 -- small / big: used as is.
 -- normal: only a fallback. Normally it is taken from KOReader's configured
 -- default font and size (see presetMm).
-local FONT_PRESETS = { small = 1.45, normal = 1.65, big = 1.90 }
+local FONT_PRESETS
+local FONT_FALLBACK
 
--- Fallback pt values, used only if the font can't be measured.
-local FONT_FALLBACK = { small = 8.5, normal = 9.5, big = 11 }
+if PageTextInfo.SCALE_FONT_BY_XHEIGHT ~= false then
+    FONT_PRESETS = { small = 1.45, normal = 1.65, big = 1.90 }
+    -- Fallback pt values, used only if the font can't be measured.
+    FONT_FALLBACK = { small = 8.5, normal = 9.5, big = 11 }
+else
+    FONT_PRESETS = { small = 8.5, normal = 9.5, big = 11 }
+end
 -- Font size steps in KOReader pt, used by the increase/decrease buttons
 local FONT_STEPS = { 0.5, 0.1 }
 local WEIGHT_STEP = 0.5
@@ -189,8 +195,12 @@ end
 local function resetDefaults(ui)
      -- Use the face saved with the long press; fall back to DEFAULTS.font_face
     setFontFace(ui, G_reader_settings:readSetting("cre_font") or DEFAULTS.font_face)
-    -- Use the mm-based "normal" preset; fall back to the fixed pt value
-    setFontSize(ui, (ptForXHeight and ptForXHeight(ui, presetMm(ui, "normal"))) or DEFAULTS.font_size)
+    if PageTextInfo.SCALE_FONT_BY_XHEIGHT ~= false then
+        -- Use the mm-based "normal" preset; fall back to the fixed pt value
+        setFontSize(ui, (ptForXHeight and ptForXHeight(ui, presetMm(ui, "normal"))) or DEFAULTS.font_size)
+    else
+        setFontSize(ui, DEFAULTS.font_size)
+    end
     setLineSpacing(ui, DEFAULTS.line_spacing)
     setMargins(ui, DEFAULTS.margins)
     setWeight(ui, DEFAULTS.font_base_weight)
@@ -244,22 +254,39 @@ local function buildRows(ui)
     -- Tight comparison for the "active" border (pt values have 0.01 resolution)
     local function near(a, b) return a and b and math.abs(a - b) < 0.011 end
 
+    local font_preset_row
+
+    if PageTextInfo.SCALE_FONT_BY_XHEIGHT ~= false then
+        font_preset_row = {
+            { text = withMm("Font small", mms.small),
+            callback = function(u) setFontSize(u, pts.small) end,
+            active = near(fs, pts.small) },
+            { text = withMm("Font default", mms.normal),
+            callback = function(u) setFontSize(u, pts.normal) end,
+            active = near(fs, pts.normal) },
+            { text = withMm("Font big", mms.big),
+            callback = function(u) setFontSize(u, pts.big) end,
+            active = near(fs, pts.big) },
+        }
+    else
+        font_preset_row = {
+            { text = "Font small",
+              callback = function(u) setFontSize(u, FONT_PRESETS.small) end,
+              active = approx(fs, FONT_PRESETS.small) },
+            { text = "Font default",
+              callback = function(u) setFontSize(u, FONT_PRESETS.normal) end,
+              active = approx(fs, FONT_PRESETS.normal) },
+            { text = "Font big",
+              callback = function(u) setFontSize(u, FONT_PRESETS.big) end,
+              active = approx(fs, FONT_PRESETS.big) },
+        }
+    end
     local rows = {
         { -- 1
             { text = "Reset defaults",      callback = resetDefaults },
             { text = "Toggle screen layout", callback = toggleLayout },
         },
-        { -- 2
-            { text = withMm("Font small", mms.small),
-              callback = function(u) setFontSize(u, pts.small) end,
-              active = near(fs, pts.small) },
-            { text = withMm("Font default", mms.normal),
-              callback = function(u) setFontSize(u, pts.normal) end,
-              active = near(fs, pts.normal) },
-            { text = withMm("Font big", mms.big),
-              callback = function(u) setFontSize(u, pts.big) end,
-              active = near(fs, pts.big) },
-        },
+            font_preset_row, -- 2
         { -- 3
             { text = "Font -0.5", callback = function(u) stepFontSize(u, -FONT_STEPS[1]) end },
             { text = "Font -0.1", callback = function(u) stepFontSize(u, -FONT_STEPS[2]) end },

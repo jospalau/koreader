@@ -1294,6 +1294,7 @@ end
 --     self.initialized = true
 -- end
 
+PageTextInfo.SCALE_FONT_BY_XHEIGHT = false
 require("settings_menu")(PageTextInfo)
 require("font_selection_menu")(PageTextInfo)
 
