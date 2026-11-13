@@ -184,6 +184,16 @@ local function setFontSize(ui, pt)
         "cre size=", ui.document._document:getFontSize())
 end
 
+-- Size in px that crengine REALLY draws for the current font size: it only
+-- draws whole pixels (the fraction is dropped). Every x-height shown must use
+-- this, not the unrounded dpi * pt / 72, or two pt values that render the same
+-- size would show different mm.
+local function drawnPx(ui, pt, dpi)
+    local ok, n = pcall(function() return ui.document._document:getFontSize() end)
+    if ok and n and n > 0 then return n end
+    return math.floor(dpi * pt / 72 + 1e-6)
+end
+
 -- Step the font size by `delta` pt, repeating until the rendering engine
 -- actually changes size. CREngine only distinguishes discrete sizes, so a
 -- small step (e.g. 0.1 pt, or the fractional values produced by the rem/em
@@ -301,11 +311,15 @@ local function configuredXHeightMm(ui)
         -- The saved size is an EFFECTIVE size (see saveCurrentFontAsDefault), so
         -- the book factor is not applied here: ptForXHeight adds it when it
         -- converts this x-height back to the pt to apply.
-        -- x_mm = ratio * px / px_per_mm, with px = dpi * pt / 72,
-        -- so the dpi cancels out
-        local mm = ratio * pt * 25.4 / 72
-        dlog("configuredXHeightMm: face=", face_name, "pt=", pt, "ratio=", ratio,
-            "-> mm=", mm)
+        -- x_mm = ratio * px / px_per_mm, with px = the WHOLE-pixel size that
+        -- crengine really draws for that pt (dpi * pt / 72, fraction dropped).
+        -- Using the unrounded px would put the target exactly between two real
+        -- sizes (e.g. 39.5 px) and the rounding would then depend on float noise.
+        local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+        local px = math.floor(dpi * pt / 72 + 1e-6)
+        local mm = ratio * px * 25.4 / dpi
+        dlog("configuredXHeightMm: face=", face_name, "pt=", pt, "px drawn=", px,
+            "ratio=", ratio, "-> mm=", mm)
         return mm
     end)
     if ok then return res end
@@ -410,8 +424,14 @@ local function buildRows(ui, plugin)
         return mm and string.format("%s %.2f mm", text, mm) or (text .. " (pt)")
     end
 
-    -- Tight comparison for the "active" border (pt values have 0.01 resolution)
-    local function near(a, b) return a and b and math.abs(a - b) < 0.011 end
+    -- "Active" border: two sizes are the same when crengine draws them at the
+    -- same whole-pixel size, even if their pt differ (stepping up and down
+    -- leaves a slightly different pt for the same drawn size).
+    local dpi_now = Device:getDeviceScreenDPI() or Screen:getDPI()
+    local function near(a, b)
+        if not (a and b) then return false end
+        return math.floor(dpi_now * a / 72 + 1e-6) == math.floor(dpi_now * b / 72 + 1e-6)
+    end
 
     local font_preset_row
     if PageTextInfo:isScaleByXHeight() then
@@ -633,6 +653,127 @@ ptForXHeight = function(ui, target_mm)
     return nil
 end
 
+-- Text-weighted detection. Every leaf block (<p> or <div> that has no
+-- other <p>/<div> inside) is weighed by its amount of text and given the
+-- font-size it really gets: its class rule, else the p/div rule, else the
+-- body's. The factor covering most of the TEXT wins. This finds the real text
+-- size even when paragraphs are <div>s or the size is split over several
+-- classes, and composes em / % with the body size.
+-- Returns { value = factor, unit = "rem", share, tier = "text" } or nil.
+local function lastFontSize(block)
+    local v, u
+    for a, b in block:gmatch("font%-size%s*:%s*([%d%.]+)%s*(%a*%%?)") do v, u = a, b end
+    if v then return { tonumber(v), u } end
+end
+
+-- Factor of a size: rem is root-relative, em / % are relative to the parent.
+-- nil for absolute units (px, pt...).
+local function relFactor(sz, parent)
+    if not sz then return parent end
+    local v, u = sz[1], sz[2]
+    if not v then return nil end
+    if u == "rem" then return v end
+    if u == "em" then return v * parent end
+    if u == "%" then return v / 100 * parent end
+    return nil
+end
+
+local function textWeighted(arc, html_paths, rules)
+    local cls_size, p_size, div_size, body_size, html_size = {}, nil, nil, nil, nil
+    for __, rule in ipairs(rules) do
+        local sz = lastFontSize(rule.block)
+        if sz then
+            for __, t in ipairs(rule.selectors) do
+                local sel = t:gsub("^body%s+", "")
+                if t == "p" or t == "body p" then p_size = sz
+                elseif t == "div" or t == "body div" then div_size = sz
+                elseif t == "body" then body_size = sz
+                elseif t == "html" then html_size = sz
+                else
+                    local c = sel:match("^p%.([%w_%-]+)$") or sel:match("^div%.([%w_%-]+)$")
+                        or sel:match("^%.([%w_%-]+)$")
+                    if c then cls_size[c] = sz end
+                end
+            end
+        end
+    end
+
+    -- Up to 16 text files spread over the whole book (not only the front matter)
+    table.sort(html_paths)
+    local picked, n_paths = {}, #html_paths
+    local want = math.min(n_paths, 16)
+    for i = 0, want - 1 do picked[#picked + 1] = html_paths[math.floor(i * n_paths / want) + 1] end
+
+    local body_cls
+    local texts = {}
+    for __, path in ipairs(picked) do
+        local html = arc:extractToMemory(path)
+        if html and #html >= 3000 then
+            texts[#texts + 1] = html
+            if not body_cls then
+                local c = html:match('<[bB][oO][dD][yY][^>]*class%s*=%s*"([^"]*)"')
+                    or html:match("<[bB][oO][dD][yY][^>]*class%s*=%s*'([^']*)'")
+                if c then body_cls = c end
+            end
+        end
+    end
+
+    local html_f = relFactor(html_size, 1) or 1
+    local bsz
+    for c in (body_cls or ""):gmatch("%S+") do
+        if cls_size[c] then bsz = cls_size[c] end
+    end
+    bsz = bsz or body_size
+    local body_f = relFactor(bsz, html_f) or 1
+
+    local buckets, chars = {}, 0
+    for __, html in ipairs(texts) do
+        local cur
+        for pos, closing, tag, attrs, after in html:gmatch("()<(/?)(%a+)([^>]*)>()") do
+            tag = tag:lower()
+            if tag == "p" or tag == "div" then
+                if closing == "/" then
+                    if cur then
+                        local txt = html:sub(cur.after, pos - 1):gsub("<[^>]*>", ""):gsub("&[#%w]+;", "x")
+                        txt = txt:gsub("%s+", " "):gsub("^ ", ""):gsub(" $", "")
+                        local len = #txt
+                        if len >= 30 then
+                            local sz
+                            for c in cur.attrs:gmatch("class%s*=%s*[\"']([^\"']*)") do
+                                for name in c:gmatch("%S+") do
+                                    if cls_size[name] then sz = cls_size[name] end
+                                end
+                            end
+                            if not sz then sz = (cur.tag == "p") and p_size or div_size end
+                            local f = relFactor(sz, body_f)
+                            local key = f and string.format("%.3f", f) or "abs"
+                            buckets[key] = (buckets[key] or 0) + len
+                            chars = chars + len
+                        end
+                        cur = nil
+                    end
+                elseif attrs:sub(-1) ~= "/" then
+                    cur = { tag = tag, attrs = attrs, after = after }
+                end
+            end
+        end
+    end
+    if chars == 0 then return nil end
+    local best, best_n = nil, 0
+    for k, n in pairs(buckets) do
+        if n > best_n or (n == best_n and best and k < best) then best, best_n = k, n end
+    end
+    local share = best_n / chars
+    dlog("textWeighted: body factor=", body_f, "chars=", chars, "best=", best, "share=", share)
+    local f = best ~= "abs" and tonumber(best) or nil
+    if f and share >= 0.6 and f > 0.5 and f < 1.5 then
+        return { value = f, unit = "rem", share = share, tier = "text", any_rem = (math.abs(f - 1) > 0.001) }
+    end
+    -- No dominant relative size: let the on-screen measurement decide
+    return { value = 1, unit = "rem", share = share, tier = "global", any_rem = true }
+end
+
+
 -- Returns { value=0.88, unit="rem", share=1.0, tier="class" }: the most repeated
 -- font-size of the rules that set the body text size, by priority:
 --   1 = the class most <p> elements use (".calibre5", "p.calibre5")
@@ -653,9 +794,11 @@ bookFontSizeStats = function(doc)
         local rules = {}                    -- { selectors = {...}, block = "..." }, all .css files
         local p_total, p_classes = 0, {}    -- <p> count and class usage in the sampled text files
         local sampled = 0
+        local html_paths = {}               -- every text file, for the text-weighted pass
         for entry in arc:iterate() do
             if entry.mode == "file" then
                 local path = entry.path:lower()
+                if path:match("%.x?html?$") then html_paths[#html_paths + 1] = entry.path end
                 if path:match("%.css$") then
                     local css = arc:extractToMemory(entry.path)
                     if css then
@@ -691,6 +834,7 @@ bookFontSizeStats = function(doc)
                 end
             end
         end
+        local by_text = textWeighted(arc, html_paths, rules)
         arc:close()
 
         -- Class used by most paragraphs (only if it is clearly the dominant one)
@@ -746,7 +890,7 @@ bookFontSizeStats = function(doc)
         end
         if total == 0 then
             dlog("bookFontSizeStats: no font-size in the CSS, rules=", #rules)
-            return nil
+            return by_text
         end
         -- Use the highest-priority group that has any declaration
         local found = false
@@ -782,8 +926,15 @@ bookFontSizeStats = function(doc)
             "share=", best_n / total, "paragraph class=", para_class,
             "sampled files=", sampled, "<p> found=", p_total, "css rules=", #rules,
             "any_rem=", any_rem, "decls per tier=", table.concat(tier_total, ","))
-        return { value = tonumber(v), unit = u, share = best_n / total, tier = tier_name,
-                 any_rem = any_rem, para_class = para_class }
+        -- Fallback: the CSS rules alone (used only when the book has no text to weigh)
+        local from_css = { value = tonumber(v), unit = u, share = best_n / total, tier = tier_name,
+                           any_rem = any_rem, para_class = para_class }
+        if by_text then
+            dlog("bookFontSizeStats: size taken from the text: factor=", by_text.value,
+                "tier=", by_text.tier, "share=", by_text.share)
+            return by_text
+        end
+        return from_css
     end)
     if not ok then dlog("bookFontSizeStats ERROR:", res) end
     _css_cache[file] = (ok and res) or false
@@ -862,6 +1013,39 @@ bookScale = function(ui, face_base)
     return scale, source
 end
 
+-- Diagnostics only: compares the cached book factor with an on-screen
+-- measurement taken NOW (call it with a text page open, e.g. from the menu).
+local function scaleCheck(ui)
+    if not DEBUG_LOG then return end
+    local function run()
+        local ok, err = pcall(function()
+            local key = ui.document.file
+            local name = tostring(key):match("([^/]+)$") or tostring(key)
+            local cached = key and _scale_cache[key]
+            local __, face_name = xHeightRatio(ui.document)
+            local face = face_name and Font:getFace(face_name, 100, 0, true)
+            if not (cached and face) then
+                dlog("scaleCheck: no cached factor or face yet:", name)
+                return
+            end
+            local m = effectiveScale(ui, face)
+            local fs = ui.document._document:getFontSize()
+            if not m then
+                dlog("scaleCheck: factor=", cached[1], "source=", cached[2],
+                    "measured=n/a (too few words) cre size=", fs, name)
+                return
+            end
+            local diff = (cached[1] / m - 1) * 100
+            dlog(string.format("scaleCheck: source=%s factor=%.3f measured=%.3f diff=%+.1f%% %s cre size=%s | %s",
+                cached[2], cached[1], m, diff, math.abs(diff) > 5 and "MISMATCH" or "ok", tostring(fs), name))
+        end)
+        if not ok then dlog("scaleCheck ERROR:", err) end
+    end
+    -- Wait for the relayout that follows a font-size change; measuring right
+    -- away can read the previous layout.
+    require("ui/uimanager"):scheduleIn(0.6, run)
+end
+
 -- Public methods (used by the fonts menu in main.lua) --------------------
 
 -- Current EFFECTIVE x-height in mm (same model as the menu title).
@@ -874,7 +1058,7 @@ function PageTextInfo:getXHeightMm()
         if not ratio then return nil end
         local face = Font:getFace(face_name, 100, 0, true)
         local scale = bookScale(ui, face)
-        local px = dpi * ui.document.configurable.font_size / 72  -- unrounded, like KOReader
+        local px = drawnPx(ui, ui.document.configurable.font_size, dpi)  -- whole px, as drawn
         local res = ratio * scale * px / (dpi / 25.4)
         dlog("getXHeightMm: pt=", ui.document.configurable.font_size, "ratio=", ratio,
             "book factor=", scale, "-> mm=", res)
@@ -1082,8 +1266,8 @@ local function buildTitleSegments(ui)
     local pt = configurable.font_size
     local ratio, face_name = xHeightRatio(doc)
     if not ratio then return na end
-    local px = display_dpi * pt / 72
-    local face_base = Font:getFace(face_name, math.floor(px + 0.5), 0, true)
+    local px = drawnPx(ui, pt, display_dpi)   -- whole px, as drawn by crengine
+    local face_base = Font:getFace(face_name, px, 0, true)
     if not face_base or not face_base.ftsize then return na end
 
     local xh_px = ratio * px
@@ -1186,6 +1370,7 @@ function PageTextInfo:onShowSettingsMenu()
         return true
     end
     dlog("onShowSettingsMenu: open, reopen=", self.settings_dialog ~= nil)
+    scaleCheck(self.ui)
 
     local old_dialog = self.settings_dialog
     local old_region = old_dialog and old_dialog.frame_rect and old_dialog.frame_rect:copy()
