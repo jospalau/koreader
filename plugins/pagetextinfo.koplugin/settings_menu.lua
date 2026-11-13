@@ -308,7 +308,7 @@ local function marginsMatch(conf, m)
         and approx(conf.t_page_margin, m[2]) and approx(conf.b_page_margin, m[4])
 end
 
-local function buildRows(ui)
+local function buildRows(ui, plugin)
     local conf = ui.document.configurable
     local fs = ui.font.configurable.font_size
     require("logger").dbg("settings menu state: font_size=", fs,
@@ -402,6 +402,33 @@ local function buildRows(ui)
             active = marginsMatch(conf, p.value) and true or false,
         })
     end
+
+    -- Mode toggles (same settings and behaviour as their entries in the main menu)
+    local scale_on = PageTextInfo:isScaleByXHeight() and true or false
+    local has_rem = plugin:hasRemStyles()
+    local compensate_on = has_rem and (scale_on or PageTextInfo:isCompensateRem()) and true or false
+    table.insert(rows, 1, {
+        { text = "Scale by x-height",
+          active = scale_on,
+          callback = function()
+              -- Keep the selected font preset (small / default / big) in the new mode
+              local preset = plugin:getActivePreset()
+              G_reader_settings:saveSetting("pagetextinfo_scale_by_xheight", not scale_on)
+              G_reader_settings:flush()
+              plugin:applyPreset(preset)
+          end },
+        { text = "Compensate rem/em",
+          active = compensate_on,
+          -- Always on with x-height scaling; unavailable without rem/em styles
+          disabled = scale_on or not has_rem,
+          callback = function()
+              if scale_on or not has_rem then return end
+              G_reader_settings:saveSetting("pagetextinfo_compensate_rem", not PageTextInfo:isCompensateRem())
+              G_reader_settings:flush()
+              -- Re-apply the current effective size so the new mode takes effect
+              plugin:reapplyFontCompensation(PageTextInfo:isCompensateRem())
+          end },
+    })
     return rows
 end
 
@@ -889,14 +916,14 @@ function PageTextInfo:onShowSettingsMenu()
 
     -- Small caption shown above each row of buttons (same order as buildRows)
     local SECTION_TITLES = {
-        "General", "Font presets", "Font size (fine step)",
+        "Font scaling", "General", "Font presets", "Font size (fine step)",
         "Line spacing", "Margins", "Weight", "Contrast",
     }
     local label_face = Font:getFace("cfont", 13)
     local label_h = math.floor(Screen:scaleBySize(13) * 1.8)
 
     local grid = VerticalGroup:new{ align = "center" }
-    for i, row_def in ipairs(buildRows(ui)) do
+    for i, row_def in ipairs(buildRows(ui, self)) do
         local n = #row_def
         if n > 0 then
             local cell_w = math.floor((dialog_w - gap * (n - 1)) / n)
@@ -933,7 +960,8 @@ function PageTextInfo:onShowSettingsMenu()
                         TextWidget:new{
                             text = b.text,
                             face = Font:getFace("cfont", 18),
-                            fgcolor = b.active and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK,
+                            fgcolor = b.active and Blitbuffer.COLOR_WHITE
+                                or (b.disabled and Blitbuffer.COLOR_DARK_GRAY or Blitbuffer.COLOR_BLACK),
                             bold = b.active and true or false,
                             max_width = cell_w - 2 * Size.padding.small,
                         },
