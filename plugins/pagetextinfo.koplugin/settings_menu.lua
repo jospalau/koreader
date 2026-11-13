@@ -206,7 +206,7 @@ end
 -- in the current book. Returns nil if it can't be measured.
 local function configuredXHeightMm(ui)
     local ok, res = pcall(function()
-        -- Default face and size as set in KOReader (fall back to this file's DEFAULTS)
+        -- Default face and size as set in KOReader (the size falls back to DEFAULTS).
         -- No default face saved: don't force DEFAULTS.font_face. If the saved
         -- face can't be measured (e.g. not installed), use the current one.
         local face = G_reader_settings:readSetting("cre_font")
@@ -257,7 +257,7 @@ local function resetDefaults(ui)
     setFontFace(ui, G_reader_settings:readSetting("cre_font") or DEFAULTS.font_face)
     if PageTextInfo:isScaleByXHeight() then
         -- Use the mm-based "normal" preset; fall back to the fixed pt value
-        setFontSize(ui, (ptForXHeight and ptForXHeight(ui, presetMm(ui, "normal"))) or defaultFontSize())
+        setFontSize(ui, (ptForXHeight and ptForXHeight(ui, presetMm(ui, "normal"))) or presetPtFor(ui, defaultFontSize()))
     else
         setFontSize(ui, presetPtFor(ui, defaultFontSize()))
     end
@@ -492,29 +492,37 @@ local function bookFontSizeStats(doc)
         local arc = Archiver.Reader:new()
         if not arc:open(file) then return nil end
         local counts, total = {}, 0
-        local body_counts, body_total = {}, 0
+        -- Rules that set the body text size, by priority:
+        -- 1 = p / body p, 2 = body / .calibre, 3 = html (often just 100%)
+        local tiers, tier_total = { {}, {}, {} }, { 0, 0, 0 }
         for entry in arc:iterate() do
             if entry.mode == "file" and entry.path:lower():match("%.css$") then
                 local css = arc:extractToMemory(entry.path)
                 if css then
                     css = css:gsub("/%*.-%*/", "")  -- strip comments
-                    -- Prefer the body / html / p rules (body text) over counting
+                    -- Prefer the rules that set the body text size over counting
                     -- every declaration in the CSS
                     for sel, block in css:gmatch("([^{}]+)%{([^}]*)%}") do
-                        local is_body = false
+                        local tier
                         for s in sel:gmatch("[^,]+") do
                             local t = s:gsub("^%s+", ""):gsub("%s+$", "")
-                            if t == "body" or t == "html" or t == "p" or t == "body p" then
-                                is_body = true
+                            local n
+                            if t == "p" or t == "body p" then
+                                n = 1
+                            elseif t == "body" or t:match("^%.calibre%d*$") then
+                                n = 2
+                            elseif t == "html" then
+                                n = 3
                             end
+                            if n and (not tier or n < tier) then tier = n end
                         end
                         for v, u in block:gmatch("font%-size%s*:%s*([%d%.]+)%s*(%a*%%?)") do
                             local k = v .. "|" .. u
                             counts[k] = (counts[k] or 0) + 1
                             total = total + 1
-                            if is_body then
-                                body_counts[k] = (body_counts[k] or 0) + 1
-                                body_total = body_total + 1
+                            if tier then
+                                tiers[tier][k] = (tiers[tier][k] or 0) + 1
+                                tier_total[tier] = tier_total[tier] + 1
                             end
                         end
                     end
@@ -523,7 +531,10 @@ local function bookFontSizeStats(doc)
         end
         arc:close()
         if total == 0 then return nil end
-        if body_total > 0 then counts, total = body_counts, body_total end
+        -- Use the highest-priority group that has any declaration
+        for i = 1, 3 do
+            if tier_total[i] > 0 then counts, total = tiers[i], tier_total[i]; break end
+        end
         local best_k, best_n = nil, 0
         for k, n in pairs(counts) do
             -- Tie-break on the key so the result doesn't depend on pairs() order
@@ -574,16 +585,18 @@ end
 bookScale = function(ui, face_base)
     local doc = ui.document
     local key = doc.file
+    local conf = doc.configurable
     local cached = key and _scale_cache[key]
-    if cached then return cached[1], cached[2] end
+    if cached and not (conf and conf.embedded_css == 0) then
+        return cached[1], cached[2]
+    end
 
     local scale, source = 1, "none"
 
     -- With the publisher style sheet disabled ("Book styles" off) crengine
     -- ignores the CSS, so the real factor is 1 (embedded_css: 1 = enabled).
-    local conf = doc.configurable
+    -- Not cached: the setting can change while the book is open.
     if conf and conf.embedded_css == 0 then
-        if key then _scale_cache[key] = { 1, "nocss" } end
         return 1, "nocss"
     end
 
