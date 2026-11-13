@@ -427,7 +427,7 @@ function PageTextInfo:onShowFonts(page)
     -- Grid settings
     local COLUMNS = 2
     local ROWS_PER_PAGE = 5
-    local FONT_SIZE = 16
+    local FONT_SIZE = 14
     local PER_PAGE = COLUMNS * ROWS_PER_PAGE
 
     local ui = self.ui
@@ -471,17 +471,17 @@ function PageTextInfo:onShowFonts(page)
     -- Sizes
     local screen = Screen:getSize()
     local frame_w = math.floor(screen.w * 0.8)
-    local outer_pad = Screen:scaleBySize(10)
+    local outer_pad = Screen:scaleBySize(5)
     -- Inner width available for the grid (window width minus padding and border)
     local dialog_w = frame_w - 2 * (outer_pad + Size.border.window)
-    local gap = Screen:scaleBySize(6)   -- space between cells and between rows
+    local gap = Screen:scaleBySize(3)   -- space between cells and between rows
     local thin = Screen:scaleBySize(1)
     local cell_w = math.floor((dialog_w - gap * (COLUMNS - 1)) / COLUMNS)
     -- The last column takes the rounding remainder so rows span exactly dialog_w
     local last_cell_w = dialog_w - gap * (COLUMNS - 1) - cell_w * (COLUMNS - 1)
-    local label_h = math.floor(Screen:scaleBySize(13) * 1.8)
+    local label_h = math.floor(Screen:scaleBySize(11) * 1.4)
     local font_px = Screen:scaleBySize(FONT_SIZE)
-    local cell_h = math.floor(font_px * 2.2)
+    local cell_h = math.floor(font_px * 2.0)
     local text_h = math.floor(font_px * 1.6)
     local baseline = math.floor(font_px * 1.15)
     local cells = {}   -- font cells: { frame, face, label }
@@ -545,6 +545,14 @@ function PageTextInfo:onShowFonts(page)
         return true
     end
 
+    -- Fonts installed / fonts already used (the ones with reading time in the stats)
+    local used_count = 0
+    for __, face in ipairs(fonts) do
+        if self.fonts_stats.secs[(face:gsub("%s+", ""):lower())] then
+            used_count = used_count + 1
+        end
+    end
+
     local grid = VerticalGroup:new{ align = "center" }
 
     -- Small caption with a thin separator below it (same look as the settings menu)
@@ -553,8 +561,8 @@ function PageTextInfo:onShowFonts(page)
         HorizontalGroup:new{
             HorizontalSpan:new{ width = gap },
             TextWidget:new{
-                text = "Fonts  |  long press for info",
-                face = Font:getFace("cfont", 13),
+                text = string.format("Fonts: %d  |  used: %d", #fonts, used_count),
+                face = Font:getFace("cfont", 11),
                 fgcolor = Blitbuffer.COLOR_DARK_GRAY,
             },
         },
