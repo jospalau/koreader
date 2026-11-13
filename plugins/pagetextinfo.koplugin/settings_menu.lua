@@ -839,6 +839,49 @@ function PageTextInfo:applyFontSizePt(pt)
     setFontSize(self.ui, pt)
 end
 
+-- Book opened for the first time: KOReader gives it its plain default size
+-- (copt_font_size), but with a compensation active (x-height scaling or rem/em)
+-- "Font default" applies the compensated size, so the preset would not be
+-- highlighted. Move the book to that preset so it starts on "Font default".
+-- Books that already have a font size of their own are left untouched.
+function PageTextInfo:applyDefaultOnOpen()
+    local ui = self.ui
+    local ok, err = pcall(function()
+        if not ui or not ui.document or ui.paging or not ui.font then return end
+        -- Fresh book: no font size saved in the book's own settings
+        local ds = ui.doc_settings
+        if ds and ds:readSetting("copt_font_size") ~= nil then return end
+        if not (PageTextInfo:isScaleByXHeight() or PageTextInfo:isCompensateRem()) then
+            return
+        end
+        -- Only if the book is still at KOReader's plain default size
+        local fs = ui.font.configurable.font_size
+        if not fs or math.abs(fs - defaultFontSize()) >= 0.011 then return end
+        local pt = computePresetPts(ui).normal
+        if pt and math.abs(pt - fs) >= 0.011 then setFontSize(ui, pt) end
+    end)
+    if not ok then require("logger").warn("applyDefaultOnOpen failed:", err) end
+end
+
+-- Run it every time a book is opened. ReaderFont reads the book's settings on
+-- open, so wrap that once (the module is loaded per book, hence the flag) and
+-- run applyDefaultOnOpen right after the book has finished opening.
+do
+    local ok_rf, ReaderFont = pcall(require, "apps/reader/modules/readerfont")
+    if ok_rf and ReaderFont and not ReaderFont._pagetextinfo_hooked then
+        ReaderFont._pagetextinfo_hooked = true
+        local orig_read_settings = ReaderFont.onReadSettings
+        ReaderFont.onReadSettings = function(font_self, ...)
+            local res = orig_read_settings and orig_read_settings(font_self, ...)
+            -- Only needs .ui
+            require("ui/uimanager"):tickAfterNext(function()
+                PageTextInfo.applyDefaultOnOpen({ ui = font_self.ui })
+            end)
+            return res
+        end
+    end
+end
+
 -- Title ------------------------------------------------------------------
 
 -- Returns two lines, each a list of segments: { line1, line2 }
