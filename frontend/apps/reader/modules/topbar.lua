@@ -1555,7 +1555,10 @@ function TopBar:toggleBar(light_on)
 
 
         local font_face = self.ui.document._document:getFontFace()
-        local current_face = font_face:gsub("%s+", "") .. "-Regular"
+        local plugin = self.ui.pagetextinfo
+        -- Real loadable name (works for "NV ..." fonts); old guess as fallback
+        local current_face = (plugin and plugin.getFaceName and plugin:getFaceName())
+            or (font_face:gsub("%s+", "") .. "-Regular")
         local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
         -- Rounded to an integer px, same as ptToPx() in the popup
         local size_px = math.floor(display_dpi * self.ui.document.configurable.font_size / 72 + 0.5)
@@ -1579,7 +1582,6 @@ function TopBar:toggleBar(light_on)
             -- Use the EFFECTIVE x-height (font x book font-size factor, e.g. rem)
             -- from the settings menu, so the top bar and the menu title agree.
             -- If it can't be measured, the plain value above is kept.
-            local plugin = self.ui.pagetextinfo
             local eff_mm = plugin and plugin.getXHeightMm and plugin:getXHeightMm()
             if eff_mm then
                 x_height_mm = eff_mm
