@@ -71,6 +71,13 @@ local function fixedPresets()
     return { small = 8.5, normal = defaultFontSize(), big = 11 }
 end
 
+-- The CSS stats are only a guess when there is no body rule ("global"), or when
+-- the body rules are neutral (100%) but rem sizes exist elsewhere: the text size
+-- may be on classes. Then the on-screen measurement decides.
+local function cssIsGuess(st)
+    return st.tier == "global" or (st.tier == "neutral" and st.any_rem)
+end
+
 -- True if the book's CSS sets its text size with a relative unit (rem/em/%)
 -- other than 1. Independent of the current font, so a font that can't be
 -- measured doesn't hide it.
@@ -81,6 +88,8 @@ local function hasRelativeStyles(doc)
     if not (st and st.value and (st.unit == "rem" or st.unit == "em" or st.unit == "%")) then
         return false
     end
+    -- No body rule: the CSS can't tell, let the on-screen measurement decide
+    if cssIsGuess(st) then return true end
     local v = (st.unit == "%") and st.value / 100 or st.value
     return math.abs(v - 1) > 0.001
 end
@@ -496,8 +505,9 @@ ptForXHeight = function(ui, target_mm)
     return nil
 end
 
--- Returns { value=0.88, unit="rem", share=1.0 }: the most repeated font-size
--- in the EPUB's .css files.
+-- Returns { value=0.88, unit="rem", share=1.0, tier="body" }: the most repeated
+-- font-size in the EPUB's .css files, taken from the body text rules when there
+-- are any (tier = "p" | "body" | "html" | "neutral" | "global").
 bookFontSizeStats = function(doc)
     local file = doc.file
     if not file then return nil end
@@ -508,9 +518,11 @@ bookFontSizeStats = function(doc)
         if not arc:open(file) then return nil end
         local counts, total = {}, 0
         -- Rules that set the body text size, by priority:
-        -- 1 = p / body p, 2 = body / .calibre, 3 = html (often just 100%)
+        -- 1 = p / body p, 2 = body / .calibre, 3 = html (often just 100%).
+        -- Only the plain .calibre class (.calibre1, .calibre2... are any element)
         local tiers, tier_total = { {}, {}, {} }, { 0, 0, 0 }
         local neutral_seen = false  -- a neutral size (1em / 1rem / 100%) in a tier
+        local any_rem = false       -- a rem size other than 1rem anywhere in the CSS
         for entry in arc:iterate() do
             if entry.mode == "file" and entry.path:lower():match("%.css$") then
                 local css = arc:extractToMemory(entry.path)
@@ -525,7 +537,7 @@ bookFontSizeStats = function(doc)
                             local n
                             if t == "p" or t == "body p" then
                                 n = 1
-                            elseif t == "body" or t:match("^%.calibre%d*$") then
+                            elseif t == "body" or t == ".calibre" then
                                 n = 2
                             elseif t == "html" then
                                 n = 3
@@ -536,6 +548,7 @@ bookFontSizeStats = function(doc)
                             local k = v .. "|" .. u
                             counts[k] = (counts[k] or 0) + 1
                             total = total + 1
+                            if u == "rem" and tonumber(v) ~= 1 then any_rem = true end
                             if tier then
                                 -- Neutral sizes say nothing about a factor (p{1em}
                                 -- inside body{0.88rem}), so they don't compete
@@ -557,14 +570,26 @@ bookFontSizeStats = function(doc)
         if total == 0 then return nil end
         -- Use the highest-priority group that has any declaration
         local found = false
+        local tier_name = "global"  -- no body rule: a guess from all the rules
         for i = 1, 3 do
             if tier_total[i] > 0 then
                 counts, total, found = tiers[i], tier_total[i], true
+                tier_name = ({ "p", "body", "html" })[i]
                 break
             end
         end
+        -- rem is relative to the root, so it is THE size when the group has one
+        if found then
+            local rem_counts, rem_total = {}, 0
+            for k, n in pairs(counts) do
+                if k:match("|rem$") then rem_counts[k] = n; rem_total = rem_total + n end
+            end
+            if rem_total > 0 then counts, total = rem_counts, rem_total end
+        end
         -- Only neutral sizes in the body rules: the factor is 1
-        if not found and neutral_seen then counts, total = { ["100|%"] = 1 }, 1 end
+        if not found and neutral_seen then
+            counts, total, tier_name = { ["100|%"] = 1 }, 1, "neutral"
+        end
         local best_k, best_n = nil, 0
         for k, n in pairs(counts) do
             -- Tie-break on the key so the result doesn't depend on pairs() order
@@ -573,7 +598,8 @@ bookFontSizeStats = function(doc)
             end
         end
         local v, u = best_k:match("^(.-)|(.*)$")
-        return { value = tonumber(v), unit = u, share = best_n / total }
+        return { value = tonumber(v), unit = u, share = best_n / total, tier = tier_name,
+                 any_rem = any_rem }
     end)
     _css_cache[file] = (ok and res) or false
     return (ok and res) or nil
@@ -632,7 +658,7 @@ bookScale = function(ui, face_base)
 
     local st = bookFontSizeStats(doc)
     -- Only trust the CSS if one value dominates and the unit is relative
-    if st and st.value and st.share >= 0.6
+    if st and st.value and st.share >= 0.6 and not cssIsGuess(st)
        and (st.unit == "rem" or st.unit == "em" or st.unit == "%") then
         local expected = (st.unit == "%") and st.value / 100 or st.value
         if expected > 0.5 and expected < 1.5 then scale, source = expected, "css" end
@@ -672,8 +698,16 @@ function PageTextInfo:hasRemStyles()
     local ok, res = pcall(function()
         local st = bookFontSizeStats(ui.document)
         require("logger").dbg("hasRemStyles: stats unit=", st and st.unit,
-            "value=", st and st.value, "share=", st and st.share)
-        return hasRelativeStyles(ui.document)
+            "value=", st and st.value, "share=", st and st.share, "tier=", st and st.tier)
+        if not hasRelativeStyles(ui.document) then return false end
+        if st and cssIsGuess(st) then
+            -- Judge by the measured factor; if it can't be measured, don't block the option
+            local __, face_name = xHeightRatio(ui.document)
+            local face = face_name and Font:getFace(face_name, 100, 0, true)
+            local scale, source = bookScale(ui, face)
+            if source == "measured" then return math.abs(scale - 1) > 0.02 end
+        end
+        return true
     end)
     return ok and res or false
 end
@@ -757,7 +791,7 @@ local function buildTitleSegments(ui)
         { text = "[" .. angle_class .. "]", bold = true },
     }
     local st = bookFontSizeStats(doc)
-    if st and st.unit == "rem" and st.value then
+    if st and st.unit == "rem" and st.value and not cssIsGuess(st) then
         table.insert(line1, { text = string.format(" rem %g", st.value), bold = true })
     end
     table.insert(line1, { text = "  |  " })
