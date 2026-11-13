@@ -1830,38 +1830,38 @@ This is to be active only if the option flash buttons and menu items or the opti
                         return true
                     end,
                 },
-                {
-                    text = _("Scale font by x-height"),
-                    checked_func = function() return self:isScaleByXHeight() end,
-                    help_text = _([[Keep the same x-height (mm) when changing font face, and show mm-based font presets. When off, presets are fixed point sizes.]]),
-                    callback = function()
-                        -- Remember the active font preset in the current mode (before the change)
-                        local preset = self:getActivePreset()
-                        G_reader_settings:saveSetting("pagetextinfo_scale_by_xheight", not self:isScaleByXHeight())
-                        G_reader_settings:flush()
-                        -- Re-select the same preset in the new mode
-                        self:applyPreset(preset)
-                        return true
-                    end,
-                },
-                {
-                    text = _("Compensate book rem/em"),
-                    checked_func = function()
-                        return self:hasRemStyles() and (self:isScaleByXHeight() or self:isCompensateRem())
-                    end,
-                    help_text = _([[Divide the small and big font presets by the book's font-size factor (rem/em/%) so the effective size matches. Always on when "Scale font by x-height" is on. Disabled when the book has no rem/em styles.]]),
-                    enabled_func = function()
-                        return not self:isScaleByXHeight() and self:hasRemStyles()
-                    end,
-                    callback = function()
-                        G_reader_settings:saveSetting("pagetextinfo_compensate_rem", not self:isCompensateRem())
-                        G_reader_settings:flush()
-                        -- Re-apply the current effective size so the new mode takes effect
-                        -- immediately (re-renders without losing the reading position).
-                        self:reapplyFontCompensation(self:isCompensateRem())
-                        return true
-                    end,
-                },
+                -- {
+                --     text = _("Scale font by x-height"),
+                --     checked_func = function() return self:isScaleByXHeight() end,
+                --     help_text = _([[Keep the same x-height (mm) when changing font face, and show mm-based font presets. When off, presets are fixed point sizes.]]),
+                --     callback = function()
+                --         -- Remember the active font preset in the current mode (before the change)
+                --         local preset = self:getActivePreset()
+                --         G_reader_settings:saveSetting("pagetextinfo_scale_by_xheight", not self:isScaleByXHeight())
+                --         G_reader_settings:flush()
+                --         -- Re-select the same preset in the new mode
+                --         self:applyPreset(preset)
+                --         return true
+                --     end,
+                -- },
+                -- {
+                --     text = _("Compensate book rem/em"),
+                --     checked_func = function()
+                --         return self:hasRemStyles() and (self:isScaleByXHeight() or self:isCompensateRem())
+                --     end,
+                --     help_text = _([[Divide the small and big font presets by the book's font-size factor (rem/em/%) so the effective size matches. Always on when "Scale font by x-height" is on. Disabled when the book has no rem/em styles.]]),
+                --     enabled_func = function()
+                --         return not self:isScaleByXHeight() and self:hasRemStyles()
+                --     end,
+                --     callback = function()
+                --         G_reader_settings:saveSetting("pagetextinfo_compensate_rem", not self:isCompensateRem())
+                --         G_reader_settings:flush()
+                --         -- Re-apply the current effective size so the new mode takes effect
+                --         -- immediately (re-renders without losing the reading position).
+                --         self:reapplyFontCompensation(self:isCompensateRem())
+                --         return true
+                --     end,
+                -- },
                 {
                     text = _("Enable ruler"),
                     checked_func = function() return self.settings:isTrue("enable_ruler") end,
@@ -2137,7 +2137,7 @@ local function findBestHyphenatedMatch(doc, hyphenatedWord)
         nestedTail(hyphenatedWord, 3),              -- nivel 3
         nestedTail(hyphenatedWord, 4),              -- nivel 4
         nestedTail(hyphenatedWord, 5),              -- nivel 5
-        hyphenatedWord:gsub("-", "")                -- sin guiones
+        (hyphenatedWord:gsub("%-", "")),            -- sin guiones
     }
 
     for _, suggestion in ipairs(attempts) do

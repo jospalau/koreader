@@ -1,5 +1,4 @@
--- Fonts menu: paged grid of font families, with long-press font info and
--- x-height preservation when the font is changed.
+-- Fonts menu: paged grid of font families, with long-press font info.
 --
 -- Lives next to main.lua. Load it from main.lua, after PageTextInfo is defined:
 --     require("font_selection_menu")(PageTextInfo)
@@ -7,10 +6,6 @@
 -- It adds these methods to PageTextInfo:
 --     closeFontsMenu, applyFontAndReopen, showFontInfo, onShowFonts
 --
--- applyFontAndReopen needs the methods added by settings_menu.lua
--- (getXHeightMm, ptForXHeight, applyFontSizePt, getActivePreset, applyPreset),
--- so load that module too.
-
 local Blitbuffer = require("ffi/blitbuffer")
 local Device = require("device")
 local Font = require("ui/font")
@@ -57,57 +52,14 @@ function PageTextInfo:closeFontsMenu()
 end
 
 -- Close the menu, apply the font directly on the reader, then reopen.
--- The x-height the reader had BEFORE the change is preserved by adjusting
--- the pt size for the new face.
 function PageTextInfo:applyFontAndReopen(face)
     local Event = require("ui/event")
-    local logger = require("logger")
     local page = self.fonts_page
-
-    local scale = PageTextInfo:isScaleByXHeight()
-    -- Active font preset (small / normal / big) before the face changes, so it
-    -- stays selected on the new face
-    local preset = scale and self:getActivePreset() or nil
-
-    local function debugFont(stage)
-        logger.dbg(string.format(
-            "[FontChange] %s | face=%s | size=%s pt | x-height=%s mm",
-            stage,
-            tostring(self.ui.document._document:getFontFace()),
-            tostring(self.ui.font.configurable.font_size),
-            scale and tostring(self:getXHeightMm()) or "n/a"
-        ))
-    end
-
-    local target_mm
-    if scale then
-        target_mm = self:getXHeightMm()
-        logger.dbg("[FontChange] target x-height:", target_mm)
-    end
-
-    debugFont("BEFORE")
 
     -- Don't close the dialog: the new one replaces it
     self.ui:handleEvent(Event:new("SetFont", face))
 
-    debugFont("AFTER SetFont")
-
-    -- Keep the same x-height with the new face (skipped if scaling is disabled or it can't be measured)
-    if preset then
-        -- A preset was active: apply the same preset (same target mm) on the new face
-        self:applyPreset(preset)
-        debugFont("AFTER applyPreset")
-    elseif target_mm then
-        local pt = self:ptForXHeight(target_mm)
-        logger.dbg("[FontChange] calculated size:", pt)
-        if pt then
-            self:applyFontSizePt(pt)
-            debugFont("AFTER applyFontSizePt")
-        end
-    end
-
     UIManager:nextTick(function()
-        debugFont("NEXT TICK")
         self:onShowFonts(page)
     end)
 end
