@@ -4989,6 +4989,140 @@ function BookshelfWidget:_openOnDoubleTap(book)
     self:_openBook(book)
 end
 
+-- Modern replacement for ConfirmBoxYesNo. It takes the same arguments (text,
+-- ok_text, cancel_text, ok_callback, cancel_callback) and has the same look as
+-- the settings and fonts menus: a rounded window, a thin separator under the
+-- question and two rounded buttons side by side (No on the left, Yes on the right).
+-- Any dismissal (No, tap outside the window, Back key) runs cancel_callback.
+-- Returns the dialog without showing it (the caller does UIManager:show).
+local function newConfirmBox(args)
+    local Blitbuffer = require("ffi/blitbuffer")
+    local Device = require("device")
+    local Font = require("ui/font")
+    local Geom = require("ui/geometry")
+    local GestureRange = require("ui/gesturerange")
+    local Size = require("ui/size")
+    local UIManager = require("ui/uimanager")
+    local TextBoxWidget = require("ui/widget/textboxwidget")
+    local TextWidget = require("ui/widget/textwidget")
+    local FrameContainer = require("ui/widget/container/framecontainer")
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local InputContainer = require("ui/widget/container/inputcontainer")
+    local HorizontalGroup = require("ui/widget/horizontalgroup")
+    local HorizontalSpan = require("ui/widget/horizontalspan")
+    local VerticalGroup = require("ui/widget/verticalgroup")
+    local VerticalSpan = require("ui/widget/verticalspan")
+    local LineWidget = require("ui/widget/linewidget")
+    local Screen = Device.screen
+
+    local screen = Screen:getSize()
+
+    -- Layout metrics (scaled to the screen DPI)
+    local frame_w = math.floor(screen.w * 0.8)
+    local outer_pad = Screen:scaleBySize(12)
+    local inner_w = frame_w - 2 * (outer_pad + Size.border.window)
+    local gap = Screen:scaleBySize(6)
+    local thin = Screen:scaleBySize(1)
+    local btn_h = math.floor(Screen:scaleBySize(18) * 2.4)
+    local btn_w = math.floor((inner_w - gap) / 2)
+
+    local dialog = InputContainer:new{
+        dimen = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
+        ges_events = {
+            Tap = { GestureRange:new{ ges = "tap",
+                range = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h } } },
+        },
+        key_events = Device:hasKeys() and { Close = { { Device.input.group.Back } } } or {},
+    }
+
+    -- Question + thin separator
+    local content = VerticalGroup:new{ align = "center" }
+    table.insert(content, TextBoxWidget:new{
+        text = args.text,
+        face = Font:getFace("cfont", 20),
+        width = inner_w,
+        alignment = "center",
+    })
+    table.insert(content, VerticalSpan:new{ width = gap * 2 })
+    table.insert(content, LineWidget:new{
+        dimen = Geom:new{ w = inner_w, h = thin },
+        background = Blitbuffer.COLOR_DARK_GRAY,
+    })
+    table.insert(content, VerticalSpan:new{ width = gap * 2 })
+
+    -- Rounded buttons side by side. `strong` = inverted (the main action).
+    local function newButton(text, strong)
+        return FrameContainer:new{
+            bordersize = thin,
+            color = Blitbuffer.COLOR_DARK_GRAY,
+            background = strong and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
+            radius = Size.radius.button,
+            margin = 0,
+            padding = 0,
+            CenterContainer:new{
+                dimen = Geom:new{ w = btn_w - 2 * thin, h = btn_h - 2 * thin },
+                TextWidget:new{
+                    text = text,
+                    face = Font:getFace("cfont", 18),
+                    fgcolor = strong and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK,
+                    max_width = btn_w - 2 * Size.padding.small,
+                },
+            },
+        }
+    end
+    local cancel_btn = newButton(args.cancel_text or "Cancel", false)
+    local ok_btn = newButton(args.ok_text or "OK", true)
+    table.insert(content, HorizontalGroup:new{
+        cancel_btn,
+        HorizontalSpan:new{ width = gap },
+        ok_btn,
+    })
+
+    local frame = FrameContainer:new{
+        background = Blitbuffer.COLOR_WHITE,
+        bordersize = Size.border.window,
+        radius = Size.radius.window,
+        padding = outer_pad,
+        margin = 0,
+        content,
+    }
+    dialog[1] = CenterContainer:new{
+        dimen = Geom:new{ w = screen.w, h = screen.h },
+        frame,
+    }
+
+    local fsize = frame:getSize()
+    dialog.frame_rect = Geom:new{
+        x = math.floor((screen.w - fsize.w) / 2),
+        y = math.floor((screen.h - fsize.h) / 2),
+        w = fsize.w, h = fsize.h,
+    }
+
+    function dialog:onTap(arg, ges)
+        if ok_btn.dimen and ges.pos:intersectWith(ok_btn.dimen) then
+            -- Close first, then run the callback (same order as ConfirmBox)
+            UIManager:close(self, "ui", self.frame_rect)
+            if args.ok_callback then args.ok_callback() end
+            return true
+        end
+        -- "No" button or tap outside the window: cancel
+        if (cancel_btn.dimen and ges.pos:intersectWith(cancel_btn.dimen))
+                or not ges.pos:intersectWith(self.frame_rect) then
+            UIManager:close(self, "ui", self.frame_rect)
+            if args.cancel_callback then args.cancel_callback() end
+        end
+        return true
+    end
+
+    function dialog:onClose()
+        UIManager:close(self, "ui", self.frame_rect)
+        if args.cancel_callback then args.cancel_callback() end
+        return true
+    end
+
+    return dialog
+end
+
 -- _openBook(book, after_open_callback, opts)  — open ReaderUI for the given book
 -- WITHOUT closing the home screen. The Reader is shown on top in UIManager's
 -- stack; when the Reader closes, Bookshelf is exposed automatically with no
@@ -5047,13 +5181,16 @@ function BookshelfWidget:_openBook(book, after_open_callback)
         -- cover-squeeze tap feedback plays first instead of being cut off
         -- by the dialog appearing instantly.
         UIManager:scheduleIn(0.5, function()
-            UIManager:show(require("ui/widget/confirmboxyesno"):new{
+            -- Stock widget, replaced by newConfirmBox (same arguments, modern look)
+            -- require("ui/widget/confirmboxyesno"):new{ ... }
+            UIManager:show(newConfirmBox{
                 text = text,
                 ok_text = _("Yes"),
                 ok_callback = function()
                     self._mbr_confirm_pending = nil
                     UIManager:nextTick(proceed)
                 end,
+                cancel_text = _("No"),
                 cancel_callback = restore_focus,
             }, "full")
         end)
