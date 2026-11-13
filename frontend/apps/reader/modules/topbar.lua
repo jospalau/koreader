@@ -1568,14 +1568,26 @@ function TopBar:toggleBar(light_on)
         local x_height_with_range = "N/A"
         local line_height = 0
         local leading_factor_text = "N/A"
-        if face_base ~= nil then
+          if face_base ~= nil then
             -- If getXHeight() < 1 it is a ratio, otherwise it is already in px.
             -- Kept fractional: no intermediate rounding.
             local xh = face_base.ftsize:getXHeight()
             x_height = (xh < 1) and (xh * size_px) or xh
             -- Unrounded; getXHeightRangeLabel already formats with %.2f
             x_height_mm = x_height * 25.4 / display_dpi
+
+            -- Use the EFFECTIVE x-height (font x book font-size factor, e.g. rem)
+            -- from the settings menu, so the top bar and the menu title agree.
+            -- If it can't be measured, the plain value above is kept.
+            local plugin = self.ui.pagetextinfo
+            local eff_mm = plugin and plugin.getXHeightMm and plugin:getXHeightMm()
+            if eff_mm then
+                x_height_mm = eff_mm
+                x_height = eff_mm * display_dpi / 25.4  -- keep the leading factor consistent
+            end
+
             x_height_with_range = self:getXHeightRangeLabel(size_pt, x_height_mm)
+            -- (rest unchanged: line_spacing_factor, leading_factor, etc.)
             -- Falls back to 100 (no extra spacing) if line_spacing is nil
             local line_spacing_factor = (self.ui.document.configurable.line_spacing or 100) / 100
             local x_height2, ascender, descender = face_base.ftsize:getAscDesc()
