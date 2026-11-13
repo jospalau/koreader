@@ -5268,14 +5268,25 @@ function PageTextInfo:closeFontsMenu()
     end
 end
 
--- Close the menu, apply the font directly on the reader, then reopen
+-- Close the menu, apply the font directly on the reader, then reopen.
+-- The x-height the reader had BEFORE the change is preserved by adjusting
+-- the pt size for the new face.
 function PageTextInfo:applyFontAndReopen(face)
     local Event = require("ui/event")
     local UIManager = require("ui/uimanager")
     local page = self.fonts_page
 
+    -- Measure the effective x-height with the old face, before switching
+    local target_mm = self:getXHeightMm()
+
     -- Don't close the dialog: the new one replaces it
     self.ui:handleEvent(Event:new("SetFont", face))
+
+    -- Keep the same x-height with the new face (skipped if it can't be measured)
+    if target_mm then
+        local pt = self:ptForXHeight(target_mm)
+        if pt then self:applyFontSizePt(pt) end
+    end
 
     UIManager:nextTick(function()
         self:onShowFonts(page)
@@ -6759,6 +6770,37 @@ bookScale = function(ui, face_base)
     return scale, source
 end
 
+-- Current EFFECTIVE x-height in mm (same model as the menu title).
+-- Returns nil if the font can't be measured.
+function PageTextInfo:getXHeightMm()
+    local ui = self.ui
+    local ok, mm = pcall(function()
+        local Device = require("device")
+        local dpi = Device:getDeviceScreenDPI() or Device.screen:getDPI()
+        local ratio, face_name = xHeightRatio(ui.document)
+        if not ratio then return nil end
+        local face = require("ui/font"):getFace(face_name, 100, 0, true)
+        local scale = bookScale(ui, face)
+        local px = dpi * ui.document.configurable.font_size / 72  -- unrounded, like KOReader
+        return ratio * scale * px / (dpi / 25.4)
+    end)
+    return ok and mm or nil
+end
+
+-- pt size that gives `target_mm` of effective x-height with the CURRENT face.
+function PageTextInfo:ptForXHeight(target_mm)
+    return (ptForXHeight(self.ui, target_mm))  -- first return value only
+end
+
+-- Set the font size without a notification, keeping configurables in sync.
+function PageTextInfo:applyFontSizePt(pt)
+    local ui = self.ui
+    pt = math.max(4, math.min(pt, 255))
+    ui.font:onSetFontSize(pt, true)
+    ui.document.configurable.font_size = pt
+    ui.font.configurable.font_size = pt
+end
+
 local function buildTitleSegments(ui)
     local doc = ui.document
     local configurable = doc.configurable
@@ -7052,7 +7094,7 @@ function PageTextInfo:onShowSettingsMenu()
                 local ok, err = pcall(b.callback, self.plugin.ui)
                 require("logger").dbg("settings menu tap:", b.text, ok and "OK" or err)
                 -- Reopen after the reflow so the active state is refreshed
-                UIManager:tickAfterNext(function() self.plugin:onShowSettingsMenu() end)
+                UIManager:nextTick(function() self.plugin:onShowSettingsMenu() end)
                 return true
             end
         end
