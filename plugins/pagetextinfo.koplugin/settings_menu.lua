@@ -31,6 +31,7 @@ local CONTRAST_DEFAULT = 15
 local ptForXHeight
 local bookScale
 local xHeightRatio
+local bookFontSizeStats
 
 -- Line spacing presets. All my Calibre books were converted so every
 -- line-height is a unitless 1.2 (see the Calibre "Transform styles" rules).
@@ -70,15 +71,29 @@ local function fixedPresets()
     return { small = 8.5, normal = defaultFontSize(), big = 11 }
 end
 
+-- True if the book's CSS sets its text size with a relative unit (rem/em/%)
+-- other than 1. Independent of the current font, so a font that can't be
+-- measured doesn't hide it.
+local function hasRelativeStyles(doc)
+    local conf = doc.configurable
+    if conf and conf.embedded_css == 0 then return false end  -- "Book styles" off
+    local st = bookFontSizeStats(doc)
+    if not (st and st.value and (st.unit == "rem" or st.unit == "em" or st.unit == "%")) then
+        return false
+    end
+    local v = (st.unit == "%") and st.value / 100 or st.value
+    return math.abs(v - 1) > 0.001
+end
+
 -- Book font-size factor (rem/em/%), 1 if unknown.
--- Only a factor read from the book's CSS counts: without rem/em styles the
--- compensation does nothing (factor 1).
+-- Without rem/em styles in the book the compensation does nothing (factor 1).
 local function remScale(ui)
     local ok, scale = pcall(function()
+        if not hasRelativeStyles(ui.document) then return 1 end
         local __, face_name = xHeightRatio(ui.document)
-        if not face_name then return 1 end
-        local factor, source = bookScale(ui, Font:getFace(face_name, 100, 0, true))
-        if source ~= "css" then return 1 end
+        local face = face_name and Font:getFace(face_name, 100, 0, true)
+        local factor, source = bookScale(ui, face)
+        if source == "none" then return 1 end
         return factor
     end)
     return ok and scale or 1
@@ -483,7 +498,7 @@ end
 
 -- Returns { value=0.88, unit="rem", share=1.0 }: the most repeated font-size
 -- in the EPUB's .css files.
-local function bookFontSizeStats(doc)
+bookFontSizeStats = function(doc)
     local file = doc.file
     if not file then return nil end
     if _css_cache[file] ~= nil then return _css_cache[file] or nil end
@@ -495,6 +510,7 @@ local function bookFontSizeStats(doc)
         -- Rules that set the body text size, by priority:
         -- 1 = p / body p, 2 = body / .calibre, 3 = html (often just 100%)
         local tiers, tier_total = { {}, {}, {} }, { 0, 0, 0 }
+        local neutral_seen = false  -- a neutral size (1em / 1rem / 100%) in a tier
         for entry in arc:iterate() do
             if entry.mode == "file" and entry.path:lower():match("%.css$") then
                 local css = arc:extractToMemory(entry.path)
@@ -521,8 +537,16 @@ local function bookFontSizeStats(doc)
                             counts[k] = (counts[k] or 0) + 1
                             total = total + 1
                             if tier then
-                                tiers[tier][k] = (tiers[tier][k] or 0) + 1
-                                tier_total[tier] = tier_total[tier] + 1
+                                -- Neutral sizes say nothing about a factor (p{1em}
+                                -- inside body{0.88rem}), so they don't compete
+                                local nv = tonumber(v)
+                                if (u == "%" and nv == 100)
+                                   or ((u == "em" or u == "rem") and nv == 1) then
+                                    neutral_seen = true
+                                else
+                                    tiers[tier][k] = (tiers[tier][k] or 0) + 1
+                                    tier_total[tier] = tier_total[tier] + 1
+                                end
                             end
                         end
                     end
@@ -532,9 +556,15 @@ local function bookFontSizeStats(doc)
         arc:close()
         if total == 0 then return nil end
         -- Use the highest-priority group that has any declaration
+        local found = false
         for i = 1, 3 do
-            if tier_total[i] > 0 then counts, total = tiers[i], tier_total[i]; break end
+            if tier_total[i] > 0 then
+                counts, total, found = tiers[i], tier_total[i], true
+                break
+            end
         end
+        -- Only neutral sizes in the body rules: the factor is 1
+        if not found and neutral_seen then counts, total = { ["100|%"] = 1 }, 1 end
         local best_k, best_n = nil, 0
         for k, n in pairs(counts) do
             -- Tie-break on the key so the result doesn't depend on pairs() order
@@ -607,7 +637,7 @@ bookScale = function(ui, face_base)
         local expected = (st.unit == "%") and st.value / 100 or st.value
         if expected > 0.5 and expected < 1.5 then scale, source = expected, "css" end
     end
-    if source == "none" then
+    if source == "none" and face_base then
         local measured = effectiveScale(ui, face_base)
         if measured and measured > 0.5 and measured < 1.5 then scale, source = measured, "measured" end
     end
@@ -640,10 +670,10 @@ end
 function PageTextInfo:hasRemStyles()
     local ui = self.ui
     local ok, res = pcall(function()
-        local __, face_name = xHeightRatio(ui.document)
-        if not face_name then return false end
-        local scale, source = bookScale(ui, Font:getFace(face_name, 100, 0, true))
-        return source == "css" and math.abs(scale - 1) > 0.001
+        local st = bookFontSizeStats(ui.document)
+        require("logger").dbg("hasRemStyles: stats unit=", st and st.unit,
+            "value=", st and st.value, "share=", st and st.share)
+        return hasRelativeStyles(ui.document)
     end)
     return ok and res or false
 end
