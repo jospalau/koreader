@@ -484,6 +484,25 @@ xHeightRatio = function(doc, raw_name)
     return ratio, face_name
 end
 
+-- New books: make KOReader's own defaults for margins equal to DEFAULTS.margins,
+-- so a book without settings of its own opens on them (and the matching preset
+-- button shows as active). Nothing hooks into the book opening: this only
+-- writes KOReader's global defaults, and only when they differ.
+do
+    local m = DEFAULTS.margins
+    local h = G_reader_settings:readSetting("copt_h_page_margins")
+    local same = h and approx(h[1], m[1]) and approx(h[2], m[3])
+        and approx(G_reader_settings:readSetting("copt_t_page_margin"), m[2])
+        and approx(G_reader_settings:readSetting("copt_b_page_margin"), m[4])
+    if not same then
+        dlog("default margins: saving as KOReader defaults")
+        G_reader_settings:saveSetting("copt_h_page_margins", { m[1], m[3] })
+        G_reader_settings:saveSetting("copt_t_page_margin", m[2])
+        G_reader_settings:saveSetting("copt_b_page_margin", m[4])
+        G_reader_settings:flush()
+    end
+end
+
 -- Public methods (used by the fonts menu in main.lua) --------------------
 
 -- Current x-height in mm of the font as it is drawn (whole pixels, like
@@ -535,74 +554,6 @@ end
 -- with the "Compensate rem/em" / "Scale by x-height" entries of main.lua.
 function PageTextInfo:hasRemStyles() return false end
 function PageTextInfo:reapplyFontCompensation() end
-
--- Book opened for the first time: KOReader gives it its plain defaults, but the
--- "Default (small)" margins preset (DEFAULTS.margins) would not match. Move the
--- book to it so it starts on the default margins. A book that already has
--- settings of its own is left untouched.
-function PageTextInfo:applyDefaultOnOpen()
-    local ui = self.ui
-    local ok, err = pcall(function()
-        if not ui or not ui.document or ui.paging or not ui.font then
-            dlog("applyDefaultOnOpen: skipped, not a reflowable book")
-            return
-        end
-        local ds = ui.doc_settings
-        local conf = ui.document.configurable
-        -- Fresh book: no font size saved in the book's own settings. KOReader can
-        -- write margin keys even for a book that was never configured, so those
-        -- are not a reliable test.
-        local saved_font = ds and ds:readSetting("copt_font_size")
-        local saved_h = ds and ds:readSetting("copt_h_page_margins")
-        local saved_t = ds and ds:readSetting("copt_t_page_margin")
-        local saved_b = ds and ds:readSetting("copt_b_page_margin")
-        dlog("applyDefaultOnOpen: margins: font size saved in book=", saved_font,
-            "margins saved in book=", saved_h and saved_h[1], saved_h and saved_h[2],
-            saved_t, saved_b, "current h=",
-            conf.h_page_margins and conf.h_page_margins[1],
-            conf.h_page_margins and conf.h_page_margins[2],
-            "t=", conf.t_page_margin, "b=", conf.b_page_margin)
-        if saved_font ~= nil then
-            dlog("applyDefaultOnOpen: margins: skipped, the book has its own settings")
-            return
-        end
-        if not ui.typeset then
-            dlog("applyDefaultOnOpen: margins: skipped, no typeset module")
-            return
-        end
-        if marginsMatch(conf, DEFAULTS.margins) then
-            dlog("applyDefaultOnOpen: margins: already on the default, nothing to do")
-            return
-        end
-        setMargins(ui, DEFAULTS.margins)
-        dlog("applyDefaultOnOpen: margins: applied the default")
-    end)
-    if not ok then require("logger").warn("[PTI] applyDefaultOnOpen failed:", err) end
-end
-
-
--- Run it every time a book is opened. ReaderFont reads the book's settings on
--- open, so wrap that once (the module is loaded per book, hence the flag) and
--- run applyDefaultOnOpen right after the book has finished opening.
-do
-    local ok_rf, ReaderFont = pcall(require, "apps/reader/modules/readerfont")
-    if ok_rf and ReaderFont and not ReaderFont._pagetextinfo_hooked then
-        ReaderFont._pagetextinfo_hooked = true
-        dlog("ReaderFont:onReadSettings hook installed")
-        local orig_read_settings = ReaderFont.onReadSettings
-        ReaderFont.onReadSettings = function(font_self, ...)
-            local res = orig_read_settings and orig_read_settings(font_self, ...)
-            dlog("book opened: ReaderFont:onReadSettings hook fired")
-            -- Only needs .ui
-            require("ui/uimanager"):tickAfterNext(function()
-                PageTextInfo.applyDefaultOnOpen({ ui = font_self.ui })
-            end)
-            return res
-        end
-    elseif not ok_rf then
-        dlog("ReaderFont hook NOT installed: require failed")
-    end
-end
 
 -- Does the book set font sizes in rem? Looks at the font-size declarations of
 -- its style sheets (a rem value other than 1) and at a font-size in rem on the
