@@ -477,6 +477,8 @@ function PageTextInfo:onShowFonts(page)
     local gap = Screen:scaleBySize(6)   -- space between cells and between rows
     local thin = Screen:scaleBySize(1)
     local cell_w = math.floor((dialog_w - gap * (COLUMNS - 1)) / COLUMNS)
+    -- The last column takes the rounding remainder so rows span exactly dialog_w
+    local last_cell_w = dialog_w - gap * (COLUMNS - 1) - cell_w * (COLUMNS - 1)
     local label_h = math.floor(Screen:scaleBySize(13) * 1.8)
     local font_px = Screen:scaleBySize(FONT_SIZE)
     local cell_h = math.floor(font_px * 2.2)
@@ -567,6 +569,7 @@ function PageTextInfo:onShowFonts(page)
     local col = 0   -- cells in the current row (spacers don't count)
 
     local function addCell(face, label)
+        local cell_w = (col == COLUMNS - 1) and last_cell_w or cell_w
         local is_current = face ~= nil and face == current
         -- The active cell is inverted (white text on black)
         local fg = is_current and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
@@ -644,10 +647,15 @@ function PageTextInfo:onShowFonts(page)
 
     -- Navigation row
     local nav_w = math.floor((dialog_w - 2 * gap) / 3)
+    local nav_last_w = dialog_w - 2 * gap - 2 * nav_w
     local nav_h = math.floor(font_px * 2)
+    -- Arrows and counter share the same baseline (a plain centered text box
+    -- would put the "‹" "›" glyphs higher than the digits). The baseline is
+    -- placed so the middle of the arrow glyph sits in the middle of the button.
+    local nav_baseline = math.floor(nav_h / 2 + Screen:scaleBySize(24) * 0.25)
 
     -- boxed: rounded outline (arrows); the page counter has none
-    local function navCell(text, enabled, boxed, size)
+    local function navCell(text, enabled, boxed, size, w)
         local bs = boxed and thin or 0
         return FrameContainer:new{
             bordersize = bs,
@@ -656,19 +664,21 @@ function PageTextInfo:onShowFonts(page)
             padding = 0,
             margin = 0,
             CenterContainer:new{
-                dimen = Geom:new{ w = nav_w - 2 * bs, h = nav_h - 2 * bs },
+                dimen = Geom:new{ w = w - 2 * bs, h = nav_h - 2 * bs },
                 TextWidget:new{
                     text = text,
                     face = Font:getFace("cfont", size),
+                    forced_height = nav_h - 2 * bs,
+                    forced_baseline = nav_baseline - bs,
                     fgcolor = enabled and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_LIGHT_GRAY,
                 },
             },
         }
     end
 
-    btn_prev = navCell("‹", has_prev, true, 26)
-    local btn_info = navCell(string.format("%d / %d", page, total_pages), true, false, 18)
-    btn_next = navCell("›", has_next, true, 26)
+    btn_prev = navCell("‹", has_prev, true, 24, nav_w)
+    local btn_info = navCell(string.format("%d / %d", page, total_pages), true, false, 18, nav_w)
+    btn_next = navCell("›", has_next, true, 24, nav_last_w)
     table.insert(grid, HorizontalGroup:new{
         btn_prev,
         HorizontalSpan:new{ width = gap },
