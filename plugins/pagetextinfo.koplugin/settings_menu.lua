@@ -235,6 +235,23 @@ local function presetMm(ui, name)
     return FONT_PRESETS[name]
 end
 
+-- pt of each font preset in the CURRENT mode (x-height or fixed pt, with or
+-- without rem compensation). Same values the menu buttons use.
+local function computePresetPts(ui)
+    local pts = {}
+    if PageTextInfo:isScaleByXHeight() then
+        for __, name in ipairs({ "small", "normal", "big" }) do
+            pts[name] = (ptForXHeight(ui, presetMm(ui, name))) or FONT_FALLBACK[name]
+        end
+    else
+        local fx = fixedPresets()
+        for __, name in ipairs({ "small", "normal", "big" }) do
+            pts[name] = presetPtFor(ui, fx[name])
+        end
+    end
+    return pts
+end
+
 local function resetDefaults(ui)
     -- Use the face saved with the long press; fall back to DEFAULTS.font_face
     setFontFace(ui, G_reader_settings:readSetting("cre_font") or DEFAULTS.font_face)
@@ -628,6 +645,32 @@ end
 -- pt size that gives `target_mm` of effective x-height with the CURRENT face.
 function PageTextInfo:ptForXHeight(target_mm)
     return (ptForXHeight(self.ui, target_mm))  -- first return value only
+end
+
+-- Name ("small" | "normal" | "big") of the font preset that matches the current
+-- size in the CURRENT mode, or nil. Call it BEFORE changing the
+-- scale-by-x-height setting, then call applyPreset after changing it.
+function PageTextInfo:getActivePreset()
+    local ui = self.ui
+    local ok, name = pcall(function()
+        local fs = ui.font.configurable.font_size
+        local pts = computePresetPts(ui)
+        for __, n in ipairs({ "small", "normal", "big" }) do
+            if pts[n] and math.abs(fs - pts[n]) < 0.011 then return n end
+        end
+    end)
+    return ok and name or nil
+end
+
+-- Apply a font preset (by name) in the CURRENT mode. Does nothing for nil.
+function PageTextInfo:applyPreset(name)
+    if not name then return end
+    local ui = self.ui
+    local ok, err = pcall(function()
+        local pt = computePresetPts(ui)[name]
+        if pt then setFontSize(ui, pt) end
+    end)
+    if not ok then require("logger").warn("applyPreset failed:", err) end
 end
 
 -- Set the font size without a notification, keeping configurables in sync.

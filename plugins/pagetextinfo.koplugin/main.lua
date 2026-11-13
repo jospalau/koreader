@@ -1834,10 +1834,12 @@ This is to be active only if the option flash buttons and menu items or the opti
                     checked_func = function() return self:isScaleByXHeight() end,
                     help_text = _([[Keep the same x-height (mm) when changing font face, and show mm-based font presets. When off, presets are fixed point sizes.]]),
                     callback = function()
+                        -- Remember the active font preset in the current mode (before the change)
+                        local preset = self:getActivePreset()
                         G_reader_settings:saveSetting("pagetextinfo_scale_by_xheight", not self:isScaleByXHeight())
                         G_reader_settings:flush()
-                        -- The compensation is implicitly on/off with this mode too
-                        self:reapplyFontCompensation(self:isScaleByXHeight() or self:isCompensateRem())
+                        -- Re-select the same preset in the new mode
+                        self:applyPreset(preset)
                         return true
                     end,
                 },
