@@ -220,6 +220,13 @@ local function saveCurrentFontAsDefault(ui)
     local face = ui.document._document:getFontFace()
     local pt = ui.font.configurable.font_size
     if not face or not pt then return nil end
+    -- Without x-height scaling the presets are EFFECTIVE sizes and get the rem/em
+    -- compensation applied on top (see presetPtFor). The size in use is already
+    -- compensated, so store it uncompensated, otherwise "Font default" would
+    -- compensate it twice.
+    if not PageTextInfo:isScaleByXHeight() and PageTextInfo:isCompensateRem() then
+        pt = math.floor(pt * remScale(ui) * 100 + 0.5) / 100
+    end
     G_reader_settings:saveSetting("cre_font", face)
     G_reader_settings:saveSetting("copt_font_size", pt)
     G_reader_settings:flush()
@@ -532,9 +539,14 @@ ptForXHeight = function(ui, target_mm)
     return nil
 end
 
--- Returns { value=0.88, unit="rem", share=1.0, tier="body" }: the most repeated
--- font-size in the EPUB's .css files, taken from the body text rules when there
--- are any (tier = "p" | "body" | "html" | "neutral" | "global").
+-- Returns { value=0.88, unit="rem", share=1.0, tier="class" }: the most repeated
+-- font-size of the rules that set the body text size, by priority:
+--   1 = the class most <p> elements use (".calibre5", "p.calibre5")
+--   2 = p / body p, 3 = body / .calibre, 4 = html (often just 100%).
+-- tier = "class" | "p" | "body" | "html" | "neutral" | "global".
+-- The paragraph class comes from a sample of the book's text files, because
+-- the size that really applies to the text is usually on that class and not
+-- on body.
 bookFontSizeStats = function(doc)
     local file = doc.file
     if not file then return nil end
@@ -543,65 +555,109 @@ bookFontSizeStats = function(doc)
         local Archiver = require("ffi/archiver")
         local arc = Archiver.Reader:new()
         if not arc:open(file) then return nil end
-        local counts, total = {}, 0
-        -- Rules that set the body text size, by priority:
-        -- 1 = p / body p, 2 = body / .calibre, 3 = html (often just 100%).
-        -- Only the plain .calibre class (.calibre1, .calibre2... are any element)
-        local tiers, tier_total = { {}, {}, {} }, { 0, 0, 0 }
-        local neutral_seen = false  -- a neutral size (1em / 1rem / 100%) in a tier
-        local any_rem = false       -- a rem size other than 1rem anywhere in the CSS
+
+        local rules = {}                    -- { selectors = {...}, block = "..." }, all .css files
+        local p_total, p_classes = 0, {}    -- <p> count and class usage in the sampled text files
+        local sampled = 0
         for entry in arc:iterate() do
-            if entry.mode == "file" and entry.path:lower():match("%.css$") then
-                local css = arc:extractToMemory(entry.path)
-                if css then
-                    css = css:gsub("/%*.-%*/", "")  -- strip comments
-                    -- Prefer the rules that set the body text size over counting
-                    -- every declaration in the CSS
-                    for sel, block in css:gmatch("([^{}]+)%{([^}]*)%}") do
-                        local tier
-                        for s in sel:gmatch("[^,]+") do
-                            local t = s:gsub("^%s+", ""):gsub("%s+$", "")
-                            local n
-                            if t == "p" or t == "body p" then
-                                n = 1
-                            elseif t == "body" or t == ".calibre" then
-                                n = 2
-                            elseif t == "html" then
-                                n = 3
+            if entry.mode == "file" then
+                local path = entry.path:lower()
+                if path:match("%.css$") then
+                    local css = arc:extractToMemory(entry.path)
+                    if css then
+                        css = css:gsub("/%*.-%*/", "")  -- strip comments
+                        for sel, block in css:gmatch("([^{}]+)%{([^}]*)%}") do
+                            local list = {}
+                            for s in sel:gmatch("[^,]+") do
+                                list[#list + 1] = (s:gsub("^%s+", ""):gsub("%s+$", ""))
                             end
-                            if n and (not tier or n < tier) then tier = n end
+                            rules[#rules + 1] = { selectors = list, block = block }
                         end
-                        for v, u in block:gmatch("font%-size%s*:%s*([%d%.]+)%s*(%a*%%?)") do
-                            local k = v .. "|" .. u
-                            counts[k] = (counts[k] or 0) + 1
-                            total = total + 1
-                            if u == "rem" and tonumber(v) ~= 1 then any_rem = true end
-                            if tier then
-                                -- Neutral sizes say nothing about a factor (p{1em}
-                                -- inside body{0.88rem}), so they don't compete
-                                local nv = tonumber(v)
-                                if (u == "%" and nv == 100)
-                                   or ((u == "em" or u == "rem") and nv == 1) then
-                                    neutral_seen = true
-                                else
-                                    tiers[tier][k] = (tiers[tier][k] or 0) + 1
-                                    tier_total[tier] = tier_total[tier] + 1
-                                end
+                    end
+                elseif sampled < 12 and path:match("%.x?html?$") then
+                    -- Sample some text files (skip short ones: cover, toc...)
+                    local html = arc:extractToMemory(entry.path)
+                    if html then
+                        local n = select(2, html:gsub("<p>", ""))
+                        local loc = {}
+                        for attrs in html:gmatch("<p(%s[^>]*)>") do
+                            n = n + 1
+                            local cl = attrs:match('class%s*=%s*"([^"]*)"')
+                                or attrs:match("class%s*=%s*'([^']*)'")
+                            if cl then
+                                for c in cl:gmatch("%S+") do loc[c] = (loc[c] or 0) + 1 end
                             end
+                        end
+                        if n >= 5 then
+                            sampled = sampled + 1
+                            p_total = p_total + n
+                            for c, k in pairs(loc) do p_classes[c] = (p_classes[c] or 0) + k end
                         end
                     end
                 end
             end
         end
         arc:close()
+
+        -- Class used by most paragraphs (only if it is clearly the dominant one)
+        local para_class, best_c = nil, 0
+        for c, k in pairs(p_classes) do
+            -- Tie-break on the name so the result doesn't depend on pairs() order
+            if k > best_c or (k == best_c and para_class and c < para_class) then
+                para_class, best_c = c, k
+            end
+        end
+        if not (p_total > 0 and best_c >= 0.5 * p_total) then para_class = nil end
+
+        local counts, total = {}, 0
+        local tiers, tier_total = { {}, {}, {}, {} }, { 0, 0, 0, 0 }
+        local neutral_seen = false  -- a neutral size (1em / 1rem / 100%) in a tier
+        local any_rem = false       -- a rem size other than 1rem anywhere in the CSS
+        for __, rule in ipairs(rules) do
+            -- Priority of the rule: the best tier among its selectors
+            local tier
+            for __, t in ipairs(rule.selectors) do
+                local n
+                if para_class and (t == "." .. para_class or t == "p." .. para_class
+                                   or t == "body p." .. para_class) then
+                    n = 1
+                elseif t == "p" or t == "body p" then
+                    n = 2
+                elseif t == "body" or t == ".calibre" then
+                    -- Only the plain .calibre class (.calibre1, .calibre2... are any element)
+                    n = 3
+                elseif t == "html" then
+                    n = 4
+                end
+                if n and (not tier or n < tier) then tier = n end
+            end
+            for v, u in rule.block:gmatch("font%-size%s*:%s*([%d%.]+)%s*(%a*%%?)") do
+                local k = v .. "|" .. u
+                counts[k] = (counts[k] or 0) + 1
+                total = total + 1
+                if u == "rem" and tonumber(v) ~= 1 then any_rem = true end
+                if tier then
+                    -- Neutral sizes say nothing about a factor (p{1em}
+                    -- inside body{0.88rem}), so they don't compete
+                    local nv = tonumber(v)
+                    if (u == "%" and nv == 100)
+                       or ((u == "em" or u == "rem") and nv == 1) then
+                        neutral_seen = true
+                    else
+                        tiers[tier][k] = (tiers[tier][k] or 0) + 1
+                        tier_total[tier] = tier_total[tier] + 1
+                    end
+                end
+            end
+        end
         if total == 0 then return nil end
         -- Use the highest-priority group that has any declaration
         local found = false
         local tier_name = "global"  -- no body rule: a guess from all the rules
-        for i = 1, 3 do
+        for i = 1, 4 do
             if tier_total[i] > 0 then
                 counts, total, found = tiers[i], tier_total[i], true
-                tier_name = ({ "p", "body", "html" })[i]
+                tier_name = ({ "class", "p", "body", "html" })[i]
                 break
             end
         end
@@ -626,7 +682,7 @@ bookFontSizeStats = function(doc)
         end
         local v, u = best_k:match("^(.-)|(.*)$")
         return { value = tonumber(v), unit = u, share = best_n / total, tier = tier_name,
-                 any_rem = any_rem }
+                 any_rem = any_rem, para_class = para_class }
     end)
     _css_cache[file] = (ok and res) or false
     return (ok and res) or nil
@@ -725,7 +781,8 @@ function PageTextInfo:hasRemStyles()
     local ok, res = pcall(function()
         local st = bookFontSizeStats(ui.document)
         require("logger").dbg("hasRemStyles: stats unit=", st and st.unit,
-            "value=", st and st.value, "share=", st and st.share, "tier=", st and st.tier)
+            "value=", st and st.value, "share=", st and st.share, "tier=", st and st.tier,
+            "class=", st and st.para_class)
         if not hasRelativeStyles(ui.document) then return false end
         if st and cssIsGuess(st) then
             -- Judge by the measured factor; if it can't be measured, don't block the option
@@ -817,11 +874,24 @@ local function buildTitleSegments(ui)
         { text = string.format("Angle @40cm: %.1f′, %.2f mm ", angle, xh_mm) },
         { text = "[" .. angle_class .. "]", bold = true },
     }
+    -- Book font-size factor in use, with where it comes from: the CSS value
+    -- (rem / em / %) or the on-screen measurement when the CSS can't tell
     local st = bookFontSizeStats(doc)
-    if st and st.unit == "rem" and st.value and not cssIsGuess(st) then
-        table.insert(line1, { text = string.format(" rem %g", st.value), bold = true })
+    if scale_source == "css" and st and st.value then
+        if st.unit == "%" then
+            table.insert(line1, { text = string.format(" %g%%", st.value), bold = true })
+        else
+            table.insert(line1, { text = string.format(" %s %g", st.unit, st.value), bold = true })
+        end
+    elseif scale_source == "measured" then
+        table.insert(line1, { text = string.format(" ×%.2f (measured)", scale), bold = true })
     end
     table.insert(line1, { text = "  |  " })
+    -- Font name on the left of the size
+    local font_name = doc._document:getFontFace()
+    if font_name and font_name ~= "" then
+        table.insert(line1, { text = font_name .. " " })
+    end
     table.insert(line1, { text = string.format("%g pt", pt), bold = true })
 
     -- Line 2: leading, weight, contrast
