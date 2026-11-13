@@ -6428,13 +6428,23 @@ function PageTextInfo:onShowTweaks(page)
     return true
 end
 
--- Quick settings menu: rows of buttons (font size, line spacing, margins, weight...)
--- Same look and gesture handling as the fonts menu.
+-- Font presets defined by the EFFECTIVE x-height in millimetres (the same
+-- "mm" value shown in the menu title). The pt size is computed from this for
+-- the current font and book, so it no longer depends on KOReader's own sizes.
+-- Tweak to taste: set the font size you like, read the mm in the title, and
+-- use that number here.
+local FONT_PRESETS = { small = 1.45, normal = 1.65, big = 1.90 }
 
--- Presets (edit to taste). Font sizes are PostScript points.
-local FONT_PRESETS = { small = 8.5, normal = 9.5, big = 11 }
+-- Fallback pt values, used only if the font can't be measured.
+local FONT_FALLBACK = { small = 8.5, normal = 9.5, big = 11 }
 local FONT_STEP    = 0.5
 local WEIGHT_STEP  = 0.5
+
+-- Forward declarations: assigned further down, but must be declared here
+-- so every function below sees them as upvalues (not globals).
+local ptForXHeight
+local bookScale
+local xHeightRatio
 
 -- Line spacing presets. All my Calibre books were converted so every
 -- line-height is a unitless 1.2 (see the Calibre "Transform styles" rules).
@@ -6507,7 +6517,8 @@ end
 
 local function resetDefaults(ui)
     setFontFace(ui, DEFAULTS.font_face)
-    setFontSize(ui, DEFAULTS.font_size)
+    -- Use the mm-based "normal" preset; fall back to the fixed pt value
+    setFontSize(ui, (ptForXHeight and ptForXHeight(ui, FONT_PRESETS.normal)) or DEFAULTS.font_size)
     setLineSpacing(ui, DEFAULTS.line_spacing)
     setMargins(ui, DEFAULTS.margins)
     setWeight(ui, DEFAULTS.font_base_weight)
@@ -6539,18 +6550,34 @@ local function buildRows(ui)
         "h_margins=", conf.h_page_margins and (conf.h_page_margins[1] .. "," .. conf.h_page_margins[2]) or "nil",
         "t=", conf.t_page_margin, "b=", conf.b_page_margin)
 
+    -- Resolve each preset (x-height in mm) to the closest achievable pt
+    local function presetPt(name)
+        local pt, mm = ptForXHeight(ui, FONT_PRESETS[name])
+        require("logger").dbg("font preset", name, "target mm=", FONT_PRESETS[name],
+            "-> pt=", pt, "achieved mm=", mm)
+        return pt or FONT_FALLBACK[name]
+    end
+    local pts = {
+        small  = presetPt("small"),
+        normal = presetPt("normal"),
+        big    = presetPt("big"),
+    }
+
+    -- Tight comparison for the "active" border (pt values have 0.01 resolution)
+    local function near(a, b) return a and b and math.abs(a - b) < 0.011 end
+
     local rows = {
         { -- 1
             { text = "Reset defaults",      callback = resetDefaults },
             { text = "Toggle screen layout", callback = toggleLayout },
         },
         { -- 2
-            { text = "Font small",  callback = function(u) setFontSize(u, FONT_PRESETS.small) end,
-              active = approx(fs, FONT_PRESETS.small) },
-            { text = "Font default", callback = function(u) setFontSize(u, FONT_PRESETS.normal) end,
-              active = approx(fs, FONT_PRESETS.normal) },
-            { text = "Font big",    callback = function(u) setFontSize(u, FONT_PRESETS.big) end,
-              active = approx(fs, FONT_PRESETS.big) },
+            { text = "Font small",  callback = function(u) setFontSize(u, pts.small) end,
+              active = near(fs, pts.small) },
+            { text = "Font default", callback = function(u) setFontSize(u, pts.normal) end,
+              active = near(fs, pts.normal) },
+            { text = "Font big",    callback = function(u) setFontSize(u, pts.big) end,
+              active = near(fs, pts.big) },
         },
         { -- 3
             { text = "Increase font 0.5", callback = function(u) setFontSize(u, u.font.configurable.font_size + FONT_STEP) end },
@@ -6609,6 +6636,41 @@ local function effectiveScale(ui, face_base)
 end
 
 local _css_cache = {}
+local _scale_cache = {}   -- [book file] = { scale, source }
+local _ratio_cache = {}   -- [face name] = x-height / size ratio
+
+-- Returns the KOReader pt size whose EFFECTIVE x-height (font x-height ratio
+-- x book font-size factor) equals `target_mm`. Same model as the menu title.
+-- Returns pt, achieved_mm (or nil if the font can't be measured).
+ptForXHeight = function(ui, target_mm)
+    local ok, pt_res, mm_res = pcall(function()
+        local Device = require("device")
+        local dpi = Device:getDeviceScreenDPI() or Device.screen:getDPI()
+        local px_per_mm = dpi / 25.4
+
+        local ratio, face_name = xHeightRatio(ui.document)
+        if not ratio then return nil end
+
+        -- Book font-size factor (same helper the title uses)
+        local face = require("ui/font"):getFace(face_name, 100, 0, true)
+        local scale, source = bookScale(ui, face)
+        require("logger").dbg("font preset scale=", scale, "source=", source,
+            "face=", face_name, "ratio=", ratio)
+
+        -- x_mm = ratio * scale * px / px_per_mm, with px = dpi * pt / 72.
+        -- Solve for pt, then round to 0.01 pt (KOReader's resolution).
+        local px = target_mm * px_per_mm / (ratio * scale)
+        local pt = math.floor(px * 72 / dpi * 100 + 0.5) / 100
+        pt = math.max(4, math.min(pt, 255))
+
+        local achieved_mm = ratio * scale * (dpi * pt / 72) / px_per_mm
+        return pt, achieved_mm
+    end)
+    if ok then return pt_res, mm_res end
+    -- pt_res holds the error message when pcall fails
+    require("logger").warn("ptForXHeight failed:", pt_res)
+    return nil
+end
 
 -- Devuelve { value=0.88, unit="rem", share=1.0 } del font-size más repetido en los .css del EPUB
 local function bookFontSizeStats(doc)
@@ -6636,13 +6698,65 @@ local function bookFontSizeStats(doc)
         if total == 0 then return nil end
         local best_k, best_n = nil, 0
         for k, n in pairs(counts) do
-            if n > best_n then best_k, best_n = k, n end
+            -- Tie-break on the key so the result doesn't depend on pairs() order
+            if n > best_n or (n == best_n and best_k and k < best_k) then
+                best_k, best_n = k, n
+            end
         end
         local v, u = best_k:match("^(.-)|(.*)$")
         return { value = tonumber(v), unit = u, share = best_n / total }
     end)
     _css_cache[file] = (ok and res) or false
     return (ok and res) or nil
+end
+
+-- x-height / font size ratio of the current face, measured at a large size
+-- so hinting/rounding doesn't matter. Cached per face name.
+-- Returns ratio, face_name (or nil if it can't be measured).
+xHeightRatio = function(doc)
+    local Font = require("ui/font")
+    local face_name = (doc._document:getFontFace() or "?"):gsub("%s+", "") .. "-Regular"
+    if _ratio_cache[face_name] then return _ratio_cache[face_name], face_name end
+
+    local face = Font:getFace(face_name, 200, 0, true)
+    if not face or not face.ftsize then return nil end
+    -- Divide by the size the face was really loaded at (it may be DPI-scaled)
+    local real_size = face.size or 200
+    local xh = face.ftsize:getXHeight()
+    local xh_px = (xh < 1) and (xh * real_size) or xh
+    if xh_px <= 0 or real_size <= 0 then return nil end
+
+    local ratio = xh_px / real_size
+    _ratio_cache[face_name] = ratio
+    return ratio, face_name
+end
+
+-- Book font-size factor (e.g. 0.88 for 0.88rem), computed once per book and
+-- cached, so the title and the presets never change between menu reopenings.
+-- Prefers the CSS value; falls back to an on-screen measurement.
+-- Returns factor, source ("css" | "measured" | "none").
+bookScale = function(ui, face_base)
+    local doc = ui.document
+    local key = doc.file
+    local cached = key and _scale_cache[key]
+    if cached then return cached[1], cached[2] end
+
+    local scale, source = 1, "none"
+    local st = bookFontSizeStats(doc)
+    -- Only trust the CSS if one value dominates and the unit is relative
+    if st and st.value and st.share >= 0.6
+       and (st.unit == "rem" or st.unit == "em" or st.unit == "%") then
+        local expected = (st.unit == "%") and st.value / 100 or st.value
+        if expected > 0.5 and expected < 1.5 then scale, source = expected, "css" end
+    end
+    if source == "none" then
+        local measured = effectiveScale(ui, face_base)
+        if measured and measured > 0.5 and measured < 1.5 then scale, source = measured, "measured" end
+    end
+
+    -- Don't cache "none": it may be a failed measurement, so retry next time
+    if key and source ~= "none" then _scale_cache[key] = { scale, source } end
+    return scale, source
 end
 
 local function buildTitleSegments(ui)
@@ -6654,17 +6768,17 @@ local function buildTitleSegments(ui)
     local na = { { text = "Angle @40cm: N/A  |  Leading: N/A" } }
 
     local pt = configurable.font_size
-    local px = math.floor(display_dpi * pt / 72 + 0.5)
+    local ratio = xHeightRatio(doc)
+    if not ratio then return na end
+    local px = display_dpi * pt / 72          -- same unrounded px KOReader uses
     local face_name = (doc._document:getFontFace() or "?"):gsub("%s+", "") .. "-Regular"
-    local face_base = Font:getFace(face_name, px, 0, true)
-
+    local face_base = Font:getFace(face_name, math.floor(px + 0.5), 0, true)
     if not face_base or not face_base.ftsize then return na end
 
-    local xh = face_base.ftsize:getXHeight()
-    local xh_px = (xh < 1) and (xh * px) or xh
-    local scale = effectiveScale(ui, face_base)
+    local xh_px = ratio * px
+    local scale, scale_source = bookScale(ui, face_base)
     local scale_applied = nil
-    if scale and scale > 0.5 and scale < 1.5 then
+    if scale_source ~= "none" then
         xh_px = xh_px * scale
         scale_applied = scale
     end
@@ -6784,10 +6898,8 @@ function PageTextInfo:onShowSettingsMenu()
         local xh = face_base.ftsize:getXHeight()
         local xh_px = (xh < 1) and (xh * px) or xh
 
-        local scale = effectiveScale(ui, face_base)
-        if scale and scale > 0.5 and scale < 1.5 then
-            xh_px = xh_px * scale
-        end
+        local scale = bookScale(ui, face_base)
+        xh_px = xh_px * scale
 
         if xh_px <= 0 then
             return "Angle @40cm: N/A  |  Leading: N/A"
