@@ -25,6 +25,9 @@ local FONT_FALLBACK = { small = 8.5, normal = 9.5, big = 11 }
 local FONT_STEPS = { 0.5, 0.1 }
 local WEIGHT_STEP = 0.5
 
+local CONTRAST_MIN, CONTRAST_MAX = 0, 56
+local CONTRAST_DEFAULT = 15
+
 -- Forward declarations: assigned further down, but must be declared here
 -- so every function below sees them as upvalues (not globals).
 local ptForXHeight
@@ -104,6 +107,34 @@ local function setWeight(ui, w)
     w = math.max(-3, math.min(w, 5))
     ui.document.configurable.font_base_weight = w
     ui.font:onSetFontBaseWeight(w)
+end
+
+local function getContrast(ui)
+    local conf = ui.document.configurable
+    return conf.font_gamma
+        or G_reader_settings:readSetting("copt_font_gamma")
+        or CONTRAST_DEFAULT
+end
+
+local function setContrast(ui, g)
+    g = math.floor(math.max(CONTRAST_MIN, math.min(g, CONTRAST_MAX)) + 0.5)
+    ui.document.configurable.font_gamma = g
+    ui.font.configurable.font_gamma = g
+
+    -- Same call KOReader's own handler makes (also shows its notification)
+    ui.font:onSetFontGamma(g)
+
+    -- Gamma is applied when glyphs are drawn, but crengine caches the rendered
+    -- page, so force it to render again and repaint.
+    ui.document:clearCacheData()
+    ui.document:getCurrentPos()
+    ui:handleEvent(require("ui/event"):new("UpdatePos"))
+    require("ui/uimanager"):setDirty("all", "full")
+end
+
+-- One index at a time over KOReader's full gamma table (0..56)
+local function stepContrast(ui, dir)
+    setContrast(ui, getContrast(ui) + dir)
 end
 
 -- Save the current font face and size as KOReader's defaults for new books.
@@ -236,6 +267,10 @@ local function buildRows(ui)
             { text = "Increase weight", callback = function(u) setWeight(u, u.document.configurable.font_base_weight + WEIGHT_STEP) end },
             { text = "Decrease weight", callback = function(u) setWeight(u, u.document.configurable.font_base_weight - WEIGHT_STEP) end },
         },
+        {
+            { text = "Increase contrast", callback = function(u) stepContrast(u, 1) end },
+            { text = "Decrease contrast", callback = function(u) stepContrast(u, -1) end },
+        },
     }
 
     local ls = conf.line_spacing
@@ -287,6 +322,36 @@ end
 local _css_cache = {}
 local _scale_cache = {}   -- [book file] = { scale, source }
 local _ratio_cache = {}   -- [face name] = x-height / size ratio
+
+local FontList = require("fontlist")
+local _face_cache = {}   -- [family name] = path or guessed name
+
+-- Real file of the Regular style of a family, found through KOReader's
+-- font list. Falls back to the old "Name-Regular" guess.
+local function resolveFace(raw_name)
+    if _face_cache[raw_name] then return _face_cache[raw_name] end
+    local function norm(s) return (s:gsub("%s+", ""):lower()) end
+    local want = norm(raw_name)
+
+    FontList:getFontList()   -- makes sure fontinfo is filled
+    local best, any
+    for path, info in pairs(FontList.fontinfo or {}) do
+        for __, f in ipairs(info) do
+            if f.name and norm(f.name) == want then
+                -- tie-break on path so the result doesn't depend on pairs() order
+                if not f.bold and not f.italic then
+                    if not best or path < best then best = path end
+                elseif not any or path < any then
+                    any = path
+                end
+            end
+        end
+    end
+
+    local res = best or any or (raw_name:gsub("%s+", "") .. "-Regular")
+    _face_cache[raw_name] = res
+    return res
+end
 
 -- Returns the KOReader pt size whose EFFECTIVE x-height (font x-height ratio
 -- x book font-size factor) equals `target_mm`. Same model as the menu title.
@@ -364,7 +429,7 @@ end
 -- Returns ratio, face_name (or nil if it can't be measured).
 xHeightRatio = function(doc, raw_name)
     raw_name = raw_name or doc._document:getFontFace() or "?"
-    local face_name = raw_name:gsub("%s+", "") .. "-Regular"
+    local face_name = resolveFace(raw_name)
     if _ratio_cache[face_name] then return _ratio_cache[face_name], face_name end
 
     local face = Font:getFace(face_name, 200, 0, true)
@@ -426,6 +491,13 @@ function PageTextInfo:getXHeightMm()
     return ok and mm or nil
 end
 
+-- Name that Font:getFace accepts for the current face (the one that worked in
+-- xHeightRatio). Returns nil if the font can't be loaded.
+function PageTextInfo:getFaceName()
+    local ok, ratio, face_name = pcall(xHeightRatio, self.ui.document)
+    return ok and ratio and face_name or nil
+end
+
 -- pt size that gives `target_mm` of effective x-height with the CURRENT face.
 function PageTextInfo:ptForXHeight(target_mm)
     return (ptForXHeight(self.ui, target_mm))  -- first return value only
@@ -447,10 +519,9 @@ local function buildTitleSegments(ui)
     local na = { { text = "Angle @40cm: N/A  |  Leading: N/A" } }
 
     local pt = configurable.font_size
-    local ratio = xHeightRatio(doc)
+    local ratio, face_name = xHeightRatio(doc)
     if not ratio then return na end
     local px = display_dpi * pt / 72          -- same unrounded px KOReader uses
-    local face_name = (doc._document:getFontFace() or "?"):gsub("%s+", "") .. "-Regular"
     local face_base = Font:getFace(face_name, math.floor(px + 0.5), 0, true)
     if not face_base or not face_base.ftsize then return na end
 
@@ -470,11 +541,19 @@ local function buildTitleSegments(ui)
 
     local angle_class = angle < 12 and "Below critical size" or "Fluent range"
 
+    -- rem of the book (only when defined in rem), next to the x-height bracket
+    local st = bookFontSizeStats(ui.document)
+    local rem_text = (st and st.unit == "rem" and st.value)
+        and string.format(" rem %g", st.value) or nil
+
     local segments = {
         { text = string.format("Angle @40cm: %.1f′, %.2f mm ", angle, xh_mm) },
         { text = "[" .. angle_class .. "]", bold = true },
-        { text = "  |  Leading: " },
     }
+    if rem_text then
+        table.insert(segments, { text = rem_text, bold = true })
+    end
+    table.insert(segments, { text = "  |  Leading: " })
 
     local line_spacing_factor = (configurable.line_spacing or 100) / 100
     local ok, xh2, ascender, descender = pcall(function()
@@ -482,7 +561,7 @@ local function buildTitleSegments(ui)
     end)
 
     if ok and xh2 and ascender and descender then
-        local leading_factor = (1.2 * px * line_spacing_factor) / xh_px
+        local leading_factor = 1.2 * line_spacing_factor / ratio
         local safe_min = (ascender + descender) / xh2
         local leading_class
 
@@ -504,12 +583,19 @@ local function buildTitleSegments(ui)
         table.insert(segments, { text = "N/A" })
     end
 
-    -- Only report the book font-size when it is defined in rem
-    local st = bookFontSizeStats(ui.document)
-    if st and st.unit == "rem" and st.value then
-        table.insert(segments, { text = "  |  " })
-        table.insert(segments, { text = string.format("rem %g", st.value), bold = true })
-    end
+    -- Weight at the end, where the rem used to be
+    local weight = configurable.font_base_weight or 0
+    table.insert(segments, { text = "  |  " })
+    table.insert(segments, { text = string.format("weight %g", weight), bold = true })
+    table.insert(segments, { text = "  |  " })
+    table.insert(segments, { text = string.format("weight %g", weight), bold = true })
+    local GAMMA_TABLE = { 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9,
+        0.95, 0.98, 1, 1.02, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45,
+        1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9,
+        3, 3.5, 4, 4.5, 5, 5.5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 }
+    local idx = getContrast(ui)
+    local gamma = GAMMA_TABLE[idx + 1]
+    table.insert(segments, { text = "  contrast " .. (gamma and string.format("%g", gamma) or tostring(idx)), bold = true })
     return segments
 end
 
@@ -585,7 +671,7 @@ function PageTextInfo:onShowSettingsMenu()
                     },
                 }
                 table.insert(row, frame)
-                table.insert(buttons, { frame = frame, callback = b.callback })
+                table.insert(buttons, { frame = frame, callback = b.callback, text = b.text })
             end
             table.insert(grid, row)
         end
@@ -669,7 +755,9 @@ function PageTextInfo:onShowSettingsMenu()
 
     -- Long press inside the window: save the current font as the default
     function dialog:onHold(arg, ges)
-        if not ges.pos:intersectWith(frame_rect) then return true end
+        if not (title_frame.dimen and ges.pos:intersectWith(title_frame.dimen)) then
+            return true
+        end
         local plugin = self.plugin
         local ok, face, pt = pcall(saveCurrentFontAsDefault, plugin.ui)
         local text
