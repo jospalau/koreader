@@ -13,17 +13,17 @@ local Screen = Device.screen
 
 return function(PageTextInfo)
 
--- Font presets defined by the EFFECTIVE x-height in millimetres (the same
--- "mm" value shown in the menu title). The pt size is computed from this for
--- the current font and book, so it no longer depends on KOReader's own sizes.
--- Tweak to taste: set the font size you like, read the mm in the title, and
--- use that number here.
+-- Font presets: EFFECTIVE x-height in millimetres (same "mm" shown in the menu title).
+-- small / big: used as is.
+-- normal: only a fallback. Normally it is taken from KOReader's configured
+-- default font and size (see presetMm).
 local FONT_PRESETS = { small = 1.45, normal = 1.65, big = 1.90 }
 
 -- Fallback pt values, used only if the font can't be measured.
 local FONT_FALLBACK = { small = 8.5, normal = 9.5, big = 11 }
-local FONT_STEP    = 0.5
-local WEIGHT_STEP  = 0.5
+-- Font size steps in KOReader pt, used by the increase/decrease buttons
+local FONT_STEPS = { 0.5, 0.1 }
+local WEIGHT_STEP = 0.5
 
 -- Forward declarations: assigned further down, but must be declared here
 -- so every function below sees them as upvalues (not globals).
@@ -79,6 +79,12 @@ local function setFontSize(ui, pt)
     ui.font.configurable.font_size = pt
 end
 
+-- Change the font size by `delta` pt, rounded to 0.01 to avoid float drift
+local function stepFontSize(ui, delta)
+    local pt = ui.font.configurable.font_size + delta
+    setFontSize(ui, math.floor(pt * 100 + 0.5) / 100)
+end
+
 local function setLineSpacing(ui, percent)
     ui.document:setInterlineSpacePercent(percent)
     ui.document.configurable.line_spacing = percent
@@ -100,10 +106,55 @@ local function setWeight(ui, w)
     ui.font:onSetFontBaseWeight(w)
 end
 
+-- Save the current font face and size as KOReader's defaults for new books.
+-- These are the same settings configuredXHeightMm reads, so "Font default"
+-- then follows the x-height of what was just saved.
+-- Returns face, pt.
+local function saveCurrentFontAsDefault(ui)
+    local face = ui.document._document:getFontFace()
+    local pt = ui.font.configurable.font_size
+    if not face or not pt then return nil end
+    G_reader_settings:saveSetting("cre_font", face)
+    G_reader_settings:saveSetting("copt_font_size", pt)
+    G_reader_settings:flush()
+    return face, pt
+end
+
+-- Effective x-height (mm) of KOReader's configured default font and size,
+-- in the current book. Returns nil if it can't be measured.
+local function configuredXHeightMm(ui)
+    local ok, res = pcall(function()
+        -- Default face and size as set in KOReader (fall back to this file's DEFAULTS)
+        local face = G_reader_settings:readSetting("cre_font") or DEFAULTS.font_face
+        local pt = G_reader_settings:readSetting("copt_font_size") or DEFAULTS.font_size
+
+        local ratio, face_name = xHeightRatio(ui.document, face)
+        if not ratio then return nil end
+        local scale = bookScale(ui, Font:getFace(face_name, 100, 0, true))
+
+        -- x_mm = ratio * scale * px / px_per_mm, with px = dpi * pt / 72,
+        -- so the dpi cancels out
+        return ratio * scale * pt * 25.4 / 72
+    end)
+    if ok then return res end
+    require("logger").warn("configuredXHeightMm failed:", res)
+    return nil
+end
+
+-- Target x-height in mm for a preset. "normal" follows KOReader's configured
+-- size; small/big use the fixed values in FONT_PRESETS.
+local function presetMm(ui, name)
+    if name == "normal" then
+        return configuredXHeightMm(ui) or FONT_PRESETS.normal
+    end
+    return FONT_PRESETS[name]
+end
+
 local function resetDefaults(ui)
-    setFontFace(ui, DEFAULTS.font_face)
+     -- Use the face saved with the long press; fall back to DEFAULTS.font_face
+    setFontFace(ui, G_reader_settings:readSetting("cre_font") or DEFAULTS.font_face)
     -- Use the mm-based "normal" preset; fall back to the fixed pt value
-    setFontSize(ui, (ptForXHeight and ptForXHeight(ui, FONT_PRESETS.normal)) or DEFAULTS.font_size)
+    setFontSize(ui, (ptForXHeight and ptForXHeight(ui, presetMm(ui, "normal"))) or DEFAULTS.font_size)
     setLineSpacing(ui, DEFAULTS.line_spacing)
     setMargins(ui, DEFAULTS.margins)
     setWeight(ui, DEFAULTS.font_base_weight)
@@ -135,18 +186,24 @@ local function buildRows(ui)
         "h_margins=", conf.h_page_margins and (conf.h_page_margins[1] .. "," .. conf.h_page_margins[2]) or "nil",
         "t=", conf.t_page_margin, "b=", conf.b_page_margin)
 
-    -- Resolve each preset (x-height in mm) to the closest achievable pt
+    -- Resolve each preset to the closest achievable pt on the current face.
+    -- Also returns the achieved x-height (mm) to show it on the button.
     local function presetPt(name)
-        local pt, mm = ptForXHeight(ui, FONT_PRESETS[name])
-        require("logger").dbg("font preset", name, "target mm=", FONT_PRESETS[name],
+        local target_mm = presetMm(ui, name)
+        local pt, mm = ptForXHeight(ui, target_mm)
+        require("logger").dbg("font preset", name, "target mm=", target_mm,
             "-> pt=", pt, "achieved mm=", mm)
-        return pt or FONT_FALLBACK[name]
+        return pt or FONT_FALLBACK[name], mm
     end
-    local pts = {
-        small  = presetPt("small"),
-        normal = presetPt("normal"),
-        big    = presetPt("big"),
-    }
+    local pts, mms = {}, {}
+    for __, name in ipairs({ "small", "normal", "big" }) do
+        pts[name], mms[name] = presetPt(name)
+    end
+
+    -- Button text with the x-height in mm (plain text if it couldn't be measured)
+    local function withMm(text, mm)
+        return mm and string.format("%s %.2f mm", text, mm) or text
+    end
 
     -- Tight comparison for the "active" border (pt values have 0.01 resolution)
     local function near(a, b) return a and b and math.abs(a - b) < 0.011 end
@@ -157,16 +214,21 @@ local function buildRows(ui)
             { text = "Toggle screen layout", callback = toggleLayout },
         },
         { -- 2
-            { text = "Font small",  callback = function(u) setFontSize(u, pts.small) end,
+            { text = withMm("Font small", mms.small),
+              callback = function(u) setFontSize(u, pts.small) end,
               active = near(fs, pts.small) },
-            { text = "Font default", callback = function(u) setFontSize(u, pts.normal) end,
+            { text = withMm("Font default", mms.normal),
+              callback = function(u) setFontSize(u, pts.normal) end,
               active = near(fs, pts.normal) },
-            { text = "Font big",    callback = function(u) setFontSize(u, pts.big) end,
+            { text = withMm("Font big", mms.big),
+              callback = function(u) setFontSize(u, pts.big) end,
               active = near(fs, pts.big) },
         },
         { -- 3
-            { text = "Increase font 0.5", callback = function(u) setFontSize(u, u.font.configurable.font_size + FONT_STEP) end },
-            { text = "Decrease font 0.5", callback = function(u) setFontSize(u, u.font.configurable.font_size - FONT_STEP) end },
+            { text = "Font -0.5", callback = function(u) stepFontSize(u, -FONT_STEPS[1]) end },
+            { text = "Font -0.1", callback = function(u) stepFontSize(u, -FONT_STEPS[2]) end },
+            { text = "Font +0.1", callback = function(u) stepFontSize(u,  FONT_STEPS[2]) end },
+            { text = "Font +0.5", callback = function(u) stepFontSize(u,  FONT_STEPS[1]) end },
         },
         {}, -- 4: line spacing (filled below)
         {}, -- 5: margins (filled below)
@@ -297,11 +359,12 @@ local function bookFontSizeStats(doc)
     return (ok and res) or nil
 end
 
--- x-height / font size ratio of the current face, measured at a large size
--- so hinting/rounding doesn't matter. Cached per face name.
+-- x-height / font size ratio of a face (the current one by default), measured
+-- at a large size so hinting/rounding doesn't matter. Cached per face name.
 -- Returns ratio, face_name (or nil if it can't be measured).
-xHeightRatio = function(doc)
-    local face_name = (doc._document:getFontFace() or "?"):gsub("%s+", "") .. "-Regular"
+xHeightRatio = function(doc, raw_name)
+    raw_name = raw_name or doc._document:getFontFace() or "?"
+    local face_name = raw_name:gsub("%s+", "") .. "-Regular"
     if _ratio_cache[face_name] then return _ratio_cache[face_name], face_name end
 
     local face = Font:getFace(face_name, 200, 0, true)
@@ -441,21 +504,11 @@ local function buildTitleSegments(ui)
         table.insert(segments, { text = "N/A" })
     end
 
-    if scale_applied and math.abs(scale_applied - 1) > 0.03 then
-        local st = bookFontSizeStats(ui.document)
+    -- Only report the book font-size when it is defined in rem
+    local st = bookFontSizeStats(ui.document)
+    if st and st.unit == "rem" and st.value then
         table.insert(segments, { text = "  |  " })
-        if st and st.unit and st.value then
-            local label = st.unit == "%" and string.format("%g%%", st.value)
-                        or string.format("%s %g", st.unit, st.value)
-            local expected = (st.unit == "%") and st.value / 100 or st.value
-            local match = math.abs(expected - scale_applied) < 0.05
-            table.insert(segments, { text = label .. " " })
-            table.insert(segments, { text = match and "[confirmed]" or "[mixed]", bold = true })
-            table.insert(segments, { text = string.format("  ×%.2f", scale_applied) })
-        else
-            table.insert(segments, { text = string.format("Book font ×%.2f ", scale_applied) })
-            table.insert(segments, { text = "[publisher size]", bold = true })
-        end
+        table.insert(segments, { text = string.format("rem %g", st.value), bold = true })
     end
     return segments
 end
@@ -496,6 +549,8 @@ function PageTextInfo:onShowSettingsMenu()
         dimen = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
         ges_events = {
             Tap = { GestureRange:new{ ges = "tap",
+                range = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h } } },
+            Hold = { GestureRange:new{ ges = "hold",
                 range = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h } } },
         },
         key_events = Device:hasKeys() and { Close = { { Device.input.group.Back } } } or {},
@@ -611,6 +666,36 @@ function PageTextInfo:onShowSettingsMenu()
         end
         return true
     end
+
+    -- Long press inside the window: save the current font as the default
+    function dialog:onHold(arg, ges)
+        if not ges.pos:intersectWith(frame_rect) then return true end
+        local plugin = self.plugin
+        local ok, face, pt = pcall(saveCurrentFontAsDefault, plugin.ui)
+        local text
+        if ok and face then
+            local mm = plugin:getXHeightMm()
+            text = mm
+                and string.format("Default font saved:\n%s, %.2f pt (%.2f mm)", face, pt, mm)
+                or string.format("Default font saved:\n%s, %.2f pt", face, pt)
+        else
+            -- face holds the error message when pcall fails
+            require("logger").warn("saveCurrentFontAsDefault failed:", face)
+            text = "Could not save the default font"
+        end
+
+        -- Reopen the menu first, then show the message box on top of it in a
+        -- later tick, so the menu can't be painted over the message
+        UIManager:tickAfterNext(function()
+            plugin:onShowSettingsMenu()
+            UIManager:nextTick(function()
+                local InfoMessage = require("ui/widget/infomessage")
+                UIManager:show(InfoMessage:new{ text = text })
+            end)
+        end)
+        return true
+    end
+
     function dialog:onClose() close(self.plugin) return true end
 
     dialog.plugin = self
