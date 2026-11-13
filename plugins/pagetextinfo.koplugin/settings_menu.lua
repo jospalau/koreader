@@ -70,12 +70,16 @@ local function fixedPresets()
     return { small = 8.5, normal = defaultFontSize(), big = 11 }
 end
 
--- Book font-size factor (rem/em/%), 1 if unknown
+-- Book font-size factor (rem/em/%), 1 if unknown.
+-- Only a factor read from the book's CSS counts: without rem/em styles the
+-- compensation does nothing (factor 1).
 local function remScale(ui)
     local ok, scale = pcall(function()
         local __, face_name = xHeightRatio(ui.document)
         if not face_name then return 1 end
-        return (bookScale(ui, Font:getFace(face_name, 100, 0, true)))
+        local factor, source = bookScale(ui, Font:getFace(face_name, 100, 0, true))
+        if source ~= "css" then return 1 end
+        return factor
     end)
     return ok and scale or 1
 end
@@ -203,10 +207,13 @@ end
 local function configuredXHeightMm(ui)
     local ok, res = pcall(function()
         -- Default face and size as set in KOReader (fall back to this file's DEFAULTS)
-        local face = G_reader_settings:readSetting("cre_font") or DEFAULTS.font_face
+        -- No default face saved: don't force DEFAULTS.font_face. If the saved
+        -- face can't be measured (e.g. not installed), use the current one.
+        local face = G_reader_settings:readSetting("cre_font")
         local pt = G_reader_settings:readSetting("copt_font_size") or DEFAULTS.font_size
 
         local ratio, face_name = xHeightRatio(ui.document, face)
+        if not ratio then ratio, face_name = xHeightRatio(ui.document) end
         if not ratio then return nil end
         local scale = bookScale(ui, Font:getFace(face_name, 100, 0, true))
 
@@ -235,7 +242,7 @@ local function resetDefaults(ui)
         -- Use the mm-based "normal" preset; fall back to the fixed pt value
         setFontSize(ui, (ptForXHeight and ptForXHeight(ui, presetMm(ui, "normal"))) or defaultFontSize())
     else
-        setFontSize(ui, defaultFontSize())
+        setFontSize(ui, presetPtFor(ui, defaultFontSize()))
     end
     setLineSpacing(ui, DEFAULTS.line_spacing)
     setMargins(ui, DEFAULTS.margins)
@@ -285,8 +292,9 @@ local function buildRows(ui)
     end
 
     -- Button text with the x-height in mm (plain text if it couldn't be measured)
+    -- "(pt)" marks a preset that couldn't be measured (fixed pt fallback used)
     local function withMm(text, mm)
-        return mm and string.format("%s %.2f mm", text, mm) or text
+        return mm and string.format("%s %.2f mm", text, mm) or (text .. " (pt)")
     end
 
     -- Tight comparison for the "active" border (pt values have 0.01 resolution)
@@ -307,8 +315,9 @@ local function buildRows(ui)
         }
     else
         local fx = fixedPresets()
-        fx.small = presetPtFor(ui, fx.small)
-        fx.big   = presetPtFor(ui, fx.big)
+        fx.small  = presetPtFor(ui, fx.small)
+        fx.normal = presetPtFor(ui, fx.normal)
+        fx.big    = presetPtFor(ui, fx.big)
         font_preset_row = {
             { text = "Font small",   callback = function(u) setFontSize(u, fx.small) end,  active = near(fs, fx.small) },
             { text = "Font default", callback = function(u) setFontSize(u, fx.normal) end, active = near(fs, fx.normal) },
@@ -362,9 +371,11 @@ local function effectiveScale(ui, face_base)
     local RenderText = require("ui/rendertext")
     local W, H = Screen:getWidth(), Screen:getHeight()
     local ratios = {}
-    for i = 1, 16 do
+    -- More sample points so sparse pages still yield >= 3 valid words
+    local N = 48
+    for i = 1, N do
         local x = math.floor(W * (0.15 + 0.7 * ((i * 37) % 10) / 10))
-        local y = math.floor(H * (0.12 + 0.76 * i / 17))
+        local y = math.floor(H * (0.08 + 0.84 * i / (N + 1)))
         local w = doc._document:getTextFromPositions(x, y, x, y, false, false)
         -- Whole words only: no hyphens, no spaces
         if w and w.text and w.text:match("^%a%a%a%a+$") and w.pos0 and w.pos1 then
@@ -412,9 +423,13 @@ local function resolveFace(raw_name)
         end
     end
 
-    local res = best or any or (raw_name:gsub("%s+", "") .. "-Regular")
-    _face_cache[raw_name] = res
-    return res
+    -- Only cache real matches. The "Name-Regular" guess is not cached
+    -- (the font list may not be ready yet).
+    if best or any then
+        _face_cache[raw_name] = best or any
+        return best or any
+    end
+    return (raw_name:gsub("%s+", "") .. "-Regular")
 end
 
 -- Returns the KOReader pt size whose EFFECTIVE x-height (font x-height ratio
@@ -460,20 +475,38 @@ local function bookFontSizeStats(doc)
         local arc = Archiver.Reader:new()
         if not arc:open(file) then return nil end
         local counts, total = {}, 0
+        local body_counts, body_total = {}, 0
         for entry in arc:iterate() do
             if entry.mode == "file" and entry.path:lower():match("%.css$") then
                 local css = arc:extractToMemory(entry.path)
                 if css then
-                    for v, u in css:gmatch("font%-size%s*:%s*([%d%.]+)%s*(%a*%%?)") do
-                        local k = v .. "|" .. u
-                        counts[k] = (counts[k] or 0) + 1
-                        total = total + 1
+                    css = css:gsub("/%*.-%*/", "")  -- strip comments
+                    -- Prefer the body / html / p rules (body text) over counting
+                    -- every declaration in the CSS
+                    for sel, block in css:gmatch("([^{}]+)%{([^}]*)%}") do
+                        local is_body = false
+                        for s in sel:gmatch("[^,]+") do
+                            local t = s:gsub("^%s+", ""):gsub("%s+$", "")
+                            if t == "body" or t == "html" or t == "p" or t == "body p" then
+                                is_body = true
+                            end
+                        end
+                        for v, u in block:gmatch("font%-size%s*:%s*([%d%.]+)%s*(%a*%%?)") do
+                            local k = v .. "|" .. u
+                            counts[k] = (counts[k] or 0) + 1
+                            total = total + 1
+                            if is_body then
+                                body_counts[k] = (body_counts[k] or 0) + 1
+                                body_total = body_total + 1
+                            end
+                        end
                     end
                 end
             end
         end
         arc:close()
         if total == 0 then return nil end
+        if body_total > 0 then counts, total = body_counts, body_total end
         local best_k, best_n = nil, 0
         for k, n in pairs(counts) do
             -- Tie-break on the key so the result doesn't depend on pairs() order
@@ -497,10 +530,18 @@ xHeightRatio = function(doc, raw_name)
     if _ratio_cache[face_name] then return _ratio_cache[face_name], face_name end
 
     local face = Font:getFace(face_name, 200, 0, true)
-    if not face or not face.ftsize then return nil end
+    if not face or not face.ftsize then
+        require("logger").warn("xHeightRatio: cannot load face", raw_name, face_name)
+        return nil
+    end
     -- Divide by the size the face was really loaded at (it may be DPI-scaled)
     local real_size = face.size or 200
-    local xh = face.ftsize:getXHeight()
+    -- Protected: a 0/nil x-height means the face can't be measured
+    local okx, xh = pcall(function() return face.ftsize:getXHeight() end)
+    if not okx or not xh or xh <= 0 then
+        require("logger").warn("xHeightRatio: no x-height for", face_name)
+        return nil
+    end
     local xh_px = (xh < 1) and (xh * real_size) or xh
     if xh_px <= 0 or real_size <= 0 then return nil end
 
@@ -520,6 +561,15 @@ bookScale = function(ui, face_base)
     if cached then return cached[1], cached[2] end
 
     local scale, source = 1, "none"
+
+    -- With the publisher style sheet disabled ("Book styles" off) crengine
+    -- ignores the CSS, so the real factor is 1 (embedded_css: 1 = enabled).
+    local conf = doc.configurable
+    if conf and conf.embedded_css == 0 then
+        if key then _scale_cache[key] = { 1, "nocss" } end
+        return 1, "nocss"
+    end
+
     local st = bookFontSizeStats(doc)
     -- Only trust the CSS if one value dominates and the unit is relative
     if st and st.value and st.share >= 0.6
@@ -553,6 +603,19 @@ function PageTextInfo:getXHeightMm()
         return ratio * scale * px / (dpi / 25.4)
     end)
     return ok and mm or nil
+end
+
+-- True if the book has rem/em/% font-size styles to compensate. Use it to grey
+-- out (and show unchecked) the "compensate book rem/em" menu item.
+function PageTextInfo:hasRemStyles()
+    local ui = self.ui
+    local ok, res = pcall(function()
+        local __, face_name = xHeightRatio(ui.document)
+        if not face_name then return false end
+        local scale, source = bookScale(ui, Font:getFace(face_name, 100, 0, true))
+        return source == "css" and math.abs(scale - 1) > 0.001
+    end)
+    return ok and res or false
 end
 
 -- Name that Font:getFace accepts for the current face (the one that worked in
@@ -860,19 +923,22 @@ local logger = require("logger")
 function PageTextInfo:reapplyFontCompensation(enabled)
     local ui = self.ui
 
-    -- Keep the unmodified font size as the reference.
-    self._font_size_before_compensation =
-        self._font_size_before_compensation
-        or ui.font.configurable.font_size
+    -- Ignore a repeated call with the same value (it would apply the factor twice)
+    enabled = enabled and true or false
+    if self._comp_applied == enabled then return end
+    self._comp_applied = enabled
 
-    local pt = self._font_size_before_compensation
+    local cur = ui.font.configurable.font_size
     local scale = remScale(ui)
 
+    -- Turning it on divides by the book factor (see compensate); turning it off
+    -- multiplies it back. Starting from the current size, so it also works when
+    -- the book was opened with the option already on and after any size change.
     local new_pt = enabled
-        and compensate(ui, pt)
-        or pt
+        and compensate(ui, cur)
+        or math.floor(cur * scale * 100 + 0.5) / 100
 
-    logger.dbg("reapply", "enabled", enabled, "base", pt,
+    logger.dbg("reapply", "enabled", enabled, "cur", cur,
         "scale", scale, "new_pt", new_pt)
 
     setFontSize(ui, new_pt)

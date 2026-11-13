@@ -1843,9 +1843,13 @@ This is to be active only if the option flash buttons and menu items or the opti
                 },
                 {
                     text = _("Compensate book rem/em"),
-                    checked_func = function() return self:isScaleByXHeight() or self:isCompensateRem() end,
-                    help_text = _([[Divide the small and big font presets by the book's font-size factor (rem/em/%) so the effective size matches. Always on when "Scale font by x-height" is on.]]),
-                    enabled_func = function() return not self:isScaleByXHeight() end,
+                    checked_func = function()
+                        return self:hasRemStyles() and (self:isScaleByXHeight() or self:isCompensateRem())
+                    end,
+                    help_text = _([[Divide the small and big font presets by the book's font-size factor (rem/em/%) so the effective size matches. Always on when "Scale font by x-height" is on. Disabled when the book has no rem/em styles.]]),
+                    enabled_func = function()
+                        return not self:isScaleByXHeight() and self:hasRemStyles()
+                    end,
                     callback = function()
                         G_reader_settings:saveSetting("pagetextinfo_compensate_rem", not self:isCompensateRem())
                         G_reader_settings:flush()
