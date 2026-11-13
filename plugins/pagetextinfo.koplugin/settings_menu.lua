@@ -58,6 +58,11 @@ local MARGIN_PRESETS = {
 local DEFAULTS = { font_face = "Capita", font_size = 9.5, line_spacing = 100, font_base_weight = 0,
                    margins = MARGIN_PRESETS[1].value }
 
+local GAMMA_TABLE = { 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9,
+    0.95, 0.98, 1, 1.02, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45,
+    1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9,
+    3, 3.5, 4, 4.5, 5, 5.5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 }
+
 local function close(self)
     local UIManager = require("ui/uimanager")
     local d = self.settings_dialog
@@ -264,12 +269,12 @@ local function buildRows(ui)
         {}, -- 4: line spacing (filled below)
         {}, -- 5: margins (filled below)
         { -- 6
-            { text = "Increase weight", callback = function(u) setWeight(u, u.document.configurable.font_base_weight + WEIGHT_STEP) end },
             { text = "Decrease weight", callback = function(u) setWeight(u, u.document.configurable.font_base_weight - WEIGHT_STEP) end },
+            { text = "Increase weight", callback = function(u) setWeight(u, u.document.configurable.font_base_weight + WEIGHT_STEP) end },
         },
         {
-            { text = "Increase contrast", callback = function(u) stepContrast(u, 1) end },
             { text = "Decrease contrast", callback = function(u) stepContrast(u, -1) end },
+            { text = "Increase contrast", callback = function(u) stepContrast(u, 1) end },
         },
     }
 
@@ -510,61 +515,56 @@ end
 
 -- Title ------------------------------------------------------------------
 
+-- Returns two lines, each a list of segments: { line1, line2 }
 local function buildTitleSegments(ui)
     local doc = ui.document
     local configurable = doc.configurable
     local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
     local reading_distance_mm = 400
 
-    local na = { { text = "Angle @40cm: N/A  |  Leading: N/A" } }
+    local na = {
+        { { text = "Angle @40cm: N/A" } },
+        { { text = "Leading: N/A" } },
+    }
 
     local pt = configurable.font_size
     local ratio, face_name = xHeightRatio(doc)
     if not ratio then return na end
-    local px = display_dpi * pt / 72          -- same unrounded px KOReader uses
+    local px = display_dpi * pt / 72
     local face_base = Font:getFace(face_name, math.floor(px + 0.5), 0, true)
     if not face_base or not face_base.ftsize then return na end
 
     local xh_px = ratio * px
     local scale, scale_source = bookScale(ui, face_base)
-    local scale_applied = nil
-    if scale_source ~= "none" then
-        xh_px = xh_px * scale
-        scale_applied = scale
-    end
-
+    if scale_source ~= "none" then xh_px = xh_px * scale end
     if xh_px <= 0 then return na end
 
     local xh_mm = xh_px * 25.4 / display_dpi
-    local angle_rad = 2 * math.atan(xh_mm / (2 * reading_distance_mm))
-    local angle = math.deg(angle_rad) * 60
-
+    local angle = math.deg(2 * math.atan(xh_mm / (2 * reading_distance_mm))) * 60
     local angle_class = angle < 12 and "Below critical size" or "Fluent range"
 
-    -- rem of the book (only when defined in rem), next to the x-height bracket
-    local st = bookFontSizeStats(ui.document)
-    local rem_text = (st and st.unit == "rem" and st.value)
-        and string.format(" rem %g", st.value) or nil
-
-    local segments = {
+    -- Line 1: angle, x-height, class, rem, pt
+    local line1 = {
         { text = string.format("Angle @40cm: %.1f′, %.2f mm ", angle, xh_mm) },
         { text = "[" .. angle_class .. "]", bold = true },
     }
-    if rem_text then
-        table.insert(segments, { text = rem_text, bold = true })
+    local st = bookFontSizeStats(doc)
+    if st and st.unit == "rem" and st.value then
+        table.insert(line1, { text = string.format(" rem %g", st.value), bold = true })
     end
-    table.insert(segments, { text = "  |  Leading: " })
+    table.insert(line1, { text = "  |  " })
+    table.insert(line1, { text = string.format("%g pt", pt), bold = true })
 
+    -- Line 2: leading, weight, contrast
+    local line2 = { { text = "Leading: " } }
     local line_spacing_factor = (configurable.line_spacing or 100) / 100
     local ok, xh2, ascender, descender = pcall(function()
         return face_base.ftsize:getAscDesc()
     end)
-
     if ok and xh2 and ascender and descender then
-        local leading_factor = 1.2 * line_spacing_factor / ratio
+        local leading_factor = (1.2 * px * line_spacing_factor) / xh_px
         local safe_min = (ascender + descender) / xh2
         local leading_class
-
         if leading_factor < safe_min then
             leading_class = "Collision"
         elseif leading_factor < safe_min + 0.15 then
@@ -576,27 +576,21 @@ local function buildTitleSegments(ui)
         else
             leading_class = "Very airy"
         end
-
-        table.insert(segments, { text = string.format("%.2f× ", leading_factor) })
-        table.insert(segments, { text = "[" .. leading_class .. "]", bold = true })
+        table.insert(line2, { text = string.format("%.2f× ", leading_factor) })
+        table.insert(line2, { text = "[" .. leading_class .. "]", bold = true })
     else
-        table.insert(segments, { text = "N/A" })
+        table.insert(line2, { text = "N/A" })
     end
 
-    -- Weight at the end, where the rem used to be
     local weight = configurable.font_base_weight or 0
-    table.insert(segments, { text = "  |  " })
-    table.insert(segments, { text = string.format("weight %g", weight), bold = true })
-    table.insert(segments, { text = "  |  " })
-    table.insert(segments, { text = string.format("weight %g", weight), bold = true })
-    local GAMMA_TABLE = { 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9,
-        0.95, 0.98, 1, 1.02, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45,
-        1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9,
-        3, 3.5, 4, 4.5, 5, 5.5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 }
     local idx = getContrast(ui)
     local gamma = GAMMA_TABLE[idx + 1]
-    table.insert(segments, { text = "  contrast " .. (gamma and string.format("%g", gamma) or tostring(idx)), bold = true })
-    return segments
+    table.insert(line2, { text = "  |  " })
+    table.insert(line2, { text = string.format("weight %g", weight), bold = true })
+    table.insert(line2, { text = "  |  " })
+    table.insert(line2, { text = "contrast " .. (gamma and string.format("%g", gamma) or tostring(idx)), bold = true })
+
+    return { line1, line2 }
 end
 
 -- Dialog -----------------------------------------------------------------
@@ -678,27 +672,25 @@ function PageTextInfo:onShowSettingsMenu()
     end
 
     local title_face = Font:getFace("cfont", 14)
-    local title_group = HorizontalGroup:new{}
-    for __, seg in ipairs(buildTitleSegments(self.ui)) do
-        table.insert(title_group, TextWidget:new{
-            text = seg.text,
-            face = title_face,
-            bold = seg.bold or false,
+    local line_h = math.floor(cell_h * 0.7)
+    local title_rows = VerticalGroup:new{ align = "center" }
+    for __, line in ipairs(buildTitleSegments(ui)) do
+        local group = HorizontalGroup:new{}
+        for __, seg in ipairs(line) do
+            table.insert(group, TextWidget:new{
+                text = seg.text,
+                face = title_face,
+                bold = seg.bold or false,
+            })
+        end
+        table.insert(title_rows, CenterContainer:new{
+            dimen = Geom:new{ w = dialog_w, h = line_h },
+            group,
         })
     end
-
-    local title = CenterContainer:new{
-        dimen = Geom:new{ w = dialog_w, h = cell_h },
-        title_group,
-    }
-
-    -- Wrapper whose real dimen (filled in when painted) is used to detect
-    -- taps on the title.
     local title_frame = FrameContainer:new{
-        bordersize = 0,
-        margin = 0,
-        padding = 0,
-        title,
+        bordersize = 0, margin = 0, padding = 0,
+        title_rows,
     }
 
     local frame = FrameContainer:new{
@@ -743,7 +735,13 @@ function PageTextInfo:onShowSettingsMenu()
                 local ok, err = pcall(b.callback, self.plugin.ui)
                 require("logger").dbg("settings menu tap:", b.text, ok and "OK" or err)
                 -- Reopen after the reflow so the active state is refreshed
-                UIManager:tickAfterNext(function() self.plugin:onShowSettingsMenu() end)
+                UIManager:nextTick(function()
+                    local plugin = self.plugin
+                    plugin:onShowSettingsMenu()
+                    if plugin.view and plugin.view.topbar then
+                        plugin.view.topbar:toggleBar()
+                    end
+                end)
                 return true
             end
         end
