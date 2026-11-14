@@ -622,7 +622,7 @@ local function gatherData(ui)
         -- give exactly PREFERRED_ARCMIN is a simple ratio.
         if angle > 0 then
             local target_pt = pt * PREFERRED_ARCMIN / angle
-            data.x_height_target = string.format("%.1f pt (%+.1f)", target_pt, target_pt - pt)
+            data.x_height_target = string.format("%.1fpt (%+.1fpt)", target_pt, target_pt - pt)
         else
             data.x_height_target = "N/A"
         end
@@ -745,7 +745,7 @@ local function buildSections(data, fonts, layout)
     local function kvTable(items)
         return buildTable(fonts, L, KV_COLS, kvRows(items))
     end
-    local function wpm(v) return v and (v .. " wpm") or "–" end
+    local function wpm(v) return v and (v .. "wpm") or "–" end
 
     -- TEXT: start of the text the CSS was sampled from
     if SNIPPET_CHARS > 0 then
@@ -759,10 +759,10 @@ local function buildSections(data, fonts, layout)
     -- FONT
     addSection(sections, fonts, L, "FONT", kvTable{
         { "Face",   (data.font_face or "?") .. " (" .. (data.readability or "N/A") .. ")", wide = true },
-        { "Size",   string.format("%.1f pt", data.font_size_pt or 0) },
+        { "Size",   string.format("%.1fpt", data.font_size_pt or 0) },
         { "Didot",  data.font_size_didot or "?" },
-        { "Pixels", tostring(data.font_size_px or "?") .. " px" },
-        { "Metric", tostring(data.font_size_mm or "?") .. " mm" },
+        { "Pixels", tostring(data.font_size_px or "?") .. "px" },
+        { "Metric", tostring(data.font_size_mm or "?") .. "mm" },
         { "Weight", tostring(data.font_weight or "?") },
     })
 
@@ -786,7 +786,7 @@ local function buildSections(data, fonts, layout)
     -- DISPLAY
     addSection(sections, fonts, L, "DISPLAY", kvTable{
         { "Model",      data.device_model or "?" },
-        { "Density",    tostring(data.display_dpi or "?") .. " ppi" },
+        { "Density",    tostring(data.display_dpi or "?") .. "ppi" },
         { "Resolution", data.screen_res or "?" },
         { "Frontlight", data.frontlight or "Off" },
     })
@@ -837,8 +837,8 @@ local function buildSections(data, fonts, layout)
     -- READING SPEED
     if data.avg_wpm then
         addSection(sections, fonts, L, "READING SPEED", kvTable{
-            { "Average",  data.avg_wpm .. " wpm" },
-            { "Per hour", data.avg_wph .. " wph" },
+            { "Average",  data.avg_wpm .. "wpm" },
+            { "Per hour", data.avg_wph .. "wph" },
             { "Sessions", tostring(data.sessions or 0) },
             { "7 days",   wpm(data.avg7) },
             { "30 days",  wpm(data.avg30) },
@@ -887,11 +887,11 @@ local function buildReferenceSections(data, fonts, layout)
         for _, ra in ipairs(refs) do
             local mm = mmFromArcmin(ra[1], READING_DISTANCE_MM)
             local font_txt = data.xh_mm_per_pt
-                and string.format("%.1f pt", mm / data.xh_mm_per_pt) or "N/A"
+                and string.format("%.1fpt", mm / data.xh_mm_per_pt) or "N/A"
             table.insert(rows, { cells = {
                 { text = fmtArc(ra[1]) .. "′", kind = "value" },
                 { text = ra[2],                        kind = "label" },
-                { text = string.format("%.2f mm", mm), kind = "value" },
+                { text = string.format("%.2fmm", mm), kind = "value" },
                 { text = font_txt,                     kind = "value" },
             } })
         end
