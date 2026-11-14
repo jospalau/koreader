@@ -633,7 +633,7 @@ local function buildTitleSegments(ui)
 
     -- Line 1: angle, x-height, class, font, pt
     local line1 = {
-        { text = string.format("Angle @40cm: %.1f′, %.2f mm ", angle, xh_mm) },
+        { text = string.format("Angle @40cm: %.1f′, %.2fmm ", angle, xh_mm) },
         { text = "[" .. angle_class .. "]", bold = true },
     }
     table.insert(line1, { text = "  |  " })
@@ -642,7 +642,7 @@ local function buildTitleSegments(ui)
     if font_name and font_name ~= "" then
         table.insert(line1, { text = font_name .. " " })
     end
-    table.insert(line1, { text = string.format("%g pt", pt), bold = true })
+    table.insert(line1, { text = string.format("%gpt", pt), bold = true })
     -- Does the book size its text in rem?
     table.insert(line1, { text = "  |  " })
     local uses = bookUsesRem(doc)
@@ -688,6 +688,317 @@ local function buildTitleSegments(ui)
         "line spacing=", configurable.line_spacing,
         "weight=", weight, "contrast index=", idx, "gamma=", gamma)
     return { line1, line2 }
+end
+
+-- Size combinations --------------------------------------------------------
+
+-- crengine only draws whole pixels, so every pt size maps to a px size and
+-- many pt values share the same px. Each distinct px size is one real
+-- "combination": the smallest pt that produces it, the px drawn, the x-height
+-- in mm and the visual angle at 40 cm. Shown in a popup (double tap on the
+-- title) for every px size from the critical print size (CPS: the x-height
+-- seen at COMBO_CPS_ARCMIN arc minutes from COMBO_DIST_MM) up to COMBO_MM_MAX.
+-- If everything fits on the screen there are no scroll buttons; otherwise swipe
+-- up/down (or the arrows) to scroll. Tap a row to apply it.
+local TITLE_DOUBLE_TAP_S = 0.4   -- max time between the two taps on the title
+local COMBO_CPS_ARCMIN = 12
+local COMBO_DIST_MM = 400
+local COMBO_MM_MAX = 2.25
+
+-- Returns a list of { pt, px, mm, angle, current } (ascending), or nil if the
+-- font can't be measured.
+local function buildSizeCombos(ui)
+    local doc = ui.document
+    local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+    local ratio = xHeightRatio(doc)
+    if not ratio then return nil end
+
+    local mm_per_px = ratio * 25.4 / dpi
+    local cur_px = drawnPx(ui, doc.configurable.font_size, dpi)
+    -- x-height that subtends COMBO_CPS_ARCMIN at COMBO_DIST_MM (about 1.40 mm)
+    local cps_mm = 2 * COMBO_DIST_MM * math.tan(math.rad(COMBO_CPS_ARCMIN / 60 / 2))
+    local first = math.max(1, math.ceil(cps_mm / mm_per_px - 1e-6))
+    local last = math.floor(COMBO_MM_MAX / mm_per_px + 1e-6)
+
+    local combos = {}
+    for px = first, last do
+        -- Smallest pt that crengine draws at this px (same formula as ptForXHeight)
+        local pt = math.max(4, math.min(math.ceil(px * 72 / dpi * 100 + 0.001) / 100, 255))
+        local mm = mm_per_px * px
+        table.insert(combos, {
+            pt = pt, px = px, mm = mm,
+            angle = math.deg(2 * math.atan(mm / (2 * 400))) * 60,
+            current = (px == cur_px),
+        })
+    end
+    dlog("buildSizeCombos: cur_px=", cur_px, "first px=", first, "last px=", last)
+    return combos
+end
+
+-- `start` = index of the first visible row (nil: centre on the current size);
+-- `old` = the previous combos dialog, replaced when scrolling.
+local function showSizeCombos(plugin, start, old)
+    local Blitbuffer = require("ffi/blitbuffer")
+    local Geom = require("ui/geometry")
+    local GestureRange = require("ui/gesturerange")
+    local Size = require("ui/size")
+    local UIManager = require("ui/uimanager")
+    local TextWidget = require("ui/widget/textwidget")
+    local FrameContainer = require("ui/widget/container/framecontainer")
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local InputContainer = require("ui/widget/container/inputcontainer")
+    local LeftContainer = require("ui/widget/container/leftcontainer")
+    local HorizontalGroup = require("ui/widget/horizontalgroup")
+    local VerticalGroup = require("ui/widget/verticalgroup")
+    local VerticalSpan = require("ui/widget/verticalspan")
+    local HorizontalSpan = require("ui/widget/horizontalspan")
+    local LineWidget = require("ui/widget/linewidget")
+
+    local ui = plugin.ui
+    local all = buildSizeCombos(ui)
+    if not all then
+        local InfoMessage = require("ui/widget/infomessage")
+        UIManager:show(InfoMessage:new{ text = "Size combinations: N/A" })
+        return
+    end
+
+    local screen = Screen:getSize()
+    local frame_w = math.floor(screen.w * 0.8)
+    local outer_pad = Screen:scaleBySize(8)
+    local inner_w = frame_w - 2 * (outer_pad + Size.border.window)
+    local gap = Screen:scaleBySize(3)
+    local thin = Screen:scaleBySize(1)
+    local face = Font:getFace("cfont", 14)
+    local small_face = Font:getFace("cfont", 11)
+    local title_face = Font:getFace("cfont", 16)
+    local row_h = math.floor(Screen:scaleBySize(14) * 1.7)
+    local head_h = math.floor(Screen:scaleBySize(11) * 1.6)
+    local title_h = math.floor(Screen:scaleBySize(16) * 1.5)
+    local nav_h = row_h
+
+    -- How many rows fit on the screen
+    local base = title_h + head_h * 3 + gap * 8 + outer_pad * 2
+    local n = #all
+    if n == 0 then
+        local InfoMessage = require("ui/widget/infomessage")
+        UIManager:show(InfoMessage:new{ text = "Size combinations: N/A" })
+        return
+    end
+    local fit_rows = math.floor((screen.h * 0.9 - base) / (row_h + gap))
+    local needs_nav = n > fit_rows   -- no scroll buttons when everything fits
+    local visible = n
+    if needs_nav then
+        visible = math.max(3, math.floor((screen.h * 0.9 - base - nav_h - gap * 2) / (row_h + gap)))
+        visible = math.min(visible, n)
+    end
+
+    local cur_idx = 1
+    for i, c in ipairs(all) do if c.current then cur_idx = i end end
+    start = start or (cur_idx - math.floor(visible / 2))
+    start = math.max(1, math.min(start, n - visible + 1))
+    local stop = start + visible - 1
+
+    -- Columns: pt | px | x-height | angle | bar
+    local row_w = inner_w - 2 * thin
+    local col_w = {
+        math.floor(row_w * 0.18), math.floor(row_w * 0.14),
+        math.floor(row_w * 0.20), math.floor(row_w * 0.20),
+    }
+    col_w[5] = row_w - col_w[1] - col_w[2] - col_w[3] - col_w[4]
+    local bar_pad = Screen:scaleBySize(10)
+    local bar_max_w = col_w[5] - 2 * bar_pad
+    local max_mm = all[n].mm   -- bars are scaled on the whole list, so they don't change when scrolling
+
+    local function cell(text, w, h, f, fg, bold)
+        return CenterContainer:new{
+            dimen = Geom:new{ w = w, h = h },
+            TextWidget:new{ text = text, face = f, fgcolor = fg, bold = bold or false,
+                max_width = w - 2 * Size.padding.small },
+        }
+    end
+
+    local grid = VerticalGroup:new{ align = "center" }
+
+    -- Title + subtitle (font, dpi)
+    local face_name = ui.document._document:getFontFace() or "?"
+    local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+    table.insert(grid, cell("Size combinations", inner_w, title_h, title_face, Blitbuffer.COLOR_BLACK, true))
+    -- Size of one step: crengine draws whole pixels, so 1 px = this much pt / x-height
+    local step_mm = all[1].mm / all[1].px
+    local xh_ratio = step_mm * dpi / 25.4   -- x-height as a fraction of the font size (em)
+    table.insert(grid, cell(string.format("%s (x-height %.3fem)  |  step: 1px = %.2fpt = %.3fmm @%ddpi",
+        face_name, xh_ratio, 72 / dpi, step_mm, dpi),
+        inner_w, head_h, small_face, Blitbuffer.COLOR_DARK_GRAY))
+    table.insert(grid, VerticalSpan:new{ width = gap })
+
+    -- Column headers
+    local head = HorizontalGroup:new{}
+    local labels = { "pt", "px", "x-height", "angle @40cm", "" }
+    for i, t in ipairs(labels) do
+        table.insert(head, cell(t, col_w[i], head_h, small_face, Blitbuffer.COLOR_DARK_GRAY))
+    end
+    table.insert(grid, CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = head_h }, head })
+    table.insert(grid, LineWidget:new{
+        dimen = Geom:new{ w = inner_w, h = thin }, background = Blitbuffer.COLOR_DARK_GRAY })
+    table.insert(grid, VerticalSpan:new{ width = gap })
+
+    -- Rows: the current one is inverted (white on black), like active buttons
+    local rows = {}
+    for i = start, stop do
+        local c = all[i]
+        local fg = c.current and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
+        local bar_w = math.max(1, math.floor(bar_max_w * c.mm / max_mm + 0.5))
+        local inner = HorizontalGroup:new{
+            cell(string.format("%.2fpt", c.pt), col_w[1], row_h - 2 * thin, face, fg, c.current),
+            cell(string.format("%dpx", c.px), col_w[2], row_h - 2 * thin, face, fg, c.current),
+            cell(string.format("%.2fmm", c.mm), col_w[3], row_h - 2 * thin, face, fg, c.current),
+            cell(string.format("%.1f′", c.angle), col_w[4], row_h - 2 * thin, face, fg, c.current),
+            LeftContainer:new{
+                dimen = Geom:new{ w = col_w[5], h = row_h - 2 * thin },
+                HorizontalGroup:new{
+                    HorizontalSpan:new{ width = bar_pad },
+                    LineWidget:new{
+                        dimen = Geom:new{ w = bar_w, h = math.floor(row_h * 0.35) },
+                        background = fg,
+                    },
+                },
+            },
+        }
+        local frame = FrameContainer:new{
+            bordersize = thin,
+            color = c.current and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
+            background = c.current and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
+            radius = Size.radius.button,
+            margin = 0, padding = 0,
+            inner,
+        }
+        table.insert(grid, frame)
+        table.insert(grid, VerticalSpan:new{ width = gap })
+        table.insert(rows, { frame = frame, pt = c.pt })
+    end
+
+    -- Scroll buttons, only when the list doesn't fit (greyed out at its ends)
+    local page = math.max(1, visible - 1)
+    local can_up, can_down = needs_nav and start > 1, needs_nav and stop < n
+    local up_btn, down_btn
+    if needs_nav then
+        local nav_w = math.floor((row_w - gap) / 2)
+        local function navButton(text, enabled)
+            return FrameContainer:new{
+                bordersize = thin,
+                color = enabled and Blitbuffer.COLOR_DARK_GRAY or Blitbuffer.COLOR_LIGHT_GRAY,
+                background = Blitbuffer.COLOR_WHITE,
+                radius = Size.radius.button,
+                margin = 0, padding = 0,
+                cell(text, nav_w - 2 * thin, nav_h - 2 * thin, face,
+                    enabled and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_LIGHT_GRAY),
+            }
+        end
+        up_btn = navButton("▲  smaller", can_up)
+        down_btn = navButton("larger  ▼", can_down)
+        table.insert(grid, CenterContainer:new{
+            dimen = Geom:new{ w = inner_w, h = nav_h },
+            HorizontalGroup:new{ up_btn, HorizontalSpan:new{ width = gap }, down_btn },
+        })
+        table.insert(grid, VerticalSpan:new{ width = gap })
+    end
+
+    table.insert(grid, LineWidget:new{
+        dimen = Geom:new{ w = inner_w, h = thin }, background = Blitbuffer.COLOR_DARK_GRAY })
+    local footer
+    if needs_nav then
+        footer = string.format("%.2f–%.2fmm  (%d–%d of %d)  ·  swipe or ▲▼ to scroll  ·  tap a row to apply",
+            all[start].mm, all[stop].mm, start, stop, n)
+    else
+        footer = string.format("%.2f–%.2fmm  ·  tap a row to apply  ·  tap outside to close",
+            all[1].mm, all[n].mm)
+    end
+    table.insert(grid, cell(footer, inner_w, head_h, small_face, Blitbuffer.COLOR_DARK_GRAY))
+
+    local frame = FrameContainer:new{
+        background = Blitbuffer.COLOR_WHITE,
+        bordersize = Size.border.window,
+        radius = Size.radius.window,
+        padding = outer_pad,
+        margin = 0,
+        grid,
+    }
+
+    local full = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h }
+    local dialog = InputContainer:new{
+        dimen = full,
+        ges_events = {
+            Tap = { GestureRange:new{ ges = "tap", range = full } },
+            Swipe = { GestureRange:new{ ges = "swipe", range = full } },
+        },
+        key_events = Device:hasKeys() and { Close = { { Device.input.group.Back } } } or {},
+    }
+    dialog[1] = CenterContainer:new{ dimen = Geom:new{ w = screen.w, h = screen.h }, frame }
+
+    local fsize = frame:getSize()
+    local frame_rect = Geom:new{
+        x = math.floor((screen.w - fsize.w) / 2),
+        y = math.floor((screen.h - fsize.h) / 2),
+        w = fsize.w, h = fsize.h,
+    }
+
+    local function closeCombos()
+        UIManager:close(dialog, "ui", frame_rect)
+    end
+
+    -- Redraw the window with another first row (the old one is replaced)
+    local function scrollTo(new_start)
+        new_start = math.max(1, math.min(new_start, n - visible + 1))
+        if new_start == start then return end
+        dlog("size combos: scroll", start, "->", new_start)
+        showSizeCombos(plugin, new_start, dialog)
+    end
+
+    function dialog:onTap(arg, ges)
+        dlog("size combos tap:", ges.pos.x, ges.pos.y, "start=", start, "stop=", stop, "n=", n,
+            "can_up=", can_up, "can_down=", can_down)
+        if can_up and up_btn.dimen and ges.pos:intersectWith(up_btn.dimen) then
+            scrollTo(start - page)
+            return true
+        end
+        if can_down and down_btn.dimen and ges.pos:intersectWith(down_btn.dimen) then
+            scrollTo(start + page)
+            return true
+        end
+        for __, r in ipairs(rows) do
+            if r.frame.dimen and ges.pos:intersectWith(r.frame.dimen) then
+                local ok, err = pcall(setFontSize, ui, r.pt)
+                dlog("size combos tap: pt=", r.pt, ok and "OK" or err)
+                closeCombos()
+                -- Reopen the settings menu after the reflow (refreshes its title)
+                UIManager:nextTick(function()
+                    plugin:onShowSettingsMenu()
+                    if plugin.view and plugin.view.topbar then
+                        plugin.view.topbar:toggleBar()
+                    end
+                end)
+                return true
+            end
+        end
+        if not ges.pos:intersectWith(frame_rect) then closeCombos() end
+        return true
+    end
+
+    -- Swipe up = show larger sizes, swipe down = smaller (like paging a list)
+    function dialog:onSwipe(arg, ges)
+        local dir = ges.direction
+        if dir == "north" then
+            scrollTo(start + page)
+        elseif dir == "south" then
+            scrollTo(start - page)
+        end
+        return true
+    end
+
+    function dialog:onClose() closeCombos() return true end
+
+    UIManager:show(dialog, "ui", frame_rect)
+    if old then UIManager:close(old, "ui", frame_rect) end
 end
 
 -- Dialog -----------------------------------------------------------------
@@ -738,6 +1049,8 @@ function PageTextInfo:onShowSettingsMenu()
         dimen = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
         ges_events = {
             Tap = { GestureRange:new{ ges = "tap",
+                range = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h } } },
+            DoubleTap = { GestureRange:new{ ges = "double_tap",
                 range = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h } } },
             Hold = { GestureRange:new{ ges = "hold",
                 range = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h } } },
@@ -862,13 +1175,29 @@ function PageTextInfo:onShowSettingsMenu()
 
         -- Tap on the title: open the reference popup from typography_popup.lua
         if title_frame.dimen and ges.pos:intersectWith(title_frame.dimen) then
-            dlog("settings: tap on the title -> typography reference")
-            local plugin_ui = self.plugin.ui
-            if plugin_ui and plugin_ui.onShowTypographyReference then
-                plugin_ui:onShowTypographyReference()
-            else
-                require("logger").warn("[PTI] onShowTypographyReference not available")
+            -- Double tap detection done here (KOReader's own "tap" fires first and
+            -- would open the reference before the double tap is seen): the single
+            -- tap action waits TITLE_DOUBLE_TAP_S; a second tap in that time
+            -- cancels it and opens the size combinations instead.
+            if self.title_tap_fn then
+                UIManager:unschedule(self.title_tap_fn)
+                self.title_tap_fn = nil
+                dlog("settings: second tap on the title -> size combinations")
+                showSizeCombos(self.plugin)
+                return true
             end
+            local dlg = self
+            self.title_tap_fn = function()
+                dlg.title_tap_fn = nil
+                dlog("settings: tap on the title -> typography reference")
+                local plugin_ui = dlg.plugin.ui
+                if plugin_ui and plugin_ui.onShowTypographyReference then
+                    plugin_ui:onShowTypographyReference()
+                else
+                    require("logger").warn("[PTI] onShowTypographyReference not available")
+                end
+            end
+            UIManager:scheduleIn(TITLE_DOUBLE_TAP_S, self.title_tap_fn)
             return true
         end
 
@@ -893,6 +1222,19 @@ function PageTextInfo:onShowSettingsMenu()
         return true
     end
 
+    -- Double tap on the title: pt -> px -> x-height combinations
+    function dialog:onDoubleTap(arg, ges)
+        if title_frame.dimen and ges.pos:intersectWith(title_frame.dimen) then
+            dlog("settings: double tap on the title -> size combinations")
+            if self.title_tap_fn then
+                UIManager:unschedule(self.title_tap_fn)
+                self.title_tap_fn = nil
+            end
+            showSizeCombos(self.plugin)
+        end
+        return true
+    end
+
     -- Long press inside the window: save the current font as the default
     function dialog:onHold(arg, ges)
         if not (title_frame.dimen and ges.pos:intersectWith(title_frame.dimen)) then
@@ -905,8 +1247,8 @@ function PageTextInfo:onShowSettingsMenu()
         if ok and face then
             local mm = plugin:getXHeightMm()
             text = mm
-                and string.format("Default font saved:\n%s, %.2f pt (%.2f mm)", face, pt, mm)
-                or string.format("Default font saved:\n%s, %.2f pt", face, pt)
+                and string.format("Default font saved:\n%s, %.2fpt (%.2fmm)", face, pt, mm)
+                or string.format("Default font saved:\n%s, %.2fpt", face, pt)
         else
             -- face holds the error message when pcall fails
             require("logger").warn("[PTI] saveCurrentFontAsDefault failed:", face)
