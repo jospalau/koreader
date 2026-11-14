@@ -559,17 +559,13 @@ local function getDictLineHeight(ui)
 end
 
 local function getBaseCss(ui)
-    local reg, bld, ita, bita = getBookFontPaths(ui)
+    -- No @font-face here: crengine cannot load an absolute file path from the dictionary HTML
+    -- ("cannot locate font" errors), so the book font is selected by family name instead.
     local doc_family = getBookFontFamilyName(ui) or "serif"
     local lh = getDictLineHeight(ui)
     local meta_fs = getMetaFontSize(ui)
     return string.format([[
-@font-face { font-family: "BookFont"; src: url("%s"); }
-@font-face { font-family: "BookFont"; src: url("%s"); font-weight: bold; }
-@font-face { font-family: "BookFont"; src: url("%s"); font-style: italic; }
-@font-face { font-family: "BookFont"; src: url("%s"); font-weight: bold; font-style: italic; }
-
-* { font-family: "BookFont", "%s", serif !important; }
+* { font-family: "%s", serif !important; }
 
 @page { margin: 0; }
 body { margin: 0; padding: 0 0.45em; line-height: %s; }
@@ -582,7 +578,7 @@ ol, ul { padding-left: 1.35em; margin-top: 0.18em; margin-bottom: 0.28em; }
 .search-content, .search-content * { font-size: 1.0em !important; line-height: %s !important; color: #000000 !important; }
 .search-content { font-weight: normal !important; }
 .search-content b, .search-content strong { font-weight: bold !important; }
-]], reg, bld, ita, bita, doc_family, lh, lh, meta_fs, lh)
+]], doc_family, lh, lh, meta_fs, lh)
 end
 
 local function getBookFace(ui, size, bold)
