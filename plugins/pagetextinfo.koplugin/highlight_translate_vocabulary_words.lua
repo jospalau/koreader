@@ -21,6 +21,66 @@ local util = require("util")
 
 return function(PageTextInfo)
 
+-- Grammar labels that dictionaries put in front of / between translations.
+-- An explicit set is used instead of a length-based pattern so that real short
+-- Spanish words ("dar", "ir", "sol", "luz", "pan"...) are never discarded.
+local GRAMMAR_LABELS = {
+    n = true, v = true, vt = true, vi = true, vr = true, vtr = true, vpr = true,
+    adj = true, adv = true, prep = true, conj = true, pron = true, interj = true,
+    art = true, loc = true, m = true, f = true,
+    nm = true, nf = true, nmf = true, npl = true, nmpl = true, nfpl = true,
+}
+
+-- Persistent cache of translations (only non-empty ones are stored on disk).
+local function translationsFile()
+    return DataStorage:getSettingsDir() .. "/vocabulary_translations.json"
+end
+
+-- Merges the translations saved on disk into self.translations (once per session).
+local function loadPersistedTranslations(self)
+    if self._translations_loaded then return end
+    self._translations_loaded = true
+    self.translations = self.translations or {}
+    local f = io.open(translationsFile(), "r")
+    if not f then return end
+    local content = f:read("*a")
+    f:close()
+    local ok, decoded = pcall(JSON.decode, content)
+    if ok and type(decoded) == "table" then
+        for k, v in pairs(decoded) do
+            if type(k) == "string" and type(v) == "string" and v ~= ""
+                and self.translations[k] == nil then
+                self.translations[k] = v
+            end
+        end
+    end
+end
+
+-- Writes the translations to disk, only if something new was added.
+local function savePersistedTranslations(self)
+    if not self._translations_dirty then return end
+    self._translations_dirty = false
+    local out = {}
+    for k, v in pairs(self.translations or {}) do
+        if type(v) == "string" and v ~= "" then out[k] = v end
+    end
+    local ok, encoded = pcall(JSON.encode, out)
+    if not ok or not encoded then return end
+    local f = io.open(translationsFile(), "w")
+    if f then
+        f:write(encoded)
+        f:close()
+    end
+end
+
+-- Cheap "has the DB changed?" stamp. The -wal file is included because with
+-- SQLite WAL mode the main file's mtime may not change on writes.
+local function dbStamp(path)
+    local m = lfs.attributes(path, "modification") or 0
+    local w = lfs.attributes(path .. "-wal", "modification") or 0
+    return m .. ":" .. w
+end
+
 local function tailAfterFirstHyphen(str)
     local pos = str:find("-")
     return pos and str:sub(pos + 1) or str
@@ -225,6 +285,21 @@ end
 local function extractDefinition(def)
     if not def or def == "" then return "" end
 
+    -- FIX: turn block-level HTML tags into line breaks BEFORE stripping tags,
+    -- otherwise multi-line HTML definitions collapse into a single line.
+    for _, pat in ipairs({ "<[bB][rR]%s*/?>", "</[pP]>", "</[lL][iI]>", "</[dD][iI][vV]>" }) do
+        def = def:gsub(pat, "\n")
+    end
+
+    -- FIX: decode numeric entities (&#233; / &#xE9;) so accents are not lost.
+    local function entityToUtf8(cp)
+        if not cp or not util.unicodeCodepointToUtf8 then return "" end
+        local ok, ch = pcall(util.unicodeCodepointToUtf8, cp)
+        return ok and ch or ""
+    end
+    def = def:gsub("&#[xX](%x+);", function(h) return entityToUtf8(tonumber(h, 16)) end)
+    def = def:gsub("&#(%d+);", function(d) return entityToUtf8(tonumber(d)) end)
+
     -- Strip HTML tags and normalize whitespace
     def = def:gsub("%b<>", ""):gsub("[\r\n]+", "\n"):gsub("&nbsp;", " "):gsub("&[a-z]+;", "")
 
@@ -238,7 +313,13 @@ local function extractDefinition(def)
 
     local function score(line)
         -- Strip leading numbering and part-of-speech labels: "1. ", "adj. ", "v. "
-        local s = line:gsub("^%d+[%.%)%)]%s*", ""):gsub("^%a+[%.%)%)]%s*", "")
+        -- FIX: only KNOWN labels are stripped (it used to remove any word followed by
+        -- a dot), and the duplicated %) in the character class is gone.
+        local s = line:gsub("^%d+[%.%)]%s*", "")
+        local label = s:match("^(%a+)[%.%)]%s*")
+        if label and GRAMMAR_LABELS[label:lower()] then
+            s = s:gsub("^%a+[%.%)]%s*", "")
+        end
         -- Too short or too long to be a useful inline gloss
         if #s < 2 or #s > 60 then return nil end
         -- Must contain at least one letter
@@ -275,7 +356,10 @@ local function formatTranslation(text, max_len)
     for part in text:gmatch("[^,;]+") do
         local p = part:match("^%s*(.-)%s*$")
         -- Skip parts that look like grammar labels: "vtr", "adj", etc.
-        if p and #p > 1 and not p:match("^%a%a?%a?%.?$") then
+        -- FIX: explicit label set; the old pattern ^%a%a?%a?%.?$ also dropped real
+        -- words of 1-3 letters ("dar", "ir", "sol", "luz"...).
+        local label = p and p:lower():gsub("%.$", "")
+        if p and #p > 1 and not GRAMMAR_LABELS[label] then
             table.insert(parts, p)
             if #parts >= 3 then break end
         end
@@ -344,7 +428,25 @@ local function sdcvLookup(dictionary, word, dict_names, fuzzy_search)
     return entries
 end
 
-function getTranslation(self, word)
+-- With fuzzy search sdcv may return approximate matches ("have" -> "haven").
+-- If any entry matches the word exactly, keep only those; otherwise keep all
+-- (same behaviour as before for words that only have fuzzy matches).
+local function preferExactEntries(results, key)
+    local exact = {}
+    for _, r in ipairs(results) do
+        if type(r.word) == "string" and r.word:lower() == key then
+            table.insert(exact, r)
+        end
+    end
+    return #exact > 0 and exact or results
+end
+
+-- FIX: local (it used to leak into the global namespace).
+local function getTranslation(self, word)
+    -- Translations saved in previous sessions (loaded once).
+    loadPersistedTranslations(self)
+    self.translations = self.translations or {}
+
     -- Normalise to lowercase so "Have" and "have" share the same cache entry.
     local key = word:lower()
     if self.translations[key] then
@@ -359,6 +461,7 @@ function getTranslation(self, word)
     if #results == 0 then
         results = sdcvLookup(dictionary, key, nil, true)
     end
+    results = preferExactEntries(results, key)
 
     local translation = ""
 
@@ -373,6 +476,9 @@ function getTranslation(self, word)
     end
 
     self.translations[key] = translation
+    -- Empty results stay in memory only, so they are retried in a later session
+    -- (e.g. after installing a dictionary).
+    if translation ~= "" then self._translations_dirty = true end
     return translation
 end
 
@@ -422,7 +528,8 @@ local function paintBaselines(bb, boxes, font_name)
         else
             local y_baseline = getBaseline(box, font_name)
             dbg_vocab("  box[%d]: painting underline at y=%.1f", i, y_baseline)
-            bb:paintRect(box.x, y_baseline, box.w, Size.line.thick, nil)
+            -- FIX: integer y and explicit colour (it used to pass a fractional y and nil)
+            bb:paintRect(box.x, math.floor(y_baseline), box.w, Size.line.thick, Blitbuffer.COLOR_BLACK)
         end
     end
 end
@@ -507,23 +614,41 @@ end
 function PageTextInfo:updateWordsVocabulary()
     if not ffiUtil.realpath(DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3") then return end
     local db_location = DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3"
-    local conn = require("lua-ljsqlite3/init").open(db_location)
-    local stmt = conn:prepare("SELECT DISTINCT LOWER(word) FROM vocabulary")
-    self.words    = {}
-    self.all_words = {}
-    while true do
-        local row = {}
-        if not stmt:step(row) then break end
-        local word = row[1]
-        if not word:find("%s+") then
-            -- Index every capitalisation variant so that "Have" at the start
-            -- of a sentence still matches the vocabulary entry "have".
-            for _, variant in ipairs(wordVariants(word)) do
-                self.all_words[variant] = word  -- value = canonical DB form
+    self.words = {}
+
+    -- FIX: the DB is only re-read when it changed (it used to be opened and fully
+    -- read on every page update). Errors are contained with pcall and the
+    -- connection is always closed.
+    local stamp = dbStamp(db_location)
+    if not self.all_words or self._vocab_stamp ~= stamp then
+        local all_words = {}
+        local ok_open, conn = pcall(function()
+            return require("lua-ljsqlite3/init").open(db_location)
+        end)
+        if ok_open and conn then
+            local ok_read = pcall(function()
+                local stmt = conn:prepare("SELECT DISTINCT LOWER(word) FROM vocabulary")
+                while true do
+                    local row = {}
+                    if not stmt:step(row) then break end
+                    local word = row[1]
+                    if word and not word:find("%s+") then
+                        -- Index every capitalisation variant so that "Have" at the start
+                        -- of a sentence still matches the vocabulary entry "have".
+                        for _, variant in ipairs(wordVariants(word)) do
+                            all_words[variant] = word  -- value = canonical DB form
+                        end
+                    end
+                end
+                if stmt.close then stmt:close() end
+            end)
+            conn:close()
+            if ok_read then
+                self.all_words = all_words
+                self._vocab_stamp = stamp
             end
         end
     end
-    conn:close()
 
     if not self.all_words then return end
 
@@ -552,19 +677,30 @@ function PageTextInfo:updateWordsVocabulary()
             local words      = nil
             local hyphenated = false
 
-            if i == 1 then
-                -- First word on the page may be hyphenated; handle separately.
+            -- case_insensitive = true: finds "have", "Have" and "HAVE" in one call.
+            -- FIX: this normal search now also runs for the FIRST word of the page;
+            -- before, that word got a single result and every other occurrence of it
+            -- on the page was missed (seen_canonical blocked any further search).
+            words = self.document:findText(canonical, 1, false, true, -1, false, 30)
+
+            -- FIX: the tail search only runs when the normal search found nothing.
+            -- Running both used to hit the same word twice (the tail of the first
+            -- word lies inside the word itself), so it was marked and glossed twice.
+            if i == 1 and not (words and #words > 0) then
+                -- First word on the page may be hyphenated; handle separately and
+                -- append those hits (each one flagged individually) to the list.
                 local cre = require("libs/libkoreader-cre")
                 local hyphenation = cre.getHyphenationForWord(canonical)
                 if hyphenation:find("-") then
-                    hyphenated = true
-                    words = findBestHyphenatedMatch(self.document, hyphenation)
-                else
-                    words = self.document:findText(canonical, 1, false, true, -1, false, 1)
+                    local hyph_words = findBestHyphenatedMatch(self.document, hyphenation)
+                    if hyph_words then
+                        words = words or {}
+                        for _, hw in ipairs(hyph_words) do
+                            hw.hyphenated = true
+                            table.insert(words, hw)
+                        end
+                    end
                 end
-            else
-                -- case_insensitive = true: finds "have", "Have" and "HAVE" in one call.
-                words = self.document:findText(canonical, 1, false, true, -1, false, 30)
             end
 
             if words then
@@ -654,7 +790,14 @@ local function shortGloss(text)
 end
 
 -- Dotted underline: black, thick, longer dashes so it is visible on e-ink.
+local VOCAB_UNDERLINE_DOTTED = true  -- true = dotted underline, false = solid line
+
 local function paintDotted(bb, x, y, w, thick)
+    -- Solid underline (same look as the fallback underline for hyphenated words)
+    if not VOCAB_UNDERLINE_DOTTED then
+        bb:paintRect(x, y, w, thick, Blitbuffer.COLOR_BLACK)
+        return
+    end
     local dash = Screen:scaleBySize(5)
     local gap  = Screen:scaleBySize(2)
     local x1 = x + w
@@ -667,12 +810,19 @@ end
 -- Paint a gloss as a "chip" (background + optional border) above the word.
 -- It is always centered on the word (clamped to the screen).
 -- Overlaps with neighbouring glosses are tolerated.
-local function paintGloss(bb, box, gloss, face)
+-- `layout` is an optional table used to memoize the text measurements, so the
+-- text is not measured again on every paint of the same page.
+local function paintGloss(bb, box, gloss, face, layout)
+    layout = layout or {}
     -- Measure the text and the font height/ascender
-    local size = RenderText:sizeUtf8Text(0, Screen:getWidth(), face, gloss, true, true)
-    local text_w = size.x
-    local height, ascender = face.ftsize:getHeightAndAscender()
-    height, ascender = math.ceil(height), math.ceil(ascender)
+    if not layout.text_w then
+        local size = RenderText:sizeUtf8Text(0, Screen:getWidth(), face, gloss, true, true)
+        layout.text_w = size.x
+        local h, a = face.ftsize:getHeightAndAscender()
+        layout.height, layout.ascender = math.ceil(h), math.ceil(a)
+    end
+    local text_w = layout.text_w
+    local height, ascender = layout.height, layout.ascender
 
     local chip_w = text_w + 2 * GLOSS_PAD_X
     local chip_h = height + 2 * GLOSS_PAD_Y
@@ -722,9 +872,12 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
     self._tr_cache = self._tr_cache or {}
 
     -- Geometry cache: only recomputed when page, position, font or layout change
+    -- FIX: screen size (rotation) and line spacing are part of the key too.
     local key = table.concat({
         self.ui.view.state.page, cur_view_top, current_font, font_size,
         self.document:getPageCount(),
+        Screen:getWidth(), Screen:getHeight(),
+        tostring(self.ui.document.configurable.line_spacing),
     }, ":")
     if not self._draw_cache
         or self._draw_cache.key ~= key
@@ -780,26 +933,38 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                     -- Gloss: only on the first box of the word
                     if show_defs and not labeled then
                         labeled = true
-                        local lkey = entry.text:lower()
-                        local gloss = self._tr_cache[lkey]
-                        if not gloss then
-                            local tr = getTranslation(self, entry.text)
-                            if tr then
-                                gloss = shortGloss(tr)
-                                self._tr_cache[lkey] = gloss   -- cache only valid results
+                        -- The gloss is memoized in the entry (entries are rebuilt whenever
+                        -- the page / font / layout change).
+                        local gloss = entry.gloss
+                        if gloss == nil then
+                            local lkey = entry.text:lower()
+                            gloss = self._tr_cache[lkey]
+                            if not gloss then
+                                local tr = getTranslation(self, entry.text)
+                                if tr then
+                                    gloss = shortGloss(tr)
+                                    self._tr_cache[lkey] = gloss   -- cache only valid results
+                                end
                             end
+                            entry.gloss = gloss or false
                         end
-                        if gloss then
-                            paintGloss(bb, box, gloss, translation_face)
+                        -- FIX: an empty gloss ("" is truthy in Lua) used to paint an empty chip.
+                        if gloss and gloss ~= "" then
+                            entry.layout = entry.layout or {}
+                            paintGloss(bb, box, gloss, translation_face, entry.layout)
                         end
                     end
 
                     -- Dotted underline slightly below the baseline
-                    local y_line = getBaseline(box, current_font) + Screen:scaleBySize(1)
+                    -- FIX: integer y (getBaseline returns a fractional value)
+                    local y_line = math.floor(getBaseline(box, current_font) + Screen:scaleBySize(1))
                     paintDotted(bb, box.x, y_line, box.w, Size.line.thick)
                 end
             end
         end
     end
+
+    -- Persist any translation looked up during this paint (no-op if nothing new).
+    savePersistedTranslations(self)
 end
 end
