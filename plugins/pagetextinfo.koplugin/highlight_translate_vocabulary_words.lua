@@ -641,6 +641,22 @@ local function insideAnyMatch(words, xp)
     return false
 end
 
+-- True when the search result `hit` lies on the first line of the page (or above it).
+-- The tail of a word split from the previous page is always there, so a tail search hit
+-- further down is a different word that just contains the fragment ("ing" in "going").
+-- If the position cannot be known the hit is kept, as it was before this check.
+local function isOnFirstLine(self, hit)
+    local ok1, pos = pcall(self.document.getPosFromXPointer, self.document, hit.start)
+    local ok2, boxes = pcall(self.document.getScreenBoxesFromPositions, self.document,
+        hit.start, hit["end"], true)
+    if not (ok1 and ok2 and pos and boxes and boxes[1] and boxes[1].h) then return true end
+    local line_h = boxes[1].h
+    local on_first_line = pos - self.document:getCurrentPos() < line_h * 0.75
+    dbg_vocab("tail hit at pos=%s top=%s line_h=%s -> first line: %s",
+        tostring(pos), tostring(self.document:getCurrentPos()), tostring(line_h), tostring(on_first_line))
+    return on_first_line
+end
+
 -- True when the first word of the page lies completely on this page, i.e. the first
 -- normal search result starts where the page text starts (or on its first line).
 -- When it does not, the first word is the tail of a word split from the previous
@@ -753,8 +769,9 @@ function PageTextInfo:updateWordsVocabulary()
                     if hyph_words then
                         words = words or {}
                         for _, hw in ipairs(hyph_words) do
-                            -- skip a hit inside a word the normal search already found
-                            if not insideAnyMatch(words, hw.start) then
+                            -- skip a hit inside a word the normal search already found,
+                            -- and a hit that is not on the first line of the page
+                            if not insideAnyMatch(words, hw.start) and isOnFirstLine(self, hw) then
                                 hw.hyphenated = true
                                 table.insert(words, hw)
                             end
