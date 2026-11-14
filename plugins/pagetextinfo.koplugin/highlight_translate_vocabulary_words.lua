@@ -15,9 +15,8 @@ local left_container = require("ui/widget/container/leftcontainer")
 local Screen = require("device").screen
 local Size = require("ui/size")
 local TextWidget = require("ui/widget/textwidget")
-local Trapper = require("ui/trapper")
-local UIManager = require("ui/uimanager")
-local logger = require("logger")
+local JSON = require("json")
+local lfs = require("libs/libkoreader-lfs")
 local util = require("util")
 
 return function(PageTextInfo)
@@ -294,89 +293,87 @@ end
 -- so that if WordReference fails Babylon is used as fallback.
 local DICTIONARIES = { "WordReference_EN_ES", "Babylon English-Spanish" }
 
--- Looks one word up with sdcv. Returns the gloss ("" if there is none), or
--- nil and true if the user cancelled the search. Must run inside Trapper:wrap().
-local function lookupGloss(self, key)
-    local dictionary = self.ui.dictionary
+-- Runs sdcv synchronously with a plain io.popen and returns the decoded entries
+-- (the same list startSdcv returns, minus its dummy "no result" entry).
+-- ReaderDictionary:startSdcv() is not used here because it goes through
+-- Trapper:dismissablePopen(), which logs "unwrapped dismissablePopen()" and falls
+-- back to a blocking io.popen() anyway when called outside Trapper:wrap().
+-- This runs while painting, so it cannot be wrapped (or deferred): going straight
+-- to io.popen gives the same blocking behaviour, without the warning.
+local function sdcvLookup(dictionary, word, dict_names, fuzzy_search)
+    local dict_dirs = { dictionary.data_dir }
+    local dict_ext = dictionary.data_dir .. "_ext"
+    if lfs.attributes(dict_ext, "mode") == "directory" then
+        table.insert(dict_dirs, dict_ext)
+    end
 
-    local function firstGloss(results)
-        if not results then return nil end
-        if results.lookup_cancelled then return nil, true end
-        for _, result in ipairs(results) do
-            -- startSdcv returns a dummy entry (no_result) when nothing is found
-            if result.definition and not result.no_result then
-                local candidate = extractDefinition(result.definition)
-                if candidate and candidate ~= "" then
-                    return formatTranslation(candidate)
+    local entries = {}
+    for _, dict_dir in ipairs(dict_dirs) do
+        local args = {
+            "./sdcv", "--utf8-input", "--utf8-output", "--json-output",
+            "--non-interactive", "--data-dir", dict_dir,
+        }
+        if not fuzzy_search then
+            table.insert(args, "--exact-search")
+        end
+        if dict_names then
+            for _, name in pairs(dict_names) do
+                table.insert(args, "-u")
+                table.insert(args, name)
+            end
+        end
+        table.insert(args, "--")   -- a word starting with "-" is not an option
+        table.insert(args, word)
+
+        local cmd = util.shell_escape(args) .. "; echo"   -- the echo guarantees some output
+        local pipe = io.popen(cmd, "r")
+        if pipe then
+            local out = pipe:read("*a")
+            pipe:close()
+            local line = out and out:match("[^\n]+")
+            if line then
+                local ok, decoded = pcall(JSON.decode, line)
+                if ok and type(decoded) == "table" then
+                    for _, entry in ipairs(decoded) do
+                        table.insert(entries, entry)
+                    end
                 end
             end
         end
-        return nil
     end
-
-    -- third argument: fuzzy search (startSdcv takes only three arguments)
-    local gloss, cancelled = firstGloss(dictionary:startSdcv(key, DICTIONARIES, true))
-    if cancelled then return nil, true end
-    if not gloss then
-        -- the preferred dictionaries have nothing: try any installed one
-        gloss, cancelled = firstGloss(dictionary:startSdcv(key, nil, true))
-        if cancelled then return nil, true end
-    end
-    return gloss or ""
+    return entries
 end
 
--- Cache only: it never launches sdcv, so it is safe to call while painting.
--- A word that is not cached yet is queued and fetched right after.
 function getTranslation(self, word)
-    local key = word:lower()   -- "Have" and "have" share the same entry
-    local cached = self.translations[key]
-    if cached then return cached end
-
-    self.pending_translations = self.pending_translations or {}
-    if not self.pending_translations[key] then
-        self.pending_translations[key] = true
-        self:scheduleTranslationFetch()
+    -- Normalise to lowercase so "Have" and "have" share the same cache entry.
+    local key = word:lower()
+    if self.translations[key] then
+        return self.translations[key]
     end
-    return nil
-end
 
-function PageTextInfo:scheduleTranslationFetch()
-    if self._translation_fetch_scheduled then return end
-    self._translation_fetch_scheduled = true
-    -- Small delay, so the paints that follow a page turn go into one batch
-    UIManager:scheduleIn(0.3, function()
-        self._translation_fetch_scheduled = false
-        Trapper:wrap(function() self:fetchPendingTranslations() end)
-    end)
-end
+    local dictionary = self.ui.dictionary
+    local results = sdcvLookup(dictionary, key, DICTIONARIES, true)
 
-function PageTextInfo:fetchPendingTranslations()
-    if self._translation_fetching then return end
-    local batch = self.pending_translations
-    if not batch or not next(batch) then return end
-    self.pending_translations = {}   -- words queued from now on go in the next batch
-    self._translation_fetching = true
+    -- If the preferred dictionaries have no entry for this word, fall back to
+    -- whatever dictionaries are installed.
+    if #results == 0 then
+        results = sdcvLookup(dictionary, key, nil, true)
+    end
 
-    local fetched = 0
-    local ok, err = pcall(function()
-        for key in pairs(batch) do
-            local gloss, cancelled = lookupGloss(self, key)
-            -- Cancelled: nothing is cached, the next paint asks for the word again
-            if cancelled then break end
-            self.translations[key] = gloss
-            fetched = fetched + 1
+    local translation = ""
+
+    for _, result in ipairs(results) do
+        if result.definition then
+            local candidate = extractDefinition(result.definition)
+            if candidate and candidate ~= "" then
+                translation = formatTranslation(candidate)
+                break
+            end
         end
-    end)
-    self._translation_fetching = false
-    if not ok then logger.warn("gloss lookup failed:", err) end
+    end
 
-    if fetched > 0 then
-        UIManager:setDirty(self.ui, "ui")   -- repaint the page, now with the glosses
-    end
-    -- words that were queued while this batch was running
-    if self.pending_translations and next(self.pending_translations) then
-        self:scheduleTranslationFetch()
-    end
+    self.translations[key] = translation
+    return translation
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
