@@ -877,6 +877,35 @@ local function findBooksWithSidecar(root, files, seen)
     walk(root, 0)
 end
 
+-- Opening every sidecar (and walking the home folder to find them) is slow,
+-- so when _G.all_files exists it is used to know which books were finished
+-- this year, and only the sidecars of those few books are opened (to get
+-- their MD5 and title, which match them to the statistics database).
+
+-- Status that _G.all_files gives to a finished book (change it if yours differs)
+local ALL_FILES_FINISHED_STATUS = "complete"
+
+-- Returns the files finished in `year` according to _G.all_files, or nil when
+-- it cannot be used (no such table, empty, or entries without a status), so
+-- the caller falls back to the sidecar search.
+local function getFinishedFilesFromAllFiles(year)
+    local all_files = rawget(_G, "all_files")
+    if type(all_files) ~= "table" then return nil end
+
+    local files, has_status = {}, false
+    for file, entry in pairs(all_files) do
+        if type(entry) == "table" and entry.status ~= nil then
+            has_status = true
+            if entry.status == ALL_FILES_FINISHED_STATUS
+                    and tonumber(entry.last_modified_year) == year then
+                files[#files + 1] = file
+            end
+        end
+    end
+    if not has_status then return nil end
+    return files
+end
+
 -- Returns the SQL condition that selects the finished books, or "0" if none
 local function getFinishedBooksFilter()
     local DocSettings = require("docsettings")
@@ -891,19 +920,26 @@ local function getFinishedBooksFilter()
         end
     end
 
-    -- Books to check: the reading history, plus every book with a sidecar
-    -- folder in the home folder (finished books may be gone from the history)
-    local files, seen = {}, {}
-    for _i, item in ipairs(ReadHistory.hist or {}) do
-        if item.file and not seen[item.file] then
-            seen[item.file] = true
-            files[#files + 1] = item.file
+    -- Fast path: the books finished this year, straight from _G.all_files
+    local files = getFinishedFilesFromAllFiles(os.date("*t").year)
+    local from_all_files = files ~= nil
+
+    if not files then
+        -- Books to check: the reading history, plus every book with a sidecar
+        -- folder in the home folder (finished books may be gone from the history)
+        local seen
+        files, seen = {}, {}
+        for _i, item in ipairs(ReadHistory.hist or {}) do
+            if item.file and not seen[item.file] then
+                seen[item.file] = true
+                files[#files + 1] = item.file
+            end
         end
+        pcall(function()
+            local root = G_reader_settings:readSetting("home_dir") or Device.home_dir
+            if root then findBooksWithSidecar(root, files, seen) end
+        end)
     end
-    pcall(function()
-        local root = G_reader_settings:readSetting("home_dir") or Device.home_dir
-        if root then findBooksWithSidecar(root, files, seen) end
-    end)
 
     for _i, file in ipairs(files) do
         pcall(function()
@@ -924,7 +960,8 @@ local function getFinishedBooksFilter()
             addTitle((util.splitFileNameSuffix(name)))
         end)
     end
-    finished_info = string.format("%d finished of %d books checked", finished, #files)
+    finished_info = string.format("%d finished of %d books checked%s",
+        finished, #files, from_all_files and " (all_files)" or "")
     logger.info("longest sessions: " .. finished_info)
 
     local conditions = {}
