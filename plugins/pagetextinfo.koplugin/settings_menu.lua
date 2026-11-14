@@ -605,7 +605,19 @@ end
 
 -- Title ------------------------------------------------------------------
 
--- Returns two lines, each a list of segments: { line1, line2 }
+-- Readability of a face: the same value the typography popup shows next to the
+-- face name (ui.pagetextinfo.readability_table, keyed by "<Face>-Regular").
+-- Returns "N/A" when it isn't available.
+local function faceReadability(ui, face_name)
+    local ok, val = pcall(function()
+        local tbl = ui.pagetextinfo and ui.pagetextinfo.readability_table
+        return tbl and tbl[(face_name:gsub("%s+", "")) .. "-Regular"]
+    end)
+    if ok and val ~= nil and val ~= "" then return tostring(val) end
+    return "N/A"
+end
+
+-- Returns three lines, each a list of segments: { font line, angle line, leading line }
 local function buildTitleSegments(ui)
     local doc = ui.document
     local configurable = doc.configurable
@@ -631,16 +643,11 @@ local function buildTitleSegments(ui)
     local angle = math.deg(2 * math.atan(xh_mm / (2 * reading_distance_mm))) * 60
     local angle_class = angle < 12 and "Below critical size" or "Fluent range"
 
-    -- Line 1: angle, x-height, class, font, pt
-    local line1 = {
-        { text = string.format("Angle @40cm: %.1f′, %.2fmm ", angle, xh_mm) },
-        { text = "[" .. angle_class .. "]", bold = true },
-    }
-    table.insert(line1, { text = "  |  " })
-    -- Font name on the left of the size
+    -- Line 1: font (readability) and size, rem
+    local line1 = {}
     local font_name = doc._document:getFontFace()
     if font_name and font_name ~= "" then
-        table.insert(line1, { text = font_name .. " " })
+        table.insert(line1, { text = string.format("%s (%s) ", font_name, faceReadability(ui, font_name)) })
     end
     table.insert(line1, { text = string.format("%gpt", pt), bold = true })
     -- Does the book size its text in rem?
@@ -649,7 +656,13 @@ local function buildTitleSegments(ui)
     local rem_txt = uses == nil and "rem: ?" or (uses and "rem: yes" or "rem: no")
     table.insert(line1, { text = rem_txt, bold = true })
 
-    -- Line 2: leading, weight, contrast
+    -- Line 2: angle, x-height, class
+    local angle_line = {
+        { text = string.format("Angle @40cm: %.1f′, %.2fmm ", angle, xh_mm) },
+        { text = "[" .. angle_class .. "]", bold = true },
+    }
+
+    -- Line 3: leading, weight, contrast
     local line2 = { { text = "Leading: " } }
     local line_spacing_factor = (configurable.line_spacing or 100) / 100
     local ok, xh2, ascender, descender = pcall(function()
@@ -687,7 +700,7 @@ local function buildTitleSegments(ui)
     dlog("title: pt=", pt, "face=", font_name, "x-height mm=", xh_mm, "angle'=", angle,
         "line spacing=", configurable.line_spacing,
         "weight=", weight, "contrast index=", idx, "gamma=", gamma)
-    return { line1, line2 }
+    return { line1, angle_line, line2 }
 end
 
 -- Size combinations --------------------------------------------------------
@@ -854,7 +867,7 @@ local function showSizeCombos(plugin, start, old)
     local nav_h = row_h
 
     -- How many rows fit on the screen
-    local base = title_h + head_h * 4 + gap * 8 + outer_pad * 2
+    local base = title_h + head_h * 5 + gap * 8 + outer_pad * 2
     local n = #all
     if n == 0 then
         local InfoMessage = require("ui/widget/infomessage")
@@ -903,8 +916,10 @@ local function showSizeCombos(plugin, start, old)
     -- Size of one step: crengine draws whole pixels, so 1 px = this much pt / x-height
     local step_mm = all[1].mm / all[1].px
     local xh_ratio = step_mm * dpi / 25.4   -- x-height as a fraction of the font size (em)
-    table.insert(grid, cell(string.format("%s (x-height %.3fem)  |  step: 1px = %.2fpt = %.3fmm @%ddpi",
-        face_name, xh_ratio, 72 / dpi, step_mm, dpi),
+    local readability = faceReadability(ui, face_name)
+    table.insert(grid, cell(string.format("%s (%s) (x-height %.3fem)", face_name, readability, xh_ratio),
+        inner_w, head_h, small_face, Blitbuffer.COLOR_DARK_GRAY))
+    table.insert(grid, cell(string.format("step: 1px = %.2fpt = %.3fmm @%ddpi", 72 / dpi, step_mm, dpi),
         inner_w, head_h, small_face, Blitbuffer.COLOR_DARK_GRAY))
     table.insert(grid, VerticalSpan:new{ width = gap })
 
