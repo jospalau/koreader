@@ -914,9 +914,349 @@ local function paintGloss(bb, box, gloss, face, layout)
         face, gloss, true, true, fg)
 end
 
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Tap on a gloss chip: a centered window with the full dictionary translation.
+
+-- Returns the whole definition as plain text: HTML removed, one entry per line.
+local function fullDefinitionText(def)
+    if not def or def == "" then return "" end
+
+    -- Block-level HTML tags become line breaks BEFORE stripping the tags
+    for _, pat in ipairs({ "<[bB][rR]%s*/?>", "</[pP]>", "</[lL][iI]>", "</[dD][iI][vV]>" }) do
+        def = def:gsub(pat, "\n")
+    end
+
+    -- Numeric entities (&#233; / &#xE9;) so accents are not lost
+    local function entityToUtf8(cp)
+        if not cp or not util.unicodeCodepointToUtf8 then return "" end
+        local ok, ch = pcall(util.unicodeCodepointToUtf8, cp)
+        return ok and ch or ""
+    end
+    def = def:gsub("&#[xX](%x+);", function(h) return entityToUtf8(tonumber(h, 16)) end)
+    def = def:gsub("&#(%d+);", function(d) return entityToUtf8(tonumber(d)) end)
+
+    -- Strip the tags, decode the common named entities and tidy the blank lines
+    def = def:gsub("%b<>", "")
+    local named = {
+        aacute = "á", eacute = "é", iacute = "í", oacute = "ó", uacute = "ú", uuml = "ü", ntilde = "ñ",
+        Aacute = "Á", Eacute = "É", Iacute = "Í", Oacute = "Ó", Uacute = "Ú", Uuml = "Ü", Ntilde = "Ñ",
+        iquest = "¿", iexcl = "¡", laquo = "«", raquo = "»",
+    }
+    def = def:gsub("&(%a+);", function(name) return named[name] end)   -- unknown names are kept
+    def = def:gsub("&nbsp;", " "):gsub("&lt;", "<"):gsub("&gt;", ">"):gsub("&quot;", '"'):gsub("&amp;", "&")
+    def = def:gsub("&%a+;", "")                                         -- the rest of the named entities
+    def = def:gsub("\r", ""):gsub("[ \t]+\n", "\n"):gsub("\n\n\n+", "\n\n")
+    return (def:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
+-- The panel that shows the full translation: a rounded card with the word, the name of
+-- the dictionary and the scrollable text. When several dictionaries have the word, a
+-- swipe left / right goes to the next / previous one, in a loop ("n / total" on the
+-- right of the title). It opens at the bottom of the screen when the tapped word is in
+-- the upper half, and at the top when it is in the lower half, so it does not cover the
+-- word, and it can be moved (hold and drag). A tap outside the card (or the Back key)
+-- closes it.
+-- The class is built on first use, so nothing is required until a word is tapped.
+local TranslationPanel
+local function getTranslationPanelClass()
+    if TranslationPanel then return TranslationPanel end
+
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local MovableContainer = require("ui/widget/container/movablecontainer")
+    local GestureRange = require("ui/gesturerange")
+    local HorizontalGroup = require("ui/widget/horizontalgroup")
+    local InputContainer = require("ui/widget/container/inputcontainer")
+    local LineWidget = require("ui/widget/linewidget")
+    local RightContainer = require("ui/widget/container/rightcontainer")
+    local ScrollTextWidget = require("ui/widget/scrolltextwidget")
+    local TextBoxWidget = require("ui/widget/textboxwidget")
+    local UIManager = require("ui/uimanager")
+    local VerticalGroup = require("ui/widget/verticalgroup")
+    local VerticalSpan = require("ui/widget/verticalspan")
+    local Device = require("device")
+
+    -- The text scrolls vertically, but the horizontal swipes must reach the panel
+    -- (they change the dictionary), so the text lets them through.
+    local PassthroughScrollText = ScrollTextWidget:extend{}
+    if ScrollTextWidget.onScrollText then
+        function PassthroughScrollText:onScrollText(arg, ges)
+            if ges.direction == "east" or ges.direction == "west" then
+                return false
+            end
+            return ScrollTextWidget.onScrollText(self, arg, ges)
+        end
+    end
+
+    TranslationPanel = InputContainer:extend{
+        modal = true,
+        name = "vocabulary_translation_panel",
+        word = "",       -- the word, shown as the title
+        entries = nil,   -- list of { dict = <dictionary name>, text = <full translation> }
+        index = 1,       -- the entry that is shown
+        anchor_y = 0,    -- y of the tapped word; decides if the panel goes up or down
+    }
+
+    function TranslationPanel:init()
+        local sw, sh = Screen:getWidth(), Screen:getHeight()
+        local margin = Screen:scaleBySize(10)
+        local pad = Screen:scaleBySize(14)
+        local border = Screen:scaleBySize(2)
+        local inner_w = sw - 2 * margin - 2 * pad - 2 * border
+        local muted = Blitbuffer.Color8(110)
+        local entry = self.entries[self.index]
+        local several = #self.entries > 1
+
+        -- Title row: the word on the left, "n / total" on the right (several dictionaries)
+        local counter_w = several and Screen:scaleBySize(56) or 0
+        local title = TextWidget:new{
+            text = self.word,
+            face = Font:getFace("cfont", 22),
+            bold = true,
+            fgcolor = Blitbuffer.COLOR_BLACK,
+            max_width = inner_w - counter_w,
+        }
+        local content = VerticalGroup:new{ align = "left" }
+        if several then
+            local title_h = title:getSize().h
+            table.insert(content, HorizontalGroup:new{
+                align = "center",
+                left_container:new{
+                    dimen = Geom:new{ w = inner_w - counter_w, h = title_h },
+                    title,
+                },
+                RightContainer:new{
+                    dimen = Geom:new{ w = counter_w, h = title_h },
+                    TextWidget:new{
+                        text = string.format("%d / %d", self.index, #self.entries),
+                        face = Font:getFace("cfont", 14),
+                        fgcolor = muted,
+                    },
+                },
+            })
+        else
+            table.insert(content, title)
+        end
+        if entry.dict and entry.dict ~= "" then
+            table.insert(content, TextWidget:new{
+                text = entry.dict,
+                face = Font:getFace("cfont", 14),
+                fgcolor = muted,
+                max_width = inner_w,
+            })
+        end
+        table.insert(content, VerticalSpan:new{ width = Screen:scaleBySize(8) })
+        table.insert(content, LineWidget:new{
+            background = Blitbuffer.Color8(225),
+            dimen = Geom:new{ w = inner_w, h = Size.line.thin },
+        })
+        table.insert(content, VerticalSpan:new{ width = Screen:scaleBySize(8) })
+
+        -- The text box is as tall as its text, up to 45% of the screen (then it scrolls)
+        local body_face = Font:getFace("cfont", 18)
+        local probe = TextBoxWidget:new{ text = entry.text, face = body_face, width = inner_w }
+        local text_h = probe:getSize().h
+        probe:free()
+        table.insert(content, PassthroughScrollText:new{
+            text = entry.text,
+            face = body_face,
+            width = inner_w,
+            height = math.min(text_h, math.floor(sh * 0.45)),
+            dialog = self,
+        })
+
+        self.frame = FrameContainer:new{
+            radius = Screen:scaleBySize(16),
+            bordersize = border,
+            padding = pad,
+            background = Blitbuffer.COLOR_WHITE,
+            content,
+        }
+
+        -- The card can be moved (hold and drag). It is centered on the screen by default,
+        -- so it is first moved to the top or to the bottom, with a margin.
+        self.movable = MovableContainer:new{ self.frame }
+        if self.movable.setMovedOffset then
+            local free = math.floor((sh - self.frame:getSize().h) / 2)
+            local at_bottom = self.anchor_y < sh / 2
+            self.movable:setMovedOffset({ x = 0, y = at_bottom and (free - margin) or (margin - free) })
+        end
+        self.dimen = Geom:new{ x = 0, y = 0, w = sw, h = sh }
+        self[1] = CenterContainer:new{ dimen = self.dimen, self.movable }
+
+        if Device:hasKeys() then
+            self.key_events.Close = { { Device.input.group.Back } }
+        end
+        if Device:isTouchDevice() then
+            self.ges_events.TapClose = {
+                GestureRange:new{ ges = "tap", range = self.dimen },
+            }
+            self.ges_events.Swipe = {
+                GestureRange:new{ ges = "swipe", range = self.dimen },
+            }
+        end
+    end
+
+    -- The children (the movable container, the scrolling text) get the gestures before the
+    -- panel and may keep them, so the two gestures that the panel needs are caught here,
+    -- before they go down: a horizontal swipe (change dictionary) and a tap outside the card.
+    function TranslationPanel:handleEvent(event)
+        if event.handler == "onGesture" and event.args then
+            local ges = event.args[1]
+            if ges and ges.ges == "swipe"
+                and (ges.direction == "west" or ges.direction == "east") then
+                return self:onSwipe(nil, ges)
+            elseif ges and ges.ges == "tap" and ges.pos
+                and self.frame.dimen and ges.pos:notIntersectWith(self.frame.dimen) then
+                return self:onClose()
+            end
+        end
+        return InputContainer.handleEvent(self, event)
+    end
+
+    -- A tap outside the card closes it; taps inside go to the scrolling text
+    function TranslationPanel:onTapClose(arg, ges)
+        if self.frame.dimen and ges.pos:notIntersectWith(self.frame.dimen) then
+            self:onClose()
+            return true
+        end
+        return false
+    end
+
+    -- Swipe left / right: next / previous dictionary, in a loop. The new panel is shown
+    -- first and then this one is closed.
+    function TranslationPanel:onSwipe(arg, ges)
+        local BD = require("ui/bidi")
+        local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
+        if #self.entries > 1 and (direction == "west" or direction == "east") then
+            local step = (direction == "west") and 1 or -1
+            local index = (self.index - 1 + step) % #self.entries + 1
+            UIManager:show(TranslationPanel:new{
+                word = self.word,
+                entries = self.entries,
+                index = index,
+                anchor_y = self.anchor_y,
+            })
+            UIManager:close(self)
+        end
+        return true   -- the panel is modal: no swipe goes through to the page
+    end
+
+    function TranslationPanel:onShow()
+        UIManager:setDirty(self, function()
+            return "ui", self.frame.dimen
+        end)
+        return true
+    end
+
+    function TranslationPanel:onCloseWidget()
+        local dimen = self.frame.dimen
+        if dimen then
+            UIManager:setDirty(nil, function()
+                return "ui", dimen
+            end)
+        end
+    end
+
+    function TranslationPanel:onClose()
+        UIManager:close(self)
+        return true
+    end
+
+    return TranslationPanel
+end
+
+-- Returns the full translations of `key` as a list of { dict = <name>, text = <text> }:
+-- first the preferred dictionaries (WordReference, Babylon), then every other installed
+-- dictionary that has exactly that word. Repeated entries are dropped.
+local function collectTranslations(self, key)
+    local dictionary = self.ui.dictionary
+    local list, seen = {}, {}
+
+    local function add(results, strict)
+        if not strict then results = preferExactEntries(results, key) end
+        for _, result in ipairs(results) do
+            -- strict: with fuzzy search sdcv also returns similar words ("house" -> "housed")
+            local exact = type(result.word) == "string" and result.word:lower() == key
+            if result.definition and (exact or not strict) then
+                local body = fullDefinitionText(result.definition)
+                local id = tostring(result.dict) .. "\0" .. body
+                if body ~= "" and not seen[id] then
+                    seen[id] = true
+                    list[#list + 1] = { dict = result.dict, text = body }
+                end
+            end
+        end
+    end
+
+    add(sdcvLookup(dictionary, key, DICTIONARIES, true), false)
+    add(sdcvLookup(dictionary, key, nil, true), true)
+    return list
+end
+
+-- Shows the full translation of `word`.
+-- `anchor_y` is the y of the tapped word (the panel goes to the opposite half).
+function PageTextInfo:showFullTranslation(word, anchor_y)
+    local UIManager = require("ui/uimanager")
+    local entries = collectTranslations(self, word:lower())
+
+    if #entries == 0 then
+        UIManager:show(require("ui/widget/infomessage"):new{ text = word .. ": no translation found" })
+        return
+    end
+
+    UIManager:show(getTranslationPanelClass():new{
+        word = word,
+        entries = entries,
+        index = 1,
+        anchor_y = anchor_y or 0,
+    })
+end
+
+-- Tap handler: opens the full translation if the tap lands on an underlined word.
+-- Returns false otherwise, so the tap goes on to the rest of the reader (turning page...).
+function PageTextInfo:onTapVocabularyWord(ges)
+    if not (self._draw_cache and ges and ges.pos) then return false end
+    local pad = Screen:scaleBySize(4)   -- a little margin: the words are small
+    for _, entry in ipairs(self._draw_cache.entries) do
+        if entry.text then
+            -- the boxes of the word (several when it is split over two lines)
+            for _, box in ipairs(entry.boxes or entry.fallback or {}) do
+                if box.h ~= 0
+                    and ges.pos.x >= box.x - pad and ges.pos.x <= box.x + box.w + pad
+                    and ges.pos.y >= box.y - pad and ges.pos.y <= box.y + box.h + pad then
+                    self:showFullTranslation(entry.text, box.y)
+                    return true
+                end
+            end
+        end
+    end
+    return false
+end
+
+-- Registers the tap zone once per reader. It is done on the first paint, when self.ui
+-- is surely ready, and it goes before the zones that would take the tap otherwise.
+function PageTextInfo:registerWordTap()
+    if self._word_tap_registered then return end
+    self._word_tap_registered = true
+    pcall(function()
+        self.ui:registerTouchZones({
+            {
+                id = "pagetextinfo_vocabulary_word_tap",
+                ges = "tap",
+                screen_zone = { ratio_x = 0, ratio_y = 0, ratio_w = 1, ratio_h = 1 },
+                overrides = { "tap_link", "readerhighlight_tap", "tap_forward", "tap_backward" },
+                handler = function(ges) return self:onTapVocabularyWord(ges) end,
+            },
+        })
+    end)
+end
+
 function PageTextInfo:drawXPointerVocabulary(bb, x, y)
     local page_words = self.words[self.ui.view.state.page]
     if not page_words then return end
+
+    self:registerWordTap()
 
     local cur_view_top = self.document:getCurrentPos()
     local current_font = self.ui.document:getFontFace():gsub(" ", "")
@@ -975,10 +1315,10 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                             end
                         elseif item.hyphenated then
                             -- No match but hyphenated: still underline with the rough boxes
-                            entries[#entries + 1] = { fallback = boxes }
+                            entries[#entries + 1] = { fallback = boxes, text = item.text }
                         end
                     elseif item.hyphenated then
-                        entries[#entries + 1] = { fallback = boxes }
+                        entries[#entries + 1] = { fallback = boxes, text = item.text }
                     end
                 end
             end
