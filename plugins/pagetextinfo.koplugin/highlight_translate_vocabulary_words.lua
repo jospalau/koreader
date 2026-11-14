@@ -359,7 +359,11 @@ local function formatTranslation(text, max_len)
         -- FIX: explicit label set; the old pattern ^%a%a?%a?%.?$ also dropped real
         -- words of 1-3 letters ("dar", "ir", "sol", "luz"...).
         local label = p and p:lower():gsub("%.$", "")
-        if p and #p > 1 and not GRAMMAR_LABELS[label] then
+        -- Parts of 1-3 letters (plus an optional dot) are dropped on purpose, as the
+        -- original code did: it filters out the many abbreviated labels ("pl", "fam.",
+        -- "abr"...) that GRAMMAR_LABELS does not list, at the price of also dropping
+        -- very short real words. GRAMMAR_LABELS stays as an extra filter.
+        if p and #p > 1 and not GRAMMAR_LABELS[label] and not p:match("^%a%a?%a?%.?$") then
             table.insert(parts, p)
             if #parts >= 3 then break end
         end
@@ -534,6 +538,7 @@ local function paintBaselines(bb, boxes, font_name)
     end
 end
 
+-- (paintTranslationLabel is currently unused: the chips drawn by paintGloss replaced it)
 -- Paints a floating translation label above a bounding box.
 -- Horizontally positions the label depending on where the box falls on screen:
 --   left quarter  → align label to the left edge of the word
@@ -591,6 +596,8 @@ end
 
 -- ─────────────────────────────────────────────────────────────────────────────
 
+-- (wordVariants is no longer used by updateWordsVocabulary, which now indexes the
+-- lowercase form only; it is kept in case it is needed again)
 -- Returns the capitalisation variants to search for a given vocabulary word.
 -- "have" → { "have", "Have", "HAVE" }
 -- Duplicates are removed (e.g. "I" would not produce "i" and "I" twice).
@@ -610,6 +617,41 @@ local function wordVariants(word)
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
+
+-- Splits an xpointer into its node path and its character offset
+-- ("/body/DocFragment[3]/body/p[5]/text().12" -> "/body/DocFragment[3]/body/p[5]/text()", 12).
+local function xpointerParts(xp)
+    local path, offset = tostring(xp):match("^(.*)%.(%d+)$")
+    return path, tonumber(offset)
+end
+
+-- True when the xpointer `xp` lies inside one of the search results in `words`.
+-- Used so that the tail search of the first word never marks twice a word that the
+-- normal search already found.
+local function insideAnyMatch(words, xp)
+    local path, offset = xpointerParts(xp)
+    if not path then return false end
+    for _, w in ipairs(words or {}) do
+        local p1, o1 = xpointerParts(w.start)
+        local p2, o2 = xpointerParts(w["end"])
+        if p1 == path and p2 == path and o1 and o2 and offset >= o1 and offset <= o2 then
+            return true
+        end
+    end
+    return false
+end
+
+-- True when the first word of the page lies completely on this page, i.e. the first
+-- normal search result starts where the page text starts (or on its first line).
+-- When it does not, the first word is the tail of a word split from the previous
+-- page and the tail search is needed, even if the word is repeated further down.
+local function firstWordIsWhole(self, words, res)
+    if not (words and words[1] and res and res.pos0) then return false end
+    if words[1].start == res.pos0 then return true end
+    local ok1, y_word = pcall(self.document.getPosFromXPointer, self.document, words[1].start)
+    local ok2, y_top  = pcall(self.document.getPosFromXPointer, self.document, res.pos0)
+    return ok1 and ok2 and y_word <= y_top
+end
 
 function PageTextInfo:updateWordsVocabulary()
     if not ffiUtil.realpath(DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3") then return end
@@ -633,11 +675,12 @@ function PageTextInfo:updateWordsVocabulary()
                     if not stmt:step(row) then break end
                     local word = row[1]
                     if word and not word:find("%s+") then
-                        -- Index every capitalisation variant so that "Have" at the start
-                        -- of a sentence still matches the vocabulary entry "have".
-                        for _, variant in ipairs(wordVariants(word)) do
-                            all_words[variant] = word  -- value = canonical DB form
-                        end
+                        -- Index the lowercase form only: page words are lowercased before
+                        -- the lookup, so any capitalisation ("Have" at the start of a
+                        -- sentence, "HAVE", "McDonald"...) matches the entry "have".
+                        -- The typographic apostrophe is normalised to a plain one.
+                        local key = word:gsub("’", "'")
+                        all_words[key] = word  -- value = canonical DB form
                     end
                 end
                 if stmt.close then stmt:close() end
@@ -669,6 +712,8 @@ function PageTextInfo:updateWordsVocabulary()
         -- zero-width space U+200B) that the DB never stores. Strip them so the
         -- lookup against all_words succeeds.
         word_page = word_page:gsub("\xC2\xA0", ""):gsub("\xE2\x80\x8B", "")
+        -- Lowercase and normalise the typographic apostrophe, as the keys of all_words are.
+        word_page = word_page:lower():gsub("’", "'")
         local canonical = self.all_words[word_page]
 
         if canonical and not seen_canonical[canonical] then
@@ -683,10 +728,22 @@ function PageTextInfo:updateWordsVocabulary()
             -- on the page was missed (seen_canonical blocked any further search).
             words = self.document:findText(canonical, 1, false, true, -1, false, 30)
 
-            -- FIX: the tail search only runs when the normal search found nothing.
-            -- Running both used to hit the same word twice (the tail of the first
-            -- word lies inside the word itself), so it was marked and glossed twice.
-            if i == 1 and not (words and #words > 0) then
+            -- The DB stores a plain apostrophe, but the book may use the typographic one.
+            if not (words and #words > 0) and canonical:find("'", 1, true) then
+                words = self.document:findText((canonical:gsub("'", "’")), 1, false, true, -1, false, 30)
+            end
+
+            if i == 1 then
+                dbg_vocab("first word %q: pos0=%s first_hit=%s", canonical, tostring(res.pos0),
+                    tostring(words and words[1] and words[1].start))
+            end
+
+            -- FIX: the tail search only runs when the first word is NOT whole on this page
+            -- (it is the tail of a word split from the previous page). Running it for a
+            -- whole word hit the same word twice, or a stray fragment ("ing") elsewhere.
+            -- It also runs when the word is repeated further down the page: the normal
+            -- search finds those copies but not the fragment cut at the top of the page.
+            if i == 1 and not firstWordIsWhole(self, words, res) then
                 -- First word on the page may be hyphenated; handle separately and
                 -- append those hits (each one flagged individually) to the list.
                 local cre = require("libs/libkoreader-cre")
@@ -696,8 +753,11 @@ function PageTextInfo:updateWordsVocabulary()
                     if hyph_words then
                         words = words or {}
                         for _, hw in ipairs(hyph_words) do
-                            hw.hyphenated = true
-                            table.insert(words, hw)
+                            -- skip a hit inside a word the normal search already found
+                            if not insideAnyMatch(words, hw.start) then
+                                hw.hyphenated = true
+                                table.insert(words, hw)
+                            end
                         end
                     end
                 end
@@ -731,9 +791,11 @@ end
 -- ─────────────────────────────────────────────────────────────────────────────
 
 -- Estilo del subrayado (ajusta aquí)
+-- (VOCAB_UNDERLINE_COLOR and VOCAB_UNDERLINE_THICK are currently unused)
 local VOCAB_UNDERLINE_COLOR = Blitbuffer.COLOR_DARK_GRAY -- necesitas: local Blitbuffer = require("ffi/blitbuffer")
 local VOCAB_UNDERLINE_THICK = Size.line.medium
-local VOCAB_MIN_TRANSLATION_SIZE = 7
+-- (VOCAB_MIN_TRANSLATION_SIZE is declared again below with the other style constants)
+-- local VOCAB_MIN_TRANSLATION_SIZE = 7
 
 -- Deja solo la última palabra del texto devuelto por el motor, normalizando el apóstrofo tipográfico.
 local function lastWord(text)
@@ -744,7 +806,8 @@ end
 
 
 local RenderText = require("ui/rendertext")
-local Blitbuffer = require("ffi/blitbuffer")
+-- (Blitbuffer is already required at the top of the file)
+-- local Blitbuffer = require("ffi/blitbuffer")
 
 -- Style constants
 local VOCAB_MIN_TRANSLATION_SIZE = 7   -- minimum font size for the gloss
@@ -754,12 +817,13 @@ local GLOSS_INVERTED  = false          -- true = black background, white text
 local GLOSS_PAD_X     = Screen:scaleBySize(3)  -- horizontal padding inside the chip
 local GLOSS_PAD_Y     = Screen:scaleBySize(1)  -- vertical padding inside the chip
 
+-- (lastWord is already defined above; this second definition was identical)
 -- Keep only the last word of the text returned by the engine.
 -- Also normalizes the typographic apostrophe to a plain one.
-local function lastWord(text)
-    text = (text:gsub("’", "'"):gsub("%s+$", ""))
-    return text:match("[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+$") or text
-end
+-- local function lastWord(text)
+--     text = (text:gsub("’", "'"):gsub("%s+$", ""))
+--     return text:match("[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+$") or text
+-- end
 
 -- Always use the generic UI font: it always exists, so no missing-font crash.
 -- Bold is simulated through the `bold` flag of renderUtf8Text.
