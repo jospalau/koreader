@@ -154,6 +154,15 @@ function PageTextInfo:showFontInfo(face, label)
         end
     end
 
+    -- Readability rating, measured like generateFontsInformation.py (the method
+    -- comes from settings_menu.lua; skipped if that file isn't loaded)
+    if path and self.getFontReadability then
+        local res = self:getFontReadability(path)
+        local rating, why = res:match("^(%u+): (.+)$")
+        table.insert(metrics_lines,
+            "Readability: " .. (rating and (rating .. " (" .. why .. ")") or res))
+    end
+
     local lines = {
         "File: " .. filename,
         "Folder: " .. dir,

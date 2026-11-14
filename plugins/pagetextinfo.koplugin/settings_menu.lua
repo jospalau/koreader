@@ -5,7 +5,8 @@
 --     require("settings_menu")(PageTextInfo)
 --
 -- It adds these methods to PageTextInfo:
---     onShowSettingsMenu, getXHeightMm, ptForXHeight, applyFontSizePt
+--     onShowSettingsMenu, getXHeightMm, ptForXHeight, applyFontSizePt,
+--     getFontReadability
 -- (plus hasRemStyles / reapplyFontCompensation: empty stand-ins, so code in
 -- main.lua that still calls them keeps working)
 --
@@ -820,10 +821,9 @@ end
 
 local _fa_cache = {}   -- [face path] = "RATING: reason" | false
 
--- Readability of a face, computed here (no precomputed table): "RATING: reason",
--- or "N/A" if the face can't be measured.
-local function faceReadability(ui, face_name)
-    local path = resolveFace(face_name)
+-- Readability of a font file, computed here (no precomputed table):
+-- "RATING: reason", or "N/A" if the font can't be measured. Cached per path.
+local function readabilityOfPath(path)
     local cached = _fa_cache[path]
     if cached == nil then
         local ok, res = pcall(faAnalyze, path)
@@ -835,6 +835,18 @@ local function faceReadability(ui, face_name)
         _fa_cache[path] = cached
     end
     return cached or "N/A"
+end
+
+-- Readability of a face given by its name (as used by the document)
+local function faceReadability(ui, face_name)
+    return readabilityOfPath(resolveFace(face_name))
+end
+
+-- Public method (used by the fonts menu info window in font_selection_menu.lua):
+-- readability of a font file path, "RATING: reason" or "N/A".
+function PageTextInfo:getFontReadability(path)
+    if not path then return "N/A" end
+    return readabilityOfPath(path)
 end
 
 -- Returns three lines, each a list of segments: { font line, angle line, leading line }
