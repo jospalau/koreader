@@ -701,6 +701,13 @@ end
 -- If everything fits on the screen there are no scroll buttons; otherwise swipe
 -- up/down (or the arrows) to scroll. Tap a row to apply it.
 local TITLE_DOUBLE_TAP_S = 0.4   -- max time between the two taps on the title
+-- Rows marked "◆" are the sizes where this font renders best: the x-height that
+-- FreeType really gives at that px size (hinted, measured per row) differs from
+-- the ideal one (ratio * px) by at most COMBO_RENDER_TOL px, so hinting has
+-- almost nothing to round. If the measurement fails, the row falls back to the
+-- estimate (distance of ratio * px to a whole number).
+local COMBO_RENDER_TOL = 0.10
+local COMBO_RENDER_SHARE = 0.25   -- fraction of the rows (the best ones) that get the mark
 local COMBO_CPS_ARCMIN = 12
 local COMBO_DIST_MM = 400
 local COMBO_MM_MAX = 2.25
@@ -710,7 +717,7 @@ local COMBO_MM_MAX = 2.25
 local function buildSizeCombos(ui)
     local doc = ui.document
     local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-    local ratio = xHeightRatio(doc)
+    local ratio, face_name = xHeightRatio(doc)
     if not ratio then return nil end
 
     local mm_per_px = ratio * 25.4 / dpi
@@ -725,14 +732,84 @@ local function buildSizeCombos(ui)
         -- Smallest pt that crengine draws at this px (same formula as ptForXHeight)
         local pt = math.max(4, math.min(math.ceil(px * 72 / dpi * 100 + 0.001) / 100, 255))
         local mm = mm_per_px * px
+        local xh_ideal = ratio * px   -- x-height in pixels, before hinting
+        -- Real x-height at this px size, as FreeType gives it (hinted)
+        local xh_real
+        local okf, face = pcall(Font.getFace, Font, face_name, px, 0, true)
+        if okf and face and face.ftsize then
+            local okx, xh = pcall(function() return face.ftsize:getXHeight() end)
+            if okx and xh and xh > 0 then
+                local size = face.size or px
+                xh_real = (xh < 1) and (xh * size) or xh
+            end
+        end
+        -- Fallback when it can't be measured: distance of the ideal to a whole px
+        local sweet = (not xh_real)
+            and math.abs(xh_ideal - math.floor(xh_ideal + 0.5)) <= COMBO_RENDER_TOL
+        dlog("combo px=", px, "xh ideal=", xh_ideal, "xh real=", xh_real)
         table.insert(combos, {
             pt = pt, px = px, mm = mm,
+            xh_px = xh_real or xh_ideal,
+            xh_ideal = xh_ideal,
+            diff = xh_real and (xh_real - xh_ideal) or nil,
+            sweet = sweet,
             angle = math.deg(2 * math.atan(mm / (2 * 400))) * 60,
             current = (px == cur_px),
         })
     end
+    -- The hinted x-height may be systematically a bit above/below the ideal one
+    -- (rounding up, overshoot...). What matters is how much it moves from row to
+    -- row, so the typical difference (median) is removed before comparing.
+    local diffs = {}
+    -- KOReader's "Font hinting" option: 0 = off, 1 = native, 2 = auto. When it
+    -- can't be read, it is guessed below from the measured x-heights.
+    local hint = doc.configurable.font_hinting
+    if hint == nil then hint = G_reader_settings:readSetting("copt_font_hinting") end
+    local HINT_NAMES = { [0] = "off", [1] = "native", [2] = "auto" }
+    local hint_name = HINT_NAMES[hint]
+    local unhinted = (hint == 0)
+    for __, c in ipairs(combos) do
+        if c.diff then table.insert(diffs, c.diff) end
+    end
+    if #diffs > 0 then
+        table.sort(diffs)
+        local median = diffs[math.floor(#diffs / 2) + 1]
+        -- Deviation of every row from the typical difference; the best
+        -- COMBO_RENDER_SHARE of the rows are marked (plus any under the tolerance),
+        -- so there are always several sizes to choose from.
+        -- Without hinting the real x-height equals the ideal one at every size
+        -- (differences ~0): then the hinting criterion says nothing, and what
+        -- matters is how far the x-height edge is from a whole pixel (a half
+        -- pixel gives a blurry grey edge).
+        local max_abs = 0
+        for __, c in ipairs(combos) do
+            if c.diff then max_abs = math.max(max_abs, math.abs(c.diff)) end
+        end
+        if hint == nil then
+            unhinted = max_abs < 0.05
+            hint_name = unhinted and "off?" or "on?"
+        end
+        local devs = {}
+        for __, c in ipairs(combos) do
+            if c.diff then
+                if unhinted then
+                    c.dev = math.abs(c.xh_ideal - math.floor(c.xh_ideal + 0.5))
+                else
+                    c.dev = math.abs(c.diff - median)
+                end
+                table.insert(devs, c.dev)
+            end
+        end
+        table.sort(devs)
+        local limit = math.max(COMBO_RENDER_TOL, devs[math.max(1, math.ceil(#devs * COMBO_RENDER_SHARE))])
+        for __, c in ipairs(combos) do
+            if c.dev then c.sweet = c.dev <= limit end
+        end
+        dlog("buildSizeCombos: median diff real-ideal=", median, "limit=", limit,
+            "unhinted=", unhinted)
+    end
     dlog("buildSizeCombos: cur_px=", cur_px, "first px=", first, "last px=", last)
-    return combos
+    return combos, unhinted, hint_name or "?"
 end
 
 -- `start` = index of the first visible row (nil: centre on the current size);
@@ -755,7 +832,7 @@ local function showSizeCombos(plugin, start, old)
     local LineWidget = require("ui/widget/linewidget")
 
     local ui = plugin.ui
-    local all = buildSizeCombos(ui)
+    local all, unhinted, hint_name = buildSizeCombos(ui)
     if not all then
         local InfoMessage = require("ui/widget/infomessage")
         UIManager:show(InfoMessage:new{ text = "Size combinations: N/A" })
@@ -777,7 +854,7 @@ local function showSizeCombos(plugin, start, old)
     local nav_h = row_h
 
     -- How many rows fit on the screen
-    local base = title_h + head_h * 3 + gap * 8 + outer_pad * 2
+    local base = title_h + head_h * 4 + gap * 8 + outer_pad * 2
     local n = #all
     if n == 0 then
         local InfoMessage = require("ui/widget/infomessage")
@@ -833,7 +910,7 @@ local function showSizeCombos(plugin, start, old)
 
     -- Column headers
     local head = HorizontalGroup:new{}
-    local labels = { "pt", "px", "x-height", "angle @40cm", "" }
+    local labels = { "pt", "px", "x-height", "x-height px", "" }
     for i, t in ipairs(labels) do
         table.insert(head, cell(t, col_w[i], head_h, small_face, Blitbuffer.COLOR_DARK_GRAY))
     end
@@ -846,15 +923,18 @@ local function showSizeCombos(plugin, start, old)
     local rows = {}
     for i = start, stop do
         local c = all[i]
+        local sweet = c.sweet
+        local bs = thin
+        local ch = row_h - 2 * bs
         local fg = c.current and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
         local bar_w = math.max(1, math.floor(bar_max_w * c.mm / max_mm + 0.5))
         local inner = HorizontalGroup:new{
-            cell(string.format("%.2fpt", c.pt), col_w[1], row_h - 2 * thin, face, fg, c.current),
-            cell(string.format("%dpx", c.px), col_w[2], row_h - 2 * thin, face, fg, c.current),
-            cell(string.format("%.2fmm", c.mm), col_w[3], row_h - 2 * thin, face, fg, c.current),
-            cell(string.format("%.1f′", c.angle), col_w[4], row_h - 2 * thin, face, fg, c.current),
+            cell(string.format("%s%.2fpt", sweet and "◆ " or "", c.pt), col_w[1], ch, face, fg, c.current),
+            cell(string.format("%dpx", c.px), col_w[2], ch, face, fg, c.current),
+            cell(string.format("%.2fmm", c.mm), col_w[3], ch, face, fg, c.current),
+            cell(string.format("%.2fpx", c.xh_px), col_w[4], ch, face, fg, c.current),
             LeftContainer:new{
-                dimen = Geom:new{ w = col_w[5], h = row_h - 2 * thin },
+                dimen = Geom:new{ w = col_w[5], h = ch },
                 HorizontalGroup:new{
                     HorizontalSpan:new{ width = bar_pad },
                     LineWidget:new{
@@ -865,7 +945,7 @@ local function showSizeCombos(plugin, start, old)
             },
         }
         local frame = FrameContainer:new{
-            bordersize = thin,
+            bordersize = bs,
             color = c.current and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
             background = c.current and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
             radius = Size.radius.button,
@@ -910,10 +990,16 @@ local function showSizeCombos(plugin, start, old)
         footer = string.format("%.2f–%.2fmm  (%d–%d of %d)  ·  swipe or ▲▼ to scroll  ·  tap a row to apply",
             all[start].mm, all[stop].mm, start, stop, n)
     else
-        footer = string.format("%.2f–%.2fmm  ·  tap a row to apply  ·  tap outside to close",
+        footer = string.format("%.2f–%.2fmm  ·  tap a row to apply",
             all[1].mm, all[n].mm)
     end
     table.insert(grid, cell(footer, inner_w, head_h, small_face, Blitbuffer.COLOR_DARK_GRAY))
+    local legend = unhinted
+        and "◆ x-height edge closest to a whole pixel"
+        or "◆ least hinting distortion"
+    legend = legend .. "  [hinting: " .. hint_name .. "]"
+    table.insert(grid, cell(string.format("%s (best %d%% of the sizes)  ·  tap outside to close",
+        legend, math.floor(COMBO_RENDER_SHARE * 100 + 0.5)), inner_w, head_h, small_face, Blitbuffer.COLOR_DARK_GRAY))
 
     local frame = FrameContainer:new{
         background = Blitbuffer.COLOR_WHITE,
