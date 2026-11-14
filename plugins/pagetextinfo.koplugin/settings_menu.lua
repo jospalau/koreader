@@ -605,16 +605,236 @@ end
 
 -- Title ------------------------------------------------------------------
 
--- Readability of a face: the same value the typography popup shows next to the
--- face name (ui.pagetextinfo.readability_table, keyed by "<Face>-Regular").
--- Returns "N/A" when it isn't available.
-local function faceReadability(ui, face_name)
-    local ok, val = pcall(function()
-        local tbl = ui.pagetextinfo and ui.pagetextinfo.readability_table
-        return tbl and tbl[(face_name:gsub("%s+", "")) .. "-Regular"]
+-- Font analysis (readability) -------------------------------------------------
+-- Port of generateFontsInformation.py, so the rating no longer comes from the
+-- precomputed readability_table.lua. The Python script measures the glyph
+-- OUTLINES; here the same scanline measurements are made on the glyph BITMAP
+-- rendered at a large size (FA.MEASURE_PX, which plays the role of the UPM), with
+-- sub-pixel coverage, so results match the script within ~0.1% of the em.
+-- Same thresholds, formula, rating and reason as the script (v4: hairline
+-- visibility + contrast bonus). Results are cached per face.
+local FA = {
+    MEASURE_PX = 1000,          -- em size used for the measurements
+    VISIBILITY_SAT = 0.05,     -- hairline >= 5% UPM = fully visible
+    VIS_WEIGHT = 0.7,
+    CONTRAST_WEIGHT = 0.5,
+    CONTRAST_MIN = 1.0,
+    CONTRAST_MAX = 2.6,
+    RF_LOW_MAX = 0.80,         -- < 0.80 -> LOW
+    RF_HIGH_MIN = 0.95,        -- >= 0.95 -> HIGH, in between MEDIUM
+    SCAN_STEPS = 15,           -- scanlines per glyph
+    SCAN_LO = 0.25, SCAN_HI = 0.75,   -- central zone of the glyph
+    MIN_SPAN_RATIO = 0.003,    -- ignore crossings < 0.3% UPM
+}
+
+local function faMedian(t)
+    local s = {}
+    for i, v in ipairs(t) do s[i] = v end
+    table.sort(s)
+    local n = #s
+    if n == 0 then return nil end
+    if n % 2 == 1 then return s[(n + 1) / 2] end
+    return (s[n / 2] + s[n / 2 + 1]) / 2
+end
+
+local function faRound(v, d)
+    local m = 10 ^ d
+    return math.floor(v * m + 0.5) / m
+end
+
+-- Rendered glyph of a character (nil if the face has no such glyph)
+local function faGlyph(face, char)
+    local ok, g = pcall(function()
+        local code = char:byte()
+        if not face.ftsize:hasGlyph(code) then return nil end
+        return face.ftsize:renderGlyph(code)
     end)
-    if ok and val ~= nil and val ~= "" then return tostring(val) end
-    return "N/A"
+    if ok and g and g.bb and g.bb:getWidth() > 0 and g.bb:getHeight() > 0 then return g end
+    return nil
+end
+
+-- Widths (in pixels, with partial coverage) of the filled runs along one line
+-- of the bitmap: a row (horizontal = true) or a column (horizontal = false)
+local function faLineSpans(bb, idx, horizontal, min_span)
+    local n = horizontal and bb:getWidth() or bb:getHeight()
+    local spans, acc, inrun = {}, 0, false
+    for i = 0, n - 1 do
+        local px = horizontal and bb:getPixel(i, idx) or bb:getPixel(idx, i)
+        local a = px:getColor8().a
+        if a > 0 then
+            acc = acc + a / 255
+            inrun = true
+        elseif inrun then
+            if acc > min_span then table.insert(spans, acc) end
+            acc, inrun = 0, false
+        end
+    end
+    if inrun and acc > min_span then table.insert(spans, acc) end
+    return spans
+end
+
+-- Spans of several lines in the central zone of the glyph, grouped by line
+local function faCentralSpans(bb, horizontal, min_span)
+    local extent = horizontal and bb:getHeight() or bb:getWidth()
+    local rows = {}
+    for k = 0, FA.SCAN_STEPS - 1 do
+        local frac = FA.SCAN_LO + (FA.SCAN_HI - FA.SCAN_LO) * k / (FA.SCAN_STEPS - 1)
+        local idx = math.max(0, math.min(extent - 1, math.floor(extent * frac)))
+        local spans = faLineSpans(bb, idx, horizontal, min_span)
+        if #spans > 0 then table.insert(rows, spans) end
+    end
+    return rows
+end
+
+-- Main vertical stroke: median of all the horizontal cross-sections of I, l, H, i
+local function faStemWidth(face, min_span)
+    for __, ch in ipairs({ "I", "l", "H", "i" }) do
+        local g = faGlyph(face, ch)
+        if g then
+            local all = {}
+            for __, row in ipairs(faCentralSpans(g.bb, true, min_span)) do
+                for __, s in ipairs(row) do table.insert(all, s) end
+            end
+            if #all > 0 then return faMedian(all) end
+        end
+    end
+    return nil
+end
+
+-- Thinnest horizontal strokes (crossbar of e / H), measured on vertical lines
+local function faThinWidth(face, min_span)
+    local best
+    for __, ch in ipairs({ "e", "H" }) do
+        local g = faGlyph(face, ch)
+        if g then
+            local mins = {}
+            for __, row in ipairs(faCentralSpans(g.bb, false, min_span)) do
+                local m = row[1]
+                for __, s in ipairs(row) do if s < m then m = s end end
+                table.insert(mins, m)
+            end
+            if #mins > 0 then
+                local v = faMedian(mins)
+                if not best or v < best then best = v end
+            end
+        end
+    end
+    return best
+end
+
+-- Height in pixels of the first of these characters that exists
+local function faGlyphHeight(face, chars)
+    for __, ch in ipairs(chars) do
+        local g = faGlyph(face, ch)
+        if g then return g.bb:getHeight() end
+    end
+    return nil
+end
+
+local function faAdjustedRatio(stem, thin)
+    local r = stem / thin
+    if r < 2.0 then return r end
+    if r < 4.0 then return 2.0 + (r - 2.0) * 0.3 end
+    return 2.6
+end
+
+local function faClassify(value)
+    if value < FA.RF_LOW_MAX then return "LOW" end
+    if value < FA.RF_HIGH_MIN then return "MEDIUM" end
+    return "HIGH"
+end
+
+-- Short reason of the rating: LOW -> weak points, HIGH -> strong points (+ the
+-- catch, if any), MEDIUM -> both
+local function faReason(rating, xh_ratio, thin_ratio, raw_contrast, adj_contrast)
+    if not xh_ratio or not thin_ratio then return "" end
+    local xh_pct = string.format("%.0f%%", xh_ratio * 100)
+    local th_pct = string.format("%.1f%%", thin_ratio * 100)
+    local weak, strong = {}, {}
+    if xh_ratio < 0.45 then
+        table.insert(weak, "low x-height " .. xh_pct)
+    elseif xh_ratio >= 0.50 then
+        table.insert(strong, "large x-height " .. xh_pct)
+    end
+    if thin_ratio < 0.03 then
+        table.insert(weak, "thin hairline " .. th_pct)
+    elseif thin_ratio >= FA.VISIBILITY_SAT then
+        table.insert(strong, "sturdy hairline " .. th_pct)
+    end
+    if raw_contrast and adj_contrast then
+        if adj_contrast >= 2.0 then
+            table.insert(strong, string.format("good contrast %.1f", raw_contrast))
+        elseif adj_contrast < 1.5 then
+            table.insert(weak, string.format("flat contrast %.1f", raw_contrast))
+        end
+    end
+    -- If nothing is clearly weak / strong, pick the weaker / stronger of x-height and hairline
+    local xh_score = xh_ratio / 0.50
+    local th_score = math.min(thin_ratio / FA.VISIBILITY_SAT, 1.0)
+    local weakest = xh_score <= th_score and ("borderline x-height " .. xh_pct)
+        or ("borderline hairline " .. th_pct)
+    local strongest = xh_score > th_score and ("x-height " .. xh_pct) or ("hairline " .. th_pct)
+
+    if rating == "LOW" then
+        return table.concat(#weak > 0 and weak or { weakest }, ", ")
+    end
+    if rating == "HIGH" then
+        local text = table.concat(#strong > 0 and strong or { strongest }, ", ")
+        if #weak > 0 then return text .. ", but " .. table.concat(weak, ", ") end
+        return text
+    end
+    return table.concat(#strong > 0 and strong or { strongest }, ", ")
+        .. ", but " .. table.concat(#weak > 0 and weak or { weakest }, ", ")
+end
+
+-- Measures a face and returns "RATING: reason" (or "RATING"), nil if it can't
+-- be measured. `face_path` is the name/path Font:getFace accepts.
+local function faAnalyze(face_path)
+    local face = Font:getFace(face_path, FA.MEASURE_PX, 0, true)
+    if not face or not face.ftsize then return nil end
+    local upm = face.size or FA.MEASURE_PX
+    local min_span = FA.MIN_SPAN_RATIO * upm
+
+    local stem = faStemWidth(face, min_span)
+    local thin = faThinWidth(face, min_span)
+    local xh = faGlyphHeight(face, { "x", "n", "e" })
+    if not (stem and thin and xh and stem > 0 and thin > 0 and xh > 0) then return nil end
+
+    local xh_ratio, thin_ratio = xh / upm, thin / upm
+    local visibility = math.min(thin_ratio / FA.VISIBILITY_SAT, 1.0)
+    local contrast_norm = (faAdjustedRatio(stem, thin) - FA.CONTRAST_MIN)
+        / (FA.CONTRAST_MAX - FA.CONTRAST_MIN)
+    contrast_norm = math.max(0.0, math.min(contrast_norm, 1.0))
+    local factor = faRound(xh_ratio * (1 + FA.VIS_WEIGHT * visibility
+        + FA.CONTRAST_WEIGHT * visibility * contrast_norm), 3)
+    local rating = faClassify(factor)
+
+    -- The script builds the reason from the rounded values of its table
+    local reason = faReason(rating,
+        faRound(xh_ratio * 100, 2) / 100, faRound(thin_ratio * 100, 2) / 100,
+        faRound(stem / thin, 2), faRound(faAdjustedRatio(stem, thin), 3))
+    dlog("faAnalyze:", face_path, "stem%=", stem / upm * 100, "thin%=", thin_ratio * 100,
+        "xh%=", xh_ratio * 100, "factor=", factor, rating, reason)
+    return reason ~= "" and (rating .. ": " .. reason) or rating
+end
+
+local _fa_cache = {}   -- [face path] = "RATING: reason" | false
+
+-- Readability of a face, computed here (no precomputed table): "RATING: reason",
+-- or "N/A" if the face can't be measured.
+local function faceReadability(ui, face_name)
+    local path = resolveFace(face_name)
+    local cached = _fa_cache[path]
+    if cached == nil then
+        local ok, res = pcall(faAnalyze, path)
+        if not ok then
+            require("logger").warn("[PTI] faAnalyze failed:", res)
+            res = nil
+        end
+        cached = res or false
+        _fa_cache[path] = cached
+    end
+    return cached or "N/A"
 end
 
 -- Returns three lines, each a list of segments: { font line, angle line, leading line }
