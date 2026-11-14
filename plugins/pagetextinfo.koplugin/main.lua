@@ -761,7 +761,7 @@ function PageTextInfo:onSwipe(_, ges)
             -- end
             -- UIManager:show(screen)
             -- return true
-            return UIManager:sendEvent(Event:new("ReadingLogDashboard"))
+            return UIManager:sendEvent(Event:new("ShowLongestSessions"))
         end
         if self.view.topbar.is_enabled == nil or self.view.topbar.is_enabled == false then
             self.view.topbar:quickToggleOnOff(true)
@@ -1304,6 +1304,7 @@ end
 require("settings_menu")(PageTextInfo)
 require("font_selection_menu")(PageTextInfo)
 require("actions_menu")(PageTextInfo)
+require("top_reading_sessions")(PageTextInfo)
 
 function PageTextInfo:readSettingsFile()
     self.settings = LuaSettings:open(DataStorage:getSettingsDir() .. "/pagetextinfo.lua")

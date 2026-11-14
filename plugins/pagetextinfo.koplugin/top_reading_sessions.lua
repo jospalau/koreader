@@ -1,6 +1,4 @@
 local logger = require("logger")
-logger.info("Applying longest sessions patch")
-
 local Blitbuffer = require("ffi/blitbuffer")
 local CenterContainer = require("ui/widget/container/centercontainer")
 local DataStorage = require("datastorage")
@@ -17,7 +15,6 @@ local InputContainer = require("ui/widget/container/inputcontainer")
 local LeftContainer = require("ui/widget/container/leftcontainer")
 local LineWidget = require("ui/widget/linewidget")
 local RightContainer = require("ui/widget/container/rightcontainer")
-local ReaderUI = require("apps/reader/readerui")
 local Screen = Device.screen
 local ScrollableContainer = require("ui/widget/container/scrollablecontainer")
 local Size = require("ui/size")
@@ -1307,27 +1304,40 @@ function ShowLongestSessionsWindow:onTapClose()
     return true
 end
 
--- ── Dispatcher ─────────────────────────────────────────────────────────────────
+-- ── Setup ──────────────────────────────────────────────────────────────────────
+-- This file is a module, loaded from the plugin's main.lua:
+--
+--     local setupLongestSessions = require("top_reading_sessions")
+--     setupLongestSessions(PageTextInfo)
+--
+-- It must be required at the top level of main.lua (while the plugin loads),
+-- because the plugin folder is only in package.path during that time.
 
-Dispatcher:registerAction("show_longest_sessions", {
-    category = "none",
-    event = "ShowLongestSessions",
-    title = _("Show longest reading sessions"),
-    general = true,
-})
+return function(PageTextInfo)
+    Dispatcher:registerAction("show_longest_sessions", {
+        category = "none",
+        event = "ShowLongestSessions",
+        title = _("Show longest reading sessions"),
+        general = true,
+    })
 
-function ReaderUI:onShowLongestSessions()
-    -- save the session in progress first, so it is in the lists
-    if self.statistics then
-        self.statistics:insertDB()
+    -- Reader: the plugin receives the event
+    function PageTextInfo:onShowLongestSessions()
+        -- save the session in progress first, so it is in the lists
+        if self.ui and self.ui.statistics then
+            self.ui.statistics:insertDB()
+        end
+        showWindow()
+        return true
     end
-    showWindow()
+
+    -- File manager: the plugin may not be loaded there, so the event is
+    -- handled by the file manager itself
+    local FileManager = require("apps/filemanager/filemanager")
+    function FileManager:onShowLongestSessions()
+        showWindow()
+        return true
+    end
+
+    logger.info("Longest sessions module loaded")
 end
-
-local FileManager = require("apps/filemanager/filemanager")
-
-function FileManager:onShowLongestSessions()
-    showWindow()
-end
-
-logger.info("Longest sessions patch applied")
