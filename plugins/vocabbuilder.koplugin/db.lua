@@ -281,6 +281,17 @@ end
 
 function VocabularyBuilder:insertOrUpdate(entry)
     local conn = SQ3.open(db_location)
+
+    -- If the word is already stored with a different capitalisation ("Jack" vs "jack"),
+    -- reuse the stored spelling so the ON CONFLICT(word) below updates that row
+    -- instead of creating a duplicate. An exact match is preferred if both exist.
+    local lookup = conn:prepare("SELECT word FROM vocabulary WHERE lower(word) = lower(?) ORDER BY (word = ?) DESC LIMIT 1;")
+    lookup:bind(entry.word, entry.word)
+    local existing = lookup:step()
+    lookup:close()
+    if existing and existing[1] then
+        entry.word = existing[1]
+    end
     local stmt = conn:prepare("INSERT OR IGNORE INTO title (name) VALUES (?);")
     stmt:bind(entry.book_title)
     stmt:step()
@@ -306,7 +317,7 @@ end
 function VocabularyBuilder:hasWord(word)
     local conn = SQ3.open(db_location)
     local sql = [[SELECT title.name as book_title, vocabulary.word, create_time, review_time, due_time, review_count, streak_count, prev_context, next_context, highlight
-          FROM vocabulary INNER JOIN title ON title_id = title.id WHERE word = ?]]
+          FROM vocabulary INNER JOIN title ON title_id = title.id WHERE lower(vocabulary.word) = lower(?)]]
     local stmt = conn:prepare(sql)
     stmt:bind(word)
     local result = stmt:step()
