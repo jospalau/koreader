@@ -29,6 +29,7 @@ local Widget         = require("ui/widget/widget")
 local logger         = require("logger")
 local BFont          = require("lib/bookshelf_fonts")
 local CoverProgress  = require("lib/bookshelf_cover_progress")
+local Marks = require("lib/bookshelf_cover_marks")
 local SpineLayout    = require("lib/bookshelf_spine_layout")
 local BookBinding    = require("lib/bookshelf_book_binding")
 local RoundCorner    = require("lib/bookshelf_round_corner")
@@ -1207,6 +1208,7 @@ function SpineShelf.faceOutFor(tab)
 end
 
 -- faceOutSpec(v) -> { favorites=, first=, reading=, all=, recent=N|nil }
+-- or { chosen = true, spine = { [filepath] = true } } (Choose for each book).
 function SpineShelf.faceOutSpec(v)
     if v == false then return {} end
     if v == nil or v == true then return { favorites = true } end
@@ -1218,6 +1220,13 @@ function SpineShelf.faceOutSpec(v)
     if type(v) ~= "table" then return { favorites = true } end
     local out = {}
     if v.all then return { all = true } end
+    -- Choose for each book (a hand-ordered shelf): every book faces out but
+    -- the ones the reader turned spine out, kept by path beside the choice.
+    -- It stands alone: a reason overruling the reader's own toggle would
+    -- read as the toggle not working.
+    if v.chosen then
+        return { chosen = true, spine = type(v.spine) == "table" and v.spine or {} }
+    end
     for _i, k in ipairs(SpineShelf.FACE_REASONS) do
         if k == "recent" then
             local n = tonumber(v.recent)
@@ -1235,7 +1244,7 @@ end
 
 -- faceOutEmpty(spec) -> true when nothing would face out.
 function SpineShelf.faceOutEmpty(spec)
-    if spec.all then return false end
+    if spec.all or spec.chosen then return false end
     for _i, k in ipairs(SpineShelf.FACE_REASONS) do
         if spec[k] then return false end
     end
@@ -1375,6 +1384,7 @@ end
 function SpineShelf.facesOut(face_spec, f, src, fav, face_recent)
     if not src.filepath then return false end
     if face_spec.all then return true end
+    if face_spec.chosen then return not (face_spec.spine and face_spec.spine[src.filepath]) end
     return (face_spec.favorites and fav)
         -- Series, run or book alone: see markSeriesHeads.
         or (face_spec.first and f.series_first == true)
@@ -1848,24 +1858,20 @@ local function _paintRotatedTitle(bb, x, y, run_len, band_w, text, face_size, lo
         -- Shrink to fit: a narrow spine can't take the nominal size, so step
         -- the face down (never below 6dp) until the rendered line's height
         -- fits across the spine, rather than silently dropping the title.
+        -- Which size is SpineShelf.titleFitSize's answer, so a series box can
+        -- ask the same question of all its books before lettering any.
         local face_name = BFont.getUIFontFace() or "cfont"
-        local tw, sz
-        local size = face_size
-        while size >= 6 do
-            tw = TextWidget:new{
-                text      = text,
-                face      = BFont:getFace(face_name, size),
-                fgcolor   = _textColor(night),
-                max_width = run_len,
-                padding   = 0,
-            }
-            sz = tw:getSize()
-            if sz.h <= inner then break end
-            tw:free()
-            tw = nil
-            size = size - 2
-        end
-        if not tw then return end
+        local size = SpineShelf.titleFitSize(band_w, face_size, inset)
+        if not size then return end
+        local tw = TextWidget:new{
+            text      = text,
+            face      = BFont:getFace(face_name, size),
+            fgcolor   = _textColor(night),
+            max_width = run_len,
+            padding   = 0,
+        }
+        local sz = tw:getSize()
+        if sz.h > inner then tw:free() return end
         local line_h = sz.h
         if sz.w < 1 or line_h < 1 then tw:free() return end
         -- A title too long for the run takes a second line where the spine
@@ -2027,6 +2033,18 @@ local function _paintLevelText(bb, x, y, box_w, text, face, night)
     return used
 end
 
+local SeeThrough = require("lib/bookshelf_see_through")
+
+-- spineFaded(book) -> is this book faded on a spine shelf (on hold, or
+-- finished with "Fade finished books" on)? The same decision a cover takes.
+function SpineShelf.spineFaded(book)
+    if not book then return false end
+    if book._spine_status_checked and book.status == nil then return false end
+    local d
+    local ok = pcall(function() d = CoverProgress.decide(book, "spines") end)
+    return ok and type(d) == "table" and d.on_hold_fade == true
+end
+
 local function _statusGlyph(book)
     local live = _G.all_files and book and _G.all_files[book.filepath]
     if live and live.status and book.status ~= live.status then
@@ -2038,7 +2056,7 @@ local function _statusGlyph(book)
         return nil
     end
     local d
-    local ok = pcall(function() d = CoverProgress.decide(book) end)
+    local ok = pcall(function() d = CoverProgress.decide(book, "spines") end)
     if not ok or type(d) ~= "table" then return nil end
     if d.glyph == "in_progress" then return CoverProgress.GLYPH_BOOKMARK end
     if d.glyph == "complete_bookmark" or d.glyph == "complete_tickbox" then
@@ -2292,6 +2310,16 @@ function SpineBookSlot:paintTo(bb, x, y)
             g:blitFrom(require("lib/bookshelf_clip_bb").real(bb), 0, 0, x, y, self.width, self.height)
         end)
     end
+    -- A faded book is faded spine out too: what is behind the spine is
+    -- copied now and mixed back over it once it has painted. Decided once a
+    -- slot (invalidate() forgets it), not once a paint.
+    if self._faded == nil then
+        self._faded = SpineShelf.spineFaded(self.book) and true or false
+    end
+    local see = nil
+    if self._faded and not self.is_bulk_selected then
+        see = SeeThrough.take(bb, x, y, self.width, self.height)
+    end
     local night = _nightMode()
     local key = self:_renderKey(night)
     local cached = _render_cache[key]
@@ -2338,6 +2366,7 @@ function SpineBookSlot:paintTo(bb, x, y)
         if not ok or not cached then
             -- Render straight to the target rather than showing nothing.
             self:_renderIntoAt(bb, x, y, night)
+            if see then SeeThrough.put(see, bb, CoverProgress.FADE_STRENGTH) end
             SpineShelf.finishSlot(bb, x, y, self._paint_after,
                                   x - (self.flush_dx or 0) - 1)
             return
@@ -2354,11 +2383,13 @@ function SpineBookSlot:paintTo(bb, x, y)
     else
         bb:blitFrom(cached, x, y, 0, 0, self.width, self.height)
     end
+    if see then SeeThrough.put(see, bb, CoverProgress.FADE_STRENGTH) end
     SpineShelf.finishSlot(bb, x, y, _render_after[key],
                           x - (self.flush_dx or 0) - 1)
 end
 
 function SpineBookSlot:invalidate()
+    self._faded = nil
     -- The pixel cache is module-level and keyed by book; drop every render
     -- of this one (state variants included).
     SpineShelf.invalidateRender(self.book and self.book.filepath)
@@ -2609,7 +2640,10 @@ function SpineBookSlot:_renderIntoAt(bb, x, y, night)
         if used > 0 then cur_top = cur_top + used + math.floor(pad / 2) end
     end
     -- Favourite star under it (face-out favourites show the cover instead).
-    if e.favourite and not e.face_out then
+    -- Shown unless switched off for spine shelves; it never followed the
+    -- covers switch here.
+    if e.favourite and not e.face_out
+            and Marks.explicit("favorite", "spines") ~= false then
         local gsize = _glyphSizeDp(w_dp, txt_ref_w_dp, GLYPH_FAV)
         local face = BFont:getFace("symbols", gsize)
         -- The favourite icon the reader chose (heart unless set to star),
@@ -2625,7 +2659,7 @@ function SpineBookSlot:_renderIntoAt(bb, x, y, night)
     -- anchored so the text BOTTOM sits one pad above the spine's foot --
     -- the reserve arithmetic this replaces drifted with font size and let
     -- the number float above the base.
-    if self.show_series and e.series_num then
+    if self.show_series and e.series_num and Marks.shown("series_num", "spines") then
         local ssize = math.max(7, math.min(13, math.floor(w_dp * 0.45)))
         local face = BFont:getFace(BFont.getUIFontFace() or "cfont", ssize)
         pcall(function()
@@ -2743,6 +2777,10 @@ function FaceOutTopBlock:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
     local w, h = self.dimen.w, self.dimen.h
     if w < 6 or h < 3 then return end
+    -- The block fades with the cover it sits on: one book, one fade.
+    local see = nil
+    local ok_f, faded = pcall(function() return self.cover and self.cover:isFaded() end)
+    if ok_f and faded then see = SeeThrough.take(bb, x, y, w, h) end
     local night = _nightMode()
     local skin = BookBinding.skin(self.binding)
     local board = skin and math.max(1, Screen:scaleBySize(1)) or math.max(2, math.min(Screen:scaleBySize(3),
@@ -2778,6 +2816,7 @@ function FaceOutTopBlock:paintTo(bb, x, y)
     bb:paintRectRGB32(x, y + ch, board, h - ch, fill)     -- left board, below the chamfer
     bb:paintRectRGB32(x + ch, y, w - ch, board, fill)     -- top board, notched at the left
     bb:paintRectRGB32(x + w - rb, y + board, rb, h - board, fill)  -- right sliver
+    if see then SeeThrough.put(see, bb, CoverProgress.FADE_STRENGTH) end
 end
 
 -- ── Face-out foot nicks ─────────────────────────────────────────────────────
@@ -3123,16 +3162,20 @@ end
 -- A face's text height, measured once per size.
 function SpineShelf.textHeight(size)
     SpineShelf._badge_text_h = SpineShelf._badge_text_h or {}
-    local text_h = SpineShelf._badge_text_h[size]
+    -- Per font as well as per size: the reader can change the UI font
+    -- mid-session, and titleFitSize trusts this to say what fits.
+    local font = BFont.getUIFontFace() or "cfont"
+    local key = font .. "|" .. size
+    local text_h = SpineShelf._badge_text_h[key]
     if not text_h then
         local ok = pcall(function()
-            local face = BFont:getFace(BFont.getUIFontFace() or "cfont", size)
+            local face = BFont:getFace(font, size)
             local tw = TextWidget:new{ text = "Xg", face = face, padding = 0 }
             text_h = tw:getSize().h
             tw:free()
         end)
         if not ok or not text_h then text_h = math.floor(size * 1.9) end
-        SpineShelf._badge_text_h[size] = text_h
+        SpineShelf._badge_text_h[key] = text_h
     end
     return text_h
 end
@@ -3174,6 +3217,39 @@ end
 function SpineShelf.titleFaceSize(w_dp, ref_w_dp)
     local base = math.max(8, math.min(SpineShelf.titleSize(ref_w_dp), math.floor((w_dp or 20) * 0.5)))
     return math.max(6, math.floor(base * SpineShelf.spineTextScale() / 100 + 0.5))
+end
+
+-- titleFitSize(band_w, face_size, inset, heightOf) -> the size a rotated
+-- title is set at on a spine band_w px wide, or nil when none fits and the
+-- spine stands bare. From face_size down in twos, and always the floor last:
+-- a spine starting on an odd size used to stop at 7 and lose a title that a
+-- slightly thinner one, starting on 8 and reaching 6, kept. inset is the
+-- spine's border, off both sides. heightOf(size) -> a line's height in px
+-- (the test seam; the UI font's own by default).
+SpineShelf.TITLE_MIN_SIZE = 6
+function SpineShelf.titleFitSize(band_w, face_size, inset, heightOf)
+    if band_w < 8 then return nil end
+    heightOf = heightOf or SpineShelf.textHeight
+    local floor = SpineShelf.TITLE_MIN_SIZE
+    local inner = math.max(1, band_w - 2 * math.max(0, inset or 0))
+    local size = math.max(floor, face_size or floor)
+    while true do
+        if heightOf(size) <= inner then return size end
+        if size <= floor then return nil end
+        size = math.max(floor, size - 2)
+    end
+end
+
+-- entryTitleFits(e) -> does this spine entry's title fit across it? The
+-- sizes _renderIntoAt hands the painter, for a caller deciding before paint.
+function SpineShelf.entryTitleFits(e)
+    -- An upright CJK column is laid out by its own painter, not this fit.
+    if _isCJKText(e.label) then return true end
+    local thick = SpineShelf.textThicken(SpineShelf.spineTextScale())
+    local w_dp = (e.w_dp or 20) / thick
+    local ref = e.ref_w_dp and (e.ref_w_dp / thick) or nil
+    local hairline = math.max(1, Screen:scaleBySize(1))
+    return SpineShelf.titleFitSize(e.w, SpineShelf.titleFaceSize(w_dp, ref), hairline) ~= nil
 end
 
 function SpineShelf.badgeDrop(row_h)
@@ -4217,7 +4293,19 @@ local function _optsKey(opts)
             local v = opts[k]
             if type(v) == "table" then
                 local sub = {}
-                for sk, sv in pairs(v) do sub[#sub + 1] = tostring(sk) .. "=" .. tostring(sv) end
+                for sk, sv in pairs(v) do
+                    -- A table inside (Face out's books turned spine out, by
+                    -- path) by its CONTENTS: its address does not change when
+                    -- a book is turned, and the plan from before the turn
+                    -- was handed back.
+                    if type(sv) == "table" then
+                        local inner = {}
+                        for ik, iv in pairs(sv) do inner[#inner + 1] = tostring(ik) .. "=" .. tostring(iv) end
+                        table.sort(inner)
+                        sv = "{" .. table.concat(inner, ",") .. "}"
+                    end
+                    sub[#sub + 1] = tostring(sk) .. "=" .. tostring(sv)
+                end
                 table.sort(sub)
                 v = "{" .. table.concat(sub, ",") .. "}"
             end
@@ -5779,11 +5867,14 @@ function SpineShelf.rowWidget(opts)
                         -- Top-RIGHT: the status glyphs have the top-left here,
                         -- and the "#N" pill that sits top-right is off.
                         favorite_top_right = true,
-                        -- Same argument for the "#N" and "<n>p" pills: the
-                        -- spines beside it already number their series on the
-                        -- foot, and a book's length is its width here (user
-                        -- ruling). The progress bar and status glyphs stay.
+                        -- Same argument for the "#N" pill: the spines beside
+                        -- it already number their series on the foot (user
+                        -- ruling).
                         suppress_number_badges  = true,
+                        -- The rest follow the "Show on spine shelves" switches
+                        -- (issue 597). The "<n>p" pill is off until a reader
+                        -- asks for it: a book's length is its width here.
+                        marks_surface = "spines",
                         is_bulk_selected = is_bulk,
                         -- No frame around a face-out on this shelf, so the
                         -- bulk flag keeps its circle off the card's edges.
@@ -5835,6 +5926,7 @@ function SpineShelf.rowWidget(opts)
                         dimen = Geom:new{ w = e.w, h = depth },
                         look  = e.look,
                         binding = e.binding,
+                        cover = cover,
                     } or nil
                     local feet = FaceOutFeet:new{
                         dimen  = Geom:new{ w = e.w, h = cover_h },

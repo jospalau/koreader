@@ -573,13 +573,6 @@ function MicroFullscreen:handleEvent(event)
         -- Don't intercept while a gesture-unlock screensaver is up (mirrors the
         -- bookshelf's guard so the wake gesture reaches the lock widget).
         if Device.screen_saver_lock then return false end
-
-        -- Multiswipes are ignored while this view is open: consumed here so
-        -- they reach neither our children nor KOReader's gesture zones.
-        local ges = event.args and event.args[1]
-        if ges and ges.ges == "multiswipe" then
-            return true
-        end
         if InputContainer.handleEvent(self, event) then return true end
         local ev = event.args[1]
 
@@ -612,15 +605,6 @@ function MicroFullscreen:handleEvent(event)
                 and _tapInRect(ev, self._grid_rect) then
             self:_turnPage(ev.direction == "west" and 1 or -1)
             return true
-        end
-
-        -- A downward swipe over the grid closes the view (not while editing).
-        -- Starting inside the grid keeps the top-edge menu swipe and the edge
-        -- brightness/warmth swipes KOReader's.
-        if ev and ev.ges == "swipe" and ev.direction == "south"
-                and not self._edit
-                and _tapInRect(ev, self._grid_rect) then
-            return self:onTapClose()
         end
 
         -- KOReader-native gestures (top-edge menu tap/swipe, edge

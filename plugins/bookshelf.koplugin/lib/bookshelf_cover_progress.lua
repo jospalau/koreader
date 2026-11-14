@@ -21,11 +21,17 @@ local Widget            = require("ui/widget/widget")
 local ffi               = require("ffi")
 local BookshelfSettings = require("lib/bookshelf_settings_store")
 local Color            = require("lib/bookshelf_color")
+local Marks            = require("lib/bookshelf_cover_marks")
 
 local ColorRGB32_t      = ffi.typeof("ColorRGB32")
 local Screen            = Device.screen
 
 local M = {}
+
+-- How see-through a faded book is (on hold, or finished with "Fade finished
+-- books"): the share of what is behind it that shows. One number for a
+-- cover, the page block above a face-out, and a spine.
+M.FADE_STRENGTH = 0.6
 
 -- Glyph code points (KOReader's bundled nerd font).
 M.GLYPH_BOOKMARK       = "\u{e7bf}"  -- in-progress
@@ -113,17 +119,6 @@ function M.badgeSize(base)
     return math.floor(base * scale / 100 + 0.5)
 end
 
--- Read a per-element toggle. All three default ON (true) when unset.
--- Setting keys (within the bookshelf settings store):
---   progress_bar_enabled       -- the rounded pill at cover bottom
---   progress_bookmark_enabled  -- the in-progress glyph
---   progress_badge_enabled     -- the complete (badged) glyph
-local function _toggle(key)
-    local v = BookshelfSettings.read(key)
-    if v == nil then return true end
-    return v == true
-end
-
 -- Lazy reference to bookshelf_book_repository for the readProgress fallback
 -- below. Required so chip paths that use the light book constructor
 -- (buildBookMeta -> no DocSettings read) still get status/pct without the
@@ -134,15 +129,18 @@ local _Repo
 -- Each output element is independently gated by its own toggle.
 -- @param book table|nil with keys `status` (string|nil), `book_pct` (number|nil)
 --             and optionally `filepath` (string|nil)
+-- @param surface "spines" for a spine shelf (a face-out cover there, or a
+--             narrow spine's glyph); anything else is covers. Each mark has a
+--             switch per surface (lib/bookshelf_cover_marks, issue 597).
 -- @return table { bar=bool, bar_pct=number, glyph=..., page_count=bool }
 --   page_count is independent of status -- the page total is meaningful
 --   for any book the user might browse, not just one that's been opened.
-function M.decide(book)
-    -- progress_page_count_enabled defaults OFF, distinct from the other
-    -- three indicators which default ON via _toggle. _toggle returns true
-    -- on nil — wrong default here — so read the raw value and only treat
-    -- an explicit `true` as on.
+function M.decide(book, surface)
+    surface = surface == "spines" and "spines" or "covers"
+    -- progress_page_count_enabled defaults OFF, unlike the bar and the
+    -- glyphs: only an explicit `true` is on.
     local want_page_count = BookshelfSettings.read("progress_page_count_enabled") == true
+        and Marks.shown("page_badge", surface)
     local none = { bar = false, bar_pct = 0, glyph = nil, page_count = want_page_count }
     if not book then return none end
     local status = book.status
@@ -193,8 +191,16 @@ function M.decide(book)
     else
         book._badge_pages = nil
     end
-    local want_bar      = _toggle("progress_bar_enabled")
-    local want_bookmark = _toggle("progress_bookmark_enabled")
+    local want_bar      = Marks.shown("progress_bar", surface)
+    local want_bookmark = Marks.shown("bookmark", surface)
+    -- A record can carry a status and no percentage: a spine shelf's planner
+    -- reads the status alone, so a face-out cover there never drew its bar.
+    -- Looked up only when something will be drawn from it.
+    if pct == nil and book.filepath and (want_bar or want_page_count)
+            and (status == "reading" or status == "abandoned" or status == "on_hold") then
+        if not _Repo then _Repo = require("lib/bookshelf_book_repository") end
+        pct = (_Repo.readProgress(book.filepath))
+    end
     -- Completed-badge style is tri-state: "none" / "bookmark" (the pre-v2.1
     -- outlined dangling check; current default) / "tickbox" (the v2.1
     -- square pill). New key wins when set; otherwise fall back to the
@@ -210,6 +216,7 @@ function M.decide(book)
             badge_style = "bookmark"
         end
     end
+    if not Marks.shown("done_badge", surface) then badge_style = "none" end
     -- Status vocabulary is normalised upstream (Repo.readProgress /
     -- Repo.buildBook). KOReader stores 'complete' / 'abandoned' in the
     -- sidecar; bookshelf treats those as 'finished' / 'on_hold' across
@@ -236,6 +243,8 @@ function M.decide(book)
             local legacy = BookshelfSettings.read("on_hold_badge_enabled")
             mode = (legacy == false) and "none" or "both"
         end
+        -- Switched off for this surface: the same as the display's own None.
+        if not Marks.shown("on_hold", surface) then mode = "none" end
         local badge = mode == "pause" or mode == "both"
         local fade  = mode == "fade"  or mode == "both"
         return {
@@ -294,7 +303,7 @@ function M.decide(book)
         -- on-hold fade render path (page-colour blend, no border/shadow).
         -- Defaults OFF; independent of the badge style, mirroring #121's
         -- split-cues lesson for on-hold.
-        local fade = BookshelfSettings.read("finished_fade_enabled") == true
+        local fade = Marks.shown("finished_fade", surface)
         return {
             bar          = false,
             bar_pct      = 0,
@@ -1076,6 +1085,8 @@ function M.resolvedColors()
     -- The micro-module card's hairline (issue 424). No default: unset, the
     -- card keeps the theme's own ink (see _cardBorderInk in hero_modules).
     local module_border_raw = _readModeColor("module_border", nil)
+    -- The top panel's rating stars (issue 594). Unset = the text ink.
+    local rating_star_raw = _readModeColor("rating_star_color", nil)
     -- Shadow color is hard-coded so it always paints DARK ON SCREEN
     -- regardless of mode. KOReader's night mode inverts the framebuffer
     -- at refresh time, so the shadow color in code is BLACK in day mode
@@ -1134,6 +1145,7 @@ function M.resolvedColors()
         ribbon_bg         = ribbon_bg_raw and _paint(ribbon_bg_raw) or nil,
         folder_fg         = folder_fg_raw and _paint(folder_fg_raw) or nil,
         module_border     = module_border_raw and _paint(module_border_raw) or nil,
+        rating_star       = rating_star_raw and _paint(rating_star_raw) or nil,
     }
     _resolved_gen   = gen
     _resolved_mode  = is_color
@@ -1220,6 +1232,7 @@ function M.rawColors()
         folder_bg         = _readOwnColor("folder_overlay_bg", nil),
         folder_fg         = _readOwnColor("folder_overlay_fg", nil),
         module_border     = _readOwnColor("module_border", nil),
+        rating_star       = _readOwnColor("rating_star_color", nil),
         -- Panel color / Panel text: unset means the theme's own (and Auto).
         panel_color       = _readOwnColor("panel_color", nil),
         panel_ink         = _readOwnColor("panel_ink", nil),

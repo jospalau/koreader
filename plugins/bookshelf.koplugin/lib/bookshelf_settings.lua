@@ -14,6 +14,7 @@ local _            = require("lib/bookshelf_i18n").gettext
 local Focus        = require("lib/bookshelf_focus")
 
 local BookshelfSettings = require("lib/bookshelf_settings_store")
+local Marks        = require("lib/bookshelf_cover_marks")
 local BFont        = require("lib/bookshelf_fonts")
 local Space        = require("lib/bookshelf_space")
 -- Up here, not beside ICON_RESET: the Theme menu's rows above that use it
@@ -483,19 +484,21 @@ function Settings:_heroSubItems(keys)
                 return not Regions.read()[key].disabled
             end,
             callback = function(touchmenu_instance)
-                -- Rating is an interactive widget, not a text-templated
-                -- region — a line editor for it is meaningless. Tap toggles
-                -- enabled, same as hold elsewhere.
-                if key == "rating" then
-                    self:_toggleRegionEnabled(key, touchmenu_instance)
-                    return
-                end
                 self:_editHeroRegion(key, touchmenu_instance)
             end,
             hold_callback = function(touchmenu_instance)
                 self:_toggleRegionEnabled(key, touchmenu_instance)
             end,
         }
+        if key == "rating" then
+            -- Rating is an interactive widget, not a text-templated region, so
+            -- it has no line editor: tap opens its options (issue 484). The
+            -- checkbox and the long-press toggle stay, as on the text rows.
+            item.callback = nil
+            item.sub_item_table_func = function()
+                return self:_ratingRegionSubItems()
+            end
+        end
         if key == "tags" then
             -- Tags is interactive AND configurable (#99): the row opens a
             -- submenu (enable + per-category visibility + font size +
@@ -511,6 +514,87 @@ function Settings:_heroSubItems(keys)
         end
         items[#items + 1] = item
     end
+    return items
+end
+
+-- _ratingRegionSubItems() -- the "Rating (interactive)" row's options (issue
+-- 484): whose rating the row shows and on which books, and whether a tap on a
+-- star rates. Two of the rows are switches that already existed elsewhere
+-- (Hardcover > Show Hardcover ratings, Gestures > Tap the stars to rate a
+-- book), gathered here because this is where a reader looks for them; they
+-- read and write the same settings.
+function Settings:_ratingRegionSubItems()
+    local Regions  = require("lib/bookshelf_hero_regions")
+    local Gestures = require("lib/bookshelf_gestures")
+    local function refresh(touchmenu_instance)
+        if self._bw and self._bw._swapHeroRightColumnInPlace then
+            self._bw:_swapHeroRightColumnInPlace(Regions.read())
+        end
+        if touchmenu_instance and touchmenu_instance.updateItems then
+            touchmenu_instance:updateItems()
+        end
+    end
+    local function shown()
+        local v = Regions.read().rating.show
+        for _i, mode in ipairs(Regions.RATING_SHOW) do
+            if v == mode then return mode end
+        end
+        return "all"
+    end
+    local labels = {
+        all            = _("Show your stars on all books"),
+        rated_finished = _("Show your stars on rated and finished books"),
+        rated          = _("Show your stars on rated books only"),
+    }
+    local items = {
+        {
+            text = _("Show Hardcover rating when a book has one"),
+            keep_menu_open = true,
+            separator = true,
+            enabled_func = function()
+                local ok_hc, HC = pcall(require, "lib/bookshelf_hardcover")
+                return (ok_hc and HC and HC.isAvailable and HC.isAvailable()) or false
+            end,
+            checked_func = function()
+                return BookshelfSettings.isTrue("hardcover_hero_rating")
+            end,
+            callback = function(touchmenu_instance)
+                BookshelfSettings.save("hardcover_hero_rating",
+                    not BookshelfSettings.isTrue("hardcover_hero_rating"))
+                if touchmenu_instance and touchmenu_instance.updateItems then
+                    touchmenu_instance:updateItems()
+                end
+                self:_markDirty()
+            end,
+        },
+    }
+    for i, mode in ipairs(Regions.RATING_SHOW) do
+        items[#items + 1] = {
+            text = labels[mode],
+            radio = true,
+            keep_menu_open = true,
+            separator = (i == #Regions.RATING_SHOW) or nil,
+            checked_func = function() return shown() == mode end,
+            callback = function(touchmenu_instance)
+                local snap = Regions.snapshot("rating") or {}
+                -- "all" is the default: store nothing for it.
+                snap.show = (mode ~= "all") and mode or nil
+                Regions.write("rating", snap)
+                refresh(touchmenu_instance)
+            end,
+        }
+    end
+    items[#items + 1] = {
+        text = _("Tap a star to rate"),
+        keep_menu_open = true,
+        checked_func = function() return Gestures.on("rate") end,
+        callback = function(touchmenu_instance)
+            Gestures.set("rate", not Gestures.on("rate"))
+            if touchmenu_instance and touchmenu_instance.updateItems then
+                touchmenu_instance:updateItems()
+            end
+        end,
+    }
     return items
 end
 
@@ -791,6 +875,45 @@ function Settings:_pageCountSubItems(markDirty)
     }
 end
 
+-- Issue 597: every cover mark has a switch for covers and one for spine
+-- shelves (lib/bookshelf_cover_marks). These are the two rows that head each
+-- mark's submenu. `enabled` greys them: a function for both, or a table
+-- { covers = fn, spines = fn } for one each (a style set to None has nothing
+-- to switch).
+function Settings._markSurfaceRows(mark, markDirty, enabled)
+    local function row(surface, label, separator)
+        local enabled_func = enabled
+        if type(enabled) == "table" then enabled_func = enabled[surface] end
+        return {
+            text = label,
+            checked_func = function() return Marks.shown(mark, surface) end,
+            enabled_func = enabled_func,
+            keep_menu_open = true,
+            separator = separator,
+            callback = function(touchmenu_instance)
+                Marks.set(mark, surface, not Marks.shown(mark, surface))
+                markDirty()
+                if touchmenu_instance and touchmenu_instance.updateItems then
+                    touchmenu_instance:updateItems()
+                end
+            end,
+        }
+    end
+    return {
+        row("covers", _("Show on covers")),
+        row("spines", _("Show on spine shelves"), true),
+    }
+end
+
+-- Where a mark shows, for its parent row.
+function Settings._markWhereLabel(mark)
+    local where = Marks.where(mark)
+    if where == "both" then return _("Covers and spine shelves") end
+    if where == "covers" then return _("Covers only") end
+    if where == "spines" then return _("Spine shelves only") end
+    return _("Off")
+end
+
 function Settings:_coverDisplaySubItems()
     local function markDirty()
         if self._bw and self._bw._rebuild then
@@ -798,31 +921,26 @@ function Settings:_coverDisplaySubItems()
             UIManager:setDirty(self._bw, "ui")
         end
     end
-
-    -- Three independent toggles (defaults all ON when unset). Inline the
-    -- builder so each row reads/writes its own setting key without
-    -- repetition.
-    -- default_off: when true, treats nil as false. Used for opt-in
-    -- toggles like Show page count where defaulting ON would be
-    -- intrusive for users upgrading from a prior version.
-    local function toggleRow(setting_key, label, separator, default_off)
-        local default_value = not default_off  -- true unless explicitly off
+    local function surfaceRows(mark, enabled)
+        return Settings._markSurfaceRows(mark, markDirty, enabled)
+    end
+    -- The switches, then a mark's own choices under them.
+    local function withSurfaceRows(mark, enabled, rows)
+        local out = surfaceRows(mark, enabled)
+        for _i = 1, #rows do out[#out + 1] = rows[_i] end
+        return out
+    end
+    -- A mark with nothing to choose but where it shows.
+    local function surfaceOnlyRow(mark, label, separator)
         return {
-            text = label,
-            checked_func = function()
-                local v = BookshelfSettings.read(setting_key)
-                if v == nil then return default_value end
-                return v == true
-            end,
-            callback = function()
-                local v = BookshelfSettings.read(setting_key)
-                if v == nil then v = default_value end
-                BookshelfSettings.save(setting_key, not v)
-                markDirty()
+            text_func = function()
+                return label .. ": " .. Settings._markWhereLabel(mark)
             end,
             separator = separator,
+            sub_item_table_func = function() return surfaceRows(mark) end,
         }
     end
+
     -- Unified label mode: one setting drives the strip under covers on EVERY
     -- shelf surface (regular grid and expanded shelf). Replaces the 3.x pair
     -- of an expanded-only mode plus a grid on/off checkbox; the stored key
@@ -1059,10 +1177,8 @@ function Settings:_coverDisplaySubItems()
             separator = true,
         },
         -- ── reading progress on covers ──
-        toggleRow("progress_bar_enabled",
-                  _("Show progress bars"), false),
-        toggleRow("progress_bookmark_enabled",
-                  _("Show reading bookmarks"), false),
+        surfaceOnlyRow("progress_bar", _("Progress bars")),
+        surfaceOnlyRow("bookmark", _("Reading bookmarks")),
         -- Page count on covers: one row opening its own menu (it was two
         -- rows, which the long menu split across its pages).
         {
@@ -1070,7 +1186,9 @@ function Settings:_coverDisplaySubItems()
                 return _("Page badge") .. ": " .. Settings._pageCountSummary()
             end,
             sub_item_table_func = function()
-                return self:_pageCountSubItems(markDirty)
+                return withSurfaceRows("page_badge", function()
+                    return BookshelfSettings.read("progress_page_count_enabled") == true
+                end, self:_pageCountSubItems(markDirty))
             end,
         },
         -- ── reading-status treatments ──
@@ -1119,18 +1237,19 @@ function Settings:_coverDisplaySubItems()
                     return _("Completed book badge") .. ": " .. labels[readMode()]
                 end,
                 sub_item_table_func = function()
-                    return {
+                    return withSurfaceRows("done_badge",
+                        function() return readMode() ~= "none" end, {
                         optionRow("none",     labels.none),
                         optionRow("bookmark", labels.bookmark),
                         optionRow("tickbox",  labels.tickbox),
-                    }
+                    })
                 end,
             }
         end)(),
         -- Fade finished books like the on-hold faded cover (#138). Opt-in
         -- (default off) and independent of the badge style above, mirroring
         -- the #121 split of badge vs fade for on-hold books.
-        toggleRow("finished_fade_enabled", _("Fade finished books"), false, true),
+        surfaceOnlyRow("finished_fade", _("Fade finished books")),
         -- On-hold display: four-state. "both" (default; pause badge +
         -- faded cover), "pause" (badge only), "fade" (faded cover only),
         -- "none". Replaces the old Show on-hold badge boolean, which
@@ -1184,12 +1303,13 @@ function Settings:_coverDisplaySubItems()
                     return _("On-hold display") .. ": " .. parent_labels[readMode()]
                 end,
                 sub_item_table_func = function()
-                    return {
+                    return withSurfaceRows("on_hold",
+                        function() return readMode() ~= "none" end, {
                         optionRow("none",  labels.none),
                         optionRow("pause", labels.pause),
                         optionRow("fade",  labels.fade),
                         optionRow("both",  labels.both),
-                    }
+                    })
                 end,
                 separator = true,  -- end the reading-status band
             }
@@ -1237,11 +1357,15 @@ function Settings:_coverDisplaySubItems()
                 end,
                 separator = true,
                 sub_item_table_func = function()
-                    return {
+                    -- The choices below are about covers. A spine's foot
+                    -- carries the number whatever they say, so its switch
+                    -- stays live under Never.
+                    return withSurfaceRows("series_num",
+                        { covers = function() return readMode() ~= "never" end }, {
                         optionRow("always",    labels.always),
                         optionRow("in_series", labels.in_series),
                         optionRow("never",     labels.never),
-                    }
+                    })
                 end,
             }
         end)(),
@@ -1250,8 +1374,7 @@ function Settings:_coverDisplaySubItems()
         -- collection. Defaults ON: favouriting a book should mark it without
         -- a second opt-in (render gate uses nilOrTrue to match). Users who
         -- explicitly turn it off keep it off.
-        toggleRow("show_fav_badge",
-                  _("Show favorites icon"), false, false),
+        -- Where it shows: the two switches that head the row below.
         -- The cover's corner badge: a favourite's heart (default; reads
         -- distinctly from the rating stars) or star, or the book's star
         -- rating on every rated book (issue 538). The choice also selects
@@ -1285,11 +1408,11 @@ function Settings:_coverDisplaySubItems()
                     return T(_("Favorite icon or star rating: %1"), labels[readIcon()])
                 end,
                 sub_item_table_func = function()
-                    return {
+                    return withSurfaceRows("favorite", nil, {
                         optionRow("heart",  labels.heart),
                         optionRow("star",   labels.star),
                         optionRow("rating", labels.rating),
-                    }
+                    })
                 end,
                 separator = true,  -- end the decorations band
             }
@@ -2783,6 +2906,7 @@ function Settings:_colorsSubItems()
                     "progress_fill", "progress_track",
                     "bookmark_color", "complete_bookmark_color",
                     "favorite_star_color", "favorite_heart_color",
+                    "rating_star_color",
                     "badge_fg", "badge_bg", "border_color",
                     "chrome_bg", "chip_bar_transparent",
                     "module_bg", "module_border", "panel_bg",
@@ -2946,6 +3070,28 @@ function Settings:_colorsSubItems()
                 if touchmenu_instance then touchmenu_instance:updateItems() end
             end,
             separator = true,   -- end of the marks on a cover band
+        },
+        {
+            -- The rating stars (issue 594): the top panel's star row, and
+            -- the star rows the rating tokens write into the panel's text
+            -- and into list rows.
+            text_func = function()
+                return _("Rating stars") .. ": " .. valueLabel("rating_star")
+            end,
+            help_text = _("The rating stars in the top panel and in list "
+                .. "rows. Left unset they follow the text color. Long-press "
+                .. "to clear."),
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                pickColor("rating_star_color", "rating_star", 100,
+                    _("Rating stars"), touchmenu_instance)
+            end,
+            hold_callback = function(touchmenu_instance)
+                deleteModeKey("rating_star_color")
+                markDirty()
+                if touchmenu_instance then touchmenu_instance:updateItems() end
+            end,
+            separator = true,
         },
         {
             text_func = function()
@@ -3354,7 +3500,17 @@ function Settings:_settingsSubItems()
             .. " it. The status line at the top has its own entry."),
         enabled_func        = function() return self._bw ~= nil end,
         sub_item_table_func = function()
-            return self:_heroSubItems()
+            -- How the rows work, where it reads without a tap: a row's
+            -- long-press is its on/off switch, so no row can show help text.
+            local rows = {
+                {
+                    text = _("Tap a line for its options, long-press to turn it on or off."),
+                    enabled = false,
+                    separator = true,
+                },
+            }
+            for _i, row in ipairs(self:_heroSubItems()) do rows[#rows + 1] = row end
+            return rows
         end,
     }
     -- ("Show text below covers" lives in the Cover display submenu since 4.0:
@@ -3575,80 +3731,13 @@ function Settings:_hardcoverSubItems()
 
     -- Bulk auto-link: scan the whole library and link any book that carries
     -- an embedded ISBN / Hardcover id -- the single-book "Auto link" applied
-    -- across the library. Throttled to ~1 request/second to stay under
-    -- Hardcover's 60/min API limit; shows cancellable progress.
-    -- Shared driver for the long Hardcover scans (auto-link, refresh). Runs one
-    -- item per scheduler tick so the UI event loop keeps running between books:
-    -- the progress message stays tappable (cancel works) and nothing freezes,
-    -- unlike a blocking loop. Network items are paced by `rate` to respect
-    -- Hardcover's ~60/min limit; cheap items just yield a tick.
-    --   opts.items     array to walk
-    --   opts.rate      seconds between network ticks (default 1.2)
-    --   opts.step(item, st) -> did_network   (mutates st counters)
-    --   opts.progress(st, total) -> string   progress message text
-    --   opts.summary(st, total)  -> string   final message text
-    --   opts.on_finish(st)        optional, before the summary shows
-    local function runPacedScan(opts)
-        local InfoMessage = require("ui/widget/infomessage")
-        local items = opts.items
-        local total = #items
-        local rate  = opts.rate or 1.2
-        local st = { i = 0, cancelled = false }
-        -- Ignore taps briefly after start: the tap that launched the scan can
-        -- bleed onto the freshly-shown progress message and cancel it instantly.
-        local armed = false
-        UIManager:scheduleIn(0.6, function() armed = true end)
-        local info
-        -- InfoMessage:onCloseWidget fires dismiss_callback on ANY close, incl.
-        -- our own close when swapping in an updated message. Detach before a
-        -- programmatic close so only a genuine user dismissal counts as cancel.
-        local function closeInfo()
-            if info then
-                info.dismiss_callback = nil
-                UIManager:close(info)
-                info = nil
-            end
-        end
-        local function refresh()
-            closeInfo()
-            info = InfoMessage:new{
-                text = opts.progress(st, total),
-                dismiss_callback = function()
-                    if armed then st.cancelled = true end
-                end,
-            }
-            UIManager:show(info)
-        end
-        local function finish()
-            closeInfo()
-            if opts.on_finish then opts.on_finish(st) end
-            -- summary is optional: callers that present their own completion UI
-            -- (e.g. the auto-link HTML report) omit it.
-            if opts.summary then
-                UIManager:show(InfoMessage:new{ text = opts.summary(st, total) })
-            end
-        end
-        local step
-        step = function()
-            if st.cancelled or st.i >= total then return finish() end
-            st.i = st.i + 1
-            local did_network = opts.step(items[st.i], st)
-            if did_network or st.i % 10 == 0 or st.i == total then refresh() end
-            if did_network then
-                UIManager:scheduleIn(rate, step)
-            else
-                UIManager:nextTick(step)
-            end
-        end
-        refresh()
-        UIManager:nextTick(step)
-    end
-
+    -- across the library. Paced to stay under Hardcover's 60/min API
+    -- limit; progress is in the shelf's status line, with Stop.
     local function autoLinkAll(touchmenu_instance)
         local ok_hc, Hardcover = pcall(require, "lib/bookshelf_hardcover")
         if not ok_hc or not Hardcover
                 or not (Hardcover.isAvailable and Hardcover.isAvailable()) then
-            notify(_("Hardcover plugin is not available"))
+            notify(_("Not connected to Hardcover"))
             return
         end
         local Repo = require("lib/bookshelf_book_repository")
@@ -3682,17 +3771,8 @@ function Settings:_hardcoverSubItems()
 
         -- ~2 Hardcover calls per processed book (resolve/search, then fetch
         -- details), so pace at ~2.5s/book to stay under the ~60/min API limit.
-        local RATE = 2.5
+        local RATE = require("lib/bookshelf_hardcover_autolink").RATE
         local est_min = math.max(1, math.ceil(total * RATE / 60))
-
-        -- Display name for the report: prefer the book's title, fall back to a
-        -- de-extensioned filename.
-        local function nameFor(fp, meta)
-            if meta and type(meta.title) == "string" and meta.title ~= "" then
-                return meta.title
-            end
-            return (fp:match("([^/]+)$") or fp):gsub("%.[^%.]+$", "")
-        end
 
         local function showReport(st, best_guess)
             local ok_tok, Tokens = pcall(require, "lib/bookshelf_tokens")
@@ -3703,6 +3783,9 @@ function Settings:_hardcoverSubItems()
                 html_body = Tokens.autoLinkReportHtml{
                     best_guess = best_guess,
                     cancelled  = st.cancelled,
+                    why        = (st.rate_limited and _("Hardcover's request limit for today was reached. Run it again tomorrow to carry on."))
+                              or (st.gave_up and _("Stopped after three books in a row could not be looked up. Check the connection and run it again."))
+                              or nil,
                     linked     = st.linked_list or {},
                     nomatch    = st.nomatch_list or {},
                     no_id      = st.no_id or 0,
@@ -3713,86 +3796,22 @@ function Settings:_hardcoverSubItems()
             })
         end
 
+        -- The pass itself is lib/bookshelf_hardcover_autolink: progress in the
+        -- shelf's status line with Stop, the shelf usable while it runs.
         local function run(best_guess)
             if touchmenu_instance then UIManager:close(touchmenu_instance) end
-            runPacedScan{
-                items = candidates,
-                rate  = RATE,
-                step = function(fp, st)
-                    st.linked_list  = st.linked_list  or {}
-                    st.nomatch_list = st.nomatch_list or {}
-                    if best_guess then
-                        -- Needs title/author, so build the record first, then
-                        -- search Hardcover and score the hits.
-                        local meta = (Repo.buildBookMeta and Repo.buildBookMeta(fp))
-                                     or { filepath = fp }
-                        local ok_call, linked_ok, details =
-                            pcall(Hardcover.bestGuessLink, meta)
-                        if ok_call and linked_ok then
-                            st.linked = (st.linked or 0) + 1
-                            pcall(Hardcover.refreshBook, meta, {})
-                            local d = type(details) == "table" and details or {}
-                            local score
-                            if tonumber(d.title_score) and tonumber(d.author_score) then
-                                score = math.floor((d.title_score + d.author_score) / 2 + 0.5)
-                            end
-                            st.linked_list[#st.linked_list + 1] = {
-                                name = nameFor(fp, meta), matched = d.title,
-                                author = d.author, score = score,
-                            }
-                        elseif not ok_call
-                                or (details ~= "no_match"
-                                    and details ~= "no_confident_match") then
-                            -- An exception, a failed search or a failed link
-                            -- write is an ERROR, not a verdict about the book
-                            -- -- counting it as no-match buried real failures
-                            -- in the report (issue 310's second finding), and
-                            -- exact mode already made the distinction.
-                            st.errors = (st.errors or 0) + 1
-                        else
-                            st.no_match = (st.no_match or 0) + 1
-                            st.nomatch_list[#st.nomatch_list + 1] = { name = nameFor(fp, meta) }
-                        end
-                        return true
-                    end
-                    -- Exact: embedded ISBN / Hardcover id only.
-                    local book = { filepath = fp }
-                    local ids = Hardcover.getEmbeddedIdentifiers
-                                and Hardcover.getEmbeddedIdentifiers(book)
-                    if not ids then
-                        st.no_id = (st.no_id or 0) + 1
-                        return false  -- no network, next tick immediately
-                    end
-                    local ok_call, linked_ok, hc =
-                        pcall(Hardcover.linkFromEmbeddedIdentifiers, book)
-                    if not ok_call then
-                        st.errors = (st.errors or 0) + 1
-                    elseif linked_ok then
-                        st.linked = (st.linked or 0) + 1
-                        -- Fetch details + apply the cover/description decision
-                        -- now, so the book is fully populated in one pass.
-                        local meta = (Repo.buildBookMeta and Repo.buildBookMeta(fp))
-                                     or book
-                        pcall(Hardcover.refreshBook, meta, {})
-                        st.linked_list[#st.linked_list + 1] = {
-                            name = nameFor(fp, meta),
-                            matched = type(hc) == "table" and hc.title or nil,
-                        }
-                    else
-                        st.no_match = (st.no_match or 0) + 1
-                        st.nomatch_list[#st.nomatch_list + 1] = { name = nameFor(fp, book) }
-                    end
-                    return true
-                end,
-                progress = function(st, n)
-                    return T(_("Auto-linking from Hardcover…\n\n%1 / %2 checked  ·  %3 linked\n\n(tap to cancel)"),
-                             tostring(st.i), tostring(n), tostring(st.linked or 0))
-                end,
-                on_finish = function(st)
-                    if (st.linked or 0) > 0 then markDirty("hardcover-auto-link-all") end
-                    showReport(st, best_guess)
-                end,
-            }
+            -- Connected first (offers Wi-Fi when off): a pass started offline
+            -- gave up after three books with "could not be looked up".
+            Hardcover.whenOnline(function()
+                require("lib/bookshelf_hardcover_autolink").run{
+                    items      = candidates,
+                    best_guess = best_guess,
+                    on_finish  = function(st)
+                        if (st.linked or 0) > 0 then markDirty("hardcover-auto-link-all") end
+                        showReport(st, best_guess)
+                    end,
+                }
+            end)
         end
 
         -- Mode picker: exact (embedded id, fast) vs best guess (title/author
@@ -3800,7 +3819,7 @@ function Settings:_hardcoverSubItems()
         local ButtonDialog = require("ui/widget/buttondialog")
         local dialog
         dialog = ButtonDialog:new{
-            title = T(_("Auto-link %1 unlinked book(s)?\n\nContacts Hardcover (rate-limited), up to ~%2 min. Cancellable, with a report at the end."),
+            title = T(_("Auto-link %1 unlinked book(s)?\n\nContacts Hardcover (rate-limited), up to ~%2 min. Progress shows in the status line, with Stop, and a report follows."),
                       tostring(total), tostring(est_min)),
             title_align = "center",
             buttons = {
@@ -3823,6 +3842,21 @@ function Settings:_hardcoverSubItems()
     end
 
     return {
+        {
+            -- Which plugin Hardcover is reached through, and how it is
+            -- signed in: a sign-in without an API key gets no reviews, and
+            -- the reader could not tell which they had.
+            text_func = function()
+                local ok_hc, Hardcover = pcall(require, "lib/bookshelf_hardcover")
+                local c = ok_hc and Hardcover and Hardcover.connection and Hardcover.connection() or nil
+                if not c then return _("Not connected to Hardcover") end
+                local how = (c.method == "oauth" and _("signed in, no API key"))
+                    or (c.method == "api_key" and _("API key"))
+                    or _("not signed in")
+                return T(_("Connected through %1 (%2)"), c.label, how)
+            end,
+            enabled_func = function() return false end,
+        },
         {
             text_func = function()
                 local ok_hc, Hardcover = pcall(require, "lib/bookshelf_hardcover")
@@ -3956,6 +3990,9 @@ function Settings:_hardcoverSubItems()
                 })
             end,
         },
+        -- Where the API key comes from, and Bookshelf's own
+        -- (lib/bookshelf_hardcover_key_ui).
+        require("lib/bookshelf_hardcover_key_ui").menuItem(function() markDirty("hardcover-key") end),
         {
             -- Maintenance lives one level down: refreshing cached data and
             -- clearing it are occasional housekeeping, not everyday settings.
@@ -3967,6 +4004,10 @@ function Settings:_hardcoverSubItems()
                     -- keeps the public ratings current as they drift on
                     -- Hardcover (one batched query, no per-book covers/text).
                     text = _("Refresh ratings only"),
+                    enabled_func = function()
+                        local ok_hc, HC = pcall(require, "lib/bookshelf_hardcover")
+                        return (ok_hc and HC and HC.isAvailable and HC.isAvailable()) or false
+                    end,
                     help_text = _("Fetch up-to-date public ratings and review counts for every linked book in one quick batched request -- seconds, even for a large library. Ratings drift daily; for the rarely-changing details (author, genres, series, description, pages) use Refresh linked book details instead."),
                     callback = function(touchmenu_instance)
                         if touchmenu_instance then
@@ -4000,6 +4041,10 @@ function Settings:_hardcoverSubItems()
                     -- translators). Links untouched; one query per book,
                     -- paced under Hardcover's rate limit.
                     text = _("Refresh linked book details"),
+                    enabled_func = function()
+                        local ok_hc, HC = pcall(require, "lib/bookshelf_hardcover")
+                        return (ok_hc and HC and HC.isAvailable and HC.isAvailable()) or false
+                    end,
                     help_text = _("Re-fetch the cached details (author, description, series, genres, page count, ratings) for every linked book, one rate-limited request per book -- minutes on a large library, cancellable. Use after an upgrade note asks for it, or when cached data looks stale; for just the ratings, Refresh ratings only is much faster."),
                     callback = function(touchmenu_instance)
                         if touchmenu_instance then
@@ -4177,7 +4222,7 @@ function Settings:_performanceSubItems()
             end,
         },
         {
-            text = _("Instant book close (beta)"),
+            text = _("Close books in the background"),
             help_text = _("Show Bookshelf immediately when leaving a "
                 .. "book. The book finishes closing at the next quiet "
                 .. "moment - opening another book, half a minute of "
@@ -4185,7 +4230,7 @@ function Settings:_performanceSubItems()
                 .. "never has to wait for it. Until then, going "
                 .. "straight back into the same book is instant. Turn "
                 .. "this off to close books fully before Bookshelf "
-                .. "appears, as before."),
+                .. "appears."),
             checked_func = function()
                 return BookshelfSettings.nilOrTrue("hot_park")
             end,

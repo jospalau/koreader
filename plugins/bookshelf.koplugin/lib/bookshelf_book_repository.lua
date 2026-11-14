@@ -682,6 +682,38 @@ local function _bimGetBookInfo(bim, filepath, want_cover, what)
     return nil, res
 end
 
+-- Repo.bimDelete(bim, filepath) -> true when the book's BIM row was deleted
+-- (Refresh metadata, the stale-cover sweep). Not BIM:deleteBookInfo: that
+-- prepares a DELETE and never closes it, and BIM closes its connection
+-- before it forks the extractor so the two processes do not share one. With
+-- that statement alive the close did not take until the garbage collector
+-- got to it: the extractor started with this process's handles on the
+-- database, and the row it wrote was undone (seen on the rig: the finished
+-- row there, then the "in progress" one again). The refreshed book sat
+-- without its cover until a retry ten seconds on, or until the shelf was
+-- next rebuilt. The statement here is closed before this returns.
+-- BIM's own delete is the fallback when this one cannot run.
+function Repo.bimDelete(bim, filepath)
+    if not bim or type(filepath) ~= "string" then return false end
+    -- Split as BIM splits (util.splitFilePathName), or the row is not found.
+    local directory, filename = filepath:match("(.*/)(.*)")
+    local ok = pcall(function()
+        if not directory then error("no directory") end
+        bim:openDbConnection()
+        local conn = bim.db_conn
+        if not conn then error("no connection") end
+        local stmt = conn:prepare("DELETE FROM bookinfo WHERE directory=? AND filename=?;")
+        local ok_run, err = pcall(function()
+            stmt:bind(directory, filename)
+            stmt:step()
+        end)
+        stmt:close()
+        if not ok_run then error(err) end
+    end)
+    if ok then return true end
+    return (pcall(function() bim:deleteBookInfo(filepath) end))
+end
+
 -- Repo.bimStatus(bim, filepath) -> the book's extraction state (nil when BIM
 -- has no row), and on failure the error. The columns whether and how to
 -- extract a book is decided from (in_progress, has_meta, has_cover,
@@ -2453,8 +2485,20 @@ function Repo.dataGeneration() return _data_generation end
 Repo._gen_listeners = setmetatable({}, { __mode = "k" })
 function Repo.onDataGeneration(owner, fn) Repo._gen_listeners[owner] = fn end
 
+-- Repo.cacheEpoch() -> a number that changes whenever ANY of this file's
+-- caches is dropped: every Repo.invalidate* call (wrapped at the end of the
+-- file), a data generation bump, and the walk finding the book set changed.
+-- Wider than dataGeneration on purpose: favourites and read-state changes
+-- drop cached lists without touching a book's fields. For a caller that keeps
+-- something derived from WHICH books a source holds (the shelf's sub-shelf
+-- tiles): while the number stands, a fetch would hand back the same lists.
+-- A field, not a local: this chunk is at Lua's 200-local limit.
+Repo._cache_epoch = 0
+function Repo.cacheEpoch() return Repo._cache_epoch end
+
 local function _bumpDataGeneration()
     _data_generation = _data_generation + 1
+    Repo._cache_epoch = Repo._cache_epoch + 1
     for owner, fn in pairs(Repo._gen_listeners) do pcall(fn, owner) end
 end
 
@@ -2766,6 +2810,18 @@ function Repo.invalidateFavoritesCache()
     end
 end
 
+-- invalidateCollectionCache(name): one collection's ORDER changed (a book
+-- stepped along its shelf, issue 390): drop that collection's cached shelves,
+-- whatever their filter and sort, and nothing else. Membership did not
+-- change, so the groups and every other shelf are still right.
+function Repo.invalidateCollectionCache(name)
+    if type(name) ~= "string" then return end
+    local prefix = "collection|" .. name .. "|"
+    for k in pairs(_bySource_cache) do
+        if k:sub(1, #prefix) == prefix then _bySource_cache[k] = nil end
+    end
+end
+
 -- invalidateReadStateCache(): drop only the _bySource_cache entries whose
 -- SORT depends on read state — last-opened time, reading progress, or
 -- read status. Called from onCloseDocument: the just-closed book's read
@@ -2878,6 +2934,8 @@ function Repo.invalidateProgressCache(filepath)
     _bumpDataGeneration()
     -- The Pages sort remembers the counts it looked up.
     if SortEngine.clearPageCountMemo then SortEngine.clearPageCountMemo() end
+    -- And the Time left sort its minutes: a book marked finished has none.
+    if Repo._dropTimeLeft then Repo._dropTimeLeft() end
     -- A status change is exactly what makes the stored finished count wrong.
     _finished_count.value = nil
     _dropFinishedCount()
@@ -3108,6 +3166,10 @@ function Repo.readProgress(filepath)
     if ok_ds and ds then
         local ok_pct, p = pcall(ds.readSetting, ds, "percent_finished")
         if ok_pct then pct = tonumber(p) end
+        -- While the sidecar is open: the Time left sort's key into the
+        -- statistics (Repo._sidecarMd5 would open it again).
+        local ok_md5, md5 = pcall(ds.readSetting, ds, "partial_md5_checksum")
+        if ok_md5 and type(md5) == "string" and Repo._md5_memo then Repo._md5_memo[filepath] = md5 end
         local ok_sum, summary = pcall(ds.readSetting, ds, "summary")
         if ok_sum and type(summary) == "table" then
             status = summary.status
@@ -3337,8 +3399,12 @@ end
 -- settings in its own folder there, so every settings save (Bookshelf saves
 -- its place on each page turn) moved a walked folder's mtime and the next
 -- shelf walked the whole device again.
---   * KOReader's own data folder (DataStorage:getFullDataDir()) is never
---     walked into: no books live there, and it changes all the time.
+--   * In KOReader's own data folder (DataStorage:getFullDataDir()) the
+--     walk passes KOReader's own folders by name (Repo._KO_OWN_DIRS), and
+--     the data folder's own mtime is never recorded: every settings save
+--     moves it. Books kept in a folder of their own there are still found:
+--     KOReader's News downloader saves to koreader/news by default, and
+--     skipping the whole data folder (6.4.0) lost them from Home.
 --   * A ".sdr" sidecar folder, or a file whose extension says it is no book
 --     and no folder (pictures, fonts, dictionaries, code), is passed over
 --     by name, without a stat. A book's own extension is tested first.
@@ -3353,6 +3419,13 @@ Repo._NOT_BOOK_EXT = {
     dic = true, dict = true, dz = true, idx = true, ifo = true, syn = true, aff = true,
     mp3 = true, m4a = true, m4b = true, ogg = true, wav = true, flac = true, mp4 = true, avi = true, mkv = true,
     tmp = true, old = true, lock = true,
+}
+Repo._KO_OWN_DIRS = {
+    cache = true, clipboard = true, common = true, data = true, docsettings = true,
+    ffi = true, fonts = true, frontend = true, hashdocsettings = true, history = true,
+    l10n = true, libs = true, ota = true, patches = true, plugins = true,
+    resources = true, rocks = true, screenshots = true, settings = true, spec = true,
+    statistics = true, styletweaks = true, tools = true, web = true,
 }
 function Repo._koreaderDataDir()
     if Repo._ko_data_dir == nil then
@@ -3398,6 +3471,8 @@ local function walkBooks(root, depth, out, current_depth, dirs, listings)
     -- subfolders wait in `found` / `subdirs` until then -- no extra stat.
     local seen_mimetype, seen_meta_inf = false, false
     local found, subdirs = {}, {}
+    local ko_dir = Repo._koreaderDataDir()
+    local in_ko_dir = ko_dir ~= nil and root:gsub("/+$", "") == ko_dir
     for entry in iter, dir_obj do
         if listing then listing[entry] = true end
         if entry == "mimetype" then seen_mimetype = true
@@ -3412,7 +3487,7 @@ local function walkBooks(root, depth, out, current_depth, dirs, listings)
         -- (around lines 1222, 1269, 1406) already do this; walkBooks
         -- was the odd one out.
         local skip = false
-        if entry:sub(-4) == ".sdr" then
+        if entry:sub(-4) == ".sdr" or (in_ko_dir and Repo._KO_OWN_DIRS[entry]) then
             skip = true
         elseif not _supportedExt(entry) then
             local ext = entry:match("%.([^%.]+)$")
@@ -3433,8 +3508,6 @@ local function walkBooks(root, depth, out, current_depth, dirs, listings)
                 }
             end
             local mode = attr.mode
-            local ko_dir = mode == "directory" and Repo._koreaderDataDir()
-            if ko_dir and fp:gsub("/+$", "") == ko_dir then mode = nil end
             if mode == "directory" then
                 -- Skip .sdr sidecar dirs. They contain KOReader's per-book
                 -- metadata (cover, progress, etc.) and no actual books -- so
@@ -3443,7 +3516,8 @@ local function walkBooks(root, depth, out, current_depth, dirs, listings)
                 -- rewrite), which would falsely invalidate the walk cache
                 -- on every read session if we recorded them in `dirs`.
                 if entry:sub(-4) ~= ".sdr" then
-                    subdirs[#subdirs + 1] = { fp = fp, mtime = attr.modification or 0 }
+                    subdirs[#subdirs + 1] = { fp = fp, mtime = attr.modification or 0,
+                        untracked = ko_dir ~= nil and fp:gsub("/+$", "") == ko_dir }
                 end
             elseif mode == "file" then
                 if _supportedExt(entry) then
@@ -3464,7 +3538,7 @@ local function walkBooks(root, depth, out, current_depth, dirs, listings)
     for i = 1, #found do out[#out + 1] = found[i] end
     for i = 1, #subdirs do
         local d = subdirs[i]
-        if dirs then dirs[d.fp] = d.mtime end
+        if dirs and not d.untracked then dirs[d.fp] = d.mtime end
         walkBooks(d.fp, depth, out, current_depth + 1, dirs, listings)
     end
 end
@@ -3648,7 +3722,12 @@ local function cachedWalk(home, depth)
         local ok_lfs, lfs = pcall(require, "libs/libkoreader-lfs")
         if ok_lfs and lfs and lfs.attributes then
             local root_m = lfs.attributes(home, "modification")
-            if root_m then dirs[home] = root_m end
+            -- Not when home IS KOReader's data folder: its settings saves move
+            -- that mtime (see Repo._KO_OWN_DIRS).
+            local ko_dir = Repo._koreaderDataDir()
+            if root_m and not (ko_dir and home:gsub("/+$", "") == ko_dir) then
+                dirs[home] = root_m
+            end
         end
         local listings = {}
         walkBooks(home, depth, fresh, 0, dirs, listings)
@@ -3691,6 +3770,7 @@ local function cachedWalk(home, depth)
             -- fresh walk. Skipped when the book set is unchanged --
             -- saves rebuilding 13+ author/genre group caches just
             -- because a .sdr was created.
+            Repo._cache_epoch = Repo._cache_epoch + 1
             _series_cache    = {}
             _authors_cache   = {}
             _genres_cache    = {}
@@ -8192,8 +8272,112 @@ local STATS_FIELDS = {
     "avg_page_time_seconds", "book_pct_read",
 }
 
+-- _timeLeft(pct, pages_total, capped_pages, capped_time) -> minutes left, or
+-- nil when any part is missing: the pages after where the reader is, at the
+-- book's own capped pace. The one copy of the sum: %book_time_left shows it
+-- and the Time left sort orders by it.
+function Repo._timeLeft(pct, pages_total, capped_pages, capped_time)
+    pct, pages_total = tonumber(pct), tonumber(pages_total)
+    capped_pages, capped_time = tonumber(capped_pages), tonumber(capped_time)
+    if not (pct and pages_total and capped_pages and capped_time)
+            or pages_total <= 0 or capped_pages <= 0 then
+        return nil
+    end
+    local current_page = math.floor(pct * pages_total + 0.5)
+    local pages_left = math.max(0, pages_total - current_page)
+    return math.floor(pages_left * capped_time / capped_pages / 60 + 0.5)
+end
+
+-- The Time left sort's answers by book (issue 602), dropped with the
+-- statistics cache and with the progress cache. Fields: the file is at Lua's
+-- 200-local limit.
+Repo._left_cache = {}
+Repo._md5_memo = {}
+function Repo._dropTimeLeft()
+    Repo._left_cache = {}
+    if SortEngine.clearTimeLeftMemo then SortEngine.clearTimeLeftMemo() end
+end
+
+-- _sidecarMd5(fp) -> the checksum KOReader's statistics key the book by, as
+-- its sidecar holds it (else computed, as enrichStats does). It does not
+-- change while the sidecar lives, so it is read once a session.
+function Repo._sidecarMd5(fp)
+    local m = Repo._md5_memo[fp]
+    if m == nil then
+        local ok_ds, ds = pcall(function() return getDocSettings():open(fp) end)
+        if ok_ds and ds and ds.readSetting then
+            m = ds:readSetting("partial_md5_checksum")
+        end
+        if not m then
+            local ok_util, util = pcall(require, "util")
+            if ok_util and util and util.partialMD5 then m = util.partialMD5(fp) end
+        end
+        m = m or false
+        Repo._md5_memo[fp] = m
+    end
+    return m or nil
+end
+
+-- _bookPace(md5) -> pages in the book, pages timed, seconds over them (each
+-- page capped, as KOReader's own estimate caps it), or nil. The connection
+-- and its two statements are kept for the burst (a sort asks for every book
+-- being read) and closed on the next tick: on a PW5 opening and preparing
+-- was 17 ms a book, the queries on an open connection 0.6 ms. Read-only, so
+-- a device with no statistics does not get an empty database made for it.
+function Repo._closePaceDb()
+    local h = Repo._pace_db
+    Repo._pace_db = nil
+    if not h then return end
+    pcall(function() h.book:close() end)
+    pcall(function() h.cap:close() end)
+    pcall(function() h.conn:close() end)
+end
+function Repo._bookPace(md5)
+    local h = Repo._pace_db
+    if not h then
+        local ok_ds, DataStorage = pcall(require, "datastorage")
+        local ok_sq, SQ3 = pcall(require, "lua-ljsqlite3/init")
+        if not (ok_ds and DataStorage and ok_sq and SQ3) then return nil end
+        local ok_conn, conn = pcall(SQ3.open,
+            DataStorage:getSettingsDir() .. "/statistics.sqlite3", "ro")
+        if not ok_conn or not conn then return nil end
+        local ok_prep, book, cap = pcall(function()
+            return conn:prepare("SELECT id, pages FROM book WHERE md5 = ? "
+                    .. "ORDER BY last_open DESC LIMIT 1"),
+                conn:prepare("SELECT count(*), sum(d) FROM (SELECT min(sum(duration), ?) AS d "
+                    .. "FROM page_stat WHERE id_book = ? GROUP BY page)")
+        end)
+        if not ok_prep or not (book and cap) then pcall(function() conn:close() end); return nil end
+        local stats = G_reader_settings:readSetting("statistics")
+        h = { conn = conn, book = book, cap = cap, max_sec = (stats and stats.max_sec) or 120 }
+        Repo._pace_db = h
+        local ok_um, UIManager = pcall(require, "ui/uimanager")
+        if ok_um and UIManager and UIManager.nextTick then
+            UIManager:nextTick(Repo._closePaceDb)
+        else
+            h.once = true
+        end
+    end
+    local pages, capped_pages, capped_time
+    local ok = pcall(function()
+        -- reset after each step: a statement left mid-step holds its read lock.
+        local row = h.book:reset():bind(md5):step()
+        h.book:reset()
+        if not row then return end
+        local id = tonumber(row[1])
+        pages = tonumber(row[2]) or 0
+        local sums = h.cap:reset():bind(h.max_sec, id):step()
+        h.cap:reset()
+        if sums then capped_pages, capped_time = tonumber(sums[1]), tonumber(sums[2]) end
+    end)
+    if not ok or h.once then Repo._closePaceDb() end
+    return pages, capped_pages, capped_time
+end
+
 function Repo.invalidateStatsCache(filepath)
     _bumpDataGeneration()
+    -- The Time left sort remembers its minutes per book and per record.
+    Repo._dropTimeLeft()
     if filepath then _stats_cache[filepath] = nil
     else _stats_cache = {} end
 end
@@ -8330,13 +8514,9 @@ function Repo.enrichStats(book)
     -- × pages_total. This matches KOReader's stats calculation exactly,
     -- which uses self.ui:getCurrentPage() (internal units) against
     -- self.document:getPageCount() (same internal units).
-    if capped_pages and capped_pages > 0 and capped_time
-            and pages_total > 0 and book.book_pct then
-        local current_page = math.floor(book.book_pct * pages_total + 0.5)
-        local pages_left = math.max(0, pages_total - current_page)
-        book.book_time_left_minutes = math.floor(
-            pages_left * capped_time / capped_pages / 60 + 0.5)
-    end
+    -- (Repo._timeLeft: the Time left sort orders by the same sum.)
+    book.book_time_left_minutes =
+        Repo._timeLeft(book.book_pct, pages_total, capped_pages, capped_time)
 
     -- Snapshot computed fields into the cache.
     local snapshot = {}
@@ -9172,7 +9352,7 @@ function Repo.getBySource(source, filter, sort_priority, offset, limit, opts)
             collections_not = true, folders = true }
         local STUB_SORT_KEYS = { date_added = true, read_status = true,
             read_status_active = true, last_opened = true, added_or_opened = true,
-            size = true, percent_read = true }
+            size = true, percent_read = true, time_left = true }
         local function stubbable()
             if (opts and opts.light_only) or Repo.spine_light then return false end
             for k, v in pairs(filter or {}) do
@@ -9580,5 +9760,45 @@ SortEngine.setPageCountResolver(function(fp)
     end
     return Repo.pageCountFor(fp)
 end)
+
+-- timeLeftMinutes(fp) -> the minutes left in a book being read, as
+-- %book_time_left shows them, or nil (issue 602: the Time left sort). Only a
+-- book with a sidecar that is not finished reaches the statistics database:
+-- a library of unopened books sorts without opening it once.
+function Repo.timeLeftMinutes(fp)
+    if not fp then return nil end
+    local kept = Repo._left_cache[fp]
+    if kept ~= nil then return kept or nil end
+    local mins
+    if _hasSidecar(fp) then
+        local pct, status = Repo.readProgress(fp)
+        if pct and status ~= "complete" and status ~= "finished" then
+            local md5 = Repo._sidecarMd5(fp)
+            if md5 then
+                local ok, pages, capped_pages, capped_time = pcall(Repo._bookPace, md5)
+                if ok then mins = Repo._timeLeft(pct, pages, capped_pages, capped_time) end
+            end
+        end
+    end
+    Repo._left_cache[fp] = mins or false
+    return mins
+end
+-- Through Repo at call time: a test, or a later wrapper, replaces it there.
+SortEngine.setTimeLeftResolver(function(fp) return Repo.timeLeftMinutes(fp) end)
+
+-- Every invalidation moves the cache epoch (Repo.cacheEpoch), whichever
+-- cache it drops and wherever it is called from; one added later is covered
+-- without being listed. In a function of its own: the chunk has no locals to
+-- spare.
+;(function()
+    for name, fn in pairs(Repo) do
+        if type(fn) == "function" and (name:match("^invalidate") or name == "forgetBook") then
+            Repo[name] = function(...)
+                Repo._cache_epoch = Repo._cache_epoch + 1
+                return fn(...)
+            end
+        end
+    end
+end)()
 
 return Repo
