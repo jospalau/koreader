@@ -15,6 +15,9 @@ local left_container = require("ui/widget/container/leftcontainer")
 local Screen = require("device").screen
 local Size = require("ui/size")
 local TextWidget = require("ui/widget/textwidget")
+local Trapper = require("ui/trapper")
+local UIManager = require("ui/uimanager")
+local logger = require("logger")
 local util = require("util")
 
 return function(PageTextInfo)
@@ -291,37 +294,89 @@ end
 -- so that if WordReference fails Babylon is used as fallback.
 local DICTIONARIES = { "WordReference_EN_ES", "Babylon English-Spanish" }
 
-function getTranslation(self, word)
-    -- Normalise to lowercase so "Have" and "have" share the same cache entry.
-    local key = word:lower()
-    if self.translations[key] then
-        return self.translations[key]
-    end
+-- Looks one word up with sdcv. Returns the gloss ("" if there is none), or
+-- nil and true if the user cancelled the search. Must run inside Trapper:wrap().
+local function lookupGloss(self, key)
+    local dictionary = self.ui.dictionary
 
-    local results = self.ui.dictionary:startSdcv(key, DICTIONARIES, true, true)
-
-    -- If the preferred dictionaries have no entry for this word, fall back to
-    -- whatever dictionaries are installed.
-    if not results or #results == 0 then
-        results = self.ui.dictionary:startSdcv(key, nil, true, true)
-    end
-
-    local translation = ""
-
-    if results then
+    local function firstGloss(results)
+        if not results then return nil end
+        if results.lookup_cancelled then return nil, true end
         for _, result in ipairs(results) do
-            if result.definition then
+            -- startSdcv returns a dummy entry (no_result) when nothing is found
+            if result.definition and not result.no_result then
                 local candidate = extractDefinition(result.definition)
                 if candidate and candidate ~= "" then
-                    translation = formatTranslation(candidate)
-                    break
+                    return formatTranslation(candidate)
                 end
             end
         end
+        return nil
     end
 
-    self.translations[key] = translation
-    return translation
+    -- third argument: fuzzy search (startSdcv takes only three arguments)
+    local gloss, cancelled = firstGloss(dictionary:startSdcv(key, DICTIONARIES, true))
+    if cancelled then return nil, true end
+    if not gloss then
+        -- the preferred dictionaries have nothing: try any installed one
+        gloss, cancelled = firstGloss(dictionary:startSdcv(key, nil, true))
+        if cancelled then return nil, true end
+    end
+    return gloss or ""
+end
+
+-- Cache only: it never launches sdcv, so it is safe to call while painting.
+-- A word that is not cached yet is queued and fetched right after.
+function getTranslation(self, word)
+    local key = word:lower()   -- "Have" and "have" share the same entry
+    local cached = self.translations[key]
+    if cached then return cached end
+
+    self.pending_translations = self.pending_translations or {}
+    if not self.pending_translations[key] then
+        self.pending_translations[key] = true
+        self:scheduleTranslationFetch()
+    end
+    return nil
+end
+
+function PageTextInfo:scheduleTranslationFetch()
+    if self._translation_fetch_scheduled then return end
+    self._translation_fetch_scheduled = true
+    -- Small delay, so the paints that follow a page turn go into one batch
+    UIManager:scheduleIn(0.3, function()
+        self._translation_fetch_scheduled = false
+        Trapper:wrap(function() self:fetchPendingTranslations() end)
+    end)
+end
+
+function PageTextInfo:fetchPendingTranslations()
+    if self._translation_fetching then return end
+    local batch = self.pending_translations
+    if not batch or not next(batch) then return end
+    self.pending_translations = {}   -- words queued from now on go in the next batch
+    self._translation_fetching = true
+
+    local fetched = 0
+    local ok, err = pcall(function()
+        for key in pairs(batch) do
+            local gloss, cancelled = lookupGloss(self, key)
+            -- Cancelled: nothing is cached, the next paint asks for the word again
+            if cancelled then break end
+            self.translations[key] = gloss
+            fetched = fetched + 1
+        end
+    end)
+    self._translation_fetching = false
+    if not ok then logger.warn("gloss lookup failed:", err) end
+
+    if fetched > 0 then
+        UIManager:setDirty(self.ui, "ui")   -- repaint the page, now with the glosses
+    end
+    -- words that were queued while this batch was running
+    if self.pending_translations and next(self.pending_translations) then
+        self:scheduleTranslationFetch()
+    end
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
