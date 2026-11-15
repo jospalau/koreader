@@ -1943,6 +1943,8 @@ installDefaultDictionaryPanel()
 -- Returns false otherwise, so the tap goes on to the rest of the reader (turning page...).
 function PageTextInfo:onTapVocabularyWord(ges)
     if not (self._draw_cache and ges and ges.pos) then return false end
+    -- Only in the highlight mode ("Highlight all words vocabulary builder and notes")
+    if not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then return false end
     local pad = Screen:scaleBySize(4)   -- a little margin: the words are small
     for _, entry in ipairs(self._draw_cache.entries) do
         if entry.text then
