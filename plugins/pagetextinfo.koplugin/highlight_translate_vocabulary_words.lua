@@ -19,6 +19,10 @@ local JSON = require("json")
 local lfs = require("libs/libkoreader-lfs")
 local util = require("util")
 
+-- The plugin instance (set whenever the plugin paints / updates), so code that has no
+-- `self` (the dictionary hook, the panel) can refresh the page after the vocabulary changes.
+local active_plugin
+
 return function(PageTextInfo)
 
 -- Grammar labels that dictionaries put in front of / between translations.
@@ -670,6 +674,7 @@ local function firstWordIsWhole(self, words, res)
 end
 
 function PageTextInfo:updateWordsVocabulary()
+    active_plugin = self
     if not ffiUtil.realpath(DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3") then return end
     local db_location = DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3"
     self.words = {}
@@ -935,6 +940,24 @@ end
 
 -- Tap on a gloss chip: a centered window with the full dictionary translation.
 
+-- Fixes the layout of a definition that is already plain text (the tags are gone, so
+-- spaces and line breaks that they provided are missing): dictionaries like the OED
+-- glue the pronunciation, the numbered senses and the dated quotations together.
+local function prettifyDefinition(def)
+    -- "tippling.1858 in" -> "tippling. 1858 in"
+    def = def:gsub("([%a%)%]])%.(%d%d%d%d)(%D)", "%1. %2%3")
+    -- "fig.c 1375" / "smiling.a 1500" -> a space before the c / a of a dated quotation
+    def = def:gsub("([%a%)%]]%.)([ca] %d%d%d%d)", "%1 %2")
+    -- numbered senses start a new paragraph: "...]1. The action" / "reasonable.2. U.S."
+    def = def:gsub("([%.%]%)])%s*(%d%d?)%.%s+(%u)", "%1\n\n%2. %3")
+    -- "smiling.attrib." / "x.Comb." glued to the end of the previous sense
+    def = def:gsub("([%a%)%]])%.(attrib%.)", "%1.\n%2")
+    def = def:gsub("([%a%)%]])%.(Comb%.)", "%1.\n%2")
+    -- tidy the blank lines
+    def = def:gsub("[ \t]+\n", "\n"):gsub("\n\n\n+", "\n\n")
+    return (def:gsub("^%s+", ""):gsub("%s+$", ""))
+end
+
 -- Returns the whole definition as plain text: HTML removed, one entry per line.
 local function fullDefinitionText(def)
     if not def or def == "" then return "" end
@@ -953,8 +976,9 @@ local function fullDefinitionText(def)
     def = def:gsub("&#[xX](%x+);", function(h) return entityToUtf8(tonumber(h, 16)) end)
     def = def:gsub("&#(%d+);", function(d) return entityToUtf8(tonumber(d)) end)
 
-    -- Strip the tags, decode the common named entities and tidy the blank lines
-    def = def:gsub("%b<>", "")
+    -- Strip the tags. Each tag leaves a marker (\1), so that text which only the tags
+    -- were separating ("fig.</i>c 1375", "reasonable.</b><b>2.</b>") can be spaced below.
+    def = def:gsub("%b<>", "\1")
     local named = {
         aacute = "á", eacute = "é", iacute = "í", oacute = "ó", uacute = "ú", uuml = "ü", ntilde = "ñ",
         Aacute = "Á", Eacute = "É", Iacute = "Í", Oacute = "Ó", Uacute = "Ú", Uuml = "Ü", Ntilde = "Ñ",
@@ -963,6 +987,15 @@ local function fullDefinitionText(def)
     def = def:gsub("&(%a+);", function(name) return named[name] end)   -- unknown names are kept
     def = def:gsub("&nbsp;", " "):gsub("&lt;", "<"):gsub("&gt;", ">"):gsub("&quot;", '"'):gsub("&amp;", "&")
     def = def:gsub("&%a+;", "")                                         -- the rest of the named entities
+
+    -- Spacing / line breaks lost with the tags (dictionaries like the OED glue the
+    -- pronunciation, the numbered senses and the quotations together)
+    def = def:gsub("\1+", "\1")
+    -- a tag between a closing punctuation mark and the next word was a separation
+    def = def:gsub("([%.%]%)%?!;:])\1([%w%(%[\128-\255])", "%1 %2")
+    def = def:gsub("\1", "")
+    def = prettifyDefinition(def)
+
     def = def:gsub("\r", ""):gsub("[ \t]+\n", "\n"):gsub("\n\n\n+", "\n\n")
     return (def:gsub("^%s+", ""):gsub("%s+$", ""))
 end
@@ -975,6 +1008,69 @@ end
 -- word, and it can be moved (hold and drag). A tap outside the card (or the Back key)
 -- closes it.
 -- The class is built on first use, so nothing is required until a word is tapped.
+-- Vocabulary (vocabulary_builder.sqlite3) helpers for the panel.
+-- Words are stored as looked up ("smiling"); the comparison ignores the case.
+local function vocabKey(word)
+    return (tostring(word or ""):lower():gsub("’", "'"))
+end
+
+local function vocabDbPath()
+    local path = DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3"
+    return ffiUtil.realpath(path) and path or nil
+end
+
+-- True when `word` is in the vocabulary.
+local function wordInVocabulary(word)
+    local key = vocabKey(word)
+    local path = vocabDbPath()
+    if key == "" or not path then return false end
+    local found = false
+    pcall(function()
+        local conn = require("lua-ljsqlite3/init").open(path)
+        local ok = pcall(function()
+            local stmt = conn:prepare("SELECT 1 FROM vocabulary WHERE LOWER(word) = ? LIMIT 1")
+            stmt:bind(key)
+            found = stmt:step({}) ~= nil
+            if stmt.close then stmt:close() end
+        end)
+        conn:close()
+        if not ok then found = false end
+    end)
+    return found
+end
+
+-- Deletes `word` from the vocabulary. Returns true if the query ran without errors.
+local function removeFromVocabulary(word)
+    local key = vocabKey(word)
+    local path = vocabDbPath()
+    if key == "" or not path then return false end
+    local done = false
+    pcall(function()
+        local conn = require("lua-ljsqlite3/init").open(path)
+        done = pcall(function()
+            local stmt = conn:prepare("DELETE FROM vocabulary WHERE LOWER(word) = ?")
+            stmt:bind(key)
+            stmt:step()
+            if stmt.close then stmt:close() end
+        end)
+        conn:close()
+    end)
+    return done
+end
+
+-- Repaints the page so the underline / gloss of a removed word disappears.
+local function refreshVocabularyHighlights()
+    local plugin = active_plugin
+    if not plugin then return end
+    pcall(function()
+        plugin.all_words = nil        -- read the DB again (the mtime may not have changed yet)
+        plugin._vocab_stamp = nil
+        plugin._draw_cache = nil
+        plugin:updateWordsVocabulary()
+        require("ui/uimanager"):setDirty("all", "ui")
+    end)
+end
+
 local TranslationPanel
 local function getTranslationPanelClass()
     if TranslationPanel then return TranslationPanel end
@@ -992,6 +1088,20 @@ local function getTranslationPanelClass()
     local VerticalGroup = require("ui/widget/verticalgroup")
     local VerticalSpan = require("ui/widget/verticalspan")
     local Device = require("device")
+    local ok_html, ScrollHtmlWidget = pcall(require, "ui/widget/scrollhtmlwidget")
+
+    -- Same base CSS as KOReader's dictionary window (Noto Sans has the IPA symbols);
+    -- `extra` is the dictionary's own css, if it has one
+    local function htmlDictionaryCss(extra)
+        local justify = G_reader_settings:nilOrTrue("dict_justify") and "text-align: justify;" or ""
+        local css = [[
+            @page { margin: 0; font-family: 'Noto Sans'; }
+            body { margin: 0; line-height: 1.3; ]] .. justify .. [[ }
+            blockquote, dd { margin: 0 1em; }
+            ol, ul, menu { margin: 0; padding: 0 1.7em; }
+        ]]
+        return extra and (css .. extra) or css
+    end
 
     -- The text scrolls vertically, but the horizontal swipes must reach the panel
     -- (they change the dictionary), so the text lets them through.
@@ -1012,6 +1122,8 @@ local function getTranslationPanelClass()
         entries = nil,   -- list of { dict = <dictionary name>, text = <full translation> }
         index = 1,       -- the entry that is shown
         anchor_y = 0,    -- y of the tapped word; decides if the panel goes up or down
+        on_close = nil,  -- optional function called once when the panel is closed
+        in_vocab = nil,  -- is the word in the vocabulary? (nil: it is looked up)
     }
 
     function TranslationPanel:init()
@@ -1027,7 +1139,7 @@ local function getTranslationPanelClass()
         -- Title row: the word on the left, "n / total" on the right (several dictionaries)
         local counter_w = several and Screen:scaleBySize(56) or 0
         local title = TextWidget:new{
-            text = self.word,
+            text = entry.word or self.word,   -- entry.word: headword of that dictionary
             face = Font:getFace("cfont", 22),
             bold = true,
             fgcolor = Blitbuffer.COLOR_BLACK,
@@ -1069,18 +1181,74 @@ local function getTranslationPanelClass()
         })
         table.insert(content, VerticalSpan:new{ width = Screen:scaleBySize(8) })
 
-        -- The text box is as tall as its text, up to 45% of the screen (then it scrolls)
-        local body_face = Font:getFace("cfont", 18)
-        local probe = TextBoxWidget:new{ text = entry.text, face = body_face, width = inner_w }
-        local text_h = probe:getSize().h
-        probe:free()
-        table.insert(content, PassthroughScrollText:new{
-            text = entry.text,
-            face = body_face,
-            width = inner_w,
-            height = math.min(text_h, math.floor(sh * 0.45)),
-            dialog = self,
-        })
+        local max_h = math.floor(sh * 0.45)
+        local body_widget
+        -- HTML dictionaries (sametypesequence=h) are drawn like KOReader's own window does
+        -- (bold, italics, paragraphs, lists...), instead of as plain text
+        if entry.html and ok_html and ScrollHtmlWidget then
+            local ok_w, widget = pcall(function()
+                return ScrollHtmlWidget:new{
+                    html_body = entry.html,
+                    html_resource_directory = entry.res_dir,
+                    css = htmlDictionaryCss(entry.css),
+                    default_font_size = Screen:scaleBySize(G_reader_settings:readSetting("dict_font_size") or 20),
+                    width = inner_w,
+                    height = max_h,
+                    dialog = self,
+                }
+            end)
+            if ok_w then body_widget = widget end
+        end
+        if not body_widget then
+            -- The text box is as tall as its text, up to 45% of the screen (then it scrolls)
+            -- Same font, size and options as KOReader's dictionary window
+            local justified = G_reader_settings:nilOrTrue("dict_justify")
+            local body_face = Font:getFace("cfont", G_reader_settings:readSetting("dict_font_size") or 20)
+            local probe = TextBoxWidget:new{
+                text = entry.text, face = body_face, width = inner_w,
+                justified = justified, auto_para_direction = true,
+            }
+            local text_h = probe:getSize().h
+            probe:free()
+            body_widget = PassthroughScrollText:new{
+                text = entry.text,
+                face = body_face,
+                width = inner_w,
+                height = math.min(text_h, max_h),
+                dialog = self,
+                justified = justified,
+                auto_para_direction = true,
+            }
+        end
+        table.insert(content, body_widget)
+
+        -- "Remove from vocabulary" button, only when the word is in the vocabulary
+        self.remove_btn = nil
+        if self.in_vocab == nil then self.in_vocab = wordInVocabulary(self.word) end
+        if self.in_vocab then
+            local bs = Size.border.thin
+            local btn_h = Screen:scaleBySize(36)
+            self.remove_label = TextWidget:new{
+                text = "Remove from vocabulary",
+                face = Font:getFace("cfont", 16),
+                fgcolor = Blitbuffer.COLOR_BLACK,
+                max_width = inner_w - 2 * Screen:scaleBySize(10),
+            }
+            self.remove_btn = FrameContainer:new{
+                bordersize = bs,
+                color = Blitbuffer.COLOR_DARK_GRAY,
+                background = Blitbuffer.COLOR_WHITE,
+                radius = Size.radius.button,
+                margin = 0,
+                padding = 0,
+                CenterContainer:new{
+                    dimen = Geom:new{ w = inner_w - 2 * bs, h = btn_h - 2 * bs },
+                    self.remove_label,
+                },
+            }
+            table.insert(content, VerticalSpan:new{ width = Screen:scaleBySize(10) })
+            table.insert(content, self.remove_btn)
+        end
 
         self.frame = FrameContainer:new{
             radius = Screen:scaleBySize(16),
@@ -1126,6 +1294,9 @@ local function getTranslationPanelClass()
             elseif ges and ges.ges == "tap" and ges.pos
                 and self.frame.dimen and ges.pos:notIntersectWith(self.frame.dimen) then
                 return self:onClose()
+            elseif ges and ges.ges == "tap" and ges.pos and self.remove_btn
+                and self.remove_btn.dimen and ges.pos:intersectWith(self.remove_btn.dimen) then
+                return self:onRemoveWord()
             end
         end
         return InputContainer.handleEvent(self, event)
@@ -1153,10 +1324,30 @@ local function getTranslationPanelClass()
                 entries = self.entries,
                 index = index,
                 anchor_y = self.anchor_y,
+                on_close = self.on_close,
+                in_vocab = self.in_vocab,
             })
+            -- The new panel owns on_close now: closing this one must not call it
+            self.on_close = nil
             UIManager:close(self)
         end
         return true   -- the panel is modal: no swipe goes through to the page
+    end
+
+    -- Remove the word from the vocabulary and close the panel. Closing it repaints the
+    -- page (onCloseWidget), so the underline and the gloss of the word disappear.
+    function TranslationPanel:onRemoveWord()
+        if removeFromVocabulary(self.word) then
+            self.vocab_changed = true
+            UIManager:close(self)
+        else
+            -- keep the panel open and say what happened
+            self.remove_label:setText("Could not remove the word")
+            UIManager:setDirty(self, function()
+                return "ui", self.frame.dimen
+            end)
+        end
+        return true
     end
 
     function TranslationPanel:onShow()
@@ -1172,6 +1363,15 @@ local function getTranslationPanelClass()
             UIManager:setDirty(nil, function()
                 return "ui", dimen
             end)
+        end
+        if self.vocab_changed then
+            -- A word was removed: repaint the page once the panel is gone
+            UIManager:nextTick(refreshVocabularyHighlights)
+        end
+        if self.on_close then
+            local callback = self.on_close
+            self.on_close = nil
+            callback()
         end
     end
 
@@ -1214,6 +1414,7 @@ end
 -- Shows the full translation of `word`.
 -- `anchor_y` is the y of the tapped word (the panel goes to the opposite half).
 function PageTextInfo:showFullTranslation(word, anchor_y)
+    active_plugin = self
     local UIManager = require("ui/uimanager")
     local entries = collectTranslations(self, word:lower())
 
@@ -1229,6 +1430,154 @@ function PageTextInfo:showFullTranslation(word, anchor_y)
         anchor_y = anchor_y or 0,
     })
 end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+
+-- Default dictionary window.
+-- KOReader opens every dictionary lookup (tap on a word, selection > Dictionary,
+-- the dictionary search box...) through ReaderDictionary:showDict(), which builds
+-- the standard DictQuickLookup window. It is replaced here by the translation panel:
+-- one entry per dictionary result (swipe left / right to change dictionary).
+-- Everything before showDict is untouched, so the lookup itself, the lookup history
+-- and the "WordLookedUp" event (vocabulary builder) work as always.
+-- Not replaced: Wikipedia (it needs the standard window) and lookups without results
+-- (KOReader's own "no results" dialog).
+-- It is controlled by the setting "translation_panel_dictionary" (off until it is turned
+-- on). Menu entry: PageTextInfo:getDictionaryPanelMenuItem(), or the one in main.lua.
+local SETTING_PANEL_DICTIONARY = "translation_panel_dictionary"
+
+local function panelDictionaryEnabled()
+    return G_reader_settings:isTrue(SETTING_PANEL_DICTIONARY)
+end
+
+-- Menu entry (same style as the other checkable entries) that turns the setting on / off
+function PageTextInfo:getDictionaryPanelMenuItem()
+    local _ = require("gettext")
+    return {
+        text = _("Translation panel as dictionary"),
+        checked_func = panelDictionaryEnabled,
+        help_text = _([[Show dictionary lookups in the translation panel (one page per dictionary, swipe left / right to change) instead of KOReader's standard dictionary window.]]),
+        callback = function()
+            G_reader_settings:saveSetting(SETTING_PANEL_DICTIONARY, not panelDictionaryEnabled())
+            G_reader_settings:flush()
+            return true
+        end,
+    }
+end
+
+local function installDefaultDictionaryPanel()
+    local ok, ReaderDictionary = pcall(require, "apps/reader/modules/readerdictionary")
+    if not (ok and ReaderDictionary and ReaderDictionary.showDict) then
+        require("logger").warn("[PTI] readerdictionary not found: the panel is not the default dictionary")
+        return
+    end
+    -- The module can be loaded again: wrap showDict only once
+    if ReaderDictionary._pti_panel_installed then return end
+    ReaderDictionary._pti_panel_installed = true
+
+    local original_showDict = ReaderDictionary.showDict
+    local original_stardictLookup = ReaderDictionary.stardictLookup
+
+    -- The vocabulary builder shows its "Vocabulary exists" window when a looked up word is
+    -- already in the vocabulary (event "WordLookedUp", sent at the start of the lookup).
+    -- While the panel is the dictionary that window is not wanted: this answers the event
+    -- first and lets it through only for new words (they are added as always) or when the
+    -- panel is off.
+    local function findVocabularyBuilder(ui)
+        if not ui then return nil end
+        -- the plugin is registered under its folder name ("vocabbuilder"), not under the
+        -- name it has inside its main.lua
+        local vb = ui.vocabbuilder or ui.vocabulary_builder
+        if vb then return vb end
+        for _, module in ipairs(ui) do
+            if type(module) == "table" and module.onWordLookedUp
+                and tostring(module.name):lower():find("vocab", 1, true) then
+                return module
+            end
+        end
+        return nil
+    end
+
+    local function silenceVocabularyExists(ui)
+        local vb = findVocabularyBuilder(ui)
+        if not (vb and vb.onWordLookedUp) or vb._pti_silenced then return end
+        vb._pti_silenced = true
+        local original = vb.onWordLookedUp
+        vb.onWordLookedUp = function(this, word, title, is_manual)
+            if not is_manual and panelDictionaryEnabled() and wordInVocabulary(word) then
+                return true
+            end
+            return original(this, word, title, is_manual)
+        end
+    end
+
+    if original_stardictLookup then
+        function ReaderDictionary:stardictLookup(...)
+            silenceVocabularyExists(self.ui)
+            return original_stardictLookup(self, ...)
+        end
+    end
+
+    function ReaderDictionary:showDict(word, results, boxes, link, dict_close_callback)
+        if not panelDictionaryEnabled() or self.is_wiki or not (results and results[1]) then
+            return original_showDict(self, word, results, boxes, link, dict_close_callback)
+        end
+
+        local entries = {}
+        for _, result in ipairs(results) do
+            local def = result.definition
+            if type(def) == "string" and def ~= "" then
+                if result.is_html then
+                    -- Drawn as HTML by the panel; the plain text is only the fallback
+                    entries[#entries + 1] = {
+                        dict = result.dict, word = result.word,
+                        html = def, css = result.css, res_dir = result.dictionary_resource_directory,
+                        text = fullDefinitionText(def),
+                    }
+                else
+                    -- KOReader already turned it into plain text (without the tags)
+                    local body = prettifyDefinition(def)
+                    if body ~= "" then
+                        entries[#entries + 1] = { dict = result.dict, word = result.word, text = body }
+                    end
+                end
+            end
+        end
+        if #entries == 0 then
+            return original_showDict(self, word, results, boxes, link, dict_close_callback)
+        end
+
+        local UIManager = require("ui/uimanager")
+        self:dismissLookupInfo()   -- close the "Searching..." message
+
+        -- `boxes` is the list of boxes of the looked up word (or a single box)
+        local box = boxes and (boxes[1] or boxes)
+        local anchor_y = box and tonumber(box.y) or 0
+
+        local highlight = self.highlight
+        UIManager:show(getTranslationPanelClass():new{
+            word = word,
+            entries = entries,
+            index = 1,
+            anchor_y = anchor_y,
+            -- Same as DictQuickLookup:onClose: clear the selection a moment later,
+            -- then run KOReader's own close callback
+            on_close = function()
+                if highlight then
+                    local clear_id = highlight:getClearId()
+                    local delay = G_defaults and G_defaults:readSetting("DELAY_CLEAR_HIGHLIGHT_S") or 0.5
+                    UIManager:scheduleIn(delay, function() highlight:clear(clear_id) end)
+                end
+                if dict_close_callback then dict_close_callback() end
+                -- The vocabulary builder may have added the word when it was looked up:
+                -- repaint the page so it is underlined (and glossed) right away
+                UIManager:nextTick(refreshVocabularyHighlights)
+            end,
+        })
+    end
+end
+
+installDefaultDictionaryPanel()
 
 -- Tap handler: opens the full translation if the tap lands on an underlined word.
 -- Returns false otherwise, so the tap goes on to the rest of the reader (turning page...).
@@ -1270,6 +1619,7 @@ function PageTextInfo:registerWordTap()
 end
 
 function PageTextInfo:drawXPointerVocabulary(bb, x, y)
+    active_plugin = self
     local page_words = self.words[self.ui.view.state.page]
     if not page_words then return end
 

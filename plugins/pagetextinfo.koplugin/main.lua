@@ -1877,6 +1877,18 @@ This is to be active only if the option flash buttons and menu items or the opti
                     end,
                 },
                 {
+                    text = _("Translation panel as dictionary"),
+                    checked_func = function() return G_reader_settings:isTrue("translation_panel_dictionary") end,
+                    help_text = _([[Show dictionary lookups in the translation panel (swipe left / right to change dictionary) instead of KOReader's standard dictionary window.]]),
+                    callback = function()
+                        local show = not G_reader_settings:isTrue("translation_panel_dictionary")
+                        G_reader_settings:saveSetting("translation_panel_dictionary", show)
+                        G_reader_settings:flush()
+
+                        return true
+                    end,
+                },
+                {
                     text = _("Show page turn time"),
                     checked_func = function() return G_reader_settings:isTrue("show_page_turn_time") end,
                     help_text = _([[Show a notification with the time (in ms) it took to turn the page. The time is also always written to the log.]]),
