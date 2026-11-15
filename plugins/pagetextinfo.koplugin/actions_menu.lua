@@ -4,6 +4,30 @@
 
 return function(PageTextInfo)
 
+    function PageTextInfo:onToggleDebugVerbose()
+        local dbg = require("dbg")
+        local DataStorage = require("datastorage")
+        local UIManager = require("ui/uimanager")
+
+        -- Delete crash.log before switching the mode so the next run
+        -- starts with a clean log.
+        os.remove(DataStorage:getDataDir() .. "/crash.log")
+
+        if G_reader_settings:isTrue("debug_verbose") then
+            dbg:setVerbose(false)
+            dbg:turnOff()
+            G_reader_settings:makeFalse("debug_verbose")
+            G_reader_settings:makeFalse("debug")
+            PageTextInfo.restartKOReader()
+        else
+            dbg:turnOn()
+            dbg:setVerbose(true)
+            G_reader_settings:makeTrue("debug")
+            G_reader_settings:makeTrue("debug_verbose")
+            PageTextInfo.restartKOReader()
+        end
+    end
+
     -- Last book read (skips the one currently open)
     function PageTextInfo:getLastBook()
         local ok, ReadHistory = pcall(require, "readhistory")
@@ -58,13 +82,18 @@ return function(PageTextInfo)
         })
         table.insert(actions, {
             label = "Crash log overlay",
-            full_width = true,
             -- Tracks the overlay state locally
             active = function() return self.crash_log_overlay_on == true end,
             callback = function()
                 self.crash_log_overlay_on = not self.crash_log_overlay_on
                 self.ui:handleEvent(Event:new("CrashLogToggled"))
             end,
+        })
+        table.insert(actions, {
+            label = "Toggle verbose logging",
+            -- Reflects the saved setting (takes effect after a restart)
+            active = function() return G_reader_settings:isTrue("debug_verbose") end,
+            callback = function() self:onToggleDebugVerbose() end,
         })
 
         local last = self:getLastBook()
@@ -83,7 +112,7 @@ return function(PageTextInfo)
             })
         end
 
-        table.insert(actions, { header = "Restart or Exit", label = "Restart", callback = function() restartKOReader() end })
+        table.insert(actions, { header = "Restart or Exit", label = "Restart", callback = function() PageTextInfo.restartKOReader() end })
         table.insert(actions, { label = "Exit", callback = function() self.ui:handleEvent(Event:new("Exit")) end })
         return actions
     end

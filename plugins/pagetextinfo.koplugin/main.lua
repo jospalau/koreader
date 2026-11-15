@@ -3251,6 +3251,7 @@ local function restartKOReader(paths, widget)
         end
     end)
 end
+PageTextInfo.restartKOReader = restartKOReader
 
 -- Refresh file list, history and stats after books changed on disk
 -- (used when the user chooses not to restart)
@@ -4540,23 +4541,6 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
         end
     else
         return self:get_empty_folder_cover(max_w, max_h)
-    end
-end
-
-function PageTextInfo:onToggleDebugVerbose()
-    local dbg = require("dbg")
-    if G_reader_settings:isTrue("debug_verbose") then
-        dbg:setVerbose(false)
-        dbg:turnOff()
-        G_reader_settings:makeFalse("debug_verbose")
-        G_reader_settings:makeFalse("debug")
-        UIManager:askForRestart(_("Verbose logging is now Off. Restart to apply changes."))
-    else
-        dbg:turnOn()
-        dbg:setVerbose(true)
-        G_reader_settings:makeTrue("debug")
-        G_reader_settings:makeTrue("debug_verbose")
-        UIManager:askForRestart(_("Verbose logging is now On. Restart to apply changes."))
     end
 end
 
