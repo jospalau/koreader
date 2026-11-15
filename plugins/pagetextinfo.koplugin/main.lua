@@ -761,7 +761,7 @@ function PageTextInfo:onSwipe(_, ges)
             -- end
             -- UIManager:show(screen)
             -- return true
-            return UIManager:sendEvent(Event:new("ShowLongestSessions"))
+            return UIManager:sendEvent(Event:new("OpenPresetManager"))
         end
         if self.view.topbar.is_enabled == nil or self.view.topbar.is_enabled == false then
             self.view.topbar:quickToggleOnOff(true)
@@ -812,7 +812,8 @@ function PageTextInfo:onSwipe(_, ges)
             })]]
         -- end
         -- UIManager:broadcastEvent(Event:new("BookshelfOpenMicroModules"))
-        UIManager:broadcastEvent(Event:new("BookshelfOpenStartMenu"))
+        -- UIManager:broadcastEvent(Event:new("BookshelfOpenStartMenu"))
+        UIManager:broadcastEvent(Event:new("ShowLongestSessions"))
         return
     end
     return false
