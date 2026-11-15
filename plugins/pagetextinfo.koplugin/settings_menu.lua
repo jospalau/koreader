@@ -161,6 +161,14 @@ local function stepLineSpacing(ui, dir)
     local cur_em = math.floor(1.2 * cur / 100 / SPACING_STEP_EM + 0.5) * SPACING_STEP_EM
     local new_em = cur_em + dir * SPACING_STEP_EM
     local percent = math.floor(new_em * 100 / 1.2 + 0.5)
+    -- The presets are rounded percentages (1.3em = 109%, not 108.33%): when the new
+    -- value is a preset, use its exact percentage so the preset button lights up
+    for __, s in ipairs(LINE_SPACINGS) do
+        if math.abs(1.2 * s.percent / 100 - new_em) < 0.015 then
+            percent = s.percent
+            break
+        end
+    end
     percent = math.max(SPACING_MIN, math.min(percent, SPACING_MAX))
     dlog("stepLineSpacing: dir=", dir, "from", cur, "% to", percent, "%")
     setLineSpacing(ui, percent)
