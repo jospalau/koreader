@@ -26,7 +26,7 @@ local Widget = require("ui/widget/widget")
 local _ = require("gettext")
 
 local DEVICE_NAMES = {
-    [0]   = "Unknown device",
+    [0]   = _("Unknown device"),
     [1]   = "Kobo Libra 2",
     [2]   = "Kobo Sage",
     [3]   = "Kobo Clara 2E",
@@ -41,8 +41,8 @@ local DEVICE_NAMES = {
     [12]  = "Kobo Libra Colour",
     [97]  = "Xiaomi 14T Pro",
     [98]  = "Boox Go6",
-    [99]  = "Physical book",
-    [100] = "Emulator",
+    [99]  = _("Physical book"),
+    [100] = _("Emulator"),
 }
 
 local MONTH_NAMES = {
@@ -50,12 +50,12 @@ local MONTH_NAMES = {
     _("Jul"), _("Aug"), _("Sep"), _("Oct"), _("Nov"), _("Dec"),
 }
 
-local ShowLongestSessionsWindow = InputContainer:extend({
+local ShowLongestSessionsWindow = InputContainer:extend{
     modal = true,
     name = "show_longest_sessions_window",
-})
+}
 
--- ── Palette ────────────────────────────────────────────────────────────────────
+-- ── Palette ──────────────────────────────────────────────────────────────────
 -- A small set of grays so every view looks the same.
 
 local function gray(v) return Blitbuffer.Color8(v) end
@@ -63,12 +63,48 @@ local function gray(v) return Blitbuffer.Color8(v) end
 local COLOR_TEXT      = Blitbuffer.COLOR_BLACK
 local COLOR_MUTED     = gray(110)  -- secondary text
 local COLOR_ACCENT    = gray(30)   -- highlighted bars and dots
-local COLOR_BAR       = gray(150)  -- regular bars
-local COLOR_TRACK     = gray(225)  -- grid lines and separators
+local COLOR_BAR       = gray(150)  -- regular bars and card borders
+local COLOR_TRACK     = gray(225)  -- grid lines, separators and empty tracks
+local COLOR_SOFT      = gray(238)  -- card background and empty heatmap cells
 
--- ── Formatting helpers ─────────────────────────────────────────────────────────
+-- ── Fonts and spacing ────────────────────────────────────────────────────────
+-- One face and one scale of sizes (in points) for the whole window.
+
+local FONT_FACE = "cfont"
+
+local FONT_HERO        = 34  -- shelf total
+local FONT_BIG         = 24  -- book title, biggest value of a card
+local FONT_SUBTITLE    = 18  -- series, year and publisher line, shelf label
+local FONT_TITLE       = 20  -- window title
+local FONT_LABEL       = 16  -- year of the per-year rows
+local FONT_TEXT        = 15  -- rows, titles of the lists
+local FONT_SUMMARY     = 14  -- summary lines, captions of a card
+local FONT_CAPTION     = 13  -- counter, second line of a row, chart labels
+local FONT_SMALL       = 12  -- second line of the per-year rows, smallest value
+local FONT_TINY        = 11  -- heatmap labels
+local FONT_CAPTION_MIN = 9   -- smallest caption of a card
+
+local function getFace(size)
+    return Font:getFace(FONT_FACE, size)
+end
+
+-- Spacing scale (scaled to the screen)
+local SPACE = {
+    xs = Screen:scaleBySize(2),
+    s  = Screen:scaleBySize(4),
+    m  = Screen:scaleBySize(6),
+    l  = Screen:scaleBySize(8),
+    xl = Screen:scaleBySize(10),
+}
+
+-- ── Formatting helpers ───────────────────────────────────────────────────────
 
 local SECONDS_PER_DAY = 86400
+
+local DOT = "\xC2\xB7"
+local SUMMARY_SEPARATOR = "  " .. DOT .. "  "  -- between the parts of a summary line
+local TITLE_SEPARATOR = " " .. DOT .. " "       -- between a title and its year
+local DELTA_L = "\xCE\x94L"                      -- reading differential
 
 local function formatDateTime(ts)
     ts = math.floor(tonumber(ts) or 0)
@@ -106,6 +142,37 @@ local function secondsToDH(seconds)
     return string.format("%dh %02dm", h, math.floor((seconds % 3600) / 60))
 end
 
+-- "1h 8m" / "25m" (the cards)
+local function secondsToShortHM(seconds)
+    seconds = math.max(0, math.floor(tonumber(seconds) or 0))
+    local h, m = math.floor(seconds / 3600), math.floor((seconds % 3600) / 60)
+    if h > 0 then return string.format("%dh %dm", h, m) end
+    return string.format("%dm", m)
+end
+
+-- "2h" for a whole hour, otherwise as secondsToShortHM (reading stats module)
+local function secondsToStatsTime(seconds)
+    seconds = math.max(0, math.floor(tonumber(seconds) or 0))
+    local h, m = math.floor(seconds / 3600), math.floor((seconds % 3600) / 60)
+    if h > 0 and m == 0 then return string.format("%dh", h) end
+    return secondsToShortHM(seconds)
+end
+
+-- "12.5h" / "1.2d" / "40m" (reading time module)
+local function secondsToBreakdownTime(seconds)
+    seconds = tonumber(seconds) or 0
+    local h = seconds / 3600
+    if h >= 24 then return string.format("%.1fd", h / 24) end
+    if h >= 1 then return string.format("%.1fh", h) end
+    return string.format("%dm", math.floor(seconds / 60))
+end
+
+-- "2h/d" / "1.5h/d"
+local function formatPace(h)
+    if h == math.floor(h) then return string.format("%dh/d", h) end
+    return string.format("%.1fh/d", h)
+end
+
 -- Hours with one decimal below 10, rounded above (keeps chart labels short)
 local function formatHours(h)
     if h >= 10 then
@@ -125,14 +192,14 @@ local function niceCeil(v)
     return nice * exp
 end
 
--- ── Shared helpers ─────────────────────────────────────────────────────────────
+-- ── Shared helpers ───────────────────────────────────────────────────────────
 
 local ROW_HEIGHT_TALL = Screen:scaleBySize(66)   -- sessions (title + date + bar)
 local ROW_HEIGHT_NORMAL = Screen:scaleBySize(46) -- the rest of the views
 
 local function makeVerticalSpacing(w_padding_internal, h)
     h = h or 1
-    return VerticalSpan:new({ width = math.floor(w_padding_internal * h) })
+    return VerticalSpan:new{ width = math.floor(w_padding_internal * h) }
 end
 
 local function makeSeparator(w_width)
@@ -145,16 +212,36 @@ local function makeSeparator(w_width)
     }
 end
 
+-- The muted one-line summary under a chart, a list or a card.
+local function makeSummaryLine(w_width, text)
+    return TextWidget:new{
+        text = text,
+        face = getFace(FONT_SUMMARY),
+        fgcolor = COLOR_MUTED,
+        max_width = w_width,
+    }
+end
+
+local function getStatsDbPath()
+    return DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+end
+
+-- The reader instance, or nil outside the reader.
+local function getReaderUI()
+    local ok, ui = pcall(function() return require("apps/reader/readerui").instance end)
+    return ok and ui or nil
+end
+
 -- Runs a query on the statistics database and returns its rows, each one
 -- turned into an item by `map` (which gets the row table, reused between
--- rows, so it must copy what it needs; it also gets the row number). Returns nil and a message when the
--- database cannot be read; the connection is closed in every case.
+-- rows, so it must copy what it needs; it also gets the row number). Returns
+-- nil and a message when the database cannot be read; the connection is
+-- closed in every case.
 local function queryAll(sql_stmt, map)
     local SQ3 = require("lua-ljsqlite3/init")
-    local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
     local items = {}
     local ok, err = pcall(function()
-        local conn = SQ3.open(db_location)
+        local conn = SQ3.open(getStatsDbPath())
         local ok_query, err_query = pcall(function()
             local stmt = conn:prepare(sql_stmt)
             local row = {}
@@ -168,7 +255,7 @@ local function queryAll(sql_stmt, map)
     end)
     if not ok then
         logger.warn("longest sessions: query failed:", err)
-        return nil, "Could not read the statistics database"
+        return nil, _("Could not read the statistics database")
     end
     return items
 end
@@ -190,7 +277,7 @@ function SwipePassthroughScrollable:onScrollableSwipe(arg, ges)
     return ScrollableContainer.onScrollableSwipe(self, arg, ges)
 end
 
--- ── Small custom widgets ───────────────────────────────────────────────────────
+-- ── Small custom widgets ─────────────────────────────────────────────────────
 
 -- A horizontal pill, used as the progress bar under each row.
 local PillBar = Widget:extend{
@@ -212,6 +299,32 @@ function PillBar:paintTo(bb, x, y)
     bb:paintRoundedRect(x, y, self.width, self.height, self.color, math.floor(self.height / 2))
 end
 
+-- A rounded progress track: a light pill with a darker one filling `ratio` of it.
+local ProgressTrack = Widget:extend{
+    width = 0,
+    height = 0,
+    ratio = 0,
+    color = COLOR_BAR,
+}
+
+function ProgressTrack:init()
+    self.dimen = Geom:new{ w = self.width, h = self.height }
+end
+
+function ProgressTrack:getSize()
+    return self.dimen
+end
+
+function ProgressTrack:paintTo(bb, x, y)
+    self.dimen.x, self.dimen.y = x, y
+    local radius = math.floor(self.height / 2)
+    bb:paintRoundedRect(x, y, self.width, self.height, COLOR_TRACK, radius)
+    if self.ratio > 0 then
+        local w = math.max(self.height, math.floor(self.width * math.min(self.ratio, 1)))
+        bb:paintRoundedRect(x, y, w, self.height, self.color, radius)
+    end
+end
+
 -- The "page" dots at the bottom: the current view is a longer, darker pill.
 local PagerDots = Widget:extend{
     count = 1,
@@ -219,8 +332,8 @@ local PagerDots = Widget:extend{
 }
 
 function PagerDots:init()
-    self.dot = Screen:scaleBySize(6)
-    self.gap = Screen:scaleBySize(6)
+    self.dot = SPACE.m
+    self.gap = SPACE.m
     self.active_w = self.dot * 3
     self.dimen = Geom:new{
         w = (self.count - 1) * (self.dot + self.gap) + self.active_w,
@@ -251,14 +364,13 @@ local BarChart = Widget:extend{
     values = nil,      -- one number (hours) per slot
     labels = nil,      -- one label per slot
     current = nil,     -- index of the slot to highlight
-    font_face = "cfont",
-    font_size = 12,
+    font_size = FONT_CAPTION,
 }
 
 function BarChart:init()
     self.dimen = Geom:new{ w = self.width, h = self.height }
     self.count = #self.values
-    local face = Font:getFace(self.font_face, self.font_size)
+    local face = getFace(self.font_size)
 
     local max_value = 0
     for _i, v in ipairs(self.values) do
@@ -290,7 +402,7 @@ function BarChart:init()
         self.tick_widgets[i + 1] = tw
         self.axis_w = math.max(self.axis_w, tw:getSize().w)
     end
-    self.gap = Screen:scaleBySize(6)
+    self.gap = SPACE.m
     self.axis_w = self.axis_w + self.gap
     self.label_h = self.month_widgets[1]:getSize().h
 end
@@ -302,7 +414,7 @@ end
 function BarChart:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
 
-    local top_pad = self.label_h + Screen:scaleBySize(4)  -- room for the value labels
+    local top_pad = self.label_h + SPACE.s  -- room for the value labels
     local plot_top = y + top_pad
     local plot_h = self.height - top_pad - self.label_h - self.gap
     local plot_x = x + self.axis_w
@@ -337,7 +449,7 @@ function BarChart:paintTo(bb, x, y)
             end
             local vw = self.value_widgets[i]
             local vs = vw:getSize()
-            vw:paintTo(bb, cx - math.floor(vs.w / 2), by - vs.h - Screen:scaleBySize(2))
+            vw:paintTo(bb, cx - math.floor(vs.w / 2), by - vs.h - SPACE.xs)
         end
         local mw = self.month_widgets[i]
         local ms = mw:getSize()
@@ -351,19 +463,19 @@ function BarChart:free()
     end
 end
 
--- ── View builder ───────────────────────────────────────────────────────────────
+-- ── View builder ─────────────────────────────────────────────────────────────
 -- Most views are the same list: something on the left, the time on the right,
 -- and a thin bar under the label showing the share of the longest item.
 -- A view says its query (sql), how a row becomes an item (map), what to show
 -- on the left (left) and how tall a row is; this builds the rows from that.
 -- (A view with its own `build` function, like the heatmap, does not use it.)
 
-local function buildRows(view, w_width, w_font_face, w_font_size_small)
+local function buildRows(view, w_width)
     local scrollbar_width = ScrollableContainer:getScrollbarWidth()
-    local padding = Screen:scaleBySize(10) * 2
+    local padding = SPACE.xl * 2
     local time_widget_width = Screen:scaleBySize(90)
-    local bar_max_width = w_width - scrollbar_width - padding - time_widget_width - Screen:scaleBySize(10)
-    local bar_height = Screen:scaleBySize(4)
+    local bar_max_width = w_width - scrollbar_width - padding - time_widget_width - SPACE.xl
+    local bar_height = SPACE.s
     local bar_indent = view.bar_indent or 0  -- the bar lines up with the text, not with a rank number
 
     -- `sql` can be a function, for queries that depend on the current date
@@ -377,73 +489,66 @@ local function buildRows(view, w_width, w_font_face, w_font_size_small)
         longest = math.max(longest, item.duration or 0)
     end
 
-    local ctx = { font_face = w_font_face, font_size = w_font_size_small, max_width = bar_max_width }
+    local ctx = { max_width = bar_max_width }
     local row_height = view.row_height
-    local rows = VerticalGroup:new({})
+    local rows = VerticalGroup:new{}
 
     for i, item in ipairs(items) do
         local ratio = longest > 0 and (item.duration or 0) / longest or 0
-        local left = VerticalGroup:new({
+        local left = VerticalGroup:new{
             align = "left",
             view.left(item, ctx),
-            VerticalSpan:new({ width = Screen:scaleBySize(4) }),
-            HorizontalGroup:new({
-                HorizontalSpan:new({ width = bar_indent }),
-                PillBar:new({
+            VerticalSpan:new{ width = SPACE.s },
+            HorizontalGroup:new{
+                HorizontalSpan:new{ width = bar_indent },
+                PillBar:new{
                     width = math.max(bar_height, math.floor((bar_max_width - bar_indent) * ratio)),
                     height = bar_height,
                     color = (i == 1) and COLOR_ACCENT or COLOR_BAR,
-                }),
-            }),
-        })
+                },
+            },
+        }
 
-        local row_item = HorizontalGroup:new({
+        rows[#rows + 1] = HorizontalGroup:new{
             align = "center",
-            LeftContainer:new({
-                dimen = Geom:new({ w = bar_max_width, h = row_height }),
+            LeftContainer:new{
+                dimen = Geom:new{ w = bar_max_width, h = row_height },
                 left,
-            }),
-            HorizontalSpan:new({ width = Screen:scaleBySize(10) }),
-            RightContainer:new({
-                dimen = Geom:new({ w = time_widget_width, h = row_height }),
-                TextWidget:new({
+            },
+            HorizontalSpan:new{ width = SPACE.xl },
+            RightContainer:new{
+                dimen = Geom:new{ w = time_widget_width, h = row_height },
+                TextWidget:new{
                     text = secondsToHMS(item.duration),
-                    face = Font:getFace(w_font_face, w_font_size_small),
+                    face = getFace(FONT_TEXT),
                     bold = true,
-                }),
-            }),
-        })
-        table.insert(rows, row_item)
+                },
+            },
+        }
         if i < #items then
-            table.insert(rows, makeSeparator(w_width))
+            rows[#rows + 1] = makeSeparator(w_width)
         end
     end
 
     return rows, #items, row_height, items
 end
 
--- ── Chart views ────────────────────────────────────────────────────────────────
+-- ── Chart views ──────────────────────────────────────────────────────────────
 -- Shared body of the chart views: the chart and a one-line summary under it.
 
-local function chartBody(w_width, w_font_face, w_font_size_small, chart_args, summary_text)
+local function chartBody(w_width, chart_args, summary_text)
     chart_args.width = w_width
     chart_args.height = math.min(Screen:scaleBySize(250), math.floor(Screen:getHeight() * 0.4))
-    chart_args.font_face = w_font_face
-    chart_args.font_size = w_font_size_small - 2
+    chart_args.font_size = FONT_CAPTION
     return {
         BarChart:new(chart_args),
-        makeVerticalSpacing(Screen:scaleBySize(8)),
-        TextWidget:new{
-            text = summary_text,
-            face = Font:getFace(w_font_face, w_font_size_small - 1),
-            fgcolor = COLOR_MUTED,
-            max_width = w_width,
-        },
+        makeVerticalSpacing(SPACE.l),
+        makeSummaryLine(w_width, summary_text),
     }
 end
 
 -- Bar chart of the hours read in each month of the current year.
-local function buildMonthlyChartView(w_width, w_font_face, w_font_size_small)
+local function buildMonthlyChartView(w_width)
     local now = os.date("*t")
     local year_start = os.time({ year = now.year, month = 1, day = 1, hour = 0 })
 
@@ -457,7 +562,7 @@ local function buildMonthlyChartView(w_width, w_font_face, w_font_size_small)
         return { month = tonumber(row[1]), seconds = tonumber(row[2]) or 0 }
     end)
     if not items then return nil, err end
-    if #items == 0 then return nil, "No reading data found for this year" end
+    if #items == 0 then return nil, _("No reading data found for this year") end
 
     local values, total, best = {}, 0, 1
     for i = 1, 12 do values[i] = 0 end
@@ -471,44 +576,18 @@ local function buildMonthlyChartView(w_width, w_font_face, w_font_size_small)
         if values[i] > values[best] then best = i end
     end
 
-    local summary = string.format("%s %s  \xC2\xB7  %s %s (%s)",
+    local summary = string.format("%s %s" .. SUMMARY_SEPARATOR .. "%s %s (%s)",
         _("Total"), secondsToDH(total),
         _("Best:"), MONTH_NAMES[best], secondsToDH(values[best] * 3600))
-    return chartBody(w_width, w_font_face, w_font_size_small, {
+    return chartBody(w_width, {
         values = values,
         labels = MONTH_NAMES,
         current = now.month,
     }, summary)
 end
 
--- A rounded progress track: a light pill with a darker one filling `ratio` of it.
-local ProgressTrack = Widget:extend{
-    width = 0,
-    height = 0,
-    ratio = 0,
-    color = COLOR_BAR,
-}
+-- ── Per-year views ───────────────────────────────────────────────────────────
 
-function ProgressTrack:init()
-    self.dimen = Geom:new{ w = self.width, h = self.height }
-end
-
-function ProgressTrack:getSize()
-    return self.dimen
-end
-
-function ProgressTrack:paintTo(bb, x, y)
-    self.dimen.x, self.dimen.y = x, y
-    local radius = math.floor(self.height / 2)
-    bb:paintRoundedRect(x, y, self.width, self.height, COLOR_TRACK, radius)
-    if self.ratio > 0 then
-        local w = math.max(self.height, math.floor(self.width * math.min(self.ratio, 1)))
-        bb:paintRoundedRect(x, y, w, self.height, self.color, radius)
-    end
-end
-
--- Days read per year, one row per year (newest first): the year, a track
--- filled with the share of the year's days that had reading, and the count.
 local MAX_YEARS = 8
 -- A day counts as read only with at least this much reading in total, so
 -- opening a book for a few seconds does not add a day.
@@ -521,62 +600,57 @@ end
 -- Shared layout of the per-year views, one row per year (newest first):
 -- the year, a track filled with `ratio`, and two lines on the right
 -- (`main` in bold, `sub` small). entries = { { year, ratio, main, sub }, ... }
-local function buildYearRows(w_width, w_font_face, w_font_size_small, entries, summary_text)
+local function buildYearRows(w_width, entries, summary_text)
     local now = os.date("*t")
-    local gap = Screen:scaleBySize(10)
+    local gap = SPACE.xl
     local row_h = Screen:scaleBySize(48)
     local year_w = Screen:scaleBySize(54)
     local count_w = Screen:scaleBySize(84)
     local track_w = w_width - year_w - count_w - 2 * gap
-    local face = Font:getFace(w_font_face, w_font_size_small + 1)
-    local face_small = Font:getFace(w_font_face, w_font_size_small - 3)
+    local face = getFace(FONT_LABEL)
+    local face_small = getFace(FONT_SMALL)
 
-    local rows = VerticalGroup:new({})
+    local rows = VerticalGroup:new{}
     for _i, e in ipairs(entries) do
         local is_current = (e.year == now.year)
-        rows[#rows + 1] = HorizontalGroup:new({
+        rows[#rows + 1] = HorizontalGroup:new{
             align = "center",
-            LeftContainer:new({
-                dimen = Geom:new({ w = year_w, h = row_h }),
-                TextWidget:new({
+            LeftContainer:new{
+                dimen = Geom:new{ w = year_w, h = row_h },
+                TextWidget:new{
                     text = tostring(e.year),
                     face = face,
                     bold = true,
                     fgcolor = is_current and COLOR_TEXT or COLOR_MUTED,
-                }),
-            }),
-            ProgressTrack:new({
+                },
+            },
+            ProgressTrack:new{
                 width = track_w,
                 height = Screen:scaleBySize(14),
                 ratio = e.ratio,
                 color = is_current and COLOR_ACCENT or COLOR_BAR,
-            }),
-            HorizontalSpan:new({ width = gap }),
-            RightContainer:new({
-                dimen = Geom:new({ w = count_w, h = row_h }),
-                VerticalGroup:new({
+            },
+            HorizontalSpan:new{ width = gap },
+            RightContainer:new{
+                dimen = Geom:new{ w = count_w, h = row_h },
+                VerticalGroup:new{
                     align = "right",
-                    TextWidget:new({ text = e.main, face = face, bold = true }),
-                    TextWidget:new({ text = e.sub, face = face_small, fgcolor = COLOR_MUTED }),
-                }),
-            }),
-        })
+                    TextWidget:new{ text = e.main, face = face, bold = true },
+                    TextWidget:new{ text = e.sub, face = face_small, fgcolor = COLOR_MUTED },
+                },
+            },
+        }
     end
 
     return {
         rows,
-        makeVerticalSpacing(Screen:scaleBySize(8)),
-        TextWidget:new{
-            text = summary_text,
-            face = Font:getFace(w_font_face, w_font_size_small - 1),
-            fgcolor = COLOR_MUTED,
-            max_width = w_width,
-        },
+        makeVerticalSpacing(SPACE.l),
+        makeSummaryLine(w_width, summary_text),
     }
 end
 
 -- Days per year: the share of the year's days that had reading.
-local function buildDaysPerYearView(w_width, w_font_face, w_font_size_small)
+local function buildDaysPerYearView(w_width)
     -- number of different days with enough reading in each year (local time)
     local items, err = queryAll(string.format([[
         SELECT year, COUNT(*) FROM (
@@ -594,7 +668,7 @@ local function buildDaysPerYearView(w_width, w_font_face, w_font_size_small)
         return { year = tonumber(row[1]), days = tonumber(row[2]) or 0 }
     end)
     if not items then return nil, err end
-    if #items == 0 then return nil, "No reading data found" end
+    if #items == 0 then return nil, _("No reading data found") end
 
     local entries, total, best = {}, 0, items[1]
     for _i, item in ipairs(items) do
@@ -608,14 +682,14 @@ local function buildDaysPerYearView(w_width, w_font_face, w_font_size_small)
             sub = string.format("%d%%", math.floor(ratio * 100 + 0.5)),
         }
     end
-    local summary = string.format("%s %d %s  \xC2\xB7  %s %d (%d)",
+    local summary = string.format("%s %d %s" .. SUMMARY_SEPARATOR .. "%s %d (%d)",
         _("Total"), total, _("days"), _("Best:"), best.year, best.days)
-    return buildYearRows(w_width, w_font_face, w_font_size_small, entries, summary)
+    return buildYearRows(w_width, entries, summary)
 end
 
 -- Days read per year: all the reading time of each year added up and shown
 -- in days (24 hours each). The track is relative to the best year.
-local function buildDaysReadPerYearView(w_width, w_font_face, w_font_size_small)
+local function buildDaysReadPerYearView(w_width)
     local items, err = queryAll(string.format([[
         SELECT CAST(strftime('%%Y', start_time, 'unixepoch', 'localtime') AS INTEGER) AS year,
                SUM(duration)
@@ -628,7 +702,7 @@ local function buildDaysReadPerYearView(w_width, w_font_face, w_font_size_small)
         return { year = tonumber(row[1]), seconds = tonumber(row[2]) or 0 }
     end)
     if not items then return nil, err end
-    if #items == 0 then return nil, "No reading data found" end
+    if #items == 0 then return nil, _("No reading data found") end
 
     local total, best = 0, items[1]
     for _i, item in ipairs(items) do
@@ -644,20 +718,23 @@ local function buildDaysReadPerYearView(w_width, w_font_face, w_font_size_small)
             sub = string.format("%.1f %s", item.seconds / SECONDS_PER_DAY, _("days")),
         }
     end
-    local summary = string.format("%s %s  \xC2\xB7  %s %d (%s)",
+    local summary = string.format("%s %s" .. SUMMARY_SEPARATOR .. "%s %d (%s)",
         _("Total"), secondsToDH(total), _("Best:"), best.year, secondsToDH(best.seconds))
-    return buildYearRows(w_width, w_font_face, w_font_size_small, entries, summary)
+    return buildYearRows(w_width, entries, summary)
 end
 
--- ── Reading heatmap ────────────────────────────────────────────────────────────
+-- ── Reading heatmap ──────────────────────────────────────────────────────────
 -- Calendar heatmap drawn with the same look as the charts: rounded cells,
 -- the same grays, month names on top and a light legend. One column per week,
--- one row per weekday. It shows the whole current year, from January 1st to today.
+-- one row per weekday. The view stacks one grid per year, the last
+-- HEATMAP_YEARS years: the current one from January 1st to today, the others
+-- complete. All of them share the same color scale and one legend.
 
 local HEATMAP_WEEK_STARTS_ON_SUNDAY = false
+local HEATMAP_YEARS = 3  -- years shown, newest first
 
 -- No reading, then 0-25%, 25-50%, 50-75% and 75-100% of the busiest day
-local HEAT_COLORS = { gray(238), gray(200), gray(155), gray(100), COLOR_ACCENT }
+local HEAT_COLORS = { COLOR_SOFT, gray(200), gray(155), gray(100), COLOR_ACCENT }
 local DAY_LETTERS = { _("S"), _("M"), _("T"), _("W"), _("T"), _("F"), _("S") } -- Sunday first
 
 local function heatLevel(seconds, max_seconds)
@@ -666,17 +743,33 @@ local function heatLevel(seconds, max_seconds)
     return (r <= 0.25 and 2) or (r <= 0.5 and 3) or (r <= 0.75 and 4) or 5
 end
 
+-- Legend aligned to `right`: Less [] [] [] [] [] More
+local function paintHeatLegend(bb, right, y, less_widget, more_widget, text_h)
+    local sq = math.floor(text_h * 0.8)
+    local pad = SPACE.m
+    local legend_w = less_widget:getSize().w + pad + 5 * (sq + pad) + more_widget:getSize().w
+    local lx = right - legend_w
+    less_widget:paintTo(bb, lx, y)
+    lx = lx + less_widget:getSize().w + pad
+    for i = 1, 5 do
+        bb:paintRoundedRect(lx, y + math.floor((text_h - sq) / 2), sq, sq, HEAT_COLORS[i], math.floor(sq / 4))
+        lx = lx + sq + pad
+    end
+    more_widget:paintTo(bb, lx, y)
+end
+
 local HeatmapGrid = Widget:extend{
     width = 0,
     daily = nil,       -- seconds read per day, keyed by "YYYY-MM-DD"
     start_t = 0,       -- first day shown (noon timestamp)
     end_t = 0,         -- last day shown (noon timestamp)
-    font_face = "cfont",
-    font_size = 12,
+    max_seconds = nil, -- busiest day of the color scale (nil: this grid's own)
+    show_legend = true,
+    font_size = FONT_TINY,
 }
 
 function HeatmapGrid:init()
-    local face = Font:getFace(self.font_face, self.font_size)
+    local face = getFace(self.font_size)
     local week_start = HEATMAP_WEEK_STARTS_ON_SUNDAY and 0 or 1
     self.week_start = week_start
 
@@ -688,7 +781,8 @@ function HeatmapGrid:init()
 
     self.cells, self.month_widgets, self.day_widgets = {}, {}, {}
     self.total, self.active = 0, 0
-    local max_seconds, index = 0, 0
+    local max_seconds, index = self.max_seconds or 0, 0
+    local shared_scale = self.max_seconds ~= nil
     while ts <= self.end_t do
         if ts >= self.start_t then
             local d = os.date("*t", ts)
@@ -698,7 +792,7 @@ function HeatmapGrid:init()
             if seconds > 0 then
                 self.total = self.total + seconds
                 self.active = self.active + 1
-                max_seconds = math.max(max_seconds, seconds)
+                if not shared_scale then max_seconds = math.max(max_seconds, seconds) end
             end
             -- a month name over the column where the month starts
             if d.day == 1 then
@@ -732,11 +826,11 @@ function HeatmapGrid:init()
     -- thinner gaps when the cells are small (a whole year is ~53 columns)
     self.gap = self.cell < 12 and 1 or math.max(2, math.floor(self.cell * 0.14))
     self.text_h = self.less_widget:getSize().h
-    self.head_h = self.text_h + Screen:scaleBySize(4)
-    self.legend_gap = Screen:scaleBySize(10)
+    self.head_h = self.text_h + SPACE.s
+    self.legend_gap = SPACE.xl
     self.dimen = Geom:new{
         w = self.width,
-        h = self.head_h + 7 * self.cell + self.legend_gap + self.text_h,
+        h = self.head_h + 7 * self.cell + (self.show_legend and (self.legend_gap + self.text_h) or 0),
     }
 end
 
@@ -762,19 +856,9 @@ function HeatmapGrid:paintTo(bb, x, y)
             size, size, HEAT_COLORS[cell.level], radius)
     end
 
-    -- Legend, aligned to the right: Less [] [] [] [] [] More
-    local sq = math.floor(self.text_h * 0.8)
-    local pad = Screen:scaleBySize(6)
-    local legend_w = self.less_widget:getSize().w + pad + 5 * (sq + pad) + self.more_widget:getSize().w
-    local lx = x + self.width - legend_w
-    local ly = grid_y + 7 * self.cell + self.legend_gap
-    self.less_widget:paintTo(bb, lx, ly)
-    lx = lx + self.less_widget:getSize().w + pad
-    for i = 1, 5 do
-        bb:paintRoundedRect(lx, ly + math.floor((self.text_h - sq) / 2), sq, sq, HEAT_COLORS[i], math.floor(sq / 4))
-        lx = lx + sq + pad
-    end
-    self.more_widget:paintTo(bb, lx, ly)
+    if not self.show_legend then return end
+    paintHeatLegend(bb, x + self.width, grid_y + 7 * self.cell + self.legend_gap,
+        self.less_widget, self.more_widget, self.text_h)
 end
 
 function HeatmapGrid:free()
@@ -784,55 +868,248 @@ function HeatmapGrid:free()
     self.more_widget:free()
 end
 
--- The widgets of the heatmap view (the window puts them under its title).
-local function buildHeatmapView(w_width, w_font_face, w_font_size_small)
-    local now = os.date("*t")
-    -- the period starts on January 1st of this year
-    local start_t = os.time({ year = now.year, month = 1, day = 1, hour = 12 })
-    local end_t = os.time({ year = now.year, month = now.month, day = now.day, hour = 12 })
-
-    -- seconds read on each day of the period (sessions, by local date)
+-- Seconds read on each day since `from_t` (local dates), keyed by "YYYY-MM-DD".
+-- Returns that map and the busiest day, or nil and a message.
+local function queryDailySeconds(from_t)
     local items, err = queryAll(string.format([[
         SELECT strftime('%%Y-%%m-%%d', start_time, 'unixepoch', 'localtime') AS day, SUM(duration)
         FROM wpm_stat_data
         WHERE start_time >= %d
         GROUP BY day
-    ]], start_t - 2 * SECONDS_PER_DAY), function(row)
+    ]], from_t - 2 * SECONDS_PER_DAY), function(row)
         return { day = row[1], seconds = tonumber(row[2]) or 0 }
     end)
     if not items then return nil, err end
-    if #items == 0 then return nil, "No reading data found" end
+    if #items == 0 then return nil, _("No reading data found") end
 
-    local daily_map = {}
-    for _i, item in ipairs(items) do daily_map[item.day] = item.seconds end
+    local daily_map, max_seconds = {}, 0
+    for _i, item in ipairs(items) do
+        daily_map[item.day] = item.seconds
+        max_seconds = math.max(max_seconds, item.seconds)
+    end
+    return daily_map, max_seconds
+end
+
+-- One year of the heatmap: its title row (the year on the left, its time and
+-- active days on the right) and the grid.
+local function buildHeatmapYear(w_width, year, daily_map, max_seconds, show_legend)
+    local now = os.date("*t")
+    local start_t = os.time({ year = year, month = 1, day = 1, hour = 12 })
+    local end_t = (year == now.year)
+        and os.time({ year = now.year, month = now.month, day = now.day, hour = 12 })
+        or os.time({ year = year, month = 12, day = 31, hour = 12 })
 
     local grid = HeatmapGrid:new{
         width = w_width,
         daily = daily_map,
         start_t = start_t,
         end_t = end_t,
-        font_face = w_font_face,
-        font_size = w_font_size_small - 4,  -- small text: the cells are tight
+        max_seconds = max_seconds,
+        show_legend = show_legend,
     }
 
-    return {
-        grid,
-        makeVerticalSpacing(Screen:scaleBySize(8)),
-        TextWidget:new{
-            text = string.format("%s %s  \xC2\xB7  %d %s", _("Total"), secondsToHM(grid.total), grid.active, _("active days")),
-            face = Font:getFace(w_font_face, w_font_size_small - 1),
-            fgcolor = COLOR_MUTED,
-            max_width = w_width,
+    local year_widget = TextWidget:new{
+        text = tostring(year),
+        face = getFace(FONT_TEXT),
+        bold = true,
+        fgcolor = (year == now.year) and COLOR_TEXT or COLOR_MUTED,
+    }
+    local total_widget = TextWidget:new{
+        text = string.format("%s" .. SUMMARY_SEPARATOR .. "%d %s",
+            secondsToHM(grid.total), grid.active, _("active days")),
+        face = getFace(FONT_CAPTION),
+        fgcolor = COLOR_MUTED,
+    }
+    local head_h = math.max(year_widget:getSize().h, total_widget:getSize().h)
+    local head = HorizontalGroup:new{
+        align = "center",
+        LeftContainer:new{
+            dimen = Geom:new{ w = w_width - total_widget:getSize().w, h = head_h },
+            year_widget,
         },
+        total_widget,
+    }
+    return grid, head
+end
+
+-- The widgets of the heatmap view (the window puts them under its title).
+local function buildHeatmapView(w_width)
+    local now = os.date("*t")
+    local first_year = now.year - HEATMAP_YEARS + 1
+    -- the period starts on January 1st of the first year shown
+    local start_t = os.time({ year = first_year, month = 1, day = 1, hour = 12 })
+
+    local daily_map, max_seconds = queryDailySeconds(start_t)
+    if not daily_map then return nil, max_seconds end
+
+    -- newest year first; only the last grid carries the legend
+    local widgets, total, active = {}, 0, 0
+    for year = now.year, first_year, -1 do
+        local grid, head = buildHeatmapYear(w_width, year, daily_map, max_seconds, year == first_year)
+        total, active = total + grid.total, active + grid.active
+        widgets[#widgets + 1] = head
+        widgets[#widgets + 1] = grid
+        if year > first_year then
+            widgets[#widgets + 1] = makeVerticalSpacing(SPACE.l)
+        end
+    end
+    widgets[#widgets + 1] = makeVerticalSpacing(SPACE.l)
+    widgets[#widgets + 1] = makeSummaryLine(w_width, string.format("%s %s" .. SUMMARY_SEPARATOR .. "%d %s",
+        _("Total"), secondsToHM(total), active, _("active days")))
+    return widgets
+end
+
+-- Calendar of the current month: one rounded cell per day with its number,
+-- colored like the heatmap (days still to come are only an outline, today has
+-- a dark border). Weekday letters on top and the same legend under it.
+local MonthGrid = Widget:extend{
+    width = 0,
+    daily = nil,       -- seconds read per day, keyed by "YYYY-MM-DD"
+    year = 0,
+    month = 0,
+    today = 0,         -- day of the month that is today
+    font_size = FONT_TEXT,
+}
+
+function MonthGrid:init()
+    local week_start = HEATMAP_WEEK_STARTS_ON_SUNDAY and 0 or 1
+    local days = os.date("*t", os.time({ year = self.year, month = self.month + 1, day = 0, hour = 12 })).day
+    local first = os.date("*t", os.time({ year = self.year, month = self.month, day = 1, hour = 12 }))
+    local offset = (first.wday - 1 - week_start) % 7
+    self.rows = math.ceil((offset + days) / 7)
+
+    self.cells = {}
+    self.total, self.active = 0, 0
+    local max_seconds = 0
+    for day = 1, days do
+        local seconds = self.daily[string.format("%04d-%02d-%02d", self.year, self.month, day)] or 0
+        local index = offset + day - 1
+        self.cells[#self.cells + 1] = {
+            day = day, col = index % 7, row = math.floor(index / 7),
+            seconds = seconds, future = day > self.today,
+        }
+        if seconds > 0 then
+            self.total = self.total + seconds
+            self.active = self.active + 1
+            max_seconds = math.max(max_seconds, seconds)
+        end
+    end
+    for _i, cell in ipairs(self.cells) do
+        cell.level = heatLevel(cell.seconds, max_seconds)
+        -- dark cells get white numbers, the ones to come a light number
+        local color = (cell.level >= 4 and Blitbuffer.COLOR_WHITE)
+            or (cell.future and COLOR_BAR)
+            or (cell.level == 1 and COLOR_MUTED)
+            or COLOR_TEXT
+        cell.widget = TextWidget:new{
+            text = tostring(cell.day),
+            face = getFace(self.font_size),
+            bold = (cell.day == self.today),
+            fgcolor = color,
+        }
+    end
+
+    local face = getFace(FONT_CAPTION)
+    self.letter_widgets = {}
+    for c = 0, 6 do
+        self.letter_widgets[c + 1] = TextWidget:new{
+            text = DAY_LETTERS[(week_start + c) % 7 + 1], face = face, fgcolor = COLOR_MUTED,
+        }
+    end
+    local legend_face = getFace(FONT_TINY)
+    self.less_widget = TextWidget:new{ text = _("Less"), face = legend_face, fgcolor = COLOR_MUTED }
+    self.more_widget = TextWidget:new{ text = _("More"), face = legend_face, fgcolor = COLOR_MUTED }
+
+    self.cell = math.min(math.floor(self.width / 7), Screen:scaleBySize(56))
+    self.gap = math.max(2, math.floor(self.cell * 0.1))
+    self.letter_h = self.letter_widgets[1]:getSize().h
+    self.head_h = self.letter_h + SPACE.l
+    self.legend_gap = SPACE.xl
+    self.legend_h = self.less_widget:getSize().h
+    self.dimen = Geom:new{
+        w = self.width,
+        h = self.head_h + self.rows * self.cell + self.legend_gap + self.legend_h,
     }
 end
 
--- ── Reading summary (first screen) ─────────────────────────────────────────────
--- The start-menu modules as stacked cards (shelf size, reading time with differential, book
--- info with session time and reading speed), like the start menu.
--- The reading figures come from one read-only connection to the statistics database.
--- No open-session time is added: showing this window already saved the
--- session in progress (see onShowLongestSessions), so it is in the database.
+function MonthGrid:getSize()
+    return self.dimen
+end
+
+function MonthGrid:paintTo(bb, x, y)
+    self.dimen.x, self.dimen.y = x, y
+    local grid_x = x + math.floor((self.width - 7 * self.cell) / 2)
+    local grid_y = y + self.head_h
+    local size = self.cell - self.gap
+    local radius = math.floor(size / 4)
+    local border = Screen:scaleBySize(2)
+
+    for c, w in ipairs(self.letter_widgets) do
+        local ws = w:getSize()
+        w:paintTo(bb, grid_x + (c - 1) * self.cell + math.floor((size - ws.w) / 2), y)
+    end
+    for _i, cell in ipairs(self.cells) do
+        local cx = grid_x + cell.col * self.cell
+        local cy = grid_y + cell.row * self.cell
+        if cell.future then
+            -- only an outline
+            bb:paintRoundedRect(cx, cy, size, size, COLOR_TRACK, radius)
+            bb:paintRoundedRect(cx + Size.border.thin, cy + Size.border.thin,
+                size - 2 * Size.border.thin, size - 2 * Size.border.thin,
+                Blitbuffer.COLOR_WHITE, math.max(0, radius - Size.border.thin))
+        elseif cell.day == self.today then
+            -- dark border around the color of the day
+            bb:paintRoundedRect(cx, cy, size, size, COLOR_ACCENT, radius)
+            bb:paintRoundedRect(cx + border, cy + border, size - 2 * border, size - 2 * border,
+                HEAT_COLORS[cell.level], math.max(0, radius - border))
+        else
+            bb:paintRoundedRect(cx, cy, size, size, HEAT_COLORS[cell.level], radius)
+        end
+        local ws = cell.widget:getSize()
+        cell.widget:paintTo(bb, cx + math.floor((size - ws.w) / 2), cy + math.floor((size - ws.h) / 2))
+    end
+
+    paintHeatLegend(bb, x + self.width, grid_y + self.rows * self.cell + self.legend_gap,
+        self.less_widget, self.more_widget, self.legend_h)
+end
+
+function MonthGrid:free()
+    for _i, cell in ipairs(self.cells) do cell.widget:free() end
+    for _i, w in ipairs(self.letter_widgets) do w:free() end
+    self.less_widget:free()
+    self.more_widget:free()
+end
+
+-- The widgets of the month view (the window puts them under its title).
+local function buildMonthView(w_width)
+    local now = os.date("*t")
+    local start_t = os.time({ year = now.year, month = now.month, day = 1, hour = 12 })
+    local daily_map, err = queryDailySeconds(start_t)
+    if not daily_map then return nil, err end
+
+    local grid = MonthGrid:new{
+        width = w_width,
+        daily = daily_map,
+        year = now.year,
+        month = now.month,
+        today = now.day,
+    }
+    return {
+        grid,
+        makeVerticalSpacing(SPACE.l),
+        makeSummaryLine(w_width, string.format("%s %s" .. SUMMARY_SEPARATOR .. "%d %s" .. SUMMARY_SEPARATOR .. "%s %s",
+            _("Total"), secondsToHM(grid.total), grid.active, _("active days"),
+            secondsToShortHM(grid.total / now.day), _("a day"))),
+    }
+end
+
+-- ── Reading summary (first screen) ───────────────────────────────────────────
+-- The start-menu modules as stacked cards (shelf size, reading time with
+-- differential, book info with session time and reading speed), like the
+-- start menu. The reading figures come from one read-only connection to the
+-- statistics database. No open-session time is added: showing this window
+-- already saved the session in progress (see onShowLongestSessions), so it is
+-- in the database.
 
 local DELTA_PACE_KEY = "micromodule_reading_delta_pace"  -- same key as the module
 local DEFAULT_PACE = 2                                    -- hours per day
@@ -855,40 +1132,10 @@ local function readPace()
     return DEFAULT_PACE
 end
 
-local function fmtPace(h)
-    if h == math.floor(h) then return string.format("%dh/d", h) end
-    return string.format("%.1fh/d", h)
-end
-
--- "1h 8m" / "25m"
-local function fmtHM(secs)
-    secs = math.max(0, math.floor(tonumber(secs) or 0))
-    local h, m = math.floor(secs / 3600), math.floor((secs % 3600) / 60)
-    if h > 0 then return string.format("%dh %dm", h, m) end
-    return string.format("%dm", m)
-end
-
--- "2h" for a whole hour, otherwise as fmtHM (reading stats module)
-local function fmtStats(secs)
-    secs = math.max(0, math.floor(tonumber(secs) or 0))
-    local h, m = math.floor(secs / 3600), math.floor((secs % 3600) / 60)
-    if h > 0 and m == 0 then return string.format("%dh", h) end
-    return fmtHM(secs)
-end
-
--- "12.5h" / "1.2d" / "40m" (reading time module)
-local function fmtBreakdown(secs)
-    secs = tonumber(secs) or 0
-    local h = secs / 3600
-    if h >= 24 then return string.format("%.1fd", h / 24) end
-    if h >= 1 then return string.format("%.1fh", h) end
-    return string.format("%dm", math.floor(secs / 60))
-end
-
 -- Reads every figure of the summary. Returns nil when the database cannot be read.
 local function loadSummaryData()
     local lfs = require("libs/libkoreader-lfs")
-    local path = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    local path = getStatsDbPath()
     if lfs.attributes(path, "mode") ~= "file" then return nil end
 
     local now = os.time()
@@ -957,35 +1204,35 @@ end
 
 -- Time of the current session and on the open book (nil outside the reader)
 local function getSessionInfo()
-    local ok, ui = pcall(function() return require("apps/reader/readerui").instance end)
-    if not ok or not ui then return nil end
-    local topbar = ui.view and ui.view.topbar
+    local ui = getReaderUI()
+    local topbar = ui and ui.view and ui.view.topbar
     if not topbar or not topbar.start_session_time then return nil end
     local session = math.max(0, os.time() - topbar.start_session_time)
     return session, session + (topbar.initial_total_time_book or 0)
 end
 
--- ── Cards ──
-local CARD_BG = gray(238)
-local CARD_PAD = Screen:scaleBySize(10)
+-- ── Cards ────────────────────────────────────────────────────────────────────
+
+local CARD_PAD = SPACE.xl
+local CARD_RADIUS = Screen:scaleBySize(10)
 
 local function cardInnerWidth(card_w)
     return card_w - 2 * (CARD_PAD + Size.border.thin)
 end
 
 local function makeCard(card_w, content)
-    return FrameContainer:new({
-        background = CARD_BG,
+    return FrameContainer:new{
+        background = COLOR_SOFT,
         color = COLOR_BAR,
         bordersize = Size.border.thin,
-        radius = Screen:scaleBySize(10),
+        radius = CARD_RADIUS,
         padding = CARD_PAD,
         margin = 0,
-        CenterContainer:new({
-            dimen = Geom:new({ w = cardInnerWidth(card_w), h = content:getSize().h }),
+        CenterContainer:new{
+            dimen = Geom:new{ w = cardInnerWidth(card_w), h = content:getSize().h },
             content,
-        }),
-    })
+        },
+    }
 end
 
 -- The biggest size (down to min_size) at which every text fits in max_w.
@@ -994,7 +1241,7 @@ local function fitSize(texts, max_size, min_size, max_w, bold)
     for _i, text in ipairs(texts) do
         local size = max_size
         while size > min_size do
-            local tw = TextWidget:new({ text = text, face = Font:getFace("cfont", size), bold = bold })
+            local tw = TextWidget:new{ text = text, face = getFace(size), bold = bold }
             local w = tw:getSize().w
             tw:free()
             if w <= max_w then break end
@@ -1008,24 +1255,24 @@ end
 -- Equal columns, each a value and a caption: cols = { { value, caption }, ... }
 local function buildColumns(inner_w, cols, caption_on_top)
     local col_w = math.floor(inner_w / #cols)
-    local avail = col_w - Screen:scaleBySize(6)
+    local avail = col_w - SPACE.m
     local values, captions = {}, {}
     for i, c in ipairs(cols) do values[i], captions[i] = c[1], c[2] end
-    local vsize = fitSize(values, 24, 12, avail, true)
-    local csize = fitSize(captions, 14, 9, avail, false)
+    local value_size = fitSize(values, FONT_BIG, FONT_SMALL, avail, true)
+    local caption_size = fitSize(captions, FONT_SUMMARY, FONT_CAPTION_MIN, avail, false)
 
     local groups, max_h = {}, 0
     for i, c in ipairs(cols) do
-        local value = TextWidget:new({
-            text = c[1], face = Font:getFace("cfont", vsize), bold = true,
+        local value = TextWidget:new{
+            text = c[1], face = getFace(value_size), bold = true,
             fgcolor = COLOR_TEXT, max_width = avail,
-        })
-        local caption = TextWidget:new({
-            text = c[2], face = Font:getFace("cfont", csize),
+        }
+        local caption = TextWidget:new{
+            text = c[2], face = getFace(caption_size),
             fgcolor = COLOR_MUTED, max_width = avail,
-        })
-        local gap = VerticalSpan:new({ width = Screen:scaleBySize(2) })
-        local vg = VerticalGroup:new({ align = "center" })
+        }
+        local gap = VerticalSpan:new{ width = SPACE.xs }
+        local vg = VerticalGroup:new{ align = "center" }
         if caption_on_top then
             vg[1], vg[2], vg[3] = caption, gap, value
         else
@@ -1034,9 +1281,9 @@ local function buildColumns(inner_w, cols, caption_on_top)
         groups[i] = vg
         max_h = math.max(max_h, vg:getSize().h)
     end
-    local row = HorizontalGroup:new({ align = "top" })
+    local row = HorizontalGroup:new{ align = "top" }
     for i, vg in ipairs(groups) do
-        row[i] = CenterContainer:new({ dimen = Geom:new({ w = col_w, h = max_h }), vg })
+        row[i] = CenterContainer:new{ dimen = Geom:new{ w = col_w, h = max_h }, vg }
     end
     return row
 end
@@ -1046,13 +1293,13 @@ local function buildBreakdownCard(card_w, data)
     local pace = readPace()
     local delta = math.ceil((data.year / 3600) - (data.yday * pace))
     return makeCard(card_w, buildColumns(cardInnerWidth(card_w), {
-        { (delta > 0 and "+" or "") .. tostring(delta), "\xCE\x94L " .. fmtPace(pace) },
-        { fmtHM(data.today),            _("Today") },
-        { fmtBreakdown(data.yesterday), _("Yesterday") },
-        { data.week and fmtStats(data.week) or "-", _("This week") },
-        { fmtBreakdown(data.month),     _("Month") },
-        { fmtBreakdown(data.lmonth),    _("Last month") },
-        { fmtBreakdown(data.year),      _("Year") },
+        { (delta > 0 and "+" or "") .. tostring(delta), DELTA_L .. " " .. formatPace(pace) },
+        { secondsToShortHM(data.today),                  _("Today") },
+        { secondsToBreakdownTime(data.yesterday),        _("Yesterday") },
+        { data.week and secondsToStatsTime(data.week) or "-", _("This week") },
+        { secondsToBreakdownTime(data.month),            _("Month") },
+        { secondsToBreakdownTime(data.lmonth),           _("Last month") },
+        { secondsToBreakdownTime(data.year),             _("Year") },
     }, true))
 end
 
@@ -1075,44 +1322,48 @@ local function readWpmSession()
     return wpm, pages or 0
 end
 
--- Title, series, words and publication year of the open book
+-- Cleans a top bar text: drops its leading bullet, [b] tags and the object
+-- replacement character.
+local function cleanTopBarText(s)
+    s = tostring(s or ""):gsub("^%s*\xE2\x8B\x85%s*", ""):gsub("%[/?b%]", ""):gsub("\xEF\xBF\xBC", "")
+    return (s:match("^%s*(.-)%s*$"))
+end
+
+-- Title, series, words and publication year of the open book, with the time on
+-- the book and the session figures on the right
 local function buildBookCard(card_w, session, book)
     local full_w = cardInnerWidth(card_w)
     local right_w = math.floor(full_w * 0.58)
-    local gap = Screen:scaleBySize(10)
+    local gap = SPACE.xl
     local inner_w = full_w - right_w - gap  -- width of the title block
 
     -- Right block, next to the title: time on this book, then the session
     -- time, wpm and pages of the session
     local wpm, pages = readWpmSession()
     local right = buildColumns(right_w, {
-        { book and fmtHM(book) or "-",       _("This book") },
-        { session and fmtHM(session) or "-", _("Session") },
-        { tostring(wpm),                      _("wpm") },
-        { tostring(pages),                    _("pages") },
+        { book and secondsToShortHM(book) or "-",       _("This book") },
+        { session and secondsToShortHM(session) or "-", _("Session") },
+        { tostring(wpm),                                _("wpm") },
+        { tostring(pages),                              _("pages") },
     }, false)
     local function withRight(left)
         local h = math.max(left:getSize().h, right:getSize().h)
-        return makeCard(card_w, HorizontalGroup:new({
+        return makeCard(card_w, HorizontalGroup:new{
             align = "top",
-            CenterContainer:new({ dimen = Geom:new({ w = inner_w, h = h }), left }),
-            HorizontalSpan:new({ width = gap }),
-            CenterContainer:new({ dimen = Geom:new({ w = right_w, h = h }), right }),
-        }))
+            CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = h }, left },
+            HorizontalSpan:new{ width = gap },
+            CenterContainer:new{ dimen = Geom:new{ w = right_w, h = h }, right },
+        })
     end
 
-    local ok, ui = pcall(function() return require("apps/reader/readerui").instance end)
-    local topbar = ok and ui and ui.view and ui.view.topbar
+    local ui = getReaderUI()
+    local topbar = ui and ui.view and ui.view.topbar
     local title = topbar and topbar.title or ""
     if title == "" then
-        return withRight(TextWidget:new({
-            text = _("Not reading"), face = Font:getFace("cfont", 22),
+        return withRight(TextWidget:new{
+            text = _("Not reading"), face = getFace(FONT_BIG),
             fgcolor = COLOR_MUTED, max_width = inner_w,
-        }))
-    end
-    local function clean(s)
-        s = tostring(s or ""):gsub("^%s*\xE2\x8B\x85%s*", ""):gsub("%[/?b%]", ""):gsub("\xEF\xBF\xBC", "")
-        return (s:match("^%s*(.-)%s*$"))
+        })
     end
     local words = tonumber(topbar.total_words) or 0
     local parts = {}
@@ -1122,30 +1373,30 @@ local function buildBookCard(card_w, session, book)
     local pub = tostring(topbar.pub_date or "")
     if pub ~= "" then parts[#parts + 1] = pub end
 
-    local vg = VerticalGroup:new({ align = "center" })
-    vg[#vg + 1] = TextWidget:new({
-        text = clean(title), face = Font:getFace("cfont", 24), bold = true,
+    local vg = VerticalGroup:new{ align = "center" }
+    vg[#vg + 1] = TextWidget:new{
+        text = cleanTopBarText(title), face = getFace(FONT_BIG), bold = true,
         fgcolor = COLOR_TEXT, max_width = inner_w, ellipsis = true,
-    })
-    local series = clean(topbar.series)
+    }
+    local series = cleanTopBarText(topbar.series)
     if series ~= "" then
-        vg[#vg + 1] = VerticalSpan:new({ width = Screen:scaleBySize(4) })
-        vg[#vg + 1] = TextWidget:new({
-            text = series, face = Font:getFace("cfont", 18),
+        vg[#vg + 1] = VerticalSpan:new{ width = SPACE.s }
+        vg[#vg + 1] = TextWidget:new{
+            text = series, face = getFace(FONT_SUBTITLE),
             fgcolor = COLOR_MUTED, max_width = inner_w, ellipsis = true,
-        })
+        }
     end
     if #parts > 0 then
-        vg[#vg + 1] = VerticalSpan:new({ width = Screen:scaleBySize(4) })
-        vg[#vg + 1] = TextWidget:new({
-            text = table.concat(parts, "  \xC2\xB7  "), face = Font:getFace("cfont", 18),
+        vg[#vg + 1] = VerticalSpan:new{ width = SPACE.s }
+        vg[#vg + 1] = TextWidget:new{
+            text = table.concat(parts, SUMMARY_SEPARATOR), face = getFace(FONT_SUBTITLE),
             fgcolor = COLOR_MUTED, max_width = inner_w, ellipsis = true,
-        })
+        }
     end
     return withRight(vg)
 end
 
--- ── Tappable zones of the summary ──
+-- ── Tappable zones of the summary ────────────────────────────────────────────
 -- A tap closes the window, except on a zone that does something first.
 -- Zones are { card, ncols, col, row_h, callback }: column `col` of the row
 -- of `ncols` equal columns at the bottom of `card`.
@@ -1226,8 +1477,7 @@ end
 -- "finished"). The chip is set BEFORE showing, so there is no second change
 -- on screen. If Bookshelf is already showing parked, it only changes the chip.
 local function openBookshelfOnStatus(status)
-    local ok_ui, ReaderUI = pcall(require, "apps/reader/readerui")
-    local rui = ok_ui and ReaderUI and ReaderUI.instance
+    local rui = getReaderUI()
     local host = rui
     if not host then
         local ok_fm, FM = pcall(require, "apps/filemanager/filemanager")
@@ -1299,19 +1549,19 @@ local function buildShelfCard(card_w)
     for i, st in ipairs(SHELF_STATUS) do
         cols[i] = { tostring(counts[st[1]]), st[2] }
     end
-    local header = HorizontalGroup:new({
+    local header = HorizontalGroup:new{
         align = "bottom",
-        TextWidget:new({ text = tostring(total), face = Font:getFace("cfont", 34), bold = true, fgcolor = COLOR_TEXT }),
-        HorizontalSpan:new({ width = Screen:scaleBySize(10) }),
-        TextWidget:new({ text = _("Books"), face = Font:getFace("cfont", 18), bold = true, fgcolor = COLOR_MUTED }),
-    })
+        TextWidget:new{ text = tostring(total), face = getFace(FONT_HERO), bold = true, fgcolor = COLOR_TEXT },
+        HorizontalSpan:new{ width = SPACE.xl },
+        TextWidget:new{ text = _("Books"), face = getFace(FONT_SUBTITLE), bold = true, fgcolor = COLOR_MUTED },
+    }
     local row = buildColumns(inner_w, cols, true)
-    local vg = VerticalGroup:new({
+    local vg = VerticalGroup:new{
         align = "center",
-        CenterContainer:new({ dimen = Geom:new({ w = inner_w, h = header:getSize().h }), header }),
-        VerticalSpan:new({ width = Screen:scaleBySize(6) }),
+        CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = header:getSize().h }, header },
+        VerticalSpan:new{ width = SPACE.m },
         row,
-    })
+    }
     local card = makeCard(card_w, vg)
     -- columns that open Bookshelf on their chip when tapped
     for i, st in ipairs(SHELF_STATUS) do
@@ -1328,22 +1578,22 @@ local function buildShelfCard(card_w)
 end
 
 -- The whole screen: the cards, in a scrollable list when they do not fit.
-local function buildSummaryView(w_width, w_font_face, w_font_size_small, parent)
+local function buildSummaryView(w_width, parent)
     local data = loadSummaryData()
-    if not data then return nil, "Could not read the statistics database" end
+    if not data then return nil, _("Could not read the statistics database") end
     local session, book = getSessionInfo()
 
     local function buildCards(card_w)
         summary_tap_zones = {}
-        local cards = VerticalGroup:new({ align = "center" })
+        local cards = VerticalGroup:new{ align = "center" }
         local list = {
             buildShelfCard(card_w),
             buildBreakdownCard(card_w, data),
             buildBookCard(card_w, session, book),
         }
         for i, card in ipairs(list) do
-            if i > 1 then table.insert(cards, VerticalSpan:new({ width = Screen:scaleBySize(6) })) end
-            table.insert(cards, card)
+            if i > 1 then cards[#cards + 1] = VerticalSpan:new{ width = SPACE.m } end
+            cards[#cards + 1] = card
         end
         return cards
     end
@@ -1354,28 +1604,14 @@ local function buildSummaryView(w_width, w_font_face, w_font_size_small, parent)
 
     cards:free()
     cards = buildCards(w_width - ScrollableContainer:getScrollbarWidth())
-    return { SwipePassthroughScrollable:new({
-        dimen = Geom:new({ w = w_width, h = max_h }),
+    return { SwipePassthroughScrollable:new{
+        dimen = Geom:new{ w = w_width, h = max_h },
         show_parent = parent,
         cards,
-    }) }
+    } }
 end
 
--- ── View definitions ───────────────────────────────────────────────────────────
-
--- One line of text on the left: the item's `field`, cut with "…" if too long.
-local function textLabel(field)
-    return function(item, ctx)
-        return TextWidget:new({
-            text = item[field],
-            face = Font:getFace(ctx.font_face, ctx.font_size),
-            max_width = ctx.max_width,
-            ellipsis = true,
-        })
-    end
-end
-
--- ── Finished books ─────────────────────────────────────────────────────────────
+-- ── Finished books ───────────────────────────────────────────────────────────
 -- The statistics database does not know which books are finished: that lives
 -- in each book's sidecar file ("summary" status). So the books of the reading
 -- history are checked, and the ones marked "complete" are matched to the
@@ -1520,44 +1756,78 @@ local function getFinishedBooksFilter()
     return "(" .. table.concat(conditions, " OR ") .. ")"
 end
 
+-- ── View definitions ─────────────────────────────────────────────────────────
+
+-- One line of text on the left: the item's `field`, cut with "…" if too long.
+local function textLabel(field)
+    return function(item, ctx)
+        return TextWidget:new{
+            text = item[field],
+            face = getFace(FONT_TEXT),
+            max_width = ctx.max_width,
+            ellipsis = true,
+        }
+    end
+end
+
+-- A title with the current year: "Hours per Month · 2026"
+local function yearTitle(name)
+    return function()
+        return string.format("%s" .. TITLE_SEPARATOR .. "%d", name, os.date("*t").year)
+    end
+end
+
 local VIEWS = {
     {
         -- not a list: it builds its own widgets (the start-menu modules as cards)
-        title = "Reading Summary",
+        title = _("Reading Summary"),
         build = buildSummaryView,
     },
     {
         -- not a list: it builds its own widgets
-        title = function() return string.format("Hours per Month \xC2\xB7 %d", os.date("*t").year) end,
+        title = yearTitle(_("Hours per Month")),
         build = buildMonthlyChartView,
     },
     {
         -- not a list: it builds its own widgets
-        title = "Days Read per Year",
+        title = _("Days Read per Year"),
         build = buildDaysReadPerYearView,
     },
     {
         -- not a list: it builds its own widgets
-        title = "Days per Year",
+        title = _("Days per Year"),
         build = buildDaysPerYearView,
     },
     {
         -- not a list: it builds its own widgets
-        title = function() return string.format("Reading Heatmap \xC2\xB7 %d", os.date("*t").year) end,
+        title = function()
+            local year = os.date("*t").year
+            return string.format("%s" .. TITLE_SEPARATOR .. "%d-%d", _("Reading Heatmap"), year - HEATMAP_YEARS + 1, year)
+        end,
         build = buildHeatmapView,
     },
     {
+        -- not a list: it builds its own widgets
+        title = function()
+            return string.format("%s" .. TITLE_SEPARATOR .. "%s %d", _("Reading Days"), os.date("%B"), os.date("*t").year)
+        end,
+        build = buildMonthView,
+    },
+    {
         -- finished books read this year, most time first
-        title = function() return string.format("Books Finished \xC2\xB7 %d", os.date("*t").year) end,
+        title = yearTitle(_("Books Finished")),
         -- says what was found, to tell if the problem is detecting finished books
-        empty = function() return "No finished books read this year (" .. finished_info .. ")" end,
+        empty = function()
+            return string.format(_("No finished books read this year (%s)"), finished_info)
+        end,
         row_height = ROW_HEIGHT_TALL,
         bar_indent = BOOK_RANK_W,
         -- number of books and the time spent on them
         summary = function(items)
             local total = 0
             for _i, item in ipairs(items) do total = total + (item.duration or 0) end
-            return string.format("%s %d %s  \xC2\xB7  %s", _("Total"), #items, _("books"), secondsToDH(total))
+            return string.format("%s %d %s" .. SUMMARY_SEPARATOR .. "%s",
+                _("Total"), #items, _("books"), secondsToDH(total))
         end,
         sql = function()
             local year_start = os.time({ year = os.date("*t").year, month = 1, day = 1, hour = 0 })
@@ -1577,7 +1847,7 @@ local VIEWS = {
         map = function(row, n)
             return {
                 rank = n,
-                title = row[1] or "Unknown",
+                title = row[1] or _("Unknown"),
                 duration = tonumber(row[2]),
                 sessions = tonumber(row[3]) or 0,
                 last = tonumber(row[4]) or 0,
@@ -1585,38 +1855,38 @@ local VIEWS = {
         end,
         -- rank number, then the title and "sessions · last read"
         left = function(item, ctx)
-            return HorizontalGroup:new({
+            return HorizontalGroup:new{
                 align = "top",
-                LeftContainer:new({
-                    dimen = Geom:new({ w = BOOK_RANK_W, h = Screen:scaleBySize(22) }),
-                    TextWidget:new({
+                LeftContainer:new{
+                    dimen = Geom:new{ w = BOOK_RANK_W, h = Screen:scaleBySize(22) },
+                    TextWidget:new{
                         text = tostring(item.rank),
-                        face = Font:getFace(ctx.font_face, ctx.font_size),
+                        face = getFace(FONT_TEXT),
                         bold = true,
                         fgcolor = item.rank <= 3 and COLOR_TEXT or COLOR_MUTED,
-                    }),
-                }),
-                VerticalGroup:new({
+                    },
+                },
+                VerticalGroup:new{
                     align = "left",
-                    TextWidget:new({
+                    TextWidget:new{
                         text = item.title,
-                        face = Font:getFace(ctx.font_face, ctx.font_size),
+                        face = getFace(FONT_TEXT),
                         max_width = ctx.max_width - BOOK_RANK_W,
                         ellipsis = true,
-                    }),
-                    TextWidget:new({
-                        text = string.format("%d %s  \xC2\xB7  %s %s", item.sessions, _("sessions"),
-                            _("last"), os.date("%d/%m", item.last)),
-                        face = Font:getFace(ctx.font_face, ctx.font_size - 2),
+                    },
+                    TextWidget:new{
+                        text = string.format("%d %s" .. SUMMARY_SEPARATOR .. "%s %s",
+                            item.sessions, _("sessions"), _("last"), os.date("%d/%m", item.last)),
+                        face = getFace(FONT_CAPTION),
                         fgcolor = COLOR_MUTED,
-                    }),
-                }),
-            })
+                    },
+                },
+            }
         end,
     },
     {
-        title = "Time per Month",
-        empty = "No monthly data found",
+        title = _("Time per Month"),
+        empty = _("No monthly data found"),
         row_height = ROW_HEIGHT_NORMAL,
         -- local time, as the dates of the sessions list (not UTC)
         sql = [[
@@ -1638,8 +1908,8 @@ local VIEWS = {
         left = textLabel("label"),
     },
     {
-        title = "Longest Reading Sessions",
-        empty = "No session data found",
+        title = _("Longest Reading Sessions"),
+        empty = _("No session data found"),
         row_height = ROW_HEIGHT_TALL,
         sql = [[
             SELECT book.title, wpm_stat_data.duration, wpm_stat_data.start_time
@@ -1650,29 +1920,29 @@ local VIEWS = {
             LIMIT 200;
         ]],
         map = function(row)
-            return { title = row[1] or "Unknown", duration = tonumber(row[2]), start_time = tonumber(row[3]) }
+            return { title = row[1] or _("Unknown"), duration = tonumber(row[2]), start_time = tonumber(row[3]) }
         end,
         -- two lines: the book's title and the date
         left = function(item, ctx)
-            return VerticalGroup:new({
+            return VerticalGroup:new{
                 align = "left",
-                TextWidget:new({
+                TextWidget:new{
                     text = item.title,
-                    face = Font:getFace(ctx.font_face, ctx.font_size),
+                    face = getFace(FONT_TEXT),
                     max_width = ctx.max_width,
                     ellipsis = true,
-                }),
-                TextWidget:new({
+                },
+                TextWidget:new{
                     text = formatDateTime(item.start_time),
-                    face = Font:getFace(ctx.font_face, ctx.font_size - 2),
+                    face = getFace(FONT_CAPTION),
                     fgcolor = COLOR_MUTED,
-                }),
-            })
+                },
+            }
         end,
     },
     {
-        title = "Time per Device",
-        empty = "No device data found",
+        title = _("Time per Device"),
+        empty = _("No device data found"),
         row_height = ROW_HEIGHT_NORMAL,
         sql = [[
             SELECT id_device, SUM(duration) as total_duration
@@ -1683,15 +1953,15 @@ local VIEWS = {
         map = function(row)
             local id = tonumber(row[1])
             return {
-                name = DEVICE_NAMES[id] or ("Device " .. tostring(id)),
+                name = DEVICE_NAMES[id] or string.format(_("Device %s"), tostring(id)),
                 duration = tonumber(row[2]),
             }
         end,
         left = textLabel("name"),
     },
     {
-        title = "Time per Font",
-        empty = "No font data found",
+        title = _("Time per Font"),
+        empty = _("No font data found"),
         row_height = ROW_HEIGHT_NORMAL,
         sql = [[
             SELECT COALESCE(font_name, 'Unknown'), SUM(duration) as total_duration
@@ -1706,7 +1976,7 @@ local VIEWS = {
     },
 }
 
--- ── Main window ────────────────────────────────────────────────────────────────
+-- ── Main window ──────────────────────────────────────────────────────────────
 
 function ShowLongestSessionsWindow:init()
     self.current_view = self.current_view or 1
@@ -1721,15 +1991,12 @@ function ShowLongestSessionsWindow:_buildUI()
         w_width = math.floor(w_width * screen_height / screen_width)
     end
 
-    local w_font_face = "cfont"
-    local w_font_size_med = 20
-    local w_font_size_small = 15
-    local w_padding_internal = Screen:scaleBySize(10)
+    local w_padding_internal = SPACE.xl
     local w_padding_external = Screen:scaleBySize(14)
 
     -- Nothing to show: tell the user why, and see showWindow.
     local function fail(message)
-        UIManager:show(InfoMessage:new({ text = _(message or "Unknown error") }))
+        UIManager:show(InfoMessage:new{ text = message or _("Unknown error") })
         self.failed = true
     end
 
@@ -1738,11 +2005,11 @@ function ShowLongestSessionsWindow:_buildUI()
     local view_def = VIEWS[self.current_view]
     local body
     if view_def.build then
-        local widgets, err = view_def.build(w_width, w_font_face, w_font_size_small, self)
+        local widgets, err = view_def.build(w_width, self)
         if not widgets then return fail(err) end
         body = widgets
     else
-        local rows, num_items, row_height, items = buildRows(view_def, w_width, w_font_face, w_font_size_small)
+        local rows, num_items, row_height, items = buildRows(view_def, w_width)
         -- on failure the second value is the message
         if not rows then return fail(num_items) end
 
@@ -1751,93 +2018,88 @@ function ShowLongestSessionsWindow:_buildUI()
         local rows_fit = math.max(1, math.floor(screen_height * 0.7 / effective_row_height))
         local scrollable_height = math.min(num_items, rows_fit, 12) * effective_row_height
         body = {
-            SwipePassthroughScrollable:new({
-                dimen = Geom:new({ w = w_width, h = scrollable_height }),
+            SwipePassthroughScrollable:new{
+                dimen = Geom:new{ w = w_width, h = scrollable_height },
                 show_parent = self,
                 rows,
-            }),
+            },
         }
         -- a line under the list, for the views that have a summary
         if view_def.summary then
-            table.insert(body, makeVerticalSpacing(w_padding_internal, 0.8))
-            table.insert(body, TextWidget:new({
-                text = view_def.summary(items),
-                face = Font:getFace(w_font_face, w_font_size_small - 1),
-                fgcolor = COLOR_MUTED,
-                max_width = w_width,
-            }))
+            body[#body + 1] = makeVerticalSpacing(w_padding_internal, 0.8)
+            body[#body + 1] = makeSummaryLine(w_width, view_def.summary(items))
         end
     end
 
     -- Title on the left, "n / total" on the right
     local title_text = type(view_def.title) == "function" and view_def.title() or view_def.title
     local counter_w = Screen:scaleBySize(56)
-    local title_widget = TextWidget:new({
+    local title_widget = TextWidget:new{
         text = title_text,
-        face = Font:getFace(w_font_face, w_font_size_med),
+        face = getFace(FONT_TITLE),
         bold = true,
         fgcolor = COLOR_TEXT,
-        max_width = w_width - counter_w - Screen:scaleBySize(10),
+        max_width = w_width - counter_w - SPACE.xl,
         ellipsis = true,
-    })
-    local counter_widget = TextWidget:new({
+    }
+    local counter_widget = TextWidget:new{
         text = string.format("%d / %d", self.current_view, #VIEWS),
-        face = Font:getFace(w_font_face, w_font_size_small - 2),
+        face = getFace(FONT_CAPTION),
         fgcolor = COLOR_MUTED,
-    })
+    }
     local title_h = title_widget:getSize().h
-    local title_row = HorizontalGroup:new({
+    local title_row = HorizontalGroup:new{
         align = "center",
-        LeftContainer:new({
-            dimen = Geom:new({ w = w_width - counter_w, h = title_h }),
+        LeftContainer:new{
+            dimen = Geom:new{ w = w_width - counter_w, h = title_h },
             title_widget,
-        }),
-        RightContainer:new({
-            dimen = Geom:new({ w = counter_w, h = title_h }),
+        },
+        RightContainer:new{
+            dimen = Geom:new{ w = counter_w, h = title_h },
             counter_widget,
-        }),
-    })
+        },
+    }
 
-    local content = VerticalGroup:new({
+    local content = VerticalGroup:new{
         title_row,
         makeVerticalSpacing(w_padding_internal, 1.2),
-    })
+    }
     for _i, widget in ipairs(body) do
-        table.insert(content, widget)
+        content[#content + 1] = widget
     end
 
     -- Page dots, so it is clear that the views can be swiped
-    local dots = PagerDots:new({ count = #VIEWS, current = self.current_view })
-    table.insert(content, makeVerticalSpacing(w_padding_internal, 1.2))
-    table.insert(content, CenterContainer:new({
-        dimen = Geom:new({ w = w_width, h = dots:getSize().h }),
+    local dots = PagerDots:new{ count = #VIEWS, current = self.current_view }
+    content[#content + 1] = makeVerticalSpacing(w_padding_internal, 1.2)
+    content[#content + 1] = CenterContainer:new{
+        dimen = Geom:new{ w = w_width, h = dots:getSize().h },
         dots,
-    }))
+    }
 
-    local frame = FrameContainer:new({
+    local frame = FrameContainer:new{
         radius = Screen:scaleBySize(28),
         bordersize = Screen:scaleBySize(2),
         padding = w_padding_external,
         background = Blitbuffer.COLOR_WHITE,
         content,
-    })
+    }
 
-    self[1] = CenterContainer:new({
+    self[1] = CenterContainer:new{
         dimen = Screen:getSize(),
         frame,
-    })
+    }
 
-    self.dimen = Geom:new({ x = 0, y = 0, w = screen_width, h = screen_height })
+    self.dimen = Geom:new{ x = 0, y = 0, w = screen_width, h = screen_height }
 
     if Device:hasDPad() then
         self.key_events.Close = { { Device.input.group.Back } }
     end
     if Device:isTouchDevice() then
         self.ges_events.TapClose = {
-            GestureRange:new({ ges = "tap", range = self.dimen }),
+            GestureRange:new{ ges = "tap", range = self.dimen },
         }
         self.ges_events.Swipe = {
-            GestureRange:new({ ges = "swipe", range = self.dimen }),
+            GestureRange:new{ ges = "swipe", range = self.dimen },
         }
     end
 end
@@ -1845,7 +2107,7 @@ end
 -- Builds the window for a view and shows it. Returns the window, or nil when
 -- it could not be built (the user has been told why).
 local function showWindow(current_view)
-    local widget = ShowLongestSessionsWindow:new({ current_view = current_view })
+    local widget = ShowLongestSessionsWindow:new{ current_view = current_view }
     if widget.failed then return nil end
     UIManager:show(widget, "ui", widget.dimen)
     return widget
@@ -1867,7 +2129,7 @@ function ShowLongestSessionsWindow:onSwipe(arg, ges)
         return false
     end
     -- the new view first: if it fails, this one stays
-    local widget = ShowLongestSessionsWindow:new({ current_view = next_view })
+    local widget = ShowLongestSessionsWindow:new{ current_view = next_view }
     if widget.failed then return true end
     UIManager:close(self)
     UIManager:show(widget, "ui", widget.dimen)
@@ -1900,7 +2162,7 @@ function ShowLongestSessionsWindow:onTapClose(arg, ges)
     return true
 end
 
--- ── Setup ──────────────────────────────────────────────────────────────────────
+-- ── Setup ────────────────────────────────────────────────────────────────────
 -- This file is a module, loaded from the plugin's main.lua:
 --
 --     local setupLongestSessions = require("top_reading_sessions")
