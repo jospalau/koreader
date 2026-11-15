@@ -84,8 +84,10 @@ local function close(self)
     local UIManager = require("ui/uimanager")
     local d = self.settings_dialog
     self.settings_dialog = nil
+    self.settings_offset = nil   -- the next time it opens it is at its place again
     dlog("settings menu closed")
-    if d then UIManager:close(d, "ui", d.frame_rect) end
+    -- The window may have been moved: refresh where it is now
+    if d then UIManager:close(d, "ui", (d.frame and d.frame.dimen) or d.frame_rect) end
 end
 
 -- Actions ---------------------------------------------------------------
@@ -186,6 +188,20 @@ local function getContrast(ui)
     return conf.font_gamma
         or G_reader_settings:readSetting("copt_font_gamma")
         or CONTRAST_DEFAULT
+end
+
+-- Font hinting: 0 = off, 1 = native, 2 = auto (KOReader's "Font Hinting" option)
+local function getHinting(ui)
+    return ui.document.configurable.font_hinting
+        or G_reader_settings:readSetting("copt_font_hinting")
+        or 2
+end
+
+local function setHinting(ui, mode)
+    dlog("setHinting:", mode)
+    ui.document.configurable.font_hinting = mode
+    -- Same call KOReader's own option makes (applies it, reflows and shows a notification)
+    ui.font:onSetFontHinting(mode)
 end
 
 local function setContrast(ui, g)
@@ -383,6 +399,12 @@ local function buildRows(ui)
         { text = "Contrast ▼", callback = function(u) stepContrast(u, -1) end },
         { text = "Contrast ▲", callback = function(u) stepContrast(u, 1) end },
     }
+    local hinting_now = getHinting(ui)
+    local hinting_row = {
+        { text = "Off",    callback = function(u) setHinting(u, 0) end, active = hinting_now == 0 },
+        { text = "Native", callback = function(u) setHinting(u, 1) end, active = hinting_now == 1 },
+        { text = "Auto",   callback = function(u) setHinting(u, 2) end, active = hinting_now == 2 },
+    }
     local rows = {
         { title = "General",
             { text = "Reset defaults",      callback = resetDefaults },
@@ -396,6 +418,7 @@ local function buildRows(ui)
         margins_row,
         weight_row,
         contrast_row,
+        hinting_row,
     }
     -- Section captions (a row without a title gets none)
     font_face_row.title = "Font face"
@@ -406,6 +429,7 @@ local function buildRows(ui)
     margins_row.title = "Margins"
     weight_row.title = "Weight"
     contrast_row.title = "Contrast"
+    hinting_row.title = "Font hinting"
 
     local ls = conf.line_spacing
     for __, spacing in ipairs(LINE_SPACINGS) do
@@ -970,6 +994,11 @@ local function buildTitleSegments(ui)
     local weight = configurable.font_base_weight or 0
     local idx = getContrast(ui)
     local gamma = GAMMA_TABLE[idx + 1]
+    -- Selected font hinting, right after the leading
+    local hinting_names = { [0] = "off", [1] = "native", [2] = "auto" }
+    table.insert(line2, { text = "  |  " })
+    table.insert(line2, { text = "hinting " .. (hinting_names[getHinting(ui)] or "?"), bold = true })
+
     -- Line spacing in em, same convention as LINE_SPACINGS (100% = 1.2em, as
     -- every line-height of the converted books is 1.2)
     local spacing_em = 1.2 * (configurable.line_spacing or 100) / 100
@@ -1416,7 +1445,13 @@ function PageTextInfo:onShowSettingsMenu()
     dlog("onShowSettingsMenu: open, reopen=", self.settings_dialog ~= nil)
 
     local old_dialog = self.settings_dialog
-    local old_region = old_dialog and old_dialog.frame_rect and old_dialog.frame_rect:copy()
+    -- The old window may have been moved: its real area is the one of its frame
+    local old_area = old_dialog and ((old_dialog.frame and old_dialog.frame.dimen) or old_dialog.frame_rect)
+    local old_region = old_area and old_area:copy()
+    -- Keep the position while the menu is reopened after a button
+    if old_dialog and old_dialog.movable then
+        self.settings_offset = old_dialog.movable:getMovedOffset()
+    end
     self.settings_dialog = nil
 
     local screen = Screen:getSize()
@@ -1426,9 +1461,9 @@ function PageTextInfo:onShowSettingsMenu()
     local outer_pad = Screen:scaleBySize(5)
     -- Inner width available for rows (window width minus padding and border)
     local dialog_w = frame_w - 2 * (outer_pad + Size.border.window)
-    local BTN_FONT_SIZE = 14            -- button text size (compact layout)
+    local BTN_FONT_SIZE = 11            -- button text size (compact layout)
     local font_px = Screen:scaleBySize(BTN_FONT_SIZE)
-    local cell_h = math.floor(font_px * 1.85)
+    local cell_h = math.floor(font_px * 1.6)
     local gap = Screen:scaleBySize(3)   -- space between buttons and between rows
     local thin = Screen:scaleBySize(1)
     local buttons = {}
@@ -1446,8 +1481,8 @@ function PageTextInfo:onShowSettingsMenu()
         key_events = Device:hasKeys() and { Close = { { Device.input.group.Back } } } or {},
     }
 
-    local label_face = Font:getFace("cfont", 11)
-    local label_h = math.floor(Screen:scaleBySize(11) * 1.4)
+    local label_face = Font:getFace("cfont", 9)
+    local label_h = math.floor(Screen:scaleBySize(9) * 1.3)
 
     local grid = VerticalGroup:new{ align = "center" }
     for i, row_def in ipairs(buildRows(ui)) do
@@ -1503,8 +1538,8 @@ function PageTextInfo:onShowSettingsMenu()
         end
     end
 
-    local title_face = Font:getFace("cfont", 12)
-    local line_h = math.floor(cell_h * 0.75)
+    local title_face = Font:getFace("cfont", 11)
+    local line_h = math.floor(cell_h * 0.85)
     local title_rows = VerticalGroup:new{ align = "center" }
     for __, line in ipairs(buildTitleSegments(ui)) do
         local group = HorizontalGroup:new{}
@@ -1547,15 +1582,29 @@ function PageTextInfo:onShowSettingsMenu()
             grid,
         },
     }
-    dialog[1] = CenterContainer:new{
-        dimen = Geom:new{ w = screen.w, h = screen.h },
+    -- Anchored to the bottom of the screen so the top of the page stays visible
+    -- while changing font / spacing / weight
+    -- The window can be moved: swipe or drag it. (Hold is not used for moving, because a
+    -- long press on the title saves the default font.)
+    local BottomContainer = require("ui/widget/container/bottomcontainer")
+    local MovableContainer = require("ui/widget/container/movablecontainer")
+    local movable = MovableContainer:new{
         frame,
+        ignore_events = { "hold", "hold_pan", "hold_release" },
     }
+    if self.settings_offset then movable:setMovedOffset(self.settings_offset) end
+    dialog[1] = BottomContainer:new{
+        dimen = Geom:new{ w = screen.w, h = screen.h },
+        movable,
+    }
+    dialog.movable = movable
+    dialog.frame = frame
 
     local fsize = frame:getSize()
+    local offset = movable:getMovedOffset()
     local frame_rect = Geom:new{
-        x = math.floor((screen.w - fsize.w) / 2),
-        y = math.floor((screen.h - fsize.h) / 2),
+        x = math.floor((screen.w - fsize.w) / 2) + offset.x,
+        y = screen.h - fsize.h + offset.y,
         w = fsize.w, h = fsize.h,
     }
 
@@ -1618,7 +1667,8 @@ function PageTextInfo:onShowSettingsMenu()
                 return true
             end
         end
-        if not ges.pos:intersectWith(frame_rect) then
+        -- Tap outside the window (it may have been moved: use where it is painted)
+        if not ges.pos:intersectWith(frame.dimen or frame_rect) then
             close(self.plugin)
         end
         return true
