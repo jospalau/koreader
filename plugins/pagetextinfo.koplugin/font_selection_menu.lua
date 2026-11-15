@@ -514,6 +514,29 @@ function PageTextInfo:onShowFonts(page)
         end
     end
 
+    -- Readability of the current font (cached per face; method comes from
+    -- settings_menu.lua, skipped if that file isn't loaded)
+    local readability_txt
+    local cur_path = self.font_paths[current]
+    if cur_path and self.getFontReadability then
+        self.fonts_readability = self.fonts_readability or {}
+        local res = self.fonts_readability[current]
+        if not res then
+            local ok, r = pcall(self.getFontReadability, self, cur_path)
+            res = ok and r or false
+            self.fonts_readability[current] = res
+        end
+        if res then
+            local rating, why = res:match("^(%u+): (.+)$")
+            readability_txt = rating and (rating .. " (" .. why .. ")") or res
+        end
+    end
+
+    local caption = string.format("Fonts: %d  |  Used: %d", #fonts, used_count)
+    if readability_txt then
+        caption = caption .. "  |  Readability: " .. readability_txt
+    end
+
     local grid = VerticalGroup:new{ align = "center" }
 
     -- Small caption with a thin separator below it (same look as the settings menu)
@@ -522,9 +545,10 @@ function PageTextInfo:onShowFonts(page)
         HorizontalGroup:new{
             HorizontalSpan:new{ width = gap },
             TextWidget:new{
-                text = string.format("Fonts: %d  |  used: %d", #fonts, used_count),
+                text = caption,
                 face = Font:getFace("cfont", 11),
                 fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+                max_width = dialog_w - 2 * gap,
             },
         },
     })
