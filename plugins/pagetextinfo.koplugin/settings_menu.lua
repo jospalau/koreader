@@ -161,14 +161,6 @@ local function stepLineSpacing(ui, dir)
     local cur_em = math.floor(1.2 * cur / 100 / SPACING_STEP_EM + 0.5) * SPACING_STEP_EM
     local new_em = cur_em + dir * SPACING_STEP_EM
     local percent = math.floor(new_em * 100 / 1.2 + 0.5)
-    -- The presets are rounded percentages (1.3em = 109%, not 108.33%): when the new
-    -- value is a preset, use its exact percentage so the preset button lights up
-    for __, s in ipairs(LINE_SPACINGS) do
-        if math.abs(1.2 * s.percent / 100 - new_em) < 0.015 then
-            percent = s.percent
-            break
-        end
-    end
     percent = math.max(SPACING_MIN, math.min(percent, SPACING_MAX))
     dlog("stepLineSpacing: dir=", dir, "from", cur, "% to", percent, "%")
     setLineSpacing(ui, percent)
@@ -444,7 +436,9 @@ local function buildRows(ui)
         table.insert(spacing_row, {
             text = spacing.label,
             callback = function(u) setLineSpacing(u, spacing.percent) end,
-            active = approx(ls, spacing.percent),
+            -- The presets are rounded percentages (1.3em = 109%, stepping gives 108%):
+            -- tolerate 1 point so the preset still lights up
+            active = ls and math.abs(ls - spacing.percent) <= 1,
         })
     end
     for __, p in ipairs(MARGIN_PRESETS) do
