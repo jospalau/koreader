@@ -1078,13 +1078,15 @@ end
 -- Title, series, words and publication year of the open book
 local function buildBookCard(card_w, session, book)
     local full_w = cardInnerWidth(card_w)
-    local right_w = math.floor(full_w * 0.5)
+    local right_w = math.floor(full_w * 0.58)
     local gap = Screen:scaleBySize(10)
     local inner_w = full_w - right_w - gap  -- width of the title block
 
-    -- Right block: session time, wpm and pages of the session
+    -- Right block, next to the title: time on this book, then the session
+    -- time, wpm and pages of the session
     local wpm, pages = readWpmSession()
     local right = buildColumns(right_w, {
+        { book and fmtHM(book) or "-",       _("This book") },
         { session and fmtHM(session) or "-", _("Session") },
         { tostring(wpm),                      _("wpm") },
         { tostring(pages),                    _("pages") },
@@ -1093,7 +1095,7 @@ local function buildBookCard(card_w, session, book)
         local h = math.max(left:getSize().h, right:getSize().h)
         return makeCard(card_w, HorizontalGroup:new({
             align = "top",
-            LeftContainer:new({ dimen = Geom:new({ w = inner_w, h = h }), left }),
+            CenterContainer:new({ dimen = Geom:new({ w = inner_w, h = h }), left }),
             HorizontalSpan:new({ width = gap }),
             CenterContainer:new({ dimen = Geom:new({ w = right_w, h = h }), right }),
         }))
@@ -1119,9 +1121,8 @@ local function buildBookCard(card_w, session, book)
     end
     local pub = tostring(topbar.pub_date or "")
     if pub ~= "" then parts[#parts + 1] = pub end
-    if book then parts[#parts + 1] = _("This book") .. " " .. fmtHM(book) end
 
-    local vg = VerticalGroup:new({ align = "left" })
+    local vg = VerticalGroup:new({ align = "center" })
     vg[#vg + 1] = TextWidget:new({
         text = clean(title), face = Font:getFace("cfont", 24), bold = true,
         fgcolor = COLOR_TEXT, max_width = inner_w, ellipsis = true,
@@ -1142,6 +1143,130 @@ local function buildBookCard(card_w, session, book)
         })
     end
     return withRight(vg)
+end
+
+-- ── Tappable zones of the summary ──
+-- A tap closes the window, except on a zone that does something first.
+-- Zones are { card, ncols, col, row_h, callback }: column `col` of the row
+-- of `ncols` equal columns at the bottom of `card`.
+local summary_tap_zones = {}
+
+local function hitSummaryZone(pos)
+    for _i, z in ipairs(summary_tap_zones) do
+        local d = z.card.dimen
+        if d and d.w and d.w > 0 and pos.x >= d.x and pos.x < d.x + d.w then
+            local edge = CARD_PAD + Size.border.thin
+            local col_w = math.floor((d.w - 2 * edge) / z.ncols)
+            local col = math.floor((pos.x - (d.x + edge)) / col_w) + 1
+            local row_bottom = d.y + d.h - edge
+            if pos.y >= row_bottom - z.row_h and pos.y < row_bottom and col == z.col then
+                return z
+            end
+        end
+    end
+end
+
+-- Names a chip can have for each status (the finished books are "complete"
+-- in the sidecar files and "Finished" on the shelf).
+local STATUS_CHIP_NAMES = {
+    tbr      = { "tbr" },
+    mbr      = { "mbr" },
+    finished = { "finished", "complete" },
+}
+
+-- The id of the Bookshelf chip that shows the books of a status ("tbr",
+-- "mbr", "finished"): the one whose id or label is one of its names (glyphs
+-- and case ignored), or whose filter has that status. nil when there is none
+-- (or when the chip model is not loaded yet).
+local function findStatusChipKey(status)
+    local names = STATUS_CHIP_NAMES[status] or { status }
+    local ok, TabModel = pcall(require, "lib/bookshelf_tab_model")
+    if not ok or not TabModel or not TabModel.getActive then return nil end
+    for _i, tab in ipairs(TabModel.getActive()) do
+        local label = tostring(tab.label or ""):lower():gsub("[^%w]", "")
+        local f = tab.filter
+        for _j, name in ipairs(names) do
+            local by_filter = type(f) == "table" and type(f.statuses) == "table" and f.statuses[name]
+            if tab.id == name or label == name or by_filter then
+                return tab.id
+            end
+        end
+    end
+    logger.info("longest sessions: no chip for status " .. status .. " found in Bookshelf")
+end
+
+-- Makes `key` the active chip of a Bookshelf widget that is NOT showing, with
+-- the state changes of its _selectChip but without the rebuild and the
+-- repaint: the overlay that opens Bookshelf rebuilds the whole widget right
+-- after showing it, so it comes up on this chip with a single paint.
+local function presetChip(widget, key)
+    pcall(function()
+        if widget._markOpdsNav then widget:_markOpdsNav() end
+        widget._opds_fail_url, widget._opds_fail_err = nil, nil
+        if widget._clearDpadFocus then widget:_clearDpadFocus() end
+        widget._drilldown_path = {}
+        widget.chip = key
+        widget._cursor = 1
+        if widget._syncPageFromCursor then widget:_syncPageFromCursor() end
+        widget._switching_shelf = true
+    end)
+end
+
+-- Saves the active chip, so a Bookshelf widget created later starts on it.
+local function saveActiveChip(key)
+    pcall(function()
+        local Store = require("lib/bookshelf_settings_store")
+        local save = Store.saveDeferred or Store.save
+        save("active_chip", key)
+    end)
+end
+
+-- Opens Bookshelf parked over the open book (the ParkAndShowBookshelf event of
+-- the bookshelf overlay patch) already on the chip of a status ("tbr", "mbr",
+-- "finished"). The chip is set BEFORE showing, so there is no second change
+-- on screen. If Bookshelf is already showing parked, it only changes the chip.
+local function openBookshelfOnStatus(status)
+    local ok_ui, ReaderUI = pcall(require, "apps/reader/readerui")
+    local rui = ok_ui and ReaderUI and ReaderUI.instance
+    local host = rui
+    if not host then
+        local ok_fm, FM = pcall(require, "apps/filemanager/filemanager")
+        host = ok_fm and FM and FM.instance
+    end
+    local plugin = host and host.bookshelf
+    if not plugin then return end
+
+    local key = findStatusChipKey(status)
+    local ok_park, Park = pcall(require, "lib/bookshelf_reader_park")
+    local parked = ok_park and Park and Park.isParked()
+
+    if parked then
+        -- Bookshelf is on screen: change the chip the normal way (repaints)
+        local widget = plugin._widget
+        if key and widget and widget._selectChip then widget:_selectChip(key) end
+        return
+    end
+
+    if key then
+        if plugin._widget then
+            presetChip(plugin._widget, key)   -- hidden widget: state only
+        end
+        saveActiveChip(key)                    -- a new widget reads this
+    end
+
+    if rui then
+        local Event = require("ui/event")
+        UIManager:sendEvent(Event:new("ParkAndShowBookshelf"))
+    end
+
+    if not key then
+        -- The chip model was not loaded before; it is now that Bookshelf shows
+        UIManager:nextTick(function()
+            local late_key = findStatusChipKey(status)
+            local widget = plugin._widget
+            if late_key and widget and widget._selectChip then widget:_selectChip(late_key) end
+        end)
+    end
 end
 
 -- Shelf size: books in the library by status (from _G.all_files)
@@ -1180,13 +1305,26 @@ local function buildShelfCard(card_w)
         HorizontalSpan:new({ width = Screen:scaleBySize(10) }),
         TextWidget:new({ text = _("Books"), face = Font:getFace("cfont", 18), bold = true, fgcolor = COLOR_MUTED }),
     })
+    local row = buildColumns(inner_w, cols, true)
     local vg = VerticalGroup:new({
-        align = "left",
-        header,
+        align = "center",
+        CenterContainer:new({ dimen = Geom:new({ w = inner_w, h = header:getSize().h }), header }),
         VerticalSpan:new({ width = Screen:scaleBySize(6) }),
-        buildColumns(inner_w, cols, true),
+        row,
     })
-    return makeCard(card_w, vg)
+    local card = makeCard(card_w, vg)
+    -- columns that open Bookshelf on their chip when tapped
+    for i, st in ipairs(SHELF_STATUS) do
+        local status = st[1]
+        if STATUS_CHIP_NAMES[status] then
+            summary_tap_zones[#summary_tap_zones + 1] = {
+                card = card, ncols = #SHELF_STATUS, col = i,
+                row_h = row:getSize().h,
+                callback = function() openBookshelfOnStatus(status) end,
+            }
+        end
+    end
+    return card
 end
 
 -- The whole screen: the cards, in a scrollable list when they do not fit.
@@ -1196,6 +1334,7 @@ local function buildSummaryView(w_width, w_font_face, w_font_size_small, parent)
     local session, book = getSessionInfo()
 
     local function buildCards(card_w)
+        summary_tap_zones = {}
         local cards = VerticalGroup:new({ align = "center" })
         local list = {
             buildShelfCard(card_w),
@@ -1747,7 +1886,16 @@ function ShowLongestSessionsWindow:onClose()
     return true
 end
 
-function ShowLongestSessionsWindow:onTapClose()
+function ShowLongestSessionsWindow:onTapClose(arg, ges)
+    -- on the summary, a tap on a zone (TBR, MBR, Finished) closes the window and then acts
+    if VIEWS[self.current_view].build == buildSummaryView and ges and ges.pos then
+        local zone = hitSummaryZone(ges.pos)
+        if zone then
+            self:onClose()
+            UIManager:nextTick(zone.callback)
+            return true
+        end
+    end
     self:onClose()
     return true
 end
