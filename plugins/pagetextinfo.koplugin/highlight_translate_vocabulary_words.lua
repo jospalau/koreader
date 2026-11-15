@@ -1834,6 +1834,24 @@ end
 -- when the dictionaries do not have it. The verb is tried as tapped ("gave") and as
 -- the headwords that the lookup gave ("give"), the longest phrase first.
 local MAX_VERB_FORMS = 3
+-- Edit distance between two short words (Levenshtein)
+local function editDistance(a, b)
+    if a == b then return 0 end
+    local la, lb = #a, #b
+    if math.abs(la - lb) > 1 then return 2 end
+    local prev, cur = {}, {}
+    for j = 0, lb do prev[j] = j end
+    for i = 1, la do
+        cur[0] = i
+        for j = 1, lb do
+            local cost = a:byte(i) == b:byte(j) and 0 or 1
+            cur[j] = math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost)
+        end
+        prev, cur = cur, prev
+    end
+    return prev[lb]
+end
+
 local function phrasalVerbEntries(ui, word, results, following)
     if not (following and #following > 0) then
         dbg_vocab("phrasalVerbEntries: %q has no particle after it", tostring(word))
@@ -1859,6 +1877,29 @@ local function phrasalVerbEntries(ui, word, results, following)
             local list = collectExactTranslations(ui, verb .. " " .. particles)
             dbg_vocab("phrasalVerbEntries: %q -> %d entries", verb .. " " .. particles, #list)
             if #list > 0 then return list end
+        end
+    end
+
+    -- The dictionaries may not link the form to its verb ("fell" is not "fall", "spun" is not
+    -- "spin"): the phrase as written is searched approximately ("fell away" -> "fall away").
+    -- Accepted only when the particles are the same and the verb differs by a single letter.
+    local dictionary = ui and ui.dictionary
+    local w = vocabKey(word)
+    if dictionary and w ~= "" and not w:find("%s") then
+        for n = #following, 1, -1 do
+            local particles = table.concat(following, " ", 1, n)
+            local query = w .. " " .. particles
+            local fuzzy = sdcvLookup(dictionary, query, DICTIONARIES, true)
+            if #fuzzy == 0 then fuzzy = sdcvLookup(dictionary, query, nil, true) end
+            for _, r in ipairs(fuzzy) do
+                local head = type(r.word) == "string" and vocabKey(r.word) or nil
+                local first = head and head:match("^(%S+) " .. particles:gsub("%p", "%%%0") .. "$")
+                if first and first:sub(1, 1) == w:sub(1, 1) and editDistance(first, w) <= 1 then
+                    local list = collectExactTranslations(ui, head)
+                    dbg_vocab("phrasalVerbEntries: %q ~ %q -> %d entries", query, head, #list)
+                    if #list > 0 then return list end
+                end
+            end
         end
     end
     return nil
