@@ -1127,10 +1127,12 @@ local function newChoiceBox(args)
     local buttons = {}
     for i, c in ipairs(choices) do
         if i > 1 then table.insert(content, VerticalSpan:new{ width = gap }) end
+        -- The default choice (args.default_choice) is highlighted: inverted colors
+        local is_default = (args.default_choice == i)
         local frame = FrameContainer:new{
             bordersize = thin,
-            color = Blitbuffer.COLOR_DARK_GRAY,
-            background = Blitbuffer.COLOR_WHITE,
+            color = is_default and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY,
+            background = is_default and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
             radius = Size.radius.button,
             margin = 0,
             padding = 0,
@@ -1139,6 +1141,8 @@ local function newChoiceBox(args)
                 TextWidget:new{
                     text = c.text or "",
                     face = Font:getFace("cfont", 18),
+                    bold = is_default,
+                    fgcolor = is_default and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK,
                     max_width = inner_w - 2 * Size.padding.small,
                 },
             },
@@ -1223,6 +1227,7 @@ function ReaderUI:onHome()
         local multi_box
         multi_box = newChoiceBox{
             third_choice = true,
+            default_choice = 3, -- "Just exit" highlighted by default
             text = "Add to history and reset settings?",
             choice1_text = _("Yes"),
             choice1_callback = function()
