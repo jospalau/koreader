@@ -233,6 +233,7 @@ if G_reader_settings:isTrue("apply_extra_patches") then
     -- local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/fonts-menu.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/book_styles_popup.lua")
     local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/bookshelf-bar-styles.lua")
+    local ok, err = pcall(dofile, "plugins/pagetextinfo.koplugin/bookshelf-start-menu-to-sessions.lua")
 end
 
 -- Inform once about color rendering on newly supported devices
