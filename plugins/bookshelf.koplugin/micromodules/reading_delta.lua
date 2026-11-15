@@ -6,14 +6,17 @@ Shows how many hours ahead or behind a configurable h/day reading pace
 you are this year. Positive = ahead, negative = behind.
 
 Data comes from wpm_stat_data in statistics.sqlite3, the same query
-used by TopBar:getReadThisYearSoFar(). TTL-cached at 30s. Works offline.
+used by TopBar:getReadThisYearSoFar(). Cached until statistics.sqlite3 changes
+(see dbStamp), with a 1 h safety cap. Works offline.
 
 Also shows today's total reading time (from the DB + any live/open
 session) to the right of ΔL, same source data as session_time.lua.
 ]]
 local _ = require("lib/bookshelf_i18n").gettext
 
-local STATS_TTL_S = 30
+-- Safety cap only: caches are invalidated when statistics.sqlite3 changes
+-- (see dbStamp), not by a short timer.
+local STATS_TTL_S = 3600
 local _cache -- { at = <epoch>, value = <number> }
 
 local PACE_KEY = "micromodule_reading_delta_pace" -- hours/day target
@@ -30,9 +33,20 @@ local function fmtPace(h)
     return string.format("%.1fh/d", h)
 end
 
+local function dbStamp()
+    local DataStorage = require("datastorage")
+    local lfs = require("libs/libkoreader-lfs")
+    local p = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    return (lfs.attributes(p, "modification") or 0) .. ":" ..
+           (lfs.attributes(p, "size") or 0)
+end
+
 local function readDelta(pace)
-    local now = os.time()
-    if _cache and now - _cache.at < STATS_TTL_S and _cache.pace == pace then
+    local now   = os.time()
+    local stamp = dbStamp()
+    local yday  = os.date("*t").yday
+    if _cache and _cache.stamp == stamp and _cache.yday == yday
+       and _cache.pace == pace and now - _cache.at < STATS_TTL_S then
         return _cache.value
     end
     local ok, result = pcall(function()
@@ -48,12 +62,10 @@ local function readDelta(pace)
             local exists = conn:rowexec(
                 "SELECT name FROM sqlite_master WHERE type='table' AND name='wpm_stat_data'")
             if not exists then val = nil; return end
-            local yday = os.date("*t").yday
-            local row = conn:rowexec(string.format([[
-                SELECT sum(duration)
-                FROM   wpm_stat_data
-                WHERE  DATE(start_time,'unixepoch','localtime') >= DATE('now', '-%d day','localtime')
-            ]], yday))
+            local t = os.date("*t")
+            local year_start = os.time{ year = t.year, month = 1, day = 1, hour = 0 }
+            local row = conn:rowexec(string.format(
+                "SELECT sum(duration) FROM wpm_stat_data WHERE start_time >= %d", year_start))
             local secs = tonumber(row) or 0
             val = math.ceil((secs / 3600) - (yday * pace))
         end)
@@ -65,7 +77,12 @@ local function readDelta(pace)
         require("logger").warn("[bookshelf] reading_delta query failed:", result)
         result = nil
     end
-    _cache = { at = now, value = result, pace = pace }
+    -- A failed query (result == nil) is retried after ~30s instead of being
+    -- cached for the whole safety cap.
+    _cache = {
+        at    = result ~= nil and now or (now - STATS_TTL_S + 30),
+        stamp = stamp, yday = yday, value = result, pace = pace,
+    }
     return result
 end
 
@@ -92,35 +109,43 @@ end
 local function getTodaySecs()
     local now = os.time()
     local day_start = dayStart(now)
+    local stamp = dbStamp()
 
-    if _today_cache and now - _today_cache.at < STATS_TTL_S and _today_cache.day_start == day_start then
-        return _today_cache.secs
-    end
-
-    local db_secs = 0
-    pcall(function()
-        local DataStorage = require("datastorage")
-        local path = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
-        local lfs = require("libs/libkoreader-lfs")
-        if lfs.attributes(path, "mode") ~= "file" then return end
-        local SQ3 = require("lua-ljsqlite3/init")
-        local conn = SQ3.open(path, "ro")
+    -- Only the DB sum is cached; `live` (the still-open session) is
+    -- recomputed on every call so "Today" keeps ticking, same rule as
+    -- session_time.lua.
+    local db_secs
+    if _today_cache and _today_cache.stamp == stamp
+       and _today_cache.day_start == day_start
+       and now - _today_cache.at < STATS_TTL_S then
+        db_secs = _today_cache.db_secs
+    else
+        db_secs = 0
         pcall(function()
-            conn:exec("PRAGMA busy_timeout=200;")
-            local stmt = conn:prepare([[
-                SELECT COALESCE(SUM(
-                    MIN(start_time + duration, ?) - MAX(start_time, ?)
-                ), 0)
-                FROM wpm_stat_data
-                WHERE start_time + duration >= ? AND start_time <= ?
-            ]])
-            local row = stmt:bind(now, day_start, day_start, now):step()
-            stmt:clearbind():reset()
-            stmt:close()
-            db_secs = tonumber(row[1]) or 0
+            local DataStorage = require("datastorage")
+            local path = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+            local lfs = require("libs/libkoreader-lfs")
+            if lfs.attributes(path, "mode") ~= "file" then return end
+            local SQ3 = require("lua-ljsqlite3/init")
+            local conn = SQ3.open(path, "ro")
+            pcall(function()
+                conn:exec("PRAGMA busy_timeout=200;")
+                local stmt = conn:prepare([[
+                    SELECT COALESCE(SUM(
+                        MIN(start_time + duration, ?) - MAX(start_time, ?)
+                    ), 0)
+                    FROM wpm_stat_data
+                    WHERE start_time + duration >= ? AND start_time <= ?
+                ]])
+                local row = stmt:bind(now, day_start, day_start, now):step()
+                stmt:clearbind():reset()
+                stmt:close()
+                db_secs = tonumber(row[1]) or 0
+            end)
+            conn:close()
         end)
-        conn:close()
-    end)
+        _today_cache = { at = now, day_start = day_start, db_secs = db_secs, stamp = stamp }
+    end
 
     local live = 0
     pcall(function()
@@ -132,9 +157,7 @@ local function getTodaySecs()
         end
     end)
 
-    local total = db_secs + live
-    _today_cache = { at = now, day_start = day_start, secs = total }
-    return total
+    return db_secs + live
 end
 
 -- Shrinks font size until `text` fits within `max_w` at the given face,

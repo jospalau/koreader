@@ -45,12 +45,25 @@ local function dayStart(now)
     return os.time{ year = t.year, month = t.month, day = t.day, hour = 0, min = 0, sec = 0 }
 end
 
-local STATS_TTL_S = 30
+-- Safety cap only: the cache is invalidated when statistics.sqlite3 changes
+-- (see dbStamp), not by a short timer.
+local STATS_TTL_S = 3600
 local _cache
+
+-- Cheap fingerprint of the statistics DB (two stat() calls, microseconds):
+-- mtime and size. Changes whenever the DB is written.
+local function dbStamp()
+    local DataStorage = require("datastorage")
+    local lfs = require("libs/libkoreader-lfs")
+    local p = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    return (lfs.attributes(p, "modification") or 0) .. ":" ..
+           (lfs.attributes(p, "size") or 0)
+end
 
 local function getTodaySecs()
     local now = os.time()
     local day_start = dayStart(now)
+    local stamp = dbStamp()
 
     -- Only the DB sum is expensive/cacheable. `live` (the still-open
     -- session/stat period) must be recomputed every call, or it goes
@@ -59,10 +72,12 @@ local function getTodaySecs()
     -- bug: "Today" would freeze mid-render-cycle while "Session" kept
     -- ticking, making them disagree by a few seconds.
     local db_secs
-    if _cache and now - _cache.at < STATS_TTL_S and _cache.day_start == day_start then
+    if _cache and _cache.stamp == stamp and _cache.day_start == day_start
+       and now - _cache.at < STATS_TTL_S then
         db_secs = _cache.db_secs
     else
         db_secs = 0
+        local ok_db = false
         pcall(function()
             local DataStorage = require("datastorage")
             local path = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
@@ -83,10 +98,16 @@ local function getTodaySecs()
                 stmt:clearbind():reset()
                 stmt:close()
                 db_secs = tonumber(row[1]) or 0
+                ok_db = true
             end)
             conn:close()
         end)
-        _cache = { at = now, day_start = day_start, db_secs = db_secs }
+        -- A failed query is retried after ~30s instead of being cached for
+        -- the whole safety cap.
+        _cache = {
+            at = ok_db and now or (now - STATS_TTL_S + 30),
+            day_start = day_start, db_secs = db_secs, stamp = stamp,
+        }
     end
 
     local live = 0

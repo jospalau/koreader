@@ -12,10 +12,21 @@ local function fmtDuration(secs)
     return require("lib/bookshelf_module_kit").fmtDuration(secs)
 end
 
--- Focus-step rebuilds re-render module rows on every keystroke; a short
--- TTL keeps sqlite out of that path while staying fresh across reopens.
-local STATS_TTL_S = 30
-local _stats_cache -- { at = <epoch>, data = <queryStats result or false> }
+-- Focus-step rebuilds re-render module rows on every keystroke; the cache
+-- keeps sqlite out of that path. It is invalidated when statistics.sqlite3
+-- changes (see dbStamp) or the day rolls over; the TTL is only a safety cap.
+local STATS_TTL_S = 3600
+local _stats_cache -- { at = <epoch>, stamp, day, data = <queryStats result or false> }
+
+-- Cheap fingerprint of the statistics DB (two stat() calls, microseconds):
+-- mtime and size. Changes whenever the DB is written.
+local function dbStamp()
+    local DataStorage = require("datastorage")
+    local lfs = require("libs/libkoreader-lfs")
+    local p = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    return (lfs.attributes(p, "modification") or 0) .. ":" ..
+           (lfs.attributes(p, "size") or 0)
+end
 
 -- Returns { today_secs, today_pages, week_secs } or nil. Never blocks long:
 -- read-only open + 200ms busy timeout; any failure -> nil.
@@ -61,11 +72,22 @@ local function queryStats()
 end
 
 local function readStats()
-    if _stats_cache and os.time() - _stats_cache.at < STATS_TTL_S then
+    local now   = os.time()
+    local stamp = dbStamp()
+    local day   = os.date("%Y%j", now)  -- today/week boundaries shift at midnight
+    if _stats_cache and _stats_cache.stamp == stamp and _stats_cache.day == day
+       and now - _stats_cache.at < STATS_TTL_S then
         return _stats_cache.data or nil
     end
     local result = queryStats()
-    _stats_cache = { at = os.time(), data = result or false }
+    -- A failed query is retried after ~30s instead of being cached for the
+    -- whole safety cap.
+    _stats_cache = {
+        at    = result and now or (now - STATS_TTL_S + 30),
+        stamp = stamp,
+        day   = day,
+        data  = result or false,
+    }
     return result
 end
 

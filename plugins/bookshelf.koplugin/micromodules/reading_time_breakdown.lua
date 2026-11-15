@@ -15,8 +15,20 @@ local function fmtDuration(secs)
     end
 end
 
-local STATS_TTL_S = 30
+-- Safety cap only: the cache is invalidated when statistics.sqlite3 changes
+-- (see dbStamp) or the day rolls over, not by a short timer.
+local STATS_TTL_S = 3600
 local _cache
+
+-- Cheap fingerprint of the statistics DB (two stat() calls, microseconds):
+-- mtime and size. Changes whenever the DB is written.
+local function dbStamp()
+    local DataStorage = require("datastorage")
+    local lfs = require("libs/libkoreader-lfs")
+    local p = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    return (lfs.attributes(p, "modification") or 0) .. ":" ..
+           (lfs.attributes(p, "size") or 0)
+end
 local _conn
 local _stmt
 
@@ -112,11 +124,22 @@ local function queryStats()
 end
 
 local function readStats()
-    if _cache and os.time() - _cache.at < STATS_TTL_S then
+    local now   = os.time()
+    local stamp = dbStamp()
+    local day   = os.date("%Y%j", now)  -- yesterday/month/year all shift at midnight
+    if _cache and _cache.stamp == stamp and _cache.day == day
+       and now - _cache.at < STATS_TTL_S then
         return _cache.data or nil
     end
     local result = queryStats()
-    _cache = { at = os.time(), data = result or false }
+    -- A failed query is retried after ~30s instead of being cached for the
+    -- whole safety cap.
+    _cache = {
+        at    = result and now or (now - STATS_TTL_S + 30),
+        stamp = stamp,
+        day   = day,
+        data  = result or false,
+    }
     return result
 end
 
