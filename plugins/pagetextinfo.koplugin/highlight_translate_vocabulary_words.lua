@@ -702,7 +702,7 @@ local function isFormOf(self, w, base)
 end
 
 -- Diagnostic log (settings folder / vocabulary_debug.log). Set to false to turn it off.
-local DEBUG_FILE = true
+local DEBUG_FILE = false
 local function dlog(fmt, ...)
     if not DEBUG_FILE then return end
     local n = select("#", ...)
@@ -2382,43 +2382,54 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
         self._draw_cache = { key = key, entries = entries, words = self.words }
     end
 
-    -- Painting (cheap: only uses already computed data)
+    -- Painting (cheap: only uses already computed data).
+    -- Two passes: first all the underlines, then all the glosses, so a gloss is never covered
+    -- by the underline of another word (the entries are not in page order: the phrases
+    -- come after the simple words).
     for _, entry in ipairs(self._draw_cache.entries) do
         if entry.fallback then
             paintBaselines(bb, entry.fallback, current_font)
         else
-            local labeled = false
             for _, box in ipairs(entry.boxes) do
                 if box.h ~= 0 then
-                    -- Gloss: only on the first box of the word
-                    if show_defs and not labeled then
-                        labeled = true
-                        -- The gloss is memoized in the entry (entries are rebuilt whenever
-                        -- the page / font / layout change).
-                        local gloss = entry.gloss
-                        if gloss == nil then
-                            local lkey = entry.text:lower()
-                            gloss = self._tr_cache[lkey]
-                            if not gloss then
-                                local tr = getTranslation(self, entry.text)
-                                if tr then
-                                    gloss = shortGloss(tr)
-                                    self._tr_cache[lkey] = gloss   -- cache only valid results
-                                end
-                            end
-                            entry.gloss = gloss or false
-                        end
-                        -- FIX: an empty gloss ("" is truthy in Lua) used to paint an empty chip.
-                        if gloss and gloss ~= "" then
-                            entry.layout = entry.layout or {}
-                            paintGloss(bb, box, gloss, translation_face, entry.layout, translation_faux_bold)
-                        end
-                    end
-
                     -- Dotted underline slightly below the baseline
                     -- FIX: integer y (getBaseline returns a fractional value)
                     local y_line = math.floor(getBaseline(box, current_font) + Screen:scaleBySize(1))
                     paintDotted(bb, box.x, y_line, box.w, Size.line.thick)
+                end
+            end
+        end
+    end
+
+    if show_defs then
+        for _, entry in ipairs(self._draw_cache.entries) do
+            if not entry.fallback then
+                -- Gloss: only on the first box of the word
+                local first_box
+                for _, box in ipairs(entry.boxes) do
+                    if box.h ~= 0 then first_box = box; break end
+                end
+                if first_box then
+                    -- The gloss is memoized in the entry (entries are rebuilt whenever
+                    -- the page / font / layout change).
+                    local gloss = entry.gloss
+                    if gloss == nil then
+                        local lkey = entry.text:lower()
+                        gloss = self._tr_cache[lkey]
+                        if not gloss then
+                            local tr = getTranslation(self, entry.text)
+                            if tr then
+                                gloss = shortGloss(tr)
+                                self._tr_cache[lkey] = gloss   -- cache only valid results
+                            end
+                        end
+                        entry.gloss = gloss or false
+                    end
+                    -- FIX: an empty gloss ("" is truthy in Lua) used to paint an empty chip.
+                    if gloss and gloss ~= "" then
+                        entry.layout = entry.layout or {}
+                        paintGloss(bb, first_box, gloss, translation_face, entry.layout, translation_faux_bold)
+                    end
                 end
             end
         end
