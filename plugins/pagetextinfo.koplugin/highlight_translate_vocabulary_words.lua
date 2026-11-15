@@ -1026,6 +1026,10 @@ local function panelDictionaryEnabled()
     return G_reader_settings:isTrue(SETTING_PANEL_DICTIONARY)
 end
 
+-- True only while a tap on an underlined word starts its lookup: that lookup always goes
+-- to the panel (even with the setting off) and must not open "Vocabulary exists".
+local silence_vocab_once = false
+
 -- Vocabulary (vocabulary_builder.sqlite3) helpers for the panel.
 -- Words are stored as looked up ("smiling"); the comparison ignores the case.
 local function vocabKey(word)
@@ -1193,18 +1197,38 @@ local function getTranslationPanelClass()
                     italic = "font-weight: normal; font-style: italic;",
                     bolditalic = "font-weight: bold; font-style: italic;",
                 }
+                local have = {}
                 for style, props in pairs(styles) do
                     local path = files[style]
                     -- only the files of the same folder can be reached
                     if path and path:match("^(.*)/[^/]+$") == dir then
-                        local file = path:match("[^/]+$"):gsub(" ", "%%20"):gsub("'", "%%27")
-                        font_face_css = font_face_css .. string.format(
-                            "@font-face { font-family: 'DocumentFont'; %s src: url('%s'); }\n", props, file)
+                        -- The file name goes as it is (MuPDF does not decode %20), in double quotes
+                        local file = path:match("[^/]+$")
+                        if not file:find('"', 1, true) then
+                            font_face_css = font_face_css .. string.format(
+                                "@font-face { font-family: 'DocumentFont'; %s src: url(\"%s\"); }\n", props, file)
+                            have[style] = true
+                        end
                     end
                 end
                 if font_face_css ~= "" then
                     family = "'DocumentFont', 'Noto Sans'"
                     font_dir = dir
+                    -- MuPDF never fakes bold or italic: a family without those files shows
+                    -- <b> and <i> as plain text. For every missing style the tags go back to
+                    -- Noto Sans, which has them, so the dictionary keeps its formatting.
+                    if not have.bold then
+                        font_face_css = font_face_css ..
+                            "b, strong, th, h1, h2, h3, h4, h5, h6 { font-family: 'Noto Sans'; }\n"
+                    end
+                    if not have.italic then
+                        font_face_css = font_face_css ..
+                            "i, em, cite, dfn, var { font-family: 'Noto Sans'; }\n"
+                    end
+                    if not have.bolditalic then
+                        font_face_css = font_face_css ..
+                            "b i, i b, b em, em b, strong i, i strong, strong em, em strong { font-family: 'Noto Sans'; }\n"
+                    end
                 end
             end)
         end
@@ -1553,8 +1577,16 @@ function PageTextInfo:showFullTranslation(word, anchor_y)
     -- hook below, so the panel gets the same results as the standard window (HTML
     -- dictionaries drawn as HTML, the dictionary order and presets of KOReader...).
     -- `boxes` only tells the panel where the word is (it opens on the other half).
-    if panelDictionaryEnabled() and self.ui and self.ui.dictionary then
-        self.ui.dictionary:onLookupWord(word, true, { { x = 0, y = anchor_y or 0, w = 0, h = 0 } })
+    -- Always, also with the setting off: tapping an underlined word has always opened the
+    -- panel, and this way it gets the HTML formatting (`force_panel` makes the hook use it).
+    if self.ui and self.ui.dictionary then
+        silence_vocab_once = true   -- the word is in the vocabulary: no "Vocabulary exists"
+        local ok, err = pcall(function()
+            self.ui.dictionary:onLookupWord(word, true,
+                { { x = 0, y = anchor_y or 0, w = 0, h = 0 }, force_panel = true })
+        end)
+        silence_vocab_once = false   -- the event is sent at the start of the lookup
+        if not ok then require("logger").warn("[PTI] lookup failed:", err) end
         return
     end
 
@@ -1642,7 +1674,8 @@ local function installDefaultDictionaryPanel()
         vb._pti_silenced = true
         local original = vb.onWordLookedUp
         vb.onWordLookedUp = function(this, word, title, is_manual)
-            if not is_manual and panelDictionaryEnabled() and wordInVocabulary(word) then
+            if not is_manual and (panelDictionaryEnabled() or silence_vocab_once)
+                and wordInVocabulary(word) then
                 return true
             end
             return original(this, word, title, is_manual)
@@ -1657,7 +1690,8 @@ local function installDefaultDictionaryPanel()
     end
 
     function ReaderDictionary:showDict(word, results, boxes, link, dict_close_callback)
-        if not panelDictionaryEnabled() or self.is_wiki or not (results and results[1]) then
+        local forced = boxes and boxes.force_panel   -- tap on an underlined word
+        if not (panelDictionaryEnabled() or forced) or self.is_wiki or not (results and results[1]) then
             return original_showDict(self, word, results, boxes, link, dict_close_callback)
         end
 
