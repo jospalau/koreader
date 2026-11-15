@@ -1020,6 +1020,9 @@ end
 -- to the panel (even with the setting off) and must not open "Vocabulary exists".
 local silence_vocab_once = false
 
+-- The word that the last lookup added to the vocabulary (nil if it was already there)
+local word_added_by_lookup = nil
+
 -- Vocabulary (vocabulary_builder.sqlite3) helpers for the panel.
 -- Words are stored as looked up ("smiling"); the comparison ignores the case.
 local function vocabKey(word)
@@ -1597,9 +1600,119 @@ local function collectTranslations(self, key)
     return list
 end
 
+-- Phrasal verbs ------------------------------------------------------------
+-- When a tapped word is followed by a particle ("gave up", "look out for"), the panel
+-- also shows the phrasal verb, as its first page.
+
+-- Particles that make a phrasal verb with the word before them
+local PARTICLES = {
+    ["up"] = true, ["down"] = true, ["in"] = true, ["out"] = true, ["on"] = true,
+    ["off"] = true, ["over"] = true, ["away"] = true, ["back"] = true, ["about"] = true,
+    ["around"] = true, ["round"] = true, ["along"] = true, ["through"] = true, ["by"] = true,
+    ["for"] = true, ["with"] = true, ["of"] = true, ["to"] = true, ["at"] = true,
+    ["into"] = true, ["onto"] = true, ["after"] = true, ["across"] = true, ["ahead"] = true,
+    ["apart"] = true, ["aside"] = true, ["forward"] = true, ["together"] = true,
+    ["behind"] = true, ["from"] = true, ["against"] = true, ["past"] = true, ["under"] = true,
+}
+local MAX_PARTICLES = 2   -- "come up with"
+
+-- The particles that follow the word of `entry` (a draw cache entry), in order, up to
+-- MAX_PARTICLES. It stops at the first word that is not a particle.
+local function followingParticles(self, entry)
+    local found = {}
+    local doc = self.ui and self.ui.document
+    if not (doc and entry and entry.pos1) then
+        dbg_vocab("followingParticles: %q has no end xpointer", tostring(entry and entry.text))
+        return found
+    end
+
+    local function wordOf(text)
+        local w = tostring(text or ""):lower():gsub("’", "'"):match("[a-z']+")
+        return w
+    end
+
+    -- By xpointer: it works across lines and pages
+    local ok = pcall(function()
+        local xp = entry.pos1
+        while #found < MAX_PARTICLES do
+            local start = doc:getNextVisibleWordStart(xp)
+            local stop = start and doc:getNextVisibleWordEnd(start)
+            if not stop then break end
+            local w = wordOf(doc:getTextFromXPointers(start, stop))
+            dbg_vocab("followingParticles: %q is followed by %q (particle: %s)",
+                tostring(entry.text), tostring(w), tostring(w and PARTICLES[w] or false))
+            if not (w and PARTICLES[w]) then break end
+            found[#found + 1] = w
+            xp = stop
+        end
+    end)
+    if not ok then dbg_vocab("followingParticles: xpointer API failed") end
+    return found
+end
+
+-- Entries of the dictionaries that have exactly `key` as a headword (no fuzzy matches:
+-- "give up" must not fall back to "give"). A list of { dict, text, word }.
+local function collectExactTranslations(ui, key)
+    local dictionary = ui and ui.dictionary
+    local list, seen = {}, {}
+    if not dictionary then return list end
+
+    local function add(results)
+        for _, result in ipairs(results) do
+            if result.definition and type(result.word) == "string" and result.word:lower() == key then
+                local body = fullDefinitionText(result.definition)
+                local id = tostring(result.dict) .. "\0" .. body
+                if body ~= "" and not seen[id] then
+                    seen[id] = true
+                    list[#list + 1] = { dict = result.dict, text = body, word = key }
+                end
+            end
+        end
+    end
+
+    add(sdcvLookup(dictionary, key, DICTIONARIES, false))
+    add(sdcvLookup(dictionary, key, nil, false))
+    return list
+end
+
+-- The phrasal verb of `word` and the particles that follow it, as panel entries, or nil
+-- when the dictionaries do not have it. The verb is tried as tapped ("gave") and as
+-- the headwords that the lookup gave ("give"), the longest phrase first.
+local MAX_VERB_FORMS = 3
+local function phrasalVerbEntries(ui, word, results, following)
+    if not (following and #following > 0) then
+        dbg_vocab("phrasalVerbEntries: %q has no particle after it", tostring(word))
+        return nil
+    end
+
+    local verbs, seen = {}, {}
+    local function addVerb(v)
+        v = vocabKey(v)
+        if v ~= "" and not v:find("%s") and not seen[v] and #verbs < MAX_VERB_FORMS then
+            seen[v] = true
+            verbs[#verbs + 1] = v
+        end
+    end
+    addVerb(word)
+    for _, result in ipairs(results or {}) do
+        if type(result.word) == "string" then addVerb(result.word) end
+    end
+
+    for n = #following, 1, -1 do
+        local particles = table.concat(following, " ", 1, n)
+        for _, verb in ipairs(verbs) do
+            local list = collectExactTranslations(ui, verb .. " " .. particles)
+            dbg_vocab("phrasalVerbEntries: %q -> %d entries", verb .. " " .. particles, #list)
+            if #list > 0 then return list end
+        end
+    end
+    return nil
+end
+
 -- Shows the full translation of `word`.
 -- `anchor_y` is the y of the tapped word (the panel goes to the opposite half).
-function PageTextInfo:showFullTranslation(word, anchor_y)
+-- `following` is the optional list of particles that follow the word in the book.
+function PageTextInfo:showFullTranslation(word, anchor_y, following)
     active_plugin = self
     local UIManager = require("ui/uimanager")
 
@@ -1613,7 +1726,7 @@ function PageTextInfo:showFullTranslation(word, anchor_y)
         silence_vocab_once = true   -- the word is in the vocabulary: no "Vocabulary exists"
         local ok, err = pcall(function()
             self.ui.dictionary:onLookupWord(word, true,
-                { { x = 0, y = anchor_y or 0, w = 0, h = 0 }, force_panel = true })
+                { { x = 0, y = anchor_y or 0, w = 0, h = 0 }, force_panel = true, following = following })
         end)
         silence_vocab_once = false   -- the event is sent at the start of the lookup
         if not ok then require("logger").warn("[PTI] lookup failed:", err) end
@@ -1704,8 +1817,9 @@ local function installDefaultDictionaryPanel()
         vb._pti_silenced = true
         local original = vb.onWordLookedUp
         vb.onWordLookedUp = function(this, word, title, is_manual)
-            if not is_manual and (panelDictionaryEnabled() or silence_vocab_once)
-                and wordInVocabulary(word) then
+            local exists = wordInVocabulary(word)
+            word_added_by_lookup = (not exists and not is_manual) and vocabKey(word) or nil
+            if not is_manual and (panelDictionaryEnabled() or silence_vocab_once) and exists then
                 return true
             end
             return original(this, word, title, is_manual)
@@ -1747,6 +1861,50 @@ local function installDefaultDictionaryPanel()
         end
         if #entries == 0 then
             return original_showDict(self, word, results, boxes, link, dict_close_callback)
+        end
+
+        -- The word is followed by a particle ("gave up"): the phrasal verb is the first page.
+        -- A tap on an underlined word brings the particles in `boxes`; any other lookup (the
+        -- word is not underlined yet) has none, so they are read after the looked up word.
+        local following = boxes and boxes.following
+        if not following and not tostring(word):find("%s") then
+            -- End of the word: from the selection, or, for lookups that do not come from
+            -- one (the double tap), from the word that is under its box on the screen
+            local selected = self.highlight and self.highlight.selected_text
+            local pos1 = selected and selected.pos1
+            if not pos1 then
+                local box = boxes and ((#boxes > 0 and boxes[#boxes]) or (boxes.w and boxes))
+                if box and box.w and box.w > 0 then
+                    local mid_x = box.x + math.floor(box.w / 2)
+                    local mid_y = box.y + math.floor(box.h / 2)
+                    local ok_t, found = pcall(function()
+                        return self.ui.document._document:getTextFromPositions(
+                            mid_x, mid_y, mid_x, mid_y, false, false)
+                    end)
+                    -- only if it is the same word that was looked up
+                    if ok_t and found and found.text and found.pos1
+                        and vocabKey(lastWord(found.text)) == vocabKey(word) then
+                        pos1 = found.pos1
+                    end
+                end
+            end
+            dbg_vocab("showDict: lookup of %q, selection=%s, boxes=%s, end of the word=%s",
+                tostring(word), tostring(selected ~= nil), tostring(boxes ~= nil), tostring(pos1))
+            if pos1 then
+                following = followingParticles({ ui = self.ui }, { pos1 = pos1, text = word })
+            end
+        end
+        local phrasal = phrasalVerbEntries(self.ui, word, results, following)
+        if phrasal then
+            for i = #phrasal, 1, -1 do
+                phrasal[i].word = phrasal[i].word .. " (phrasal verb detected)"
+                table.insert(entries, 1, phrasal[i])
+            end
+            -- It is a phrasal verb: the single word that this lookup has just added is not kept
+            if word_added_by_lookup == vocabKey(word) then
+                removeFromVocabulary(word)
+                word_added_by_lookup = nil
+            end
         end
 
         local UIManager = require("ui/uimanager")
@@ -1793,7 +1951,7 @@ function PageTextInfo:onTapVocabularyWord(ges)
                 if box.h ~= 0
                     and ges.pos.x >= box.x - pad and ges.pos.x <= box.x + box.w + pad
                     and ges.pos.y >= box.y - pad and ges.pos.y <= box.y + box.h + pad then
-                    self:showFullTranslation(entry.text, box.y)
+                    self:showFullTranslation(entry.text, box.y, followingParticles(self, entry))
                     return true
                 end
             end
@@ -1882,7 +2040,8 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                 precise = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
                             end
                             if precise then
-                                entries[#entries + 1] = { boxes = precise, text = got }
+                                -- pos1: end of the word, to read the words that follow it
+                                entries[#entries + 1] = { boxes = precise, text = got, pos1 = word.pos1 }
                             end
                         elseif item.hyphenated then
                             -- No match but hyphenated: still underline with the rough boxes
