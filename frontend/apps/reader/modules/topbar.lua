@@ -29,6 +29,64 @@ local Size = require("ui/size")
 local ffiUtil = require("ffi/util")
 
 
+-- Corner mark: a small triangle in the right corner of the screen (a dog-ear
+-- look). setText() takes the mode:
+--   "free_double_tap": a solid triangle
+--   "vocabulary":      a triangle with a white diagonal stripe
+--   "":                nothing
+-- It sits in the top right corner, or in the bottom right one when the caller
+-- paints it in the lower half of the screen (the bar is at the top or the
+-- bookmark dog-ear is showing). It is drawn with plain rectangles, so there are
+-- no fonts or image files, and it keeps the small part of the TextWidget
+-- interface the top bar uses (setText, getSize, paintTo, free).
+local CORNER_MARK_SIZE = 28 -- in dp, change it to make the mark bigger or smaller
+
+local CornerIcon = Widget:extend{
+    kind = "",
+}
+
+function CornerIcon:init()
+    self.dimen = Geom:new()
+end
+
+function CornerIcon:setText(kind)
+    self.kind = kind or ""
+end
+
+function CornerIcon:getSize()
+    if self.kind == "" then return Geom:new{ w = 0, h = 0 } end
+    local size = Screen:scaleBySize(CORNER_MARK_SIZE)
+    return Geom:new{ w = size, h = size }
+end
+
+function CornerIcon:paintTo(bb, x, y)
+    if self.kind == "" then return end
+    local size = Screen:scaleBySize(CORNER_MARK_SIZE)
+    local width, height = Screen:getWidth(), Screen:getHeight()
+    local top = y < height / 2
+    local stripe = math.max(2, math.floor(size * 0.25)) -- width of the stripe and of the gap
+    self.dimen.x, self.dimen.y = x, y
+    -- One row at a time: a row is shorter the further it is from the corner
+    for i = 0, size - 1 do
+        local row_w = size - i
+        local row_y = top and i or (height - 1 - i)
+        if self.kind == "vocabulary" then
+            -- outer band along the long side, a gap, then the inner triangle
+            local band = math.min(stripe, row_w)
+            bb:paintRect(width - row_w, row_y, band, 1, Blitbuffer.COLOR_BLACK)
+            local inner = row_w - math.min(2 * stripe, row_w)
+            if inner > 0 then
+                bb:paintRect(width - inner, row_y, inner, 1, Blitbuffer.COLOR_BLACK)
+            end
+        else
+            bb:paintRect(width - row_w, row_y, row_w, 1, Blitbuffer.COLOR_BLACK)
+        end
+    end
+end
+
+function CornerIcon:free()
+end
+
 -- self[4] = self.topbar in readerview.lua
 
 local TopBar = WidgetContainer:extend{
@@ -1059,11 +1117,7 @@ function TopBar:onReaderReady()
 
     self.ignore_corners_widget_container = left_container:new{
         dimen = Geom:new(),
-        TextWidget:new{
-            text =  "",
-            face = Font:getFace("symbols", 12),
-            fgcolor = Blitbuffer.COLOR_BLACK,
-        },
+        CornerIcon:new{},
     }
     if Device:isAndroid() then
         TopBar.MARGIN_SIDES =  Screen:scaleBySize(20)
@@ -1797,14 +1851,14 @@ function TopBar:toggleBar(light_on)
         if self.ui.gestures.ignore_hold_corners then
             -- If page text info plugin highlight_all_words_vocabulary_builder_and_notes setting is true, then self.ui.gestures.ignore_hold_corners will be true so the corner words can be double tapped
             if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
-                self.ignore_corners = "\u{F0F6}"
+                self.ignore_corners = "vocabulary"
             else
-                self.ignore_corners = "\u{EA3D}"
+                self.ignore_corners = "free_double_tap"
             end
         else
             self.ignore_corners = ""
             -- if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
-            --     self.ignore_corners = "\u{F0F6}"
+            --     self.ignore_corners = "vocabulary"
             -- else
             --     self.ignore_corners = ""
             -- end
@@ -1943,14 +1997,14 @@ function TopBar:toggleBar(light_on)
         if self.ui.gestures.ignore_hold_corners then
             -- If page text info plugin highlight_all_words_vocabulary_builder_and_notes setting is true, then self.ui.gestures.ignore_hold_corners will be true so the corner words can be double tapped
             if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
-                self.ignore_corners = "\u{F0F6}"
+                self.ignore_corners = "vocabulary"
             else
-                self.ignore_corners = "\u{EA3D}"
+                self.ignore_corners = "free_double_tap"
             end
         else
             self.ignore_corners = ""
             -- if self.ui.pagetextinfo and self.ui.pagetextinfo.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
-            --     self.ignore_corners = "\u{F0F6}"
+            --     self.ignore_corners = "vocabulary"
             -- else
             --     self.ignore_corners = ""
             -- end
@@ -2449,16 +2503,12 @@ function TopBar:paintTo(bb, x, y)
                 end
                local ignore_double_tap_frame_widget_container = left_container:new{
                     dimen = Geom:new(),
-                    TextWidget:new{
-                        text =  "",
-                        face = Font:getFace("myfont3", 12),
-                        fgcolor = Blitbuffer.COLOR_BLACK,
-                    },
+                    CornerIcon:new{},
                 }
 
                 local fm = require("apps/filemanager/filemanager").instance
                 if not fm.disable_double_tap then
-                    ignore_double_tap_frame_widget_container[1]:setText("🔒")
+                    ignore_double_tap_frame_widget_container[1]:setText("free_double_tap")
                 else
                     ignore_double_tap_frame_widget_container[1]:setText("")
                 end
