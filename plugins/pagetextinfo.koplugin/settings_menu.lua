@@ -34,6 +34,14 @@ dlog("settings_menu module loaded")
 
 local WEIGHT_STEP = 0.5
 
+-- Sizes shared by the settings menu and the size combinations window, so both
+-- look the same. Font sizes are in points and are the biggest wanted: each
+-- window lowers them only as much as needed for its texts to fit.
+local WINDOW_W_RATIO = 0.92            -- window width, as a fraction of the screen
+local BTN_FONT_SIZE, BTN_FONT_MIN = 16, 10     -- buttons / table rows
+local LABEL_FONT_SIZE, LABEL_FONT_MIN = 15, 9  -- section labels / small texts
+local TITLE_FONT_SIZE, TITLE_FONT_MIN = 14, 9  -- title block
+
 local CONTRAST_MIN, CONTRAST_MAX = 0, 56
 local CONTRAST_DEFAULT = 15
 
@@ -367,37 +375,35 @@ local function buildRows(ui)
     end
 
     local fx = fixedPresets()
+    -- The first button opens the fonts menu (font_selection_menu.lua). Handled in
+    -- the dialog's onTap (open_fonts): the callback is not used, because the
+    -- settings menu must NOT be reopened over the fonts menu afterwards.
     local font_preset_row = {
-        { text = "Font small",   callback = function(u) setFontSize(u, fx.small) end,  active = near(fs, fx.small) },
-        { text = "Font default", callback = function(u) setFontSize(u, fx.normal) end, active = near(fs, fx.normal) },
-        { text = "Font big",     callback = function(u) setFontSize(u, fx.big) end,    active = near(fs, fx.big) },
+        { text = "Face",    open_fonts = true, callback = function() end },
+        { text = "Small",   callback = function(u) setFontSize(u, fx.small) end,  active = near(fs, fx.small) },
+        { text = "Default", callback = function(u) setFontSize(u, fx.normal) end, active = near(fs, fx.normal) },
+        { text = "Big",     callback = function(u) setFontSize(u, fx.big) end,    active = near(fs, fx.big) },
     }
     for __, b in ipairs(font_preset_row) do
         dlog("buildRows: preset button", b.text, "active=", b.active and true or false,
             "fs=", fs)
     end
-    -- Opens the fonts menu (font_selection_menu.lua). Handled in the dialog's
-    -- onTap (open_fonts): the callback is not used, because the settings menu
-    -- must NOT be reopened over the fonts menu afterwards.
-    local font_face_row = {
-        { text = "Font face", open_fonts = true, callback = function() end },
-    }
     local font_step_row = {
-        { text = "Font ▼", callback = function(u) stepFontSize(u, -0.1) end },
-        { text = "Font ▲", callback = function(u) stepFontSize(u,  0.1) end },
+        { text = "▼", callback = function(u) stepFontSize(u, -0.1) end },
+        { text = "▲", callback = function(u) stepFontSize(u,  0.1) end },
     }
     local spacing_row, margins_row = {}, {}
     local spacing_step_row = {
-        { text = "Spacing ▼", callback = function(u) stepLineSpacing(u, -1) end },
-        { text = "Spacing ▲", callback = function(u) stepLineSpacing(u,  1) end },
+        { text = "▼", callback = function(u) stepLineSpacing(u, -1) end },
+        { text = "▲", callback = function(u) stepLineSpacing(u,  1) end },
     }
     local weight_row = {
-        { text = "Weight ▼", callback = function(u) setWeight(u, u.document.configurable.font_base_weight - WEIGHT_STEP) end },
-        { text = "Weight ▲", callback = function(u) setWeight(u, u.document.configurable.font_base_weight + WEIGHT_STEP) end },
+        { text = "▼", callback = function(u) setWeight(u, u.document.configurable.font_base_weight - WEIGHT_STEP) end },
+        { text = "▲", callback = function(u) setWeight(u, u.document.configurable.font_base_weight + WEIGHT_STEP) end },
     }
     local contrast_row = {
-        { text = "Contrast ▼", callback = function(u) stepContrast(u, -1) end },
-        { text = "Contrast ▲", callback = function(u) stepContrast(u, 1) end },
+        { text = "▼", callback = function(u) stepContrast(u, -1) end },
+        { text = "▲", callback = function(u) stepContrast(u, 1) end },
     }
     local hinting_now = getHinting(ui)
     local hinting_row = {
@@ -410,7 +416,6 @@ local function buildRows(ui)
             { text = "Reset defaults",      callback = resetDefaults },
             { text = "Toggle screen layout", callback = toggleLayout },
         },
-        font_face_row,
         font_preset_row,
         font_step_row,
         spacing_row,
@@ -420,16 +425,16 @@ local function buildRows(ui)
         contrast_row,
         hinting_row,
     }
-    -- Section captions (a row without a title gets none)
-    font_face_row.title = "Font face"
-    font_preset_row.title = "Font presets"
-    font_step_row.title = "Font size (fine step)"
+    -- Section labels, shown to the left of each row (a row without a title
+    -- gets none: it continues the one above)
+    font_preset_row.title = "Font"
+    font_step_row.title = "Fine size"
     spacing_row.title = "Line spacing"
-    spacing_step_row.title = "Line spacing (fine step)"
+    spacing_step_row.title = "Fine spacing"
     margins_row.title = "Margins"
     weight_row.title = "Weight"
     contrast_row.title = "Contrast"
-    hinting_row.title = "Font hinting"
+    hinting_row.title = "Hinting"
 
     local ls = conf.line_spacing
     for __, spacing in ipairs(LINE_SPACINGS) do
@@ -1042,6 +1047,11 @@ local COMBO_RENDER_SHARE = 0.25   -- fraction of the rows (the best ones) that g
 local COMBO_CPS_ARCMIN = 12
 local COMBO_DIST_MM = 400
 local COMBO_MM_MAX = 2.25
+-- Font sizes of the window (biggest wanted, lowered when a text does not fit):
+-- a bit bigger than the ones of the settings menu
+local COMBO_ROW_FONT = 18     -- table rows
+local COMBO_LABEL_FONT = 16   -- column headers and info lines
+local COMBO_TITLE_FONT = 16   -- title
 
 -- Returns a list of { pt, px, mm, angle, current } (ascending), or nil if the
 -- font can't be measured.
@@ -1171,17 +1181,32 @@ local function showSizeCombos(plugin, start, old)
     end
 
     local screen = Screen:getSize()
-    local frame_w = math.floor(screen.w * 0.8)
+    local frame_w = math.floor(screen.w * WINDOW_W_RATIO)
     local outer_pad = Screen:scaleBySize(8)
     local inner_w = frame_w - 2 * (outer_pad + Size.border.window)
-    local gap = Screen:scaleBySize(3)
+    local gap = Screen:scaleBySize(5)
     local thin = Screen:scaleBySize(1)
-    local face = Font:getFace("cfont", 14)
-    local small_face = Font:getFace("cfont", 11)
-    local title_face = Font:getFace("cfont", 16)
-    local row_h = math.floor(Screen:scaleBySize(14) * 1.7)
-    local head_h = math.floor(Screen:scaleBySize(11) * 1.6)
-    local title_h = math.floor(Screen:scaleBySize(16) * 1.5)
+
+    -- Row font: the biggest size at which the widest value of each column fits
+    -- (bold, as the current row is). The fractions are the column widths used
+    -- below (pt, x-height mm, x-height px, px).
+    local row_size = COMBO_ROW_FONT
+    for __, t in ipairs({ { "◆ 99.99pt", 0.18 }, { "9.99mm", 0.20 }, { "99.99px", 0.20 }, { "999px", 0.14 } }) do
+        local max_w = math.floor((inner_w - 2 * thin) * t[2]) - 2 * Size.padding.small
+        while row_size > BTN_FONT_MIN do
+            local tw = TextWidget:new{ text = t[1], face = Font:getFace("cfont", row_size), bold = true }
+            local w = tw:getSize().w
+            tw:free()
+            if w <= max_w then break end
+            row_size = row_size - 1
+        end
+    end
+    local face = Font:getFace("cfont", row_size)
+    local small_face = Font:getFace("cfont", COMBO_LABEL_FONT)   -- column headers
+    local title_face = Font:getFace("cfont", COMBO_TITLE_FONT)
+    local row_h = math.floor(Screen:scaleBySize(row_size) * 1.8)
+    local head_h = math.floor(Screen:scaleBySize(COMBO_LABEL_FONT) * 1.6)
+    local title_h = math.floor(Screen:scaleBySize(COMBO_TITLE_FONT) * 1.5)
     local nav_h = row_h
 
     -- How many rows fit on the screen
@@ -1225,6 +1250,20 @@ local function showSizeCombos(plugin, start, old)
         }
     end
 
+    -- Like cell, for the long info lines: the font is lowered (down to
+    -- LABEL_FONT_MIN) until the text fits the width
+    local function cellFit(text, w, h, fg)
+        local size = COMBO_LABEL_FONT
+        while size > LABEL_FONT_MIN do
+            local tw = TextWidget:new{ text = text, face = Font:getFace("cfont", size) }
+            local tw_w = tw:getSize().w
+            tw:free()
+            if tw_w <= w - 2 * Size.padding.small then break end
+            size = size - 1
+        end
+        return cell(text, w, h, Font:getFace("cfont", size), fg)
+    end
+
     local grid = VerticalGroup:new{ align = "center" }
 
     -- Title + subtitle (font, dpi)
@@ -1235,10 +1274,10 @@ local function showSizeCombos(plugin, start, old)
     local step_mm = all[1].mm / all[1].px
     local xh_ratio = step_mm * dpi / 25.4   -- x-height as a fraction of the font size (em)
     local readability = faceReadability(ui, face_name)
-    table.insert(grid, cell(string.format("%s (%s) (x-height %.3fem)", face_name, readability, xh_ratio),
-        inner_w, head_h, small_face, Blitbuffer.COLOR_DARK_GRAY))
-    table.insert(grid, cell(string.format("step: 1px = %.2fpt = %.3fmm @%ddpi", 72 / dpi, step_mm, dpi),
-        inner_w, head_h, small_face, Blitbuffer.COLOR_DARK_GRAY))
+    table.insert(grid, cellFit(string.format("%s (%s) (x-height %.3fem)", face_name, readability, xh_ratio),
+        inner_w, head_h, Blitbuffer.COLOR_DARK_GRAY))
+    table.insert(grid, cellFit(string.format("step: 1px = %.2fpt = %.3fmm @%ddpi", 72 / dpi, step_mm, dpi),
+        inner_w, head_h, Blitbuffer.COLOR_DARK_GRAY))
     table.insert(grid, VerticalSpan:new{ width = gap })
 
     -- Column headers
@@ -1326,13 +1365,13 @@ local function showSizeCombos(plugin, start, old)
         footer = string.format("%.2f–%.2fmm  ·  tap a row to apply",
             all[1].mm, all[n].mm)
     end
-    table.insert(grid, cell(footer, inner_w, head_h, small_face, Blitbuffer.COLOR_DARK_GRAY))
+    table.insert(grid, cellFit(footer, inner_w, head_h, Blitbuffer.COLOR_DARK_GRAY))
     local legend = unhinted
         and "◆ x-height edge closest to a whole pixel"
         or "◆ least hinting distortion"
     legend = legend .. "  [hinting: " .. hint_name .. "]"
-    table.insert(grid, cell(string.format("%s (best %d%% of the sizes)  ·  tap outside to close",
-        legend, math.floor(COMBO_RENDER_SHARE * 100 + 0.5)), inner_w, head_h, small_face, Blitbuffer.COLOR_DARK_GRAY))
+    table.insert(grid, cellFit(string.format("%s (best %d%% of the sizes)  ·  tap outside to close",
+        legend, math.floor(COMBO_RENDER_SHARE * 100 + 0.5)), inner_w, head_h, Blitbuffer.COLOR_DARK_GRAY))
 
     local frame = FrameContainer:new{
         background = Blitbuffer.COLOR_WHITE,
@@ -1458,21 +1497,57 @@ function PageTextInfo:onShowSettingsMenu()
 
     local screen = Screen:getSize()
 
-    -- Layout metrics (scaled to the screen DPI)
-    local frame_w = math.floor(screen.w * 0.8)
-    local outer_pad = Screen:scaleBySize(6)
+    -- Layout metrics (scaled to the screen DPI). Each row is a label on the left
+    -- and the buttons on the right, so the section captions no longer take a
+    -- line of their own and the buttons can be bigger.
+    local frame_w = math.floor(screen.w * WINDOW_W_RATIO)
+    local outer_pad = Screen:scaleBySize(8)
     -- Inner width available for rows (window width minus padding and border)
     local dialog_w = frame_w - 2 * (outer_pad + Size.border.window)
-    -- Font sizes in points. The menu has many rows, so it is kept compact: these
-    -- are the values to change to make it bigger or smaller.
-    local BTN_FONT_SIZE = 12            -- button text size (was 11)
-    local LABEL_FONT_SIZE = 10          -- section captions (was 9)
-    local TITLE_FONT_SIZE = 11          -- title block; unchanged, its lines are long
-    local font_px = Screen:scaleBySize(BTN_FONT_SIZE)
-    local cell_h = math.floor(font_px * 1.7)   -- button height (was 1.6 x font)
-    local gap = Screen:scaleBySize(4)   -- space between buttons and between rows (was 3)
+    -- Font sizes: BTN_FONT_SIZE, LABEL_FONT_SIZE and TITLE_FONT_SIZE (top of the
+    -- file) are the biggest wanted; they are lowered below when a text does not fit.
+    local gap = Screen:scaleBySize(5)   -- space between buttons and between rows
     local thin = Screen:scaleBySize(1)
+    local label_w = math.floor(dialog_w * 0.2)   -- column with the section labels
+    local buttons_w = dialog_w - label_w - gap   -- width left for the buttons of a row
     local buttons = {}
+
+    local menu_rows = buildRows(ui)
+    -- The biggest font size at which every button text fits in its button. It is
+    -- the same for all the buttons, so the menu looks even. Bold is measured
+    -- because the active button is bold.
+    local btn_size = BTN_FONT_SIZE
+    for __, row_def in ipairs(menu_rows) do
+        local n = #row_def
+        if n > 0 then
+            local max_w = math.floor((buttons_w - gap * (n - 1)) / n) - 2 * Size.padding.small
+            for __, b in ipairs(row_def) do
+                while btn_size > BTN_FONT_MIN do
+                    local tw = TextWidget:new{ text = b.text, face = Font:getFace("cfont", btn_size), bold = true }
+                    local w = tw:getSize().w
+                    tw:free()
+                    if w <= max_w then break end
+                    btn_size = btn_size - 1
+                end
+            end
+        end
+    end
+    dlog("settings menu: button font size", btn_size)
+    -- The biggest label size at which every section label fits its column
+    local label_size = LABEL_FONT_SIZE
+    for __, row_def in ipairs(menu_rows) do
+        if row_def.title then
+            while label_size > LABEL_FONT_MIN do
+                local tw = TextWidget:new{ text = row_def.title, face = Font:getFace("cfont", label_size) }
+                local w = tw:getSize().w
+                tw:free()
+                if w <= label_w - 2 * gap then break end
+                label_size = label_size - 1
+            end
+        end
+    end
+    local font_px = Screen:scaleBySize(btn_size)
+    local cell_h = math.floor(font_px * 1.8)   -- button height
 
     local dialog = InputContainer:new{
         dimen = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
@@ -1487,31 +1562,35 @@ function PageTextInfo:onShowSettingsMenu()
         key_events = Device:hasKeys() and { Close = { { Device.input.group.Back } } } or {},
     }
 
-    local label_face = Font:getFace("cfont", LABEL_FONT_SIZE)
-    local label_h = math.floor(Screen:scaleBySize(LABEL_FONT_SIZE) * 1.3)
+    local label_face = Font:getFace("cfont", label_size)
+    local btn_face = Font:getFace("cfont", btn_size)
 
     local grid = VerticalGroup:new{ align = "center" }
-    for i, row_def in ipairs(buildRows(ui)) do
+    for i, row_def in ipairs(menu_rows) do
         local n = #row_def
         if n > 0 then
-            local cell_w = math.floor((dialog_w - gap * (n - 1)) / n)
+            local cell_w = math.floor((buttons_w - gap * (n - 1)) / n)
+            local row = HorizontalGroup:new{}
 
-            -- Section caption, left aligned
+            -- Section label on the left (blank when the row continues the one above)
             if row_def.title then
-                table.insert(grid, LeftContainer:new{
-                    dimen = Geom:new{ w = dialog_w, h = label_h },
+                table.insert(row, LeftContainer:new{
+                    dimen = Geom:new{ w = label_w, h = cell_h },
                     HorizontalGroup:new{
                         HorizontalSpan:new{ width = gap },
                         TextWidget:new{
                             text = row_def.title,
                             face = label_face,
                             fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+                            max_width = label_w - gap,
                         },
                     },
                 })
+            else
+                table.insert(row, HorizontalSpan:new{ width = label_w })
             end
+            table.insert(row, HorizontalSpan:new{ width = gap })
 
-            local row = HorizontalGroup:new{}
             for j, b in ipairs(row_def) do
                 if j > 1 then table.insert(row, HorizontalSpan:new{ width = gap }) end
                 -- Rounded buttons. The active one is inverted (white text on black),
@@ -1527,7 +1606,7 @@ function PageTextInfo:onShowSettingsMenu()
                         dimen = Geom:new{ w = cell_w - 2 * thin, h = cell_h - 2 * thin },
                         TextWidget:new{
                             text = b.text,
-                            face = Font:getFace("cfont", BTN_FONT_SIZE),
+                            face = btn_face,
                             fgcolor = b.active and Blitbuffer.COLOR_WHITE
                                 or (b.disabled and Blitbuffer.COLOR_DARK_GRAY or Blitbuffer.COLOR_BLACK),
                             bold = b.active and true or false,
@@ -1544,12 +1623,30 @@ function PageTextInfo:onShowSettingsMenu()
         end
     end
 
-    local title_face = Font:getFace("cfont", TITLE_FONT_SIZE)
-    -- Line height of the title: it follows the title font, not the buttons, so
-    -- the title does not grow when the buttons do
-    local line_h = math.floor(Screen:scaleBySize(TITLE_FONT_SIZE) * 1.6 * 0.85)
+    local title_lines = buildTitleSegments(ui)
+    -- The biggest title size at which the longest line fits the window
+    local title_size = TITLE_FONT_SIZE
+    while title_size > TITLE_FONT_MIN do
+        local face = Font:getFace("cfont", title_size)
+        local widest = 0
+        for __, line in ipairs(title_lines) do
+            local w = 0
+            for __, seg in ipairs(line) do
+                local tw = TextWidget:new{ text = seg.text, face = face, bold = seg.bold or false }
+                w = w + tw:getSize().w
+                tw:free()
+            end
+            widest = math.max(widest, w)
+        end
+        if widest <= dialog_w - 2 * gap then break end
+        title_size = title_size - 1
+    end
+    dlog("settings menu: title font size", title_size, "label font size", label_size)
+    local title_face = Font:getFace("cfont", title_size)
+    -- Line height of the title: it follows the title font, not the buttons
+    local line_h = math.floor(Screen:scaleBySize(title_size) * 1.6 * 0.85)
     local title_rows = VerticalGroup:new{ align = "center" }
-    for __, line in ipairs(buildTitleSegments(ui)) do
+    for __, line in ipairs(title_lines) do
         local group = HorizontalGroup:new{}
         for __, seg in ipairs(line) do
             table.insert(group, TextWidget:new{
