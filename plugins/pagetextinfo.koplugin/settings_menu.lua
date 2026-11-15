@@ -147,6 +147,23 @@ local function setLineSpacing(ui, percent)
     ui:handleEvent(require("ui/event"):new("UpdatePos"))
 end
 
+-- Fine step of the line spacing: 0.05em up or down (100% = 1.2em, same
+-- convention as LINE_SPACINGS), converted back to KOReader's percentage.
+local SPACING_STEP_EM = 0.05
+local SPACING_MIN, SPACING_MAX = 50, 200
+
+local function stepLineSpacing(ui, dir)
+    local cur = ui.document.configurable.line_spacing or 100
+    -- Snap the current value to the 0.05em grid so presets (e.g. 109% = 1.308em)
+    -- move to the neighbouring grid value instead of drifting
+    local cur_em = math.floor(1.2 * cur / 100 / SPACING_STEP_EM + 0.5) * SPACING_STEP_EM
+    local new_em = cur_em + dir * SPACING_STEP_EM
+    local percent = math.floor(new_em * 100 / 1.2 + 0.5)
+    percent = math.max(SPACING_MIN, math.min(percent, SPACING_MAX))
+    dlog("stepLineSpacing: dir=", dir, "from", cur, "% to", percent, "%")
+    setLineSpacing(ui, percent)
+end
+
 local function setMargins(ui, m)
     -- m = {left, top, right, bottom}. The event does not store them, so do it here
     dlog("setMargins: l,t,r,b=", m[1], m[2], m[3], m[4])
@@ -343,35 +360,52 @@ local function buildRows(ui)
         dlog("buildRows: preset button", b.text, "active=", b.active and true or false,
             "fs=", fs)
     end
+    -- Opens the fonts menu (font_selection_menu.lua). Handled in the dialog's
+    -- onTap (open_fonts): the callback is not used, because the settings menu
+    -- must NOT be reopened over the fonts menu afterwards.
+    local font_face_row = {
+        { text = "Font face", open_fonts = true, callback = function() end },
+    }
+    local font_step_row = {
+        { text = "Font ▼", callback = function(u) stepFontSize(u, -0.1) end },
+        { text = "Font ▲", callback = function(u) stepFontSize(u,  0.1) end },
+    }
     local spacing_row, margins_row = {}, {}
+    local spacing_step_row = {
+        { text = "Spacing ▼", callback = function(u) stepLineSpacing(u, -1) end },
+        { text = "Spacing ▲", callback = function(u) stepLineSpacing(u,  1) end },
+    }
+    local weight_row = {
+        { text = "Weight ▼", callback = function(u) setWeight(u, u.document.configurable.font_base_weight - WEIGHT_STEP) end },
+        { text = "Weight ▲", callback = function(u) setWeight(u, u.document.configurable.font_base_weight + WEIGHT_STEP) end },
+    }
+    local contrast_row = {
+        { text = "Contrast ▼", callback = function(u) stepContrast(u, -1) end },
+        { text = "Contrast ▲", callback = function(u) stepContrast(u, 1) end },
+    }
     local rows = {
         { title = "General",
             { text = "Reset defaults",      callback = resetDefaults },
             { text = "Toggle screen layout", callback = toggleLayout },
         },
+        font_face_row,
         font_preset_row,
-        {
-            { text = "Font ▼", callback = function(u) stepFontSize(u, -0.1) end },
-            { text = "Font ▲", callback = function(u) stepFontSize(u,  0.1) end },
-        },
+        font_step_row,
         spacing_row,
+        spacing_step_row,
         margins_row,
-        {
-            { text = "Decrease weight", callback = function(u) setWeight(u, u.document.configurable.font_base_weight - WEIGHT_STEP) end },
-            { text = "Increase weight", callback = function(u) setWeight(u, u.document.configurable.font_base_weight + WEIGHT_STEP) end },
-        },
-        {
-            { text = "Decrease contrast", callback = function(u) stepContrast(u, -1) end },
-            { text = "Increase contrast", callback = function(u) stepContrast(u, 1) end },
-        },
+        weight_row,
+        contrast_row,
     }
     -- Section captions (a row without a title gets none)
+    font_face_row.title = "Font face"
     font_preset_row.title = "Font presets"
-    rows[3].title = "Font size (fine step)"
+    font_step_row.title = "Font size (fine step)"
     spacing_row.title = "Line spacing"
+    spacing_step_row.title = "Line spacing (fine step)"
     margins_row.title = "Margins"
-    rows[6].title = "Weight"
-    rows[7].title = "Contrast"
+    weight_row.title = "Weight"
+    contrast_row.title = "Contrast"
 
     local ls = conf.line_spacing
     for __, spacing in ipairs(LINE_SPACINGS) do
@@ -879,7 +913,18 @@ local function buildTitleSegments(ui)
     local line1 = {}
     local font_name = doc._document:getFontFace()
     if font_name and font_name ~= "" then
-        table.insert(line1, { text = string.format("%s (%s) ", font_name, faceReadability(ui, font_name)) })
+        -- Font name and rating (HIGH / MEDIUM / LOW) in bold, the reason in regular
+        local res = faceReadability(ui, font_name)
+        local rating, why = res:match("^(%u+): (.+)$")
+        if not rating and res:match("^%u+$") then rating = res end
+        table.insert(line1, { text = font_name, bold = true })
+        if rating then
+            table.insert(line1, { text = " (" })
+            table.insert(line1, { text = rating, bold = true })
+            table.insert(line1, { text = (why and (": " .. why) or "") .. ") " })
+        else
+            table.insert(line1, { text = " (" .. res .. ") " })
+        end
     end
     table.insert(line1, { text = string.format("%gpt", pt), bold = true })
     -- Does the book size its text in rem?
@@ -890,8 +935,9 @@ local function buildTitleSegments(ui)
 
     -- Line 2: angle, x-height, class
     local angle_line = {
-        { text = string.format("Angle @40cm: %.1f′, %.2fmm ", angle, xh_mm) },
-        { text = "[" .. angle_class .. "]", bold = true },
+        { text = string.format("Angle @40cm: %.1f′, ", angle) },
+        { text = string.format("%.2fmm", xh_mm), bold = true },
+        { text = " [" .. angle_class .. "]", bold = true },
     }
 
     -- Line 3: leading, weight, contrast
@@ -924,6 +970,15 @@ local function buildTitleSegments(ui)
     local weight = configurable.font_base_weight or 0
     local idx = getContrast(ui)
     local gamma = GAMMA_TABLE[idx + 1]
+    -- Line spacing in em, same convention as LINE_SPACINGS (100% = 1.2em, as
+    -- every line-height of the converted books is 1.2)
+    local spacing_em = 1.2 * (configurable.line_spacing or 100) / 100
+    table.insert(line2, { text = "  |  " })
+    -- Rounded to the 0.05em grid of the fine step; trailing zero dropped
+    -- (1.10 -> 1.1, 1.25 stays), so presets still read 1.1 / 1.2 / 1.3 / 1.4
+    local em_txt = string.format("%.2f", math.floor(spacing_em / SPACING_STEP_EM + 0.5) * SPACING_STEP_EM)
+    em_txt = em_txt:gsub("0$", "")
+    table.insert(line2, { text = "spacing " .. em_txt .. "em", bold = true })
     table.insert(line2, { text = "  |  " })
     table.insert(line2, { text = string.format("weight %g", weight), bold = true })
     table.insert(line2, { text = "  |  " })
@@ -1440,7 +1495,8 @@ function PageTextInfo:onShowSettingsMenu()
                     },
                 }
                 table.insert(row, frame)
-                table.insert(buttons, { frame = frame, callback = b.callback, text = b.text })
+                table.insert(buttons, { frame = frame, callback = b.callback, text = b.text,
+                    open_fonts = b.open_fonts })
             end
             table.insert(grid, row)
             table.insert(grid, VerticalSpan:new{ width = gap })
@@ -1536,6 +1592,19 @@ function PageTextInfo:onShowSettingsMenu()
 
         for __, b in ipairs(buttons) do
             if b.frame.dimen and ges.pos:intersectWith(b.frame.dimen) then
+                -- Font face: swap this window for the fonts menu
+                if b.open_fonts then
+                    local plugin = self.plugin
+                    if plugin.onShowFonts then
+                        close(plugin)
+                        -- Tells the fonts menu to reopen this menu when it closes
+                        plugin.fonts_from_settings = true
+                        UIManager:nextTick(function() plugin:onShowFonts() end)
+                    else
+                        require("logger").warn("[PTI] onShowFonts not available (font_selection_menu not loaded)")
+                    end
+                    return true
+                end
                 local ok, err = pcall(b.callback, self.plugin.ui)
                 dlog("settings menu tap:", b.text, ok and "OK" or err)
                 -- Reopen after the reflow so the active state is refreshed

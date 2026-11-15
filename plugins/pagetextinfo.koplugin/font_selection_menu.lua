@@ -49,6 +49,19 @@ function PageTextInfo:closeFontsMenu()
     if d then
         UIManager:close(d, "ui", d.frame_rect)
     end
+
+    -- Opened from the settings menu: go back to it (flag set in settings_menu.lua)
+    if self.fonts_from_settings then
+        self.fonts_from_settings = nil
+        if self.onShowSettingsMenu then
+            UIManager:nextTick(function()
+                self:onShowSettingsMenu()
+                if self.view and self.view.topbar then
+                    self.view.topbar:toggleBar()
+                end
+            end)
+        end
+    end
 end
 
 -- Close the menu, apply the font directly on the reader, then reopen.
