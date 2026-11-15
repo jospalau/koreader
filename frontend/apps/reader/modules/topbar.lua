@@ -29,21 +29,20 @@ local Size = require("ui/size")
 local ffiUtil = require("ffi/util")
 
 
--- Corner marks: a small triangle in each corner of the screen (a dog-ear
+-- Corner mark: a small triangle in the right corner of the screen (a dog-ear
 -- look). setText() takes the mode:
---   "free_double_tap": solid triangles
---   "vocabulary":      triangles with a white diagonal stripe
+--   "free_double_tap": a solid triangle
+--   "vocabulary":      a triangle with a white diagonal stripe
 --   "":                nothing
--- The top right corner is left alone while the bookmark dog-ear is showing
--- there (skip_top_right() returns true). The marks are drawn with plain
--- rectangles, so there are no fonts or image files, and the widget keeps the
--- small part of the TextWidget interface the top bar uses (setText, getSize,
--- paintTo, free).
-local CORNER_MARK_SIZE = 28 -- in dp, change it to make the marks bigger or smaller
+-- It sits in the top right corner, or in the bottom right one when the caller
+-- paints it in the lower half of the screen (the bar is at the top or the
+-- bookmark dog-ear is showing). It is drawn with plain rectangles, so there are
+-- no fonts or image files, and it keeps the small part of the TextWidget
+-- interface the top bar uses (setText, getSize, paintTo, free).
+local CORNER_MARK_SIZE = 28 -- in dp, change it to make the mark bigger or smaller
 
 local CornerIcon = Widget:extend{
     kind = "",
-    skip_top_right = nil, -- optional function(): true when the bookmark is showing
 }
 
 function CornerIcon:init()
@@ -60,11 +59,13 @@ function CornerIcon:getSize()
     return Geom:new{ w = size, h = size }
 end
 
--- One triangle with the right angle in a corner of the screen
-function CornerIcon:_paintCorner(bb, size, right, top)
+function CornerIcon:paintTo(bb, x, y)
+    if self.kind == "" then return end
+    local size = Screen:scaleBySize(CORNER_MARK_SIZE)
     local width, height = Screen:getWidth(), Screen:getHeight()
+    local top = y < height / 2
     local stripe = math.max(2, math.floor(size * 0.25)) -- width of the stripe and of the gap
-    local black = Blitbuffer.COLOR_BLACK
+    self.dimen.x, self.dimen.y = x, y
     -- One row at a time: a row is shorter the further it is from the corner
     for i = 0, size - 1 do
         local row_w = size - i
@@ -72,30 +73,14 @@ function CornerIcon:_paintCorner(bb, size, right, top)
         if self.kind == "vocabulary" then
             -- outer band along the long side, a gap, then the inner triangle
             local band = math.min(stripe, row_w)
+            bb:paintRect(width - row_w, row_y, band, 1, Blitbuffer.COLOR_BLACK)
             local inner = row_w - math.min(2 * stripe, row_w)
-            if right then
-                bb:paintRect(width - row_w, row_y, band, 1, black)
-                if inner > 0 then bb:paintRect(width - inner, row_y, inner, 1, black) end
-            else
-                bb:paintRect(row_w - band, row_y, band, 1, black)
-                if inner > 0 then bb:paintRect(0, row_y, inner, 1, black) end
+            if inner > 0 then
+                bb:paintRect(width - inner, row_y, inner, 1, Blitbuffer.COLOR_BLACK)
             end
         else
-            bb:paintRect(right and (width - row_w) or 0, row_y, row_w, 1, black)
+            bb:paintRect(width - row_w, row_y, row_w, 1, Blitbuffer.COLOR_BLACK)
         end
-    end
-end
-
-function CornerIcon:paintTo(bb, x, y)
-    if self.kind == "" then return end
-    self.dimen.x, self.dimen.y = x, y
-    local size = Screen:scaleBySize(CORNER_MARK_SIZE)
-    self:_paintCorner(bb, size, false, true)   -- top left
-    self:_paintCorner(bb, size, false, false)  -- bottom left
-    self:_paintCorner(bb, size, true, false)   -- bottom right
-    -- top right: not while the bookmark dog-ear is there
-    if not (self.skip_top_right and self.skip_top_right()) then
-        self:_paintCorner(bb, size, true, true)
     end
 end
 
@@ -1132,9 +1117,7 @@ function TopBar:onReaderReady()
 
     self.ignore_corners_widget_container = left_container:new{
         dimen = Geom:new(),
-        CornerIcon:new{
-            skip_top_right = function() return self.view and self.view.dogear_visible end,
-        },
+        CornerIcon:new{},
     }
     if Device:isAndroid() then
         TopBar.MARGIN_SIDES =  Screen:scaleBySize(20)
