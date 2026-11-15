@@ -953,6 +953,16 @@ local function prettifyDefinition(def)
     -- "smiling.attrib." / "x.Comb." glued to the end of the previous sense
     def = def:gsub("([%a%)%]])%.(attrib%.)", "%1.\n%2")
     def = def:gsub("([%a%)%]])%.(Comb%.)", "%1.\n%2")
+    -- each dated quotation on its own line: "...Peace iv. Wks. IX. 92 ... 1846 M{supc}Culloch"
+    def = def:gsub("([%.%]%)!%?])[ \t]+(%d%d%d%d)[ \t]+(%u)", "%1\n%2 %3")
+    def = def:gsub("([%.%]%)!%?])[ \t]+([ca] %d%d%d%d)[ \t]+(%u)", "%1\n%2 %3")
+    -- lettered sub-senses: ". b. Of or pertaining" (first: the two rules below put
+    -- back together what this one splits after "A." / "1.")
+    def = def:gsub("([%.%]%)])[ \t]+(%l)%.[ \t]+(%u)", "%1\n%2. %3")
+    -- main divisions: "A. adj." / "B. sb." / "B. n."
+    def = def:gsub("([%.%]%)])[ \t]+([A-D])%.[ \t\n]+(%l+%.)", "%1\n\n%2. %3")
+    -- numbered senses followed by a letter: "1. a. Of, belonging"
+    def = def:gsub("([%.%]%)])[ \t]+(%d%d?)%.[ \t\n]+(%l)%.[ \t]", "%1\n\n%2. %3. ")
     -- tidy the blank lines
     def = def:gsub("[ \t]+\n", "\n"):gsub("\n\n\n+", "\n\n")
     return (def:gsub("^%s+", ""):gsub("%s+$", ""))
@@ -1008,6 +1018,14 @@ end
 -- word, and it can be moved (hold and drag). A tap outside the card (or the Back key)
 -- closes it.
 -- The class is built on first use, so nothing is required until a word is tapped.
+-- Is the translation panel the dictionary? Setting "translation_panel_dictionary", off
+-- until it is turned on.
+local SETTING_PANEL_DICTIONARY = "translation_panel_dictionary"
+
+local function panelDictionaryEnabled()
+    return G_reader_settings:isTrue(SETTING_PANEL_DICTIONARY)
+end
+
 -- Vocabulary (vocabulary_builder.sqlite3) helpers for the panel.
 -- Words are stored as looked up ("smiling"); the comparison ignores the case.
 local function vocabKey(word)
@@ -1071,6 +1089,68 @@ local function refreshVocabularyHighlights()
     end)
 end
 
+-- The font of the open document (the panel text uses it) ---------------------
+
+-- Name of the font family of the book that is open, or nil
+local function documentFontName()
+    local plugin = active_plugin
+    local ok, name = pcall(function() return plugin.ui.document._document:getFontFace() end)
+    return ok and type(name) == "string" and name ~= "" and name or nil
+end
+
+-- Real file of the regular style of a family, found through KOReader's font list
+local _family_path_cache = {}
+local function fontPathForFamily(name)
+    if _family_path_cache[name] ~= nil then return _family_path_cache[name] or nil end
+    local function norm(s) return (s:gsub("%s+", ""):lower()) end
+    local want = norm(name)
+    local FontList = require("fontlist")
+    pcall(function() FontList:getFontList() end)   -- makes sure fontinfo is filled
+    local best, any
+    for path, info in pairs(FontList.fontinfo or {}) do
+        for _, f in ipairs(info) do
+            if f.name and norm(f.name) == want then
+                -- tie-break on path so the result doesn't depend on pairs() order
+                if not f.bold and not f.italic then
+                    if not best or path < best then best = path end
+                elseif not any or path < any then
+                    any = path
+                end
+            end
+        end
+    end
+    _family_path_cache[name] = best or any or false
+    return best or any
+end
+
+-- Font files of a family by style: { regular =, bold =, italic =, bolditalic = } (paths)
+local function familyFontFiles(name)
+    local function norm(s) return (s:gsub("%s+", ""):lower()) end
+    local want = norm(name)
+    local FontList = require("fontlist")
+    pcall(function() FontList:getFontList() end)
+    local files = {}
+    for path, info in pairs(FontList.fontinfo or {}) do
+        for _, f in ipairs(info) do
+            if f.name and norm(f.name) == want then
+                local style = (f.bold and f.italic) and "bolditalic"
+                    or f.bold and "bold" or f.italic and "italic" or "regular"
+                if not files[style] or path < files[style] then files[style] = path end
+            end
+        end
+    end
+    return files
+end
+
+-- Face of the document font at `size`, or nil if it can't be loaded
+local function documentFace(size)
+    local name = documentFontName()
+    local path = name and fontPathForFamily(name)
+    if not path then return nil end
+    local ok, face = pcall(Font.getFace, Font, path, size)
+    return ok and face or nil
+end
+
 local TranslationPanel
 local function getTranslationPanelClass()
     if TranslationPanel then return TranslationPanel end
@@ -1092,15 +1172,49 @@ local function getTranslationPanelClass()
 
     -- Same base CSS as KOReader's dictionary window (Noto Sans has the IPA symbols);
     -- `extra` is the dictionary's own css, if it has one
-    local function htmlDictionaryCss(extra)
+    -- Returns the css and the folder of the document font files (the folder must be the
+    -- resource directory of the html, MuPDF loads @font-face files relative to it).
+    -- `has_res_dir`: the dictionary has its own resource directory (images...); then the
+    -- font files can't be reached and only Noto Sans is used.
+    local function htmlDictionaryCss(extra, has_res_dir)
         local justify = G_reader_settings:nilOrTrue("dict_justify") and "text-align: justify;" or ""
-        local css = [[
-            @page { margin: 0; font-family: 'Noto Sans'; }
+        -- The document font first (if MuPDF knows it), Noto Sans (it has the IPA symbols) after
+        -- MuPDF only knows its own fonts, so the document font is loaded with @font-face
+        local family, font_face_css, font_dir = "'Noto Sans'", "", nil
+        local doc_font = documentFontName()
+        if doc_font and not has_res_dir then
+            pcall(function()
+                local files = familyFontFiles(doc_font)
+                local dir = files.regular and files.regular:match("^(.*)/[^/]+$")
+                if not dir then return end
+                local styles = {
+                    regular = "font-weight: normal; font-style: normal;",
+                    bold = "font-weight: bold; font-style: normal;",
+                    italic = "font-weight: normal; font-style: italic;",
+                    bolditalic = "font-weight: bold; font-style: italic;",
+                }
+                for style, props in pairs(styles) do
+                    local path = files[style]
+                    -- only the files of the same folder can be reached
+                    if path and path:match("^(.*)/[^/]+$") == dir then
+                        local file = path:match("[^/]+$"):gsub(" ", "%%20"):gsub("'", "%%27")
+                        font_face_css = font_face_css .. string.format(
+                            "@font-face { font-family: 'DocumentFont'; %s src: url('%s'); }\n", props, file)
+                    end
+                end
+                if font_face_css ~= "" then
+                    family = "'DocumentFont', 'Noto Sans'"
+                    font_dir = dir
+                end
+            end)
+        end
+        local css = font_face_css .. [[
+            @page { margin: 0; font-family: ]] .. family .. [[; }
             body { margin: 0; line-height: 1.3; ]] .. justify .. [[ }
             blockquote, dd { margin: 0 1em; }
             ol, ul, menu { margin: 0; padding: 0 1.7em; }
         ]]
-        return extra and (css .. extra) or css
+        return (extra and (css .. extra) or css), font_dir
     end
 
     -- The text scrolls vertically, but the horizontal swipes must reach the panel
@@ -1140,7 +1254,9 @@ local function getTranslationPanelClass()
         local counter_w = several and Screen:scaleBySize(56) or 0
         local title = TextWidget:new{
             text = entry.word or self.word,   -- entry.word: headword of that dictionary
-            face = Font:getFace("cfont", 22),
+            -- The UI title font ("tfont") at the same size as KOReader's own window: the
+            -- font selected for the interface, not the one of the book
+            face = Font:getFace("tfont", math.max(22, G_reader_settings:readSetting("dict_font_size") or 20)),
             bold = true,
             fgcolor = Blitbuffer.COLOR_BLACK,
             max_width = inner_w - counter_w,
@@ -1186,24 +1302,40 @@ local function getTranslationPanelClass()
         -- HTML dictionaries (sametypesequence=h) are drawn like KOReader's own window does
         -- (bold, italics, paragraphs, lists...), instead of as plain text
         if entry.html and ok_html and ScrollHtmlWidget then
-            local ok_w, widget = pcall(function()
+            local css_text, font_dir = htmlDictionaryCss(entry.css, entry.res_dir ~= nil)
+            local function newHtmlWidget(height)
                 return ScrollHtmlWidget:new{
                     html_body = entry.html,
-                    html_resource_directory = entry.res_dir,
-                    css = htmlDictionaryCss(entry.css),
+                    html_resource_directory = entry.res_dir or font_dir,
+                    css = css_text,
                     default_font_size = Screen:scaleBySize(G_reader_settings:readSetting("dict_font_size") or 20),
                     width = inner_w,
-                    height = max_h,
+                    height = height,
                     dialog = self,
                 }
-            end)
-            if ok_w then body_widget = widget end
+            end
+            local ok_w, widget = pcall(newHtmlWidget, max_h)
+            if ok_w then
+                -- A short definition fits on one page: use only the height it needs
+                -- (getSinglePageHeight() is nil when the text needs several pages)
+                local ok_h, used = pcall(function() return widget:getSinglePageHeight() end)
+                if ok_h and used and used > 0 and used < max_h then
+                    local ok_t, tight = pcall(newHtmlWidget, math.min(max_h, used + Screen:scaleBySize(6)))
+                    if ok_t then
+                        pcall(function() if widget.free then widget:free() end end)
+                        widget = tight
+                    end
+                end
+                body_widget = widget
+            end
         end
         if not body_widget then
             -- The text box is as tall as its text, up to 45% of the screen (then it scrolls)
-            -- Same font, size and options as KOReader's dictionary window
-            local justified = G_reader_settings:nilOrTrue("dict_justify")
-            local body_face = Font:getFace("cfont", G_reader_settings:readSetting("dict_font_size") or 20)
+            -- Same font and size as KOReader's dictionary window. Not justified: in a
+            -- narrow card the justification opens huge gaps between the words
+            local justified = false
+            local body_size = G_reader_settings:readSetting("dict_font_size") or 20
+            local body_face = documentFace(body_size) or Font:getFace("cfont", body_size)
             local probe = TextBoxWidget:new{
                 text = entry.text, face = body_face, width = inner_w,
                 justified = justified, auto_para_direction = true,
@@ -1416,6 +1548,16 @@ end
 function PageTextInfo:showFullTranslation(word, anchor_y)
     active_plugin = self
     local UIManager = require("ui/uimanager")
+
+    -- Panel as dictionary: do a normal KOReader lookup. It goes through the dictionary
+    -- hook below, so the panel gets the same results as the standard window (HTML
+    -- dictionaries drawn as HTML, the dictionary order and presets of KOReader...).
+    -- `boxes` only tells the panel where the word is (it opens on the other half).
+    if panelDictionaryEnabled() and self.ui and self.ui.dictionary then
+        self.ui.dictionary:onLookupWord(word, true, { { x = 0, y = anchor_y or 0, w = 0, h = 0 } })
+        return
+    end
+
     local entries = collectTranslations(self, word:lower())
 
     if #entries == 0 then
@@ -1442,13 +1584,9 @@ end
 -- and the "WordLookedUp" event (vocabulary builder) work as always.
 -- Not replaced: Wikipedia (it needs the standard window) and lookups without results
 -- (KOReader's own "no results" dialog).
--- It is controlled by the setting "translation_panel_dictionary" (off until it is turned
--- on). Menu entry: PageTextInfo:getDictionaryPanelMenuItem(), or the one in main.lua.
-local SETTING_PANEL_DICTIONARY = "translation_panel_dictionary"
-
-local function panelDictionaryEnabled()
-    return G_reader_settings:isTrue(SETTING_PANEL_DICTIONARY)
-end
+-- It is controlled by the setting "translation_panel_dictionary" (see
+-- panelDictionaryEnabled above). Menu entry: PageTextInfo:getDictionaryPanelMenuItem(),
+-- or the one in main.lua.
 
 -- Menu entry (same style as the other checkable entries) that turns the setting on / off
 function PageTextInfo:getDictionaryPanelMenuItem()
