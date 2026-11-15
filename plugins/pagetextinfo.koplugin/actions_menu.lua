@@ -90,7 +90,7 @@ return function(PageTextInfo)
             end,
         })
         table.insert(actions, {
-            label = "Toggle verbose logging",
+            label = "Verbose logging",
             -- Reflects the saved setting (takes effect after a restart)
             active = function() return G_reader_settings:isTrue("debug_verbose") end,
             callback = function() self:onToggleDebugVerbose() end,
