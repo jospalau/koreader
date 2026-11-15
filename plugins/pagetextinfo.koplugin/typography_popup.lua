@@ -59,6 +59,19 @@ local SNIPPET_CHARS = 150
 -- change it here if you read from elsewhere.
 local READING_DISTANCE_MM = 400
 
+-- The popups have a button that switches this distance between 40 and 30 cm (every
+-- angle, mm and pt figure is recomputed). Every time a popup is opened from scratch
+-- the distance is reset to 40 cm; the choice only lasts while that popup is open.
+local DEFAULT_READING_DISTANCE_MM = 400
+
+local function resetReadingDistance()
+    READING_DISTANCE_MM = DEFAULT_READING_DISTANCE_MM
+end
+
+local function toggleReadingDistance()
+    READING_DISTANCE_MM = (READING_DISTANCE_MM == 400) and 300 or 400
+end
+
 -- Critical print size (CPS) in arcminutes of x-height. Evidence-based (see
 -- below); used both as the first band edge and as the unit for "× CPS".
 local CPS_ARCMIN = 12
@@ -112,6 +125,7 @@ end
 local REFERENCE_ANGLES = {
     { CPS_ARCMIN,       "CPS" },
     { CPS_AGE_ARCMIN,   string.format("CPS ref. age %d (population reference, not individual)", AGE) },
+    { PRINT_MEAN_ARCMIN, "Print book (mean)" },
     { PREFERRED_ARCMIN, "Preferred" },
     { PRINT_MAX_ARCMIN, "Print book (max)" },
     { 25,               "Larger" },
@@ -176,8 +190,11 @@ local function angleNote()
             CPS_ARCMIN, mmFromArcmin(CPS_ARCMIN, READING_DISTANCE_MM)),
     }
     for _, part in ipairs(parts) do table.insert(lines, part) end   -- one band per line
-    table.insert(lines, string.format("Printed books: %d–%d′ (mean ~%d′)",
-        PRINT_MIN_ARCMIN, PRINT_MAX_ARCMIN, PRINT_MEAN_ARCMIN))
+    table.insert(lines, string.format("Printed books: %s–%s′ (%.2f–%.2fmm), mean ~%s′ (%.2fmm)",
+        fmtArc(PRINT_MIN_ARCMIN), fmtArc(PRINT_MAX_ARCMIN),
+        mmFromArcmin(PRINT_MIN_ARCMIN, READING_DISTANCE_MM),
+        mmFromArcmin(PRINT_MAX_ARCMIN, READING_DISTANCE_MM),
+        fmtArc(PRINT_MEAN_ARCMIN), mmFromArcmin(PRINT_MEAN_ARCMIN, READING_DISTANCE_MM)))
     table.insert(lines, string.format("CPS at age %d: %s′ (%.2fmm), ×%.2f vs young adults (Calabrèse et al. 2016)",
         AGE, fmtArc(CPS_AGE_ARCMIN), mmFromArcmin(CPS_AGE_ARCMIN, READING_DISTANCE_MM), CPS_AGE_FACTOR))
     table.insert(lines, string.format("Preferred (midpoint of print mean and max, %d–%d′): %g′ (%.2fmm)",
@@ -391,6 +408,27 @@ local function addSection(sections, fonts, layout, title, tbl)
     table.insert(sections, tbl)
     table.insert(sections, VerticalSpan:new{ height = Size.padding.large })
     return header, tbl
+end
+
+-- Button that switches the reading distance between 40 and 30 cm. Returns the widget to
+-- insert in the sections and the framed button, whose area is the tap target.
+local function distanceButton(fonts, layout)
+    local other = (READING_DISTANCE_MM == 400) and 300 or 400
+    local frame = FrameContainer:new{
+        background = Blitbuffer.COLOR_WHITE,
+        color      = Blitbuffer.COLOR_DARK_GRAY,
+        bordersize = Size.border.thin,
+        radius     = Size.radius.button,
+        padding    = Size.padding.small,
+        margin     = 0,
+        TextWidget:new{
+            text = string.format("Reading distance: %d cm  ⇄  tap for %d cm",
+                READING_DISTANCE_MM / 10, other / 10),
+            face = fonts.value,
+            max_width = layout.full_width - 4 * layout.padding_h,
+        },
+    }
+    return padded(layout.padding_h, frame), frame
 end
 
 local function classifyLeading(lf, x_height, ascender, descender)
@@ -783,6 +821,11 @@ local function buildSections(data, fonts, layout)
         { "For pref", data.x_height_target or "?", wide = true },
     })
 
+    -- Reading distance 40 / 30 cm: recomputes the angle, mm and pt figures
+    local dist_widget, dist_btn = distanceButton(fonts, L)
+    table.insert(sections, dist_widget)
+    table.insert(sections, VerticalSpan:new{ height = Size.padding.large })
+
     -- DISPLAY
     addSection(sections, fonts, L, "DISPLAY", kvTable{
         { "Model",      data.device_model or "?" },
@@ -859,9 +902,11 @@ local function buildSections(data, fonts, layout)
     --   style → STYLE popup     (CSS section)
     local style_targets = {}
     if css_header then style_targets = { css_header, css_tbl.table_frame } end
+    --   distance → the 40 / 30 cm button
     return sections, {
-        ref   = { xh_header, xh_tbl.table_frame },
-        style = style_targets,
+        ref      = { xh_header, xh_tbl.table_frame },
+        style    = style_targets,
+        distance = { dist_btn },
     }
 end
 
@@ -869,6 +914,11 @@ end
 local function buildReferenceSections(data, fonts, layout)
     local sections = VerticalGroup:new{ align = "left" }
     local L = layout
+
+    -- Reading distance 40 / 30 cm toggle (tap target returned to the popup)
+    table.insert(sections, VerticalSpan:new{ height = Size.padding.large })
+    local dist_widget, dist_btn = distanceButton(fonts, L)
+    table.insert(sections, dist_widget)
 
     -- ANGLE → SIZE: generic table, depends only on READING_DISTANCE_MM and
     -- (for the pt column) on the current font's x-height proportion
@@ -916,7 +966,7 @@ local function buildReferenceSections(data, fonts, layout)
         background = Blitbuffer.COLOR_BLACK,
     })
 
-    return sections
+    return sections, dist_btn
 end
 
 -- ── Paragraph style resolver (origin of line-height / text-align / text-indent)
@@ -1365,13 +1415,45 @@ function BasePopup:onCloseWidget()
     UIManager:setDirty(nil, "ui")
 end
 
+-- Forward declaration: ReferencePopup rebuilds the main popup when the distance changes.
+local TextInfoPopup
+
 -- Secondary popup: angle → size table and reference note.
 local ReferencePopup = BasePopup:extend{
-    data = nil,
+    data   = nil,
+    ui     = nil,   -- used to recompute the data when the distance changes
+    parent = nil,   -- main popup it was opened from (if any)
 }
 
 function ReferencePopup:buildContent(fonts, layout)
-    return buildReferenceSections(self.data or {}, fonts, layout)
+    local sections, dist_btn = buildReferenceSections(self.data or {}, fonts, layout)
+    self.dist_btn = dist_btn
+    return sections
+end
+
+-- A tap on the distance button switches 40 / 30 cm and rebuilds this popup (and
+-- the main one underneath it, if any); a tap anywhere else closes it.
+function ReferencePopup:onTapClose(arg, ges)
+    if ges and ges.pos and self.dist_btn and self.dist_btn.dimen
+            and ges.pos:intersectWith(self.dist_btn.dimen) then
+        toggleReadingDistance()
+        local ui, parent = self.ui, self.parent
+        UIManager:close(self)
+        local new_parent
+        if parent then
+            UIManager:close(parent)
+            new_parent = TextInfoPopup:new{ ui = ui }
+            UIManager:show(new_parent)
+        end
+        UIManager:show(ReferencePopup:new{
+            ui     = ui,
+            parent = new_parent,
+            data   = new_parent and new_parent.data or (ui and gatherData(ui)) or self.data,
+        })
+        return true
+    end
+    UIManager:close(self)
+    return true
 end
 
 -- Secondary popup: line-height / text-align / text-indent of the sampled
@@ -1385,7 +1467,7 @@ function StylePopup:buildContent(fonts, layout)
 end
 
 -- Main popup.
-local TextInfoPopup = BasePopup:extend{
+TextInfoPopup = BasePopup:extend{
     ui = nil,
 }
 
@@ -1400,9 +1482,18 @@ end
 -- section opens the style popup; a tap anywhere else closes this one.
 function TextInfoPopup:onTapClose(arg, ges)
     if ges and ges.pos and self.targets then
+        -- Distance button: switch 40 / 30 cm and rebuild this popup
+        for _, w in ipairs(self.targets.distance or {}) do
+            if w.dimen and ges.pos:intersectWith(w.dimen) then
+                toggleReadingDistance()
+                UIManager:show(TextInfoPopup:new{ ui = self.ui })
+                UIManager:close(self)
+                return true
+            end
+        end
         for _, w in ipairs(self.targets.ref or {}) do
             if w.dimen and ges.pos:intersectWith(w.dimen) then
-                UIManager:show(ReferencePopup:new{ data = self.data })
+                UIManager:show(ReferencePopup:new{ data = self.data, ui = self.ui, parent = self })
                 return true
             end
         end
@@ -1435,12 +1526,14 @@ ReaderUI.registerKeyEvents = function(self)
     local is_pdf = self.document and util.getFileNameSuffix(self.document.file) == "pdf"
     if is_pdf then return end
     self.onGetTextPage = function(this)
+        resetReadingDistance()
         UIManager:show(TextInfoPopup:new{ ui = this })
         return true
     end
     -- Opens the REFERENCE popup directly (same one as tapping X-HEIGHT)
     self.onShowTypographyReference = function(this)
-        UIManager:show(ReferencePopup:new{ data = gatherData(this) })
+        resetReadingDistance()
+        UIManager:show(ReferencePopup:new{ data = gatherData(this), ui = this })
         return true
     end
 end
