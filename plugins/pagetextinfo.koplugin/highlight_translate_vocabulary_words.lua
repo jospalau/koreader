@@ -1876,6 +1876,23 @@ local function installDefaultDictionaryPanel()
     -- State of the vocabulary just before the vocabulary builder sees a lookup: if the word
     -- was not there and the lookup turns out to be a phrasal verb, the word is removed again.
     local lookup_pre = nil   -- { key = <word>, had = <was it in the vocabulary?> }
+    local phrasal_notified = false   -- the "not saved" message was already shown for this lookup
+
+    -- Small message: the word is not saved because it is part of a phrasal verb
+    local function notifyNotSaved(word)
+        if phrasal_notified then return end
+        phrasal_notified = true
+        -- A moment later, so the message is drawn over the dictionary panel and not under it
+        require("ui/uimanager"):scheduleIn(0.4, function()
+            pcall(function()
+                local Notification = require("ui/widget/notification")
+                -- without a source Notification:notify() shows nothing
+                Notification:notify(
+                    string.format("\"%s\" is part of a phrasal verb: not saved to vocabulary", tostring(word)),
+                    Notification.SOURCE_ALWAYS_SHOW)
+            end)
+        end)
+    end
 
     -- True when the word that is being looked up (the current selection) is a verb followed
     -- by a particle that makes a phrasal verb of the dictionaries ("gave" in "gave up").
@@ -1902,10 +1919,12 @@ local function installDefaultDictionaryPanel()
         local original = vb.onWordLookedUp
         vb.onWordLookedUp = function(this, word, title, is_manual)
             if not is_manual then
+                phrasal_notified = false
                 lookup_pre = { key = vocabKey(word), had = wordInVocabulary(word) }
             end
             -- A verb followed by its particle ("gave up"): not saved, the dictionary opens
             if not is_manual and isVerbOfPhrasalVerb(ui, word) then
+                if not lookup_pre.had then notifyNotSaved(word) end
                 return true
             end
             if not is_manual and (panelDictionaryEnabled() or silence_vocab_once)
@@ -1990,6 +2009,7 @@ local function installDefaultDictionaryPanel()
         lookup_pre = nil
         if phrasal and pre and pre.key == vocabKey(word) and not pre.had then
             removeFromVocabulary(word)
+            notifyNotSaved(word)
         end
         if phrasal then
             for i = #phrasal, 1, -1 do table.insert(entries, 1, phrasal[i]) end
