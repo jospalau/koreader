@@ -673,6 +673,60 @@ local function firstWordIsWhole(self, words, res)
     return ok1 and ok2 and y_word <= y_top
 end
 
+-- Forms of a verb, to find a phrasal verb saved in the infinitive ("look for") when the
+-- book has it inflected ("looked for"). Regular rules plus the common irregular verbs.
+local PHRASE_PARTICLES = {
+    up=true, down=true, ["in"]=true, out=true, on=true, off=true, over=true, away=true,
+    back=true, about=true, around=true, round=true, along=true, through=true, by=true,
+    ["for"]=true, with=true, of=true, to=true, at=true, into=true, onto=true, after=true,
+    across=true, ahead=true, apart=true, aside=true, forward=true, together=true,
+    behind=true, from=true, against=true, past=true, under=true,
+}
+local IRREGULAR_FORMS = {
+    be={"is","are","was","were","been","being"}, have={"has","had","having"},
+    go={"goes","went","gone"}, get={"gets","got","gotten","getting"},
+    give={"gave","given"}, take={"took","taken"}, make={"made"}, come={"came"},
+    see={"saw","seen"}, put={"putting"}, run={"ran","running"}, set={"setting"},
+    bring={"brought"}, find={"found"}, keep={"kept"}, hold={"held"}, ["break"]={"broke","broken"},
+    fall={"fell","fallen"}, say={"said"}, tell={"told"}, think={"thought"}, leave={"left"},
+    stand={"stood"}, sit={"sat","sitting"}, show={"shown"}, throw={"threw","thrown"},
+    draw={"drew","drawn"}, grow={"grew","grown"}, pay={"paid"}, lay={"laid"},
+    lie={"lay","lain","lying"}, hang={"hung"}, cut={"cutting"}, hit={"hitting"},
+    win={"won","winning"}, send={"sent"}, spend={"spent"}, build={"built"}, buy={"bought"},
+    catch={"caught"}, speak={"spoke","spoken"}, write={"wrote","written"},
+    drive={"drove","driven"}, ride={"rode","ridden"}, rise={"rose","risen"},
+    wake={"woke","woken"}, wear={"wore","worn"}, tear={"tore","torn"}, blow={"blew","blown"},
+    fly={"flew","flown"}, sell={"sold"}, lose={"lost"}, mean={"meant"}, meet={"met"},
+    feed={"fed"}, lead={"led"}, shake={"shook","shaken"}, steal={"stole","stolen"},
+    begin={"began","begun","beginning"}, hide={"hid","hidden"}, sleep={"slept"},
+    sweep={"swept"}, sink={"sank","sunk"}, sing={"sang","sung"}, eat={"ate","eaten"},
+    drink={"drank","drunk"}, know={"knew","known"}, forget={"forgot","forgotten"},
+    choose={"chose","chosen"}, freeze={"froze","frozen"}, pull={}, read={}, let={"letting"},
+    cost={}, shut={"shutting"}, split={"splitting"}, bear={"bore","borne"}, swim={"swam","swum"},
+    deal={"dealt"}, lend={"lent"}, bend={"bent"}, light={"lit"}, shoot={"shot"}, fight={"fought"},
+    seek={"sought"}, teach={"taught"}, understand={"understood"}, undergo={"underwent","undergone"},
+}
+local function verbForms(v)
+    local forms = { v }
+    local function add(x) forms[#forms + 1] = x end
+    for _, f in ipairs(IRREGULAR_FORMS[v] or {}) do add(f) end
+    if v:match("[^aeiou]y$") then
+        local b = v:sub(1, -2)
+        add(b .. "ies"); add(b .. "ied"); add(v .. "ing")
+    elseif v:match("e$") then
+        add(v .. "s"); add(v .. "d"); add(v:sub(1, -2) .. "ing")
+    elseif v:match("[sxz]$") or v:match("[sc]h$") then
+        add(v .. "es"); add(v .. "ed"); add(v .. "ing")
+    else
+        add(v .. "s"); add(v .. "ed"); add(v .. "ing")
+        if v:match("[^aeiou][aeiou][^aeiouwxy]$") then   -- "stop" -> "stopped"
+            local d = v .. v:sub(-1)
+            add(d .. "ed"); add(d .. "ing")
+        end
+    end
+    return forms
+end
+
 function PageTextInfo:updateWordsVocabulary()
     active_plugin = self
     if not ffiUtil.realpath(DataStorage:getSettingsDir() .. "/vocabulary_builder.sqlite3") then return end
@@ -701,6 +755,12 @@ function PageTextInfo:updateWordsVocabulary()
                         -- searched as a whole on the page.
                         local pkey = word:lower():gsub("’", "'"):gsub("%s+", " ")
                         if pkey ~= "" and pkey ~= " " then all_phrases[pkey] = word end
+                    elseif word and word:find("%-") then
+                        -- Hyphenated word ("bang-up"): the page words are split at the hyphen,
+                        -- so it is searched whole, like a phrase.
+                        local hkey = word:lower():gsub("’", "'")
+                        all_phrases[hkey] = word
+                        all_words[hkey] = word
                     elseif word then
                         -- Index the lowercase form only: page words are lowercased before
                         -- the lookup, so any capitalisation ("Have" at the start of a
@@ -820,18 +880,36 @@ function PageTextInfo:updateWordsVocabulary()
     if self.all_phrases and next(self.all_phrases) then
         local page_text = res.text:lower():gsub("’", "'"):gsub("[%s\xC2\xA0]+", " ")
         for pkey, canonical in pairs(self.all_phrases) do
-            if page_text:find(pkey, 1, true) then
-                local hits = self.document:findText(canonical, 1, false, true, -1, false, 30)
-                for _, hit in ipairs(hits or {}) do
-                    hit.text = canonical
-                    hit.phrase = true
-                    local page = self.document:getPageFromXPointer(hit.start)
-                    if not self.words[page] then self.words[page] = {} end
-                    table.insert(self.words[page], hit)
-                    local page2 = self.document:getPageFromXPointer(hit["end"])
-                    if page2 ~= page then
-                        if not self.words[page2] then self.words[page2] = {} end
-                        table.insert(self.words[page2], hit)
+            -- "look for" is also searched as "looks for", "looked for", "looking for"...
+            -- (only when what follows the verb is a particle)
+            local variants = { pkey }
+            local first, rest = pkey:match("^([%a]+) (.+)$")
+            if first and PHRASE_PARTICLES[rest:match("^[%a']+") or ""] then
+                for _, form in ipairs(verbForms(first)) do
+                    if form ~= first then variants[#variants + 1] = form .. " " .. rest end
+                end
+            end
+            local seen_hit = {}
+            for _, variant in ipairs(variants) do
+                if page_text:find(variant, 1, true) then
+                    local hits = self.document:findText(variant, 1, false, true, -1, false, 30)
+                    for _, hit in ipairs(hits or {}) do
+                        local id = tostring(hit.start) .. ">" .. tostring(hit["end"])
+                        if not seen_hit[id] then
+                            seen_hit[id] = true
+                            -- text = the phrase as saved, so the gloss, the tap and the
+                            -- "Remove from vocabulary" button use "look for"
+                            hit.text = canonical
+                            hit.phrase = true
+                            local page = self.document:getPageFromXPointer(hit.start)
+                            if not self.words[page] then self.words[page] = {} end
+                            table.insert(self.words[page], hit)
+                            local page2 = self.document:getPageFromXPointer(hit["end"])
+                            if page2 ~= page then
+                                if not self.words[page2] then self.words[page2] = {} end
+                                table.insert(self.words[page2], hit)
+                            end
+                        end
                     end
                 end
             end
@@ -1644,6 +1722,13 @@ local PARTICLES = {
 }
 local MAX_PARTICLES = 2   -- "come up with"
 
+-- True when `t` starts with a hyphen ("-up"): the next word is part of a compound ("bang-up"),
+-- not a separate particle.
+local function startsWithHyphen(t)
+    if not t then return false end
+    return t:match("^%s*%-") ~= nil or t:match("^%s*\xE2\x80[\x90\x91\x93\x94]") ~= nil
+end
+
 -- The particles that follow the word of `entry` (a draw cache entry), in order, up to
 -- MAX_PARTICLES. It stops at the first word that is not a particle.
 local function followingParticles(self, entry)
@@ -1666,6 +1751,8 @@ local function followingParticles(self, entry)
             local start = doc:getNextVisibleWordStart(xp)
             local stop = start and doc:getNextVisibleWordEnd(start)
             if not stop then break end
+            -- "bang-up": a hyphen joins the words, it is a compound and not a phrasal verb
+            if startsWithHyphen(doc:getTextFromXPointers(xp, stop)) then break end
             local w = wordOf(doc:getTextFromXPointers(start, stop))
             dbg_vocab("followingParticles: %q is followed by %q (particle: %s)",
                 tostring(entry.text), tostring(w), tostring(w and PARTICLES[w] or false))
@@ -1737,7 +1824,7 @@ local function phrasalVerbEntries(ui, word, results, following)
     return nil
 end
 
--- True when `word` (a vocabulary word found on the page), followed by `following`
+-- Returns the phrasal verb (a string, "look for") when `word` (a word found on the page), followed by `following`
 -- particles, is part of a phrasal verb: either the phrasal verb is a headword of the
 -- dictionaries, or it is itself in the vocabulary. Then the simple verb must NOT be
 -- marked (the phrasal verb is marked as a whole only if it is in the vocabulary).
@@ -1754,7 +1841,7 @@ local function isPartOfPhrasalVerb(self, word, following)
     for n = #following, 1, -1 do
         if self.all_phrases
             and self.all_phrases[base .. " " .. table.concat(following, " ", 1, n)] then
-            found = true
+            found = base .. " " .. table.concat(following, " ", 1, n)
             break
         end
     end
@@ -1765,7 +1852,8 @@ local function isPartOfPhrasalVerb(self, word, following)
             results = sdcvLookup(self.ui.dictionary, base, nil, true)
         end
         results = preferExactEntries(results, base)
-        found = phrasalVerbEntries(self.ui, word, results, following) ~= nil
+        local list = phrasalVerbEntries(self.ui, word, results, following)
+        found = list and list[1] and list[1].word or false   -- the headword: "look for"
     end
     self._phrasal_cache[ckey] = found
     return found
@@ -1876,28 +1964,11 @@ local function installDefaultDictionaryPanel()
     -- State of the vocabulary just before the vocabulary builder sees a lookup: if the word
     -- was not there and the lookup turns out to be a phrasal verb, the word is removed again.
     local lookup_pre = nil   -- { key = <word>, had = <was it in the vocabulary?> }
-    local phrasal_notified = false   -- the "not saved" message was already shown for this lookup
-
-    -- Small message: the word is not saved because it is part of a phrasal verb
-    local function notifyNotSaved(word)
-        if phrasal_notified then return end
-        phrasal_notified = true
-        -- A moment later, so the message is drawn over the dictionary panel and not under it
-        require("ui/uimanager"):scheduleIn(0.4, function()
-            pcall(function()
-                local Notification = require("ui/widget/notification")
-                -- without a source Notification:notify() shows nothing
-                Notification:notify(
-                    string.format("\"%s\" is part of a phrasal verb: not saved to vocabulary", tostring(word)),
-                    Notification.SOURCE_ALWAYS_SHOW)
-            end)
-        end)
-    end
 
     -- True when the word that is being looked up (the current selection) is a verb followed
     -- by a particle that makes a phrasal verb of the dictionaries ("gave" in "gave up").
-    -- Such a word is not added to the vocabulary: the dictionary opens (with the phrasal
-    -- verb as its first page) but the simple verb is not saved. A particle alone is not
+    -- Returns the phrasal verb ("look for"): it is saved to the vocabulary instead of the simple
+    -- verb, and the dictionary opens with it as its first page. A particle alone is not
     -- enough ("wanted to"): the phrasal verb must exist.
     local function isVerbOfPhrasalVerb(ui, word)
         local plugin = active_plugin
@@ -1912,20 +1983,50 @@ local function installDefaultDictionaryPanel()
         return ok and result or false
     end
 
+    -- The hyphenated compound that the looked up word belongs to ("bang" in "bang-up" ->
+    -- "bang-up"), or nil. It is what gets saved, and it is not a phrasal verb.
+    local function hyphenCompound(ui, word)
+        if not (ui and ui.document and word) or tostring(word):find("[%s%-]") then return nil end
+        local selected = ui.highlight and ui.highlight.selected_text
+        if not (selected and selected.pos1 and selected.text) then return nil end
+        if vocabKey(lastWord(selected.text)) ~= vocabKey(word) then return nil end   -- old selection
+        local ok, compound = pcall(function()
+            local doc = ui.document
+            local xp, text = selected.pos1, vocabKey(word)
+            for _ = 1, 2 do   -- up to three parts
+                local start = doc:getNextVisibleWordStart(xp)
+                local stop = start and doc:getNextVisibleWordEnd(start)
+                if not stop then break end
+                local between = doc:getTextFromXPointers(xp, stop)
+                local part = between and between:match("^%s*%-([%a']+)%s*$")
+                if not part then break end
+                text = text .. "-" .. vocabKey(part)
+                xp = stop
+            end
+            return text ~= vocabKey(word) and text or nil
+        end)
+        return ok and compound or nil
+    end
+
     local function silenceVocabularyExists(ui)
         local vb = findVocabularyBuilder(ui)
         if not (vb and vb.onWordLookedUp) or vb._pti_silenced then return end
         vb._pti_silenced = true
         local original = vb.onWordLookedUp
+        vb._pti_original = original
         vb.onWordLookedUp = function(this, word, title, is_manual)
             if not is_manual then
-                phrasal_notified = false
                 lookup_pre = { key = vocabKey(word), had = wordInVocabulary(word) }
-            end
-            -- A verb followed by its particle ("gave up"): not saved, the dictionary opens
-            if not is_manual and isVerbOfPhrasalVerb(ui, word) then
-                if not lookup_pre.had then notifyNotSaved(word) end
-                return true
+                -- A verb followed by its particle ("looking for"): the phrasal verb is saved
+                -- ("look for") instead of the simple verb, so it is underlined later
+                local phrase = hyphenCompound(ui, word) or isVerbOfPhrasalVerb(ui, word)
+                if phrase then
+                    lookup_pre.phrase_saved = true
+                    if (panelDictionaryEnabled() or silence_vocab_once) and wordInVocabulary(phrase) then
+                        return true
+                    end
+                    return original(this, phrase, title, is_manual)
+                end
             end
             if not is_manual and (panelDictionaryEnabled() or silence_vocab_once)
                 and wordInVocabulary(word) then
@@ -2004,15 +2105,27 @@ local function installDefaultDictionaryPanel()
             end
         end
         local phrasal = phrasalVerbEntries(self.ui, word, results, following)
-        -- A phrasal verb: the simple verb must not stay in the vocabulary if this lookup added it
+        -- A hyphenated compound ("bang-up"): it is what gets saved, and its own entry (if the
+        -- dictionaries have it) is the first page. The particle after a hyphen is not a phrasal verb.
+        local compound = hyphenCompound(self.ui, word)
+        local compound_entries = compound and collectExactTranslations(self.ui, compound)
+        -- A phrasal verb / compound: if this lookup saved the simple verb, the phrase is saved instead
         local pre = lookup_pre
         lookup_pre = nil
-        if phrasal and pre and pre.key == vocabKey(word) and not pre.had then
+        if (phrasal or compound) and pre and pre.key == vocabKey(word) and not pre.had and not pre.phrase_saved then
             removeFromVocabulary(word)
-            notifyNotSaved(word)
+            local vb = findVocabularyBuilder(self.ui)
+            local phrase = compound or (phrasal[1] and phrasal[1].word)
+            if vb and vb._pti_original and phrase and not wordInVocabulary(phrase) then
+                local title = self.ui.doc_props and self.ui.doc_props.display_title or "Dictionary lookup"
+                pcall(vb._pti_original, vb, phrase, title, false)
+            end
         end
         if phrasal then
             for i = #phrasal, 1, -1 do table.insert(entries, 1, phrasal[i]) end
+        end
+        if compound_entries then
+            for i = #compound_entries, 1, -1 do table.insert(entries, 1, compound_entries[i]) end
         end
 
         local UIManager = require("ui/uimanager")
