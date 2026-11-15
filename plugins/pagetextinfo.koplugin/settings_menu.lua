@@ -1460,13 +1460,17 @@ function PageTextInfo:onShowSettingsMenu()
 
     -- Layout metrics (scaled to the screen DPI)
     local frame_w = math.floor(screen.w * 0.8)
-    local outer_pad = Screen:scaleBySize(5)
+    local outer_pad = Screen:scaleBySize(6)
     -- Inner width available for rows (window width minus padding and border)
     local dialog_w = frame_w - 2 * (outer_pad + Size.border.window)
-    local BTN_FONT_SIZE = 11            -- button text size (compact layout)
+    -- Font sizes in points. The menu has many rows, so it is kept compact: these
+    -- are the values to change to make it bigger or smaller.
+    local BTN_FONT_SIZE = 12            -- button text size (was 11)
+    local LABEL_FONT_SIZE = 10          -- section captions (was 9)
+    local TITLE_FONT_SIZE = 11          -- title block; unchanged, its lines are long
     local font_px = Screen:scaleBySize(BTN_FONT_SIZE)
-    local cell_h = math.floor(font_px * 1.6)
-    local gap = Screen:scaleBySize(3)   -- space between buttons and between rows
+    local cell_h = math.floor(font_px * 1.7)   -- button height (was 1.6 x font)
+    local gap = Screen:scaleBySize(4)   -- space between buttons and between rows (was 3)
     local thin = Screen:scaleBySize(1)
     local buttons = {}
 
@@ -1483,8 +1487,8 @@ function PageTextInfo:onShowSettingsMenu()
         key_events = Device:hasKeys() and { Close = { { Device.input.group.Back } } } or {},
     }
 
-    local label_face = Font:getFace("cfont", 9)
-    local label_h = math.floor(Screen:scaleBySize(9) * 1.3)
+    local label_face = Font:getFace("cfont", LABEL_FONT_SIZE)
+    local label_h = math.floor(Screen:scaleBySize(LABEL_FONT_SIZE) * 1.3)
 
     local grid = VerticalGroup:new{ align = "center" }
     for i, row_def in ipairs(buildRows(ui)) do
@@ -1540,8 +1544,10 @@ function PageTextInfo:onShowSettingsMenu()
         end
     end
 
-    local title_face = Font:getFace("cfont", 11)
-    local line_h = math.floor(cell_h * 0.85)
+    local title_face = Font:getFace("cfont", TITLE_FONT_SIZE)
+    -- Line height of the title: it follows the title font, not the buttons, so
+    -- the title does not grow when the buttons do
+    local line_h = math.floor(Screen:scaleBySize(TITLE_FONT_SIZE) * 1.6 * 0.85)
     local title_rows = VerticalGroup:new{ align = "center" }
     for __, line in ipairs(buildTitleSegments(ui)) do
         local group = HorizontalGroup:new{}
