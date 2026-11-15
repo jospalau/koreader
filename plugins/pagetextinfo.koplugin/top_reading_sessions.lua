@@ -727,11 +727,16 @@ end
 -- Calendar heatmap drawn with the same look as the charts: rounded cells,
 -- the same grays, month names on top and a light legend. One column per week,
 -- one row per weekday. The view stacks one grid per year, the last
--- HEATMAP_YEARS years: the current one from January 1st to today, the others
--- complete. All of them share the same color scale and one legend.
+-- HEATMAP_YEARS years, each one from January 1st to December 31st. In the
+-- current year the days still to come are drawn as an outline (like in the
+-- month view). All of them share the same color scale and one legend.
 
 local HEATMAP_WEEK_STARTS_ON_SUNDAY = false
-local HEATMAP_YEARS = 3  -- years shown, newest first
+local HEATMAP_YEARS = 4  -- years shown, newest first
+-- Columns of the widest possible year (366 days starting on the last weekday
+-- of the week = 54 weeks). Every grid sizes its cells for this many columns,
+-- so all years show the same square size, whatever their number of weeks.
+local HEATMAP_MAX_COLS = 54
 
 -- No reading, then 0-25%, 25-50%, 50-75% and 75-100% of the busiest day
 local HEAT_COLORS = { COLOR_SOFT, gray(200), gray(155), gray(100), COLOR_ACCENT }
@@ -764,6 +769,8 @@ local HeatmapGrid = Widget:extend{
     start_t = 0,       -- first day shown (noon timestamp)
     end_t = 0,         -- last day shown (noon timestamp)
     max_seconds = nil, -- busiest day of the color scale (nil: this grid's own)
+    layout_cols = nil, -- columns used to size the cells (nil: this grid's own)
+    today_t = nil,     -- last day that is not in the future (noon timestamp; nil: none is)
     show_legend = true,
     font_size = FONT_TINY,
 }
@@ -788,7 +795,10 @@ function HeatmapGrid:init()
             local d = os.date("*t", ts)
             local seconds = self.daily[os.date("%Y-%m-%d", ts)] or 0
             local col = math.floor(index / 7)
-            self.cells[#self.cells + 1] = { col = col, row = index % 7, seconds = seconds }
+            self.cells[#self.cells + 1] = {
+                col = col, row = index % 7, seconds = seconds,
+                future = self.today_t ~= nil and ts > self.today_t,
+            }
             if seconds > 0 then
                 self.total = self.total + seconds
                 self.active = self.active + 1
@@ -822,7 +832,10 @@ function HeatmapGrid:init()
     self.more_widget = TextWidget:new{ text = _("More"), face = face, fgcolor = COLOR_MUTED }
 
     self.label_w = Screen:scaleBySize(16)
-    self.cell = math.min(math.floor((self.width - self.label_w) / self.cols), Screen:scaleBySize(30))
+    -- Size the cells for the widest year (layout_cols), so a year that is still
+    -- in progress does not get bigger squares than the complete ones.
+    local size_cols = math.max(self.cols, self.layout_cols or 0)
+    self.cell = math.min(math.floor((self.width - self.label_w) / size_cols), Screen:scaleBySize(30))
     -- thinner gaps when the cells are small (a whole year is ~53 columns)
     self.gap = self.cell < 12 and 1 or math.max(2, math.floor(self.cell * 0.14))
     self.text_h = self.less_widget:getSize().h
@@ -852,8 +865,17 @@ function HeatmapGrid:paintTo(bb, x, y)
         w:paintTo(bb, x, grid_y + r * self.cell + math.floor((self.cell - w:getSize().h) / 2))
     end
     for _i, cell in ipairs(self.cells) do
-        bb:paintRoundedRect(grid_x + cell.col * self.cell, grid_y + cell.row * self.cell,
-            size, size, HEAT_COLORS[cell.level], radius)
+        local cx = grid_x + cell.col * self.cell
+        local cy = grid_y + cell.row * self.cell
+        if cell.future then
+            -- a day still to come: only an outline
+            bb:paintRoundedRect(cx, cy, size, size, COLOR_TRACK, radius)
+            bb:paintRoundedRect(cx + Size.border.thin, cy + Size.border.thin,
+                size - 2 * Size.border.thin, size - 2 * Size.border.thin,
+                Blitbuffer.COLOR_WHITE, math.max(0, radius - Size.border.thin))
+        else
+            bb:paintRoundedRect(cx, cy, size, size, HEAT_COLORS[cell.level], radius)
+        end
     end
 
     if not self.show_legend then return end
@@ -895,16 +917,18 @@ end
 local function buildHeatmapYear(w_width, year, daily_map, max_seconds, show_legend)
     local now = os.date("*t")
     local start_t = os.time({ year = year, month = 1, day = 1, hour = 12 })
-    local end_t = (year == now.year)
-        and os.time({ year = now.year, month = now.month, day = now.day, hour = 12 })
-        or os.time({ year = year, month = 12, day = 31, hour = 12 })
+    -- the whole year, also the current one: the days to come are drawn empty
+    local end_t = os.time({ year = year, month = 12, day = 31, hour = 12 })
+    local today_t = os.time({ year = now.year, month = now.month, day = now.day, hour = 12 })
 
     local grid = HeatmapGrid:new{
         width = w_width,
         daily = daily_map,
         start_t = start_t,
         end_t = end_t,
+        today_t = today_t,
         max_seconds = max_seconds,
+        layout_cols = HEATMAP_MAX_COLS,
         show_legend = show_legend,
     }
 
@@ -916,7 +940,7 @@ local function buildHeatmapYear(w_width, year, daily_map, max_seconds, show_lege
     }
     local total_widget = TextWidget:new{
         text = string.format("%s" .. SUMMARY_SEPARATOR .. "%d %s",
-            secondsToHM(grid.total), grid.active, _("active days")),
+            secondsToDH(grid.total), grid.active, _("active days")),
         face = getFace(FONT_CAPTION),
         fgcolor = COLOR_MUTED,
     }
@@ -955,8 +979,15 @@ local function buildHeatmapView(w_width)
     end
     widgets[#widgets + 1] = makeVerticalSpacing(SPACE.l)
     widgets[#widgets + 1] = makeSummaryLine(w_width, string.format("%s %s" .. SUMMARY_SEPARATOR .. "%d %s",
-        _("Total"), secondsToHM(total), active, _("active days")))
+        _("Total"), secondsToDH(total), active, _("active days")))
     return widgets
+end
+
+-- Fill color of a day of the month view: days without reading are white, the
+-- rest use the heatmap colors.
+local function monthCellColor(level)
+    if level == 1 then return Blitbuffer.COLOR_WHITE end
+    return HEAT_COLORS[level]
 end
 
 -- Calendar of the current month: one rounded cell per day with its number,
@@ -983,13 +1014,17 @@ function MonthGrid:init()
     local max_seconds = 0
     for day = 1, days do
         local seconds = self.daily[string.format("%04d-%02d-%02d", self.year, self.month, day)] or 0
+        -- A day counts as read only with enough reading (see MIN_DAY_SECONDS):
+        -- opening a book for a few seconds leaves the day blank. The time still
+        -- adds to the month total.
+        local read = seconds >= MIN_DAY_SECONDS
         local index = offset + day - 1
         self.cells[#self.cells + 1] = {
             day = day, col = index % 7, row = math.floor(index / 7),
-            seconds = seconds, future = day > self.today,
+            seconds = read and seconds or 0, future = day > self.today,
         }
-        if seconds > 0 then
-            self.total = self.total + seconds
+        self.total = self.total + seconds
+        if read then
             self.active = self.active + 1
             max_seconds = math.max(max_seconds, seconds)
         end
@@ -1061,9 +1096,9 @@ function MonthGrid:paintTo(bb, x, y)
             -- dark border around the color of the day
             bb:paintRoundedRect(cx, cy, size, size, COLOR_ACCENT, radius)
             bb:paintRoundedRect(cx + border, cy + border, size - 2 * border, size - 2 * border,
-                HEAT_COLORS[cell.level], math.max(0, radius - border))
+                monthCellColor(cell.level), math.max(0, radius - border))
         else
-            bb:paintRoundedRect(cx, cy, size, size, HEAT_COLORS[cell.level], radius)
+            bb:paintRoundedRect(cx, cy, size, size, monthCellColor(cell.level), radius)
         end
         local ws = cell.widget:getSize()
         cell.widget:paintTo(bb, cx + math.floor((size - ws.w) / 2), cy + math.floor((size - ws.h) / 2))
