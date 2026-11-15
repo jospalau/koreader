@@ -813,11 +813,15 @@ local function buildSections(data, fonts, layout)
         { "Pixels",  data.x_height_px or "?" },
         { "Metric",  data.x_height_mm or "?" },
         { string.format("Angle @%dcm", READING_DISTANCE_MM / 10),
-          data.x_height_arcmin or "?", wide = true },
+          data.x_height_arcmin or "?" },
+        { "CPS",     string.format("%s′ = %.2fmm", fmtArc(CPS_ARCMIN),
+            mmFromArcmin(CPS_ARCMIN, READING_DISTANCE_MM)) },
         { "vs CPS",  data.x_height_cps or "?" },
         { "Leading", data.leading_text and
             string.format("%.2f× [%s]", data.leading_factor, data.leading_text) or "N/A" },
-        { "vs Pref", data.x_height_vs_pref or "?", wide = true },
+        { "vs Pref", data.x_height_vs_pref or "?" },
+        { "Preferred", string.format("%s′ = %.2fmm", fmtArc(PREFERRED_ARCMIN),
+            mmFromArcmin(PREFERRED_ARCMIN, READING_DISTANCE_MM)) },
         { "For pref", data.x_height_target or "?", wide = true },
     })
 
