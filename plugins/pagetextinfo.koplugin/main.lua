@@ -4544,6 +4544,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
 end
 
 function PageTextInfo:onToggleDebugVerbose()
+    local dbg = require("dbg")
     if G_reader_settings:isTrue("debug_verbose") then
         dbg:setVerbose(false)
         dbg:turnOff()
