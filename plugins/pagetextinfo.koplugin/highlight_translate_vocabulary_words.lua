@@ -673,8 +673,7 @@ local function firstWordIsWhole(self, words, res)
     return ok1 and ok2 and y_word <= y_top
 end
 
--- Forms of a verb, to find a phrasal verb saved in the infinitive ("look for") when the
--- book has it inflected ("looked for"). Regular rules plus the common irregular verbs.
+-- Particles that make a phrasal verb with the word before them
 local PHRASE_PARTICLES = {
     up=true, down=true, ["in"]=true, out=true, on=true, off=true, over=true, away=true,
     back=true, about=true, around=true, round=true, along=true, through=true, by=true,
@@ -682,49 +681,75 @@ local PHRASE_PARTICLES = {
     across=true, ahead=true, apart=true, aside=true, forward=true, together=true,
     behind=true, from=true, against=true, past=true, under=true,
 }
-local IRREGULAR_FORMS = {
-    be={"is","are","was","were","been","being"}, have={"has","had","having"},
-    go={"goes","went","gone"}, get={"gets","got","gotten","getting"},
-    give={"gave","given"}, take={"took","taken"}, make={"made"}, come={"came"},
-    see={"saw","seen"}, put={"putting"}, run={"ran","running"}, set={"setting"},
-    bring={"brought"}, find={"found"}, keep={"kept"}, hold={"held"}, ["break"]={"broke","broken"},
-    fall={"fell","fallen"}, say={"said"}, tell={"told"}, think={"thought"}, leave={"left"},
-    stand={"stood"}, sit={"sat","sitting"}, show={"shown"}, throw={"threw","thrown"},
-    draw={"drew","drawn"}, grow={"grew","grown"}, pay={"paid"}, lay={"laid"},
-    lie={"lay","lain","lying"}, hang={"hung"}, cut={"cutting"}, hit={"hitting"},
-    win={"won","winning"}, send={"sent"}, spend={"spent"}, build={"built"}, buy={"bought"},
-    catch={"caught"}, speak={"spoke","spoken"}, write={"wrote","written"},
-    drive={"drove","driven"}, ride={"rode","ridden"}, rise={"rose","risen"},
-    wake={"woke","woken"}, wear={"wore","worn"}, tear={"tore","torn"}, blow={"blew","blown"},
-    fly={"flew","flown"}, sell={"sold"}, lose={"lost"}, mean={"meant"}, meet={"met"},
-    feed={"fed"}, lead={"led"}, shake={"shook","shaken"}, steal={"stole","stolen"},
-    begin={"began","begun","beginning"}, hide={"hid","hidden"}, sleep={"slept"},
-    sweep={"swept"}, sink={"sank","sunk"}, sing={"sang","sung"}, eat={"ate","eaten"},
-    drink={"drank","drunk"}, know={"knew","known"}, forget={"forgot","forgotten"},
-    choose={"chose","chosen"}, freeze={"froze","frozen"}, pull={}, read={}, let={"letting"},
-    cost={}, shut={"shutting"}, split={"splitting"}, bear={"bore","borne"}, swim={"swam","swum"},
-    deal={"dealt"}, lend={"lent"}, bend={"bent"}, light={"lit"}, shoot={"shot"}, fight={"fought"},
-    seek={"sought"}, teach={"taught"}, understand={"understood"}, undergo={"underwent","undergone"},
-}
-local function verbForms(v)
-    local forms = { v }
-    local function add(x) forms[#forms + 1] = x end
-    for _, f in ipairs(IRREGULAR_FORMS[v] or {}) do add(f) end
-    if v:match("[^aeiou]y$") then
-        local b = v:sub(1, -2)
-        add(b .. "ies"); add(b .. "ied"); add(v .. "ing")
-    elseif v:match("e$") then
-        add(v .. "s"); add(v .. "d"); add(v:sub(1, -2) .. "ing")
-    elseif v:match("[sxz]$") or v:match("[sc]h$") then
-        add(v .. "es"); add(v .. "ed"); add(v .. "ing")
-    else
-        add(v .. "s"); add(v .. "ed"); add(v .. "ing")
-        if v:match("[^aeiou][aeiou][^aeiouwxy]$") then   -- "stop" -> "stopped"
-            local d = v .. v:sub(-1)
-            add(d .. "ed"); add(d .. "ing")
+
+-- Is `w` ("looked", "spun") a form of the verb `base` ("look", "spin")? The dictionaries
+-- say so: the lookup of "looked" has "look" as a headword. Cached (the lookup is blocking).
+local function isFormOf(self, w, base)
+    self._form_cache = self._form_cache or {}
+    local ckey = w .. ">" .. base
+    if self._form_cache[ckey] ~= nil then return self._form_cache[ckey] end
+    local ok = false
+    local dictionary = self.ui and self.ui.dictionary
+    if dictionary then
+        local results = sdcvLookup(dictionary, w, DICTIONARIES, true)
+        if #results == 0 then results = sdcvLookup(dictionary, w, nil, true) end
+        for _, r in ipairs(results) do
+            if type(r.word) == "string" and r.word:lower() == base then ok = true; break end
         end
     end
-    return forms
+    self._form_cache[ckey] = ok
+    return ok
+end
+
+-- Diagnostic log (settings folder / vocabulary_debug.log). Set to false to turn it off.
+local DEBUG_FILE = true
+local function dlog(fmt, ...)
+    if not DEBUG_FILE then return end
+    local n = select("#", ...)
+    local args = { ... }
+    pcall(function()
+        for i = 1, n do args[i] = tostring(args[i]) end
+        local f = io.open(DataStorage:getSettingsDir() .. "/vocabulary_debug.log", "a")
+        if f then
+            f:write(os.date("%H:%M:%S "), string.format(fmt, unpack(args, 1, n)), "\n")
+            f:close()
+        end
+    end)
+end
+
+-- Forms in which a saved phrasal verb was looked up: "spin around" -> { "spun around" }.
+-- The dictionaries do not always link a form to its verb ("spun" is "hilado"), so the form
+-- that the reader tapped is remembered and searched on the page together with the phrase.
+local function phraseFormsFile()
+    return DataStorage:getSettingsDir() .. "/vocabulary_phrase_forms.json"
+end
+local phrase_forms
+local function getPhraseForms()
+    if phrase_forms then return phrase_forms end
+    phrase_forms = {}
+    local f = io.open(phraseFormsFile(), "r")
+    if f then
+        local content = f:read("*a")
+        f:close()
+        local ok, decoded = pcall(JSON.decode, content)
+        if ok and type(decoded) == "table" then phrase_forms = decoded end
+    end
+    return phrase_forms
+end
+local function addPhraseForm(phrase, surface)
+    phrase, surface = tostring(phrase):lower(), tostring(surface):lower()
+    if phrase == surface then return end
+    local forms = getPhraseForms()
+    forms[phrase] = forms[phrase] or {}
+    for _, known in ipairs(forms[phrase]) do
+        if known == surface then return end
+    end
+    table.insert(forms[phrase], surface)
+    local ok, encoded = pcall(JSON.encode, forms)
+    if ok and encoded then
+        local f = io.open(phraseFormsFile(), "w")
+        if f then f:write(encoded); f:close() end
+    end
 end
 
 function PageTextInfo:updateWordsVocabulary()
@@ -776,6 +801,11 @@ function PageTextInfo:updateWordsVocabulary()
             if ok_read then
                 self.all_words = all_words
                 self.all_phrases = all_phrases
+                do
+                    local n = 0
+                    for _ in pairs(all_phrases) do n = n + 1 end
+                    dlog("db: read, phrases/hyphenated in vocabulary: %d", n)
+                end
                 self._phrasal_cache = nil   -- depends on the vocabulary
                 self._vocab_stamp = stamp
             end
@@ -880,19 +910,29 @@ function PageTextInfo:updateWordsVocabulary()
     if self.all_phrases and next(self.all_phrases) then
         local page_text = res.text:lower():gsub("’", "'"):gsub("[%s\xC2\xA0]+", " ")
         for pkey, canonical in pairs(self.all_phrases) do
-            -- "look for" is also searched as "looks for", "looked for", "looking for"...
-            -- (only when what follows the verb is a particle)
+            -- "look for" is also searched as "looked for", "looking for"... (forms found with the dictionary)
             local variants = { pkey }
+            for _, form in ipairs(getPhraseForms()[pkey] or {}) do   -- forms the reader tapped
+                variants[#variants + 1] = form
+            end
             local first, rest = pkey:match("^([%a]+) (.+)$")
             if first and PHRASE_PARTICLES[rest:match("^[%a']+") or ""] then
-                for _, form in ipairs(verbForms(first)) do
-                    if form ~= first then variants[#variants + 1] = form .. " " .. rest end
+                -- the words that come before "for" on this page: are they forms of "look"?
+                local seen_w = {}
+                local pattern = "([%a']+) " .. rest:gsub("%p", "%%%0") .. "%f[^%a']"
+                for w in page_text:gmatch(pattern) do
+                    if w ~= first and not seen_w[w] then
+                        seen_w[w] = true
+                        if isFormOf(self, w, first) then variants[#variants + 1] = w .. " " .. rest end
+                    end
                 end
             end
             local seen_hit = {}
+            dlog("update: phrase %q variants: %s", pkey, table.concat(variants, " | "))
             for _, variant in ipairs(variants) do
                 if page_text:find(variant, 1, true) then
                     local hits = self.document:findText(variant, 1, false, true, -1, false, 30)
+                    dlog("update: %q is on the page, hits: %d", variant, hits and #hits or 0)
                     for _, hit in ipairs(hits or {}) do
                         local id = tostring(hit.start) .. ">" .. tostring(hit["end"])
                         if not seen_hit[id] then
@@ -2020,8 +2060,15 @@ local function installDefaultDictionaryPanel()
                 -- A verb followed by its particle ("looking for"): the phrasal verb is saved
                 -- ("look for") instead of the simple verb, so it is underlined later
                 local phrase = hyphenCompound(ui, word) or isVerbOfPhrasalVerb(ui, word)
+                do
+                    local sel = ui.highlight and ui.highlight.selected_text
+                    dlog("hook: word=%q selection=%s pos1=%s -> phrase=%s", word,
+                        sel and sel.text or "none", sel and sel.pos1 or "none", phrase)
+                end
                 if phrase then
                     lookup_pre.phrase_saved = true
+                    local rest = phrase:match("^[^%s]+ (.+)$")
+                    if rest then addPhraseForm(phrase, vocabKey(word) .. " " .. rest) end
                     if (panelDictionaryEnabled() or silence_vocab_once) and wordInVocabulary(phrase) then
                         return true
                     end
@@ -2112,10 +2159,18 @@ local function installDefaultDictionaryPanel()
         -- A phrasal verb / compound: if this lookup saved the simple verb, the phrase is saved instead
         local pre = lookup_pre
         lookup_pre = nil
-        if (phrasal or compound) and pre and pre.key == vocabKey(word) and not pre.had and not pre.phrase_saved then
-            removeFromVocabulary(word)
+        dlog("showDict: word=%q following=%s phrasal=%s compound=%s pre=%s phrase_saved=%s", word,
+            following and table.concat(following, " ") or "none", phrasal and phrasal[1] and phrasal[1].word,
+            compound, pre and pre.key, pre and pre.phrase_saved)
+        if (phrasal or compound) and pre and pre.key == vocabKey(word) and not pre.phrase_saved then
+            -- The hook did not save the phrase (a tap on an underlined word has no selection):
+            -- the verb that this lookup added is removed, and the phrase is saved instead.
+            -- A verb that was already in the vocabulary stays, but its phrase is saved too.
+            if not pre.had then removeFromVocabulary(word) end
             local vb = findVocabularyBuilder(self.ui)
             local phrase = compound or (phrasal[1] and phrasal[1].word)
+            local rest = phrase and phrase:match("^[^%s]+ (.+)$")
+            if rest then addPhraseForm(phrase, vocabKey(word) .. " " .. rest) end
             if vb and vb._pti_original and phrase and not wordInVocabulary(phrase) then
                 local title = self.ui.doc_props and self.ui.doc_props.display_title or "Dictionary lookup"
                 pcall(vb._pti_original, vb, phrase, title, false)
@@ -2245,6 +2300,7 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                 if boxes and boxes[1] and item.phrase then
                     -- A phrase saved in the vocabulary: the boxes of the whole phrase
                     entries[#entries + 1] = { boxes = boxes, text = item.text }
+                    dlog("draw: phrase %q, %d boxes", item.text, #boxes)
                 elseif boxes and boxes[1] then
                     -- Sample from the center of the first box so we don't land on a neighbor word
                     local mid_x = boxes[1].x + math.floor(boxes[1].w / 2)
