@@ -685,6 +685,7 @@ function PageTextInfo:updateWordsVocabulary()
     local stamp = dbStamp(db_location)
     if not self.all_words or self._vocab_stamp ~= stamp then
         local all_words = {}
+        local all_phrases = {}
         local ok_open, conn = pcall(function()
             return require("lua-ljsqlite3/init").open(db_location)
         end)
@@ -695,7 +696,12 @@ function PageTextInfo:updateWordsVocabulary()
                     local row = {}
                     if not stmt:step(row) then break end
                     local word = row[1]
-                    if word and not word:find("%s+") then
+                    if word and word:find("%s") then
+                        -- Phrase saved in the vocabulary ("make up"): kept apart, it is
+                        -- searched as a whole on the page.
+                        local pkey = word:lower():gsub("’", "'"):gsub("%s+", " ")
+                        if pkey ~= "" and pkey ~= " " then all_phrases[pkey] = word end
+                    elseif word then
                         -- Index the lowercase form only: page words are lowercased before
                         -- the lookup, so any capitalisation ("Have" at the start of a
                         -- sentence, "HAVE", "McDonald"...) matches the entry "have".
@@ -709,6 +715,8 @@ function PageTextInfo:updateWordsVocabulary()
             conn:close()
             if ok_read then
                 self.all_words = all_words
+                self.all_phrases = all_phrases
+                self._phrasal_cache = nil   -- depends on the vocabulary
                 self._vocab_stamp = stamp
             end
         end
@@ -801,6 +809,29 @@ function PageTextInfo:updateWordsVocabulary()
                     if page2 ~= page then
                         if not self.words[page2] then self.words[page2] = {} end
                         table.insert(self.words[page2], wordi)
+                    end
+                end
+            end
+        end
+    end
+
+    -- Phrases saved in the vocabulary ("make up"): searched as a whole, only when the
+    -- text of the page contains them (cheap check before the findText call).
+    if self.all_phrases and next(self.all_phrases) then
+        local page_text = res.text:lower():gsub("’", "'"):gsub("[%s\xC2\xA0]+", " ")
+        for pkey, canonical in pairs(self.all_phrases) do
+            if page_text:find(pkey, 1, true) then
+                local hits = self.document:findText(canonical, 1, false, true, -1, false, 30)
+                for _, hit in ipairs(hits or {}) do
+                    hit.text = canonical
+                    hit.phrase = true
+                    local page = self.document:getPageFromXPointer(hit.start)
+                    if not self.words[page] then self.words[page] = {} end
+                    table.insert(self.words[page], hit)
+                    local page2 = self.document:getPageFromXPointer(hit["end"])
+                    if page2 ~= page then
+                        if not self.words[page2] then self.words[page2] = {} end
+                        table.insert(self.words[page2], hit)
                     end
                 end
             end
@@ -1706,6 +1737,40 @@ local function phrasalVerbEntries(ui, word, results, following)
     return nil
 end
 
+-- True when `word` (a vocabulary word found on the page), followed by `following`
+-- particles, is part of a phrasal verb: either the phrasal verb is a headword of the
+-- dictionaries, or it is itself in the vocabulary. Then the simple verb must NOT be
+-- marked (the phrasal verb is marked as a whole only if it is in the vocabulary).
+-- The answer is cached per "word particles" (the dictionary lookup is blocking).
+local function isPartOfPhrasalVerb(self, word, following)
+    if not (following and #following > 0) then return false end
+    local base = vocabKey(word)
+    local ckey = base .. " " .. table.concat(following, " ")
+    self._phrasal_cache = self._phrasal_cache or {}
+    if self._phrasal_cache[ckey] ~= nil then return self._phrasal_cache[ckey] end
+
+    local found = false
+    -- the phrase is in the vocabulary ("make up" saved as such)
+    for n = #following, 1, -1 do
+        if self.all_phrases
+            and self.all_phrases[base .. " " .. table.concat(following, " ", 1, n)] then
+            found = true
+            break
+        end
+    end
+    -- the phrase is a headword of the dictionaries
+    if not found and self.ui and self.ui.dictionary then
+        local results = sdcvLookup(self.ui.dictionary, base, DICTIONARIES, true)
+        if #results == 0 then   -- the preferred dictionaries do not have it: any installed one
+            results = sdcvLookup(self.ui.dictionary, base, nil, true)
+        end
+        results = preferExactEntries(results, base)
+        found = phrasalVerbEntries(self.ui, word, results, following) ~= nil
+    end
+    self._phrasal_cache[ckey] = found
+    return found
+end
+
 -- Shows the full translation of `word`.
 -- `anchor_y` is the y of the tapped word (the panel goes to the opposite half).
 -- `following` is the optional list of particles that follow the word in the book.
@@ -1808,12 +1873,41 @@ local function installDefaultDictionaryPanel()
         return nil
     end
 
+    -- State of the vocabulary just before the vocabulary builder sees a lookup: if the word
+    -- was not there and the lookup turns out to be a phrasal verb, the word is removed again.
+    local lookup_pre = nil   -- { key = <word>, had = <was it in the vocabulary?> }
+
+    -- True when the word that is being looked up (the current selection) is a verb followed
+    -- by a particle that makes a phrasal verb of the dictionaries ("gave" in "gave up").
+    -- Such a word is not added to the vocabulary: the dictionary opens (with the phrasal
+    -- verb as its first page) but the simple verb is not saved. A particle alone is not
+    -- enough ("wanted to"): the phrasal verb must exist.
+    local function isVerbOfPhrasalVerb(ui, word)
+        local plugin = active_plugin
+        if not (plugin and ui and word) or tostring(word):find("%s") then return false end
+        local selected = ui.highlight and ui.highlight.selected_text
+        if not (selected and selected.pos1 and selected.text) then return false end
+        if vocabKey(lastWord(selected.text)) ~= vocabKey(word) then return false end   -- old selection
+        local ok, result = pcall(function()
+            local following = followingParticles({ ui = ui }, { pos1 = selected.pos1, text = word })
+            return isPartOfPhrasalVerb(plugin, word, following)
+        end)
+        return ok and result or false
+    end
+
     local function silenceVocabularyExists(ui)
         local vb = findVocabularyBuilder(ui)
         if not (vb and vb.onWordLookedUp) or vb._pti_silenced then return end
         vb._pti_silenced = true
         local original = vb.onWordLookedUp
         vb.onWordLookedUp = function(this, word, title, is_manual)
+            if not is_manual then
+                lookup_pre = { key = vocabKey(word), had = wordInVocabulary(word) }
+            end
+            -- A verb followed by its particle ("gave up"): not saved, the dictionary opens
+            if not is_manual and isVerbOfPhrasalVerb(ui, word) then
+                return true
+            end
             if not is_manual and (panelDictionaryEnabled() or silence_vocab_once)
                 and wordInVocabulary(word) then
                 return true
@@ -1891,6 +1985,12 @@ local function installDefaultDictionaryPanel()
             end
         end
         local phrasal = phrasalVerbEntries(self.ui, word, results, following)
+        -- A phrasal verb: the simple verb must not stay in the vocabulary if this lookup added it
+        local pre = lookup_pre
+        lookup_pre = nil
+        if phrasal and pre and pre.key == vocabKey(word) and not pre.had then
+            removeFromVocabulary(word)
+        end
         if phrasal then
             for i = #phrasal, 1, -1 do table.insert(entries, 1, phrasal[i]) end
         end
@@ -2009,7 +2109,10 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
             local end_pos = self.document:getPosFromXPointer(item["end"])
             if end_pos >= cur_view_top then
                 local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true)
-                if boxes and boxes[1] then
+                if boxes and boxes[1] and item.phrase then
+                    -- A phrase saved in the vocabulary: the boxes of the whole phrase
+                    entries[#entries + 1] = { boxes = boxes, text = item.text }
+                elseif boxes and boxes[1] then
                     -- Sample from the center of the first box so we don't land on a neighbor word
                     local mid_x = boxes[1].x + math.floor(boxes[1].w / 2)
                     local mid_y = boxes[1].y + math.floor(boxes[1].h / 2)
@@ -2028,8 +2131,13 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                                 precise = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
                             end
                             if precise then
-                                -- pos1: end of the word, to read the words that follow it
-                                entries[#entries + 1] = { boxes = precise, text = got, pos1 = word.pos1 }
+                                -- A simple verb that is part of a phrasal verb ("gave up")
+                                -- is not marked; the phrasal verb is, if it is in the vocabulary.
+                                local entry = { boxes = precise, text = got, pos1 = word.pos1 }
+                                if not isPartOfPhrasalVerb(self, got, followingParticles(self, entry)) then
+                                    -- pos1: end of the word, to read the words that follow it
+                                    entries[#entries + 1] = entry
+                                end
                             end
                         elseif item.hyphenated then
                             -- No match but hyphenated: still underline with the rough boxes
