@@ -180,6 +180,13 @@ function SwipePassthroughScrollable:onScrollableSwipe(arg, ges)
     if ges.direction == "east" or ges.direction == "west" then
         return false
     end
+    -- A swipe down closes the window, unless the content is taller than the
+    -- list: then it scrolls.
+    if ges.direction == "south" then
+        local content = self[1]
+        local content_h = content and content.getSize and content:getSize().h or 0
+        if content_h <= self.dimen.h then return false end
+    end
     return ScrollableContainer.onScrollableSwipe(self, arg, ges)
 end
 
@@ -820,6 +827,401 @@ local function buildHeatmapView(w_width, w_font_face, w_font_size_small)
     }
 end
 
+-- ── Reading summary (first screen) ─────────────────────────────────────────────
+-- The start-menu modules as stacked cards (shelf size, reading time with differential, book
+-- info with session time and reading speed), like the start menu.
+-- The reading figures come from one read-only connection to the statistics database.
+-- No open-session time is added: showing this window already saved the
+-- session in progress (see onShowLongestSessions), so it is in the database.
+
+local DELTA_PACE_KEY = "micromodule_reading_delta_pace"  -- same key as the module
+local DEFAULT_PACE = 2                                    -- hours per day
+
+-- The pace is a setting of the reading differential module. This plugin may
+-- not be able to load that module's settings store; then the default is used.
+local function readPace()
+    local loaders = {
+        function() return require("lib/bookshelf_settings_store") end,
+        function() return dofile("plugins/bookshelf.koplugin/lib/bookshelf_settings_store.lua") end,
+    }
+    for _i, load in ipairs(loaders) do
+        local ok, Store = pcall(load)
+        if ok and type(Store) == "table" and Store.read then
+            local ok_read, v = pcall(Store.read, DELTA_PACE_KEY)
+            v = ok_read and tonumber(v) or nil
+            if v and v > 0 then return v end
+        end
+    end
+    return DEFAULT_PACE
+end
+
+local function fmtPace(h)
+    if h == math.floor(h) then return string.format("%dh/d", h) end
+    return string.format("%.1fh/d", h)
+end
+
+-- "1h 8m" / "25m"
+local function fmtHM(secs)
+    secs = math.max(0, math.floor(tonumber(secs) or 0))
+    local h, m = math.floor(secs / 3600), math.floor((secs % 3600) / 60)
+    if h > 0 then return string.format("%dh %dm", h, m) end
+    return string.format("%dm", m)
+end
+
+-- "2h" for a whole hour, otherwise as fmtHM (reading stats module)
+local function fmtStats(secs)
+    secs = math.max(0, math.floor(tonumber(secs) or 0))
+    local h, m = math.floor(secs / 3600), math.floor((secs % 3600) / 60)
+    if h > 0 and m == 0 then return string.format("%dh", h) end
+    return fmtHM(secs)
+end
+
+-- "12.5h" / "1.2d" / "40m" (reading time module)
+local function fmtBreakdown(secs)
+    secs = tonumber(secs) or 0
+    local h = secs / 3600
+    if h >= 24 then return string.format("%.1fd", h / 24) end
+    if h >= 1 then return string.format("%.1fh", h) end
+    return string.format("%dm", math.floor(secs / 60))
+end
+
+-- Reads every figure of the summary. Returns nil when the database cannot be read.
+local function loadSummaryData()
+    local lfs = require("libs/libkoreader-lfs")
+    local path = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+    if lfs.attributes(path, "mode") ~= "file" then return nil end
+
+    local now = os.time()
+    local t = os.date("*t", now)
+    local day_start   = os.time{ year = t.year, month = t.month, day = t.day, hour = 0, min = 0, sec = 0 }
+    local month_start = os.time{ year = t.year, month = t.month, day = 1,     hour = 0, min = 0, sec = 0 }
+    local year_start  = os.time{ year = t.year, month = 1,       day = 1,     hour = 0, min = 0, sec = 0 }
+    local week_start  = day_start - ((t.wday + 5) % 7) * SECONDS_PER_DAY  -- Monday
+    local lm = t.month - 1 == 0 and 12 or t.month - 1
+    local ly = t.month - 1 == 0 and t.year - 1 or t.year
+    local lmonth_start = os.time{ year = ly, month = lm, day = 1, hour = 0, min = 0, sec = 0 }
+
+    local out = { yday = t.yday }
+    local SQ3 = require("lua-ljsqlite3/init")
+    local ok, err = pcall(function()
+        local conn = SQ3.open(path, "ro")
+        local ok_q, err_q = pcall(function()
+            conn:exec("PRAGMA busy_timeout=200;")
+
+            -- Seconds read inside [from, to]; sessions that cross a border
+            -- count proportionally in each period.
+            local overlap = conn:prepare([[
+                SELECT COALESCE(SUM(
+                    MIN(start_time + duration, ?) - MAX(start_time, ?)
+                ), 0)
+                FROM wpm_stat_data
+                WHERE start_time + duration >= ? AND start_time <= ?
+            ]])
+            local function span(from, to)
+                local row = overlap:bind(to, from, from, to):step()
+                local secs = tonumber(row[1]) or 0
+                overlap:clearbind():reset()
+                return secs
+            end
+            out.today     = span(day_start, now)
+            out.yesterday = span(day_start - SECONDS_PER_DAY, day_start - 1)
+            out.month     = span(month_start, now)
+            out.lmonth    = span(lmonth_start, month_start - 1)
+            out.year      = span(year_start, now)
+            overlap:close()
+
+            -- Per-page statistics (reading stats module); optional
+            pcall(function()
+                local stmt = conn:prepare([[
+                    SELECT COALESCE(SUM(duration), 0),
+                           COUNT(DISTINCT (id_book || ':' || page))
+                    FROM page_stat_data WHERE start_time >= ?]])
+                local row = stmt:bind(day_start):step()
+                out.page_secs  = tonumber(row[1]) or 0
+                out.page_count = tonumber(row[2]) or 0
+                stmt:clearbind():reset()
+                row = stmt:bind(week_start):step()
+                out.week = tonumber(row[1]) or 0
+                stmt:close()
+            end)
+        end)
+        conn:close()
+        if not ok_q then error(err_q, 0) end
+    end)
+    if not ok then
+        logger.warn("longest sessions: summary query failed:", err)
+        return nil
+    end
+    return out
+end
+
+-- Time of the current session and on the open book (nil outside the reader)
+local function getSessionInfo()
+    local ok, ui = pcall(function() return require("apps/reader/readerui").instance end)
+    if not ok or not ui then return nil end
+    local topbar = ui.view and ui.view.topbar
+    if not topbar or not topbar.start_session_time then return nil end
+    local session = math.max(0, os.time() - topbar.start_session_time)
+    return session, session + (topbar.initial_total_time_book or 0)
+end
+
+-- ── Cards ──
+local CARD_BG = gray(238)
+local CARD_PAD = Screen:scaleBySize(10)
+
+local function cardInnerWidth(card_w)
+    return card_w - 2 * (CARD_PAD + Size.border.thin)
+end
+
+local function makeCard(card_w, content)
+    return FrameContainer:new({
+        background = CARD_BG,
+        color = COLOR_BAR,
+        bordersize = Size.border.thin,
+        radius = Screen:scaleBySize(10),
+        padding = CARD_PAD,
+        margin = 0,
+        CenterContainer:new({
+            dimen = Geom:new({ w = cardInnerWidth(card_w), h = content:getSize().h }),
+            content,
+        }),
+    })
+end
+
+-- The biggest size (down to min_size) at which every text fits in max_w.
+local function fitSize(texts, max_size, min_size, max_w, bold)
+    local best = max_size
+    for _i, text in ipairs(texts) do
+        local size = max_size
+        while size > min_size do
+            local tw = TextWidget:new({ text = text, face = Font:getFace("cfont", size), bold = bold })
+            local w = tw:getSize().w
+            tw:free()
+            if w <= max_w then break end
+            size = size - 1
+        end
+        best = math.min(best, size)
+    end
+    return best
+end
+
+-- Equal columns, each a value and a caption: cols = { { value, caption }, ... }
+local function buildColumns(inner_w, cols, caption_on_top)
+    local col_w = math.floor(inner_w / #cols)
+    local avail = col_w - Screen:scaleBySize(6)
+    local values, captions = {}, {}
+    for i, c in ipairs(cols) do values[i], captions[i] = c[1], c[2] end
+    local vsize = fitSize(values, 24, 12, avail, true)
+    local csize = fitSize(captions, 14, 9, avail, false)
+
+    local groups, max_h = {}, 0
+    for i, c in ipairs(cols) do
+        local value = TextWidget:new({
+            text = c[1], face = Font:getFace("cfont", vsize), bold = true,
+            fgcolor = COLOR_TEXT, max_width = avail,
+        })
+        local caption = TextWidget:new({
+            text = c[2], face = Font:getFace("cfont", csize),
+            fgcolor = COLOR_MUTED, max_width = avail,
+        })
+        local gap = VerticalSpan:new({ width = Screen:scaleBySize(2) })
+        local vg = VerticalGroup:new({ align = "center" })
+        if caption_on_top then
+            vg[1], vg[2], vg[3] = caption, gap, value
+        else
+            vg[1], vg[2], vg[3] = value, gap, caption
+        end
+        groups[i] = vg
+        max_h = math.max(max_h, vg:getSize().h)
+    end
+    local row = HorizontalGroup:new({ align = "top" })
+    for i, vg in ipairs(groups) do
+        row[i] = CenterContainer:new({ dimen = Geom:new({ w = col_w, h = max_h }), vg })
+    end
+    return row
+end
+
+-- First row: differential (ΔL), today, yesterday, this week, month, last month, year
+local function buildBreakdownCard(card_w, data)
+    local pace = readPace()
+    local delta = math.ceil((data.year / 3600) - (data.yday * pace))
+    return makeCard(card_w, buildColumns(cardInnerWidth(card_w), {
+        { (delta > 0 and "+" or "") .. tostring(delta), "\xCE\x94L " .. fmtPace(pace) },
+        { fmtHM(data.today),            _("Today") },
+        { fmtBreakdown(data.yesterday), _("Yesterday") },
+        { data.week and fmtStats(data.week) or "-", _("This week") },
+        { fmtBreakdown(data.month),     _("Month") },
+        { fmtBreakdown(data.lmonth),    _("Last month") },
+        { fmtBreakdown(data.year),      _("Year") },
+    }, true))
+end
+
+-- Reading speed: words per minute and pages of the current session. Read from
+-- the JSON the statistics plugin writes on every page turn; 0 and 0 when the
+-- file is missing, invalid or older than 5 minutes (as the wpm_session module).
+local WPM_STALE_S = 300
+
+local function readWpmSession()
+    local f = io.open(DataStorage:getSettingsDir() .. "/wpm_session.json", "r")
+    if not f then return 0, 0 end
+    local raw = f:read("*a")
+    f:close()
+    if not raw or raw == "" then return 0, 0 end
+    local wpm     = tonumber(raw:match('"wpm"%s*:%s*(%d+)'))
+    local pages   = tonumber(raw:match('"Pages"%s*:%s*(%d+)'))
+    local updated = tonumber(raw:match('"updated"%s*:%s*(%d+)'))
+    if not wpm or not updated then return 0, 0 end
+    if os.time() - updated > WPM_STALE_S then return 0, 0 end
+    return wpm, pages or 0
+end
+
+-- Title, series, words and publication year of the open book
+local function buildBookCard(card_w, session, book)
+    local full_w = cardInnerWidth(card_w)
+    local right_w = math.floor(full_w * 0.5)
+    local gap = Screen:scaleBySize(10)
+    local inner_w = full_w - right_w - gap  -- width of the title block
+
+    -- Right block: session time, wpm and pages of the session
+    local wpm, pages = readWpmSession()
+    local right = buildColumns(right_w, {
+        { session and fmtHM(session) or "-", _("Session") },
+        { tostring(wpm),                      _("wpm") },
+        { tostring(pages),                    _("pages") },
+    }, false)
+    local function withRight(left)
+        local h = math.max(left:getSize().h, right:getSize().h)
+        return makeCard(card_w, HorizontalGroup:new({
+            align = "top",
+            LeftContainer:new({ dimen = Geom:new({ w = inner_w, h = h }), left }),
+            HorizontalSpan:new({ width = gap }),
+            CenterContainer:new({ dimen = Geom:new({ w = right_w, h = h }), right }),
+        }))
+    end
+
+    local ok, ui = pcall(function() return require("apps/reader/readerui").instance end)
+    local topbar = ok and ui and ui.view and ui.view.topbar
+    local title = topbar and topbar.title or ""
+    if title == "" then
+        return withRight(TextWidget:new({
+            text = _("Not reading"), face = Font:getFace("cfont", 22),
+            fgcolor = COLOR_MUTED, max_width = inner_w,
+        }))
+    end
+    local function clean(s)
+        s = tostring(s or ""):gsub("^%s*\xE2\x8B\x85%s*", ""):gsub("%[/?b%]", ""):gsub("\xEF\xBF\xBC", "")
+        return (s:match("^%s*(.-)%s*$"))
+    end
+    local words = tonumber(topbar.total_words) or 0
+    local parts = {}
+    if words > 0 then
+        parts[#parts + 1] = (words >= 1000 and string.format("%dk", math.floor(words / 1000)) or tostring(words)) .. "w"
+    end
+    local pub = tostring(topbar.pub_date or "")
+    if pub ~= "" then parts[#parts + 1] = pub end
+    if book then parts[#parts + 1] = _("This book") .. " " .. fmtHM(book) end
+
+    local vg = VerticalGroup:new({ align = "left" })
+    vg[#vg + 1] = TextWidget:new({
+        text = clean(title), face = Font:getFace("cfont", 24), bold = true,
+        fgcolor = COLOR_TEXT, max_width = inner_w, ellipsis = true,
+    })
+    local series = clean(topbar.series)
+    if series ~= "" then
+        vg[#vg + 1] = VerticalSpan:new({ width = Screen:scaleBySize(4) })
+        vg[#vg + 1] = TextWidget:new({
+            text = series, face = Font:getFace("cfont", 18),
+            fgcolor = COLOR_MUTED, max_width = inner_w, ellipsis = true,
+        })
+    end
+    if #parts > 0 then
+        vg[#vg + 1] = VerticalSpan:new({ width = Screen:scaleBySize(4) })
+        vg[#vg + 1] = TextWidget:new({
+            text = table.concat(parts, "  \xC2\xB7  "), face = Font:getFace("cfont", 18),
+            fgcolor = COLOR_MUTED, max_width = inner_w, ellipsis = true,
+        })
+    end
+    return withRight(vg)
+end
+
+-- Shelf size: books in the library by status (from _G.all_files)
+local SHELF_STATUS = {
+    { "reading", _("Reading") }, { "tbr", _("TBR") }, { "mbr", _("MBR") },
+    { "finished", _("Finished") }, { "unread", _("Unread") },
+}
+
+local function getShelfCounts()
+    local total = 0
+    local counts = { reading = 0, tbr = 0, mbr = 0, finished = 0, unread = 0 }
+    local all_files = rawget(_G, "all_files")
+    if type(all_files) == "table" then
+        for _file, info in pairs(all_files) do
+            total = total + 1
+            local status = type(info) == "table" and info.status or nil
+            local bucket = (status == "complete" and "finished")
+                or ((status == "reading" or status == "tbr" or status == "mbr") and status)
+                or "unread"
+            counts[bucket] = counts[bucket] + 1
+        end
+    end
+    return total, counts
+end
+
+local function buildShelfCard(card_w)
+    local inner_w = cardInnerWidth(card_w)
+    local total, counts = getShelfCounts()
+    local cols = {}
+    for i, st in ipairs(SHELF_STATUS) do
+        cols[i] = { tostring(counts[st[1]]), st[2] }
+    end
+    local header = HorizontalGroup:new({
+        align = "bottom",
+        TextWidget:new({ text = tostring(total), face = Font:getFace("cfont", 34), bold = true, fgcolor = COLOR_TEXT }),
+        HorizontalSpan:new({ width = Screen:scaleBySize(10) }),
+        TextWidget:new({ text = _("Books"), face = Font:getFace("cfont", 18), bold = true, fgcolor = COLOR_MUTED }),
+    })
+    local vg = VerticalGroup:new({
+        align = "left",
+        header,
+        VerticalSpan:new({ width = Screen:scaleBySize(6) }),
+        buildColumns(inner_w, cols, true),
+    })
+    return makeCard(card_w, vg)
+end
+
+-- The whole screen: the cards, in a scrollable list when they do not fit.
+local function buildSummaryView(w_width, w_font_face, w_font_size_small, parent)
+    local data = loadSummaryData()
+    if not data then return nil, "Could not read the statistics database" end
+    local session, book = getSessionInfo()
+
+    local function buildCards(card_w)
+        local cards = VerticalGroup:new({ align = "center" })
+        local list = {
+            buildShelfCard(card_w),
+            buildBreakdownCard(card_w, data),
+            buildBookCard(card_w, session, book),
+        }
+        for i, card in ipairs(list) do
+            if i > 1 then table.insert(cards, VerticalSpan:new({ width = Screen:scaleBySize(6) })) end
+            table.insert(cards, card)
+        end
+        return cards
+    end
+
+    local cards = buildCards(w_width)
+    local max_h = math.floor(Screen:getHeight() * 0.7)
+    if cards:getSize().h <= max_h then return { cards } end
+
+    cards:free()
+    cards = buildCards(w_width - ScrollableContainer:getScrollbarWidth())
+    return { SwipePassthroughScrollable:new({
+        dimen = Geom:new({ w = w_width, h = max_h }),
+        show_parent = parent,
+        cards,
+    }) }
+end
+
 -- ── View definitions ───────────────────────────────────────────────────────────
 
 -- One line of text on the left: the item's `field`, cut with "…" if too long.
@@ -980,6 +1382,11 @@ local function getFinishedBooksFilter()
 end
 
 local VIEWS = {
+    {
+        -- not a list: it builds its own widgets (the start-menu modules as cards)
+        title = "Reading Summary",
+        build = buildSummaryView,
+    },
     {
         -- not a list: it builds its own widgets
         title = function() return string.format("Hours per Month \xC2\xB7 %d", os.date("*t").year) end,
@@ -1192,7 +1599,7 @@ function ShowLongestSessionsWindow:_buildUI()
     local view_def = VIEWS[self.current_view]
     local body
     if view_def.build then
-        local widgets, err = view_def.build(w_width, w_font_face, w_font_size_small)
+        local widgets, err = view_def.build(w_width, w_font_face, w_font_size_small, self)
         if not widgets then return fail(err) end
         body = widgets
     else
@@ -1306,6 +1713,10 @@ local function showWindow(current_view)
 end
 
 function ShowLongestSessionsWindow:onSwipe(arg, ges)
+    -- a swipe down closes the window
+    if ges.direction == "south" then
+        return self:onClose()
+    end
     local BD = require("ui/bidi")
     local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
     local next_view
