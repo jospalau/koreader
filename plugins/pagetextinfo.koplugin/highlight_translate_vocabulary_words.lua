@@ -847,18 +847,7 @@ local GLOSS_PAD_Y     = Screen:scaleBySize(1)  -- vertical padding inside the ch
 --     return text:match("[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+$") or text
 -- end
 
--- Always use the generic UI font: it always exists, so no missing-font crash.
--- Bold is simulated through the `bold` flag of renderUtf8Text.
-local function getGlossFace(self, size)
-    local ckey = tostring(size)
-    if self._gloss_face_key == ckey and self._gloss_face then
-        return self._gloss_face
-    end
-    local face = Font:getFace("cfont", size)
-    self._gloss_face_key = ckey
-    self._gloss_face = face
-    return face
-end
+-- (getGlossFace is defined below, after the helpers that find the font of the book)
 
 -- Keep only the first meaning of a translation and truncate it with "…".
 -- Uses utf8.len so accented characters are never cut in half.
@@ -898,11 +887,12 @@ end
 -- Overlaps with neighbouring glosses are tolerated.
 -- `layout` is an optional table used to memoize the text measurements, so the
 -- text is not measured again on every paint of the same page.
-local function paintGloss(bb, box, gloss, face, layout)
+-- `faux_bold`: draw the text with simulated bold (the face is not a real bold).
+local function paintGloss(bb, box, gloss, face, layout, faux_bold)
     layout = layout or {}
     -- Measure the text and the font height/ascender
     if not layout.text_w then
-        local size = RenderText:sizeUtf8Text(0, Screen:getWidth(), face, gloss, true, true)
+        local size = RenderText:sizeUtf8Text(0, Screen:getWidth(), face, gloss, true, faux_bold)
         layout.text_w = size.x
         local h, a = face.ftsize:getHeightAndAscender()
         layout.height, layout.ascender = math.ceil(h), math.ceil(a)
@@ -933,7 +923,7 @@ local function paintGloss(bb, box, gloss, face, layout)
 
     -- Text, vertically aligned using the font ascender
     RenderText:renderUtf8Text(bb, x + GLOSS_PAD_X, y + GLOSS_PAD_Y + ascender,
-        face, gloss, true, true, fg)
+        face, gloss, true, faux_bold, fg)
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -1153,6 +1143,46 @@ local function documentFace(size)
     if not path then return nil end
     local ok, face = pcall(Font.getFace, Font, path, size)
     return ok and face or nil
+end
+
+-- Face of the gloss: the font of the book, so the chip matches the text around it.
+-- Returns the face and `faux_bold`: true when the face is not a real bold, so the
+-- text must be drawn with the `bold` flag of renderUtf8Text (simulated bold).
+-- Order: the real bold file of the family, then its regular file with simulated bold,
+-- then the generic UI font ("cfont", it always exists) with simulated bold.
+-- A face that cannot be loaded never reaches the painting code.
+local function getGlossFace(self, font_name, size)
+    local ckey = tostring(font_name) .. ":" .. tostring(size)
+    if self._gloss_face_key == ckey and self._gloss_face then
+        return self._gloss_face, self._gloss_faux_bold
+    end
+
+    local face, faux_bold
+    if type(font_name) == "string" and font_name ~= "" then
+        -- real bold of the family, if its file exists
+        local bold_path = familyFontFiles(font_name).bold
+        if bold_path then
+            local ok, f = pcall(Font.getFace, Font, bold_path, size)
+            if ok and f and f.ftsize then face, faux_bold = f, false end
+        end
+        -- regular file of the family, with simulated bold
+        if not face then
+            local regular_path = fontPathForFamily(font_name)
+            if regular_path then
+                local ok, f = pcall(Font.getFace, Font, regular_path, size)
+                if ok and f and f.ftsize then face, faux_bold = f, true end
+            end
+        end
+    end
+    if not face then
+        dbg_vocab("getGlossFace: font %s not usable, using cfont", tostring(font_name))
+        face, faux_bold = Font:getFace("cfont", size), true
+    end
+
+    self._gloss_face_key = ckey
+    self._gloss_face = face
+    self._gloss_faux_bold = faux_bold
+    return face, faux_bold
 end
 
 local TranslationPanel
@@ -1802,15 +1832,17 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
     local font_size    = self.ui.document.configurable.font_size
     local show_defs    = self.settings:isTrue("show_definitions")
 
-    -- Gloss font: larger and bold so it stands out
+    -- Gloss font: the font of the book, larger and bold so it stands out
     -- pt -> px of the book text, then -> getFace units
     local book_px = font_size * Screen:getDPI() / 72
     local translation_size = math.max(
         book_px * GLOSS_SCALE / Screen:scaleBySize(1),
         VOCAB_MIN_TRANSLATION_SIZE)
-    local translation_face = show_defs
-        and getGlossFace(self, translation_size)
-        or nil
+    local translation_face, translation_faux_bold
+    if show_defs then
+        translation_face, translation_faux_bold =
+            getGlossFace(self, self.ui.document:getFontFace(), translation_size)
+    end
 
     self._tr_cache = self._tr_cache or {}
 
@@ -1894,7 +1926,7 @@ function PageTextInfo:drawXPointerVocabulary(bb, x, y)
                         -- FIX: an empty gloss ("" is truthy in Lua) used to paint an empty chip.
                         if gloss and gloss ~= "" then
                             entry.layout = entry.layout or {}
-                            paintGloss(bb, box, gloss, translation_face, entry.layout)
+                            paintGloss(bb, box, gloss, translation_face, entry.layout, translation_faux_bold)
                         end
                     end
 
