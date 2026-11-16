@@ -754,6 +754,7 @@ end
 -- Builds self.pages_notes (page -> list of occurrences, each one with its `note`) and
 -- self.notes (the annotations that were found on the page).
 function PageTextInfo:updateNotes()
+    self._notes_page = self.ui.view.state.page   -- page it was built for (see getNotesCache)
     self.pages_notes = {}
     self.notes = {}
     local annotations = self.ui.annotation.annotations
@@ -880,7 +881,13 @@ local function notesSignature(self)
     return #parts .. ":" .. table.concat(parts, "|")
 end
 
-function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
+-- The marked notes of the current page ({ key, entries = { boxes, text }, page, ... }), or nil
+-- when the page has none. The geometry is cached. It builds the notes by itself when nobody
+-- did it for this page (taps work in any mode, not only when the notes are painted).
+function PageTextInfo:getNotesCache()
+    if not self.pages_notes or self._notes_page ~= self.ui.view.state.page then
+        self:updateNotes()
+    end
     -- A note was added or deleted since the marks were built: build them again
     if self.pages_notes then
         local sig = notesSignature(self)
@@ -894,12 +901,8 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
     local page_notes = self.pages_notes and self.pages_notes[self.ui.view.state.page]
     if not page_notes then
         self._notes_draw_cache = nil   -- no notes on this page: a tap must not use the previous one
-        return
+        return nil
     end
-
-    self:registerNoteDoubleTap()
-    -- The single taps on the notes go through the tap zone of the vocabulary (see onTapVocabularyWord)
-    self:registerWordTap()
 
     local cur_view_top = self.document:getCurrentPos()
     local key = table.concat({
@@ -952,6 +955,16 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
                   page = self.ui.view.state.page }
         self._notes_draw_cache = cache
     end
+    return cache
+end
+
+function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
+    local cache = self:getNotesCache()
+    if not cache then return end
+
+    self:registerNoteDoubleTap()
+    -- The single taps on the notes go through the tap zone of the vocabulary (see onTapVocabularyWord)
+    self:registerWordTap()
 
     -- Note indicator at the top right corner of the word (the last box of it, when the word
     -- is split over two lines). It is drawn with the blitbuffer, so it does not depend on
@@ -967,18 +980,13 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
     end
 end
 
--- The note (entry of the cache) under a tap, or nil. It works when the notes are marked,
--- i.e. in the vocabulary mode ("Highlight all words vocabulary builder and notes") or in
--- the one that highlights all the notes ("highlight_all_notes_and_allow_to_edit_them_on_tap").
+-- The note (entry of the cache) under a tap, or nil. Only in the vocabulary mode.
 local function noteAt(self, ges)
-    local cache = self._notes_draw_cache
-    if not (cache and ges and ges.pos) then return nil end
-    -- the cache belongs to the page that was painted last
-    if cache.page ~= self.ui.view.state.page then return nil end
-    if not (self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")
-        or self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap")) then
-        return nil
-    end
+    if not (ges and ges.pos) then return nil end
+    -- Only in the vocabulary mode ("Highlight all words vocabulary builder and notes")
+    if not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then return nil end
+    local cache = self:getNotesCache()
+    if not cache then return nil end
     local pad = Screen:scaleBySize(4)   -- a little margin: the words are small
     for _, entry in ipairs(cache.entries) do
         -- the boxes of the word (several when it is split over two lines)
@@ -2305,22 +2313,6 @@ function PageTextInfo:showNote(text_note)
                                 end,
                             },
                         },
-                        {
-                            {
-                                text = _("Delete highlight"),
-                                callback = function()
-                                    UIManager:close(textviewer)
-                                    self.ui.highlight:deleteHighlight(index)
-                                end,
-                            },
-                            {
-                                text = _("Highlight menu"),
-                                callback = function()
-                                    UIManager:close(textviewer)
-                                    self.ui.highlight:showHighlightDialog(index)
-                                end,
-                            },
-                        },
                     },
                 }
                 UIManager:show(textviewer)
@@ -2329,11 +2321,19 @@ function PageTextInfo:showNote(text_note)
         end
     end
 
+    -- No argument: the call comes from the "Notes" button of the highlight dialog, and the
+    -- word is the selected text. All the notes of that text are shown. Only annotations WITH
+    -- a note count (the last annotation with the same text used to overwrite the note with
+    -- nil), and the comparison ignores the case and the spaces around the text.
+    local selected = self.ui.highlight and self.ui.highlight.selected_text
+    local wanted = selected and selected.text and selected.text:gsub("^%s+", ""):gsub("%s+$", ""):upper()
     local text = nil
-    local annotations = self.ui.annotation.annotations
-    for i, item in ipairs(annotations) do
-        if item.text == self.ui.highlight.selected_text.text then
-            text = item.note
+    if wanted and wanted ~= "" then
+        for _, item in ipairs(self.ui.annotation.annotations or {}) do
+            if item.note and item.text
+                and item.text:gsub("^%s+", ""):gsub("%s+$", ""):upper() == wanted then
+                text = (text and (text .. "<br/>") or "") .. item.note
+            end
         end
     end
     if self.ui.highlight.highlight_dialog then
