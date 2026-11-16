@@ -579,15 +579,18 @@ end
 -- the face is opened straight through FreeType at the real pixel size, with the
 -- load flags of the selected hinting mode. Any failure returns nil and the callers
 -- use the design x-height instead.
--- NOTE: check these flags against crengine (lvfntman.cpp, where the glyphs are
--- loaded for each hinting mode) and adjust them if crengine uses others, e.g.
--- FT_LOAD_TARGET_LIGHT (0x10000). The weight (font_base_weight) is not applied.
+-- These are the flags crengine uses (lvfntman.cpp, LVFreeTypeFace::getGlyph):
+-- FT_LOAD_RENDER | FT_LOAD_TARGET_LIGHT, plus FT_LOAD_NO_AUTOHINT (native),
+-- FT_LOAD_FORCE_AUTOHINT (auto) or FT_LOAD_NO_AUTOHINT | FT_LOAD_NO_HINTING (off).
+-- The weight (font_base_weight) is not applied: with a weight that the font file
+-- does not have, crengine emboldens the outline, which moves the top of the glyphs.
 local FT_LOAD_NO_HINTING, FT_LOAD_RENDER = 0x2, 0x4
 local FT_LOAD_FORCE_AUTOHINT, FT_LOAD_NO_AUTOHINT = 0x20, 0x8000
+local FT_LOAD_TARGET_LIGHT = 0x10000
 local HINT_LOAD_FLAGS = {
-    [0] = FT_LOAD_RENDER + FT_LOAD_NO_HINTING,    -- off
-    [1] = FT_LOAD_RENDER + FT_LOAD_NO_AUTOHINT,   -- native (font bytecode)
-    [2] = FT_LOAD_RENDER + FT_LOAD_FORCE_AUTOHINT, -- auto
+    [0] = FT_LOAD_RENDER + FT_LOAD_TARGET_LIGHT + FT_LOAD_NO_AUTOHINT + FT_LOAD_NO_HINTING,   -- off
+    [1] = FT_LOAD_RENDER + FT_LOAD_TARGET_LIGHT + FT_LOAD_NO_AUTOHINT,    -- native (font bytecode)
+    [2] = FT_LOAD_RENDER + FT_LOAD_TARGET_LIGHT + FT_LOAD_FORCE_AUTOHINT, -- auto
 }
 
 local _ft   -- { ffi, lib, library } once loaded; false when FreeType can't be reached
@@ -1254,7 +1257,8 @@ end
 -- title) for every px size from the critical print size (CPS: the x-height
 -- seen at COMBO_CPS_ARCMIN arc minutes from COMBO_DIST_MM) up to COMBO_MM_MAX.
 -- If everything fits on the screen there are no scroll buttons; otherwise swipe
--- up/down (or the arrows) to scroll. Tap a row to apply it.
+-- up/down (or the arrows) to scroll. Tap a row to apply it: the window stays
+-- open.
 local TITLE_DOUBLE_TAP_S = 0.4   -- max time between the two taps on the title
 -- Rows marked "◆" are the sizes where this font renders best: the x-height that
 -- FreeType really gives at that px size (hinted, measured per row) is closest to
@@ -1684,6 +1688,7 @@ local function showSizeCombos(plugin, start, old)
         key_events = Device:hasKeys() and { Close = { { Device.input.group.Back } } } or {},
     }
     dialog[1] = CenterContainer:new{ dimen = Geom:new{ w = screen.w, h = screen.h }, frame }
+    dialog.frame = frame
 
     local fsize = frame:getSize()
     local frame_rect = Geom:new{
@@ -1719,13 +1724,18 @@ local function showSizeCombos(plugin, start, old)
             if r.frame.dimen and ges.pos:intersectWith(r.frame.dimen) then
                 local ok, err = pcall(setFontSize, ui, r.pt)
                 dlog("size combos tap: pt=", r.pt, ok and "OK" or err)
-                closeCombos()
-                -- Reopen the settings menu after the reflow (refreshes its title)
+                -- This window stays open. After the reflow the settings menu is
+                -- reopened behind it (its title shows the new size) and this
+                -- window is drawn again on top, at the same scroll position, with
+                -- the new current row. Everything is done in the
+                -- same tick, so the screen is refreshed once (no flash between
+                -- the two windows).
                 UIManager:nextTick(function()
                     plugin:onShowSettingsMenu()
                     if plugin.view and plugin.view.topbar then
                         plugin.view.topbar:toggleBar()
                     end
+                    showSizeCombos(plugin, start, dialog)
                 end)
                 return true
             end
