@@ -1260,10 +1260,16 @@ local TITLE_DOUBLE_TAP_S = 0.4   -- max time between the two taps on the title
 -- FreeType really gives at that px size (hinted, measured per row) is closest to
 -- the ideal one (ratio * px), i.e. hinting distorts it the least. The best
 -- COMBO_RENDER_SHARE of the rows get the mark, plus any row whose distortion is
--- under COMBO_RENDER_TOL px. With hinting off, or if the measurement fails, the
--- criterion is the distance of ratio * px to a whole number of pixels.
+-- under COMBO_RENDER_TOL px; and no more than COMBO_MARK_GAP rows in a row are
+-- left without a mark (the best one of the run gets it). With hinting off, or if
+-- the measurement fails, the criterion is the distance of ratio * px to a whole
+-- number of pixels.
 local COMBO_RENDER_TOL = 0.10
 local COMBO_RENDER_SHARE = 0.25   -- fraction of the rows (the best ones) that get the mark
+-- Longest run of rows without a mark. The best rows of the whole list can all lie
+-- in one part of it (the distortion drifts with the size), leaving the other sizes
+-- without any choice: so every run of COMBO_MARK_GAP rows gets its best row marked.
+local COMBO_MARK_GAP = 5
 local COMBO_CPS_ARCMIN = 12
 local COMBO_DIST_MM = 400
 local COMBO_MM_MAX = 2.25
@@ -1390,6 +1396,28 @@ local function buildSizeCombos(ui)
         local limit = math.max(COMBO_RENDER_TOL, devs[math.max(1, math.ceil(#devs * COMBO_RENDER_SHARE))])
         for __, c in ipairs(combos) do
             if c.dev then c.sweet = c.dev <= limit end
+        end
+        -- Rows a..b without a mark, more than COMBO_MARK_GAP of them: mark the one
+        -- with the smallest distortion (the smaller size on a tie), then check the
+        -- two runs that are left on its sides
+        local function fillGaps(a, b)
+            if b - a + 1 <= COMBO_MARK_GAP then return end
+            local best
+            for i = a, b do
+                local c = combos[i]
+                if c.dev and (not best or c.dev < combos[best].dev - 1e-9) then best = i end
+            end
+            if not best then return end
+            combos[best].sweet = true
+            fillGaps(a, best - 1)
+            fillGaps(best + 1, b)
+        end
+        local run_start = 1
+        for i = 1, #combos + 1 do
+            if i > #combos or combos[i].sweet then
+                fillGaps(run_start, i - 1)
+                run_start = i + 1
+            end
         end
         dlog("buildSizeCombos: limit=", limit, "unhinted=", unhinted)
     end
@@ -1625,8 +1653,9 @@ local function showSizeCombos(plugin, start, old)
         and "◆ x-height edge closest to a whole pixel"
         or "◆ least hinting distortion"
     legend = legend .. "  [hinting: " .. hint_name .. "]"
-    table.insert(grid, cellFit(string.format("%s (best %d%% of the sizes)  ·  tap outside to close",
-        legend, math.floor(COMBO_RENDER_SHARE * 100 + 0.5)), inner_w, head_h, Blitbuffer.COLOR_DARK_GRAY))
+    table.insert(grid, cellFit(string.format("%s (best %d%%, at least 1 per %d sizes)  ·  tap outside to close",
+        legend, math.floor(COMBO_RENDER_SHARE * 100 + 0.5), COMBO_MARK_GAP),
+        inner_w, head_h, Blitbuffer.COLOR_DARK_GRAY))
     -- Next to the "◆" legend: what "=" means. It is explained whenever the
     -- x-height is hinted, also when no row carries it, so it is clear why none does.
     if has_hinted then
