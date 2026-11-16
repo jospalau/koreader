@@ -342,7 +342,7 @@ local function forceRerender(ui)
     if not cleared then dlog("forceRerender: no clearCacheData available, skipped") end
     doc:getCurrentPos()
     ui:handleEvent(require("ui/event"):new("UpdatePos"))
-    require("ui/uimanager"):setDirty("all", "full")
+    require("ui/uimanager"):setDirty("all", "partial")
 end
 
 local function getContrast(ui)
@@ -998,115 +998,77 @@ local function realXHeightPx(ui, px)
     return ratio * px, false
 end
 
--- x-height measured on the page as crengine really draws it -----------------------
--- The FreeType prediction above can be one pixel off (each glyph is hinted on its
--- own and the screen does not always agree), so with native / auto hinting the
--- x-height shown is measured on the rendered page: the document's own page buffer
--- is read and the height of the band where most letters have ink is taken from
--- the ink profile of every text line.
--- x-height (rows) of the text of a page from its row ink profile.
--- ink[y] (y = 1..n) = number of dark pixels of row y. Returns rows, nlines.
-local function xHeightRowsFromInk(ink, n)
-    local PEAK_FRAC, MED_FRAC = 0.2, 0.7
-    local counts = {}
-    local y = 1
-    while y <= n do
-        if ink[y] > 0 then
-            local y0 = y
-            while y <= n and ink[y] > 0 do y = y + 1 end
-            local y1 = y - 1
-            if y1 - y0 + 1 >= 15 then
-                local mx, peak = 0, y0
-                for r = y0, y1 do
-                    if ink[r] > mx then mx = ink[r]; peak = r end
-                end
-                local top, bot = peak, peak
-                while top - 1 >= y0 and ink[top - 1] >= PEAK_FRAC * mx do top = top - 1 end
-                while bot + 1 <= y1 and ink[bot + 1] >= PEAK_FRAC * mx do bot = bot + 1 end
-                local h = bot - top + 1
-                if h >= 8 and h <= 60 then
-                    local band = {}
-                    for r = top, bot do band[#band + 1] = ink[r] end
-                    table.sort(band)
-                    local med = band[math.floor((#band + 1) / 2)]
-                    local rows = 0
-                    for r = top, bot do
-                        if ink[r] >= MED_FRAC * med then rows = rows + 1 end
-                    end
-                    counts[#counts + 1] = rows
-                end
-            end
-        else
-            y = y + 1
-        end
-    end
-    if #counts < 3 then return nil, #counts end
-    -- most frequent value; it must be shared by at least half of the lines
-    local freq, best, best_n = {}, nil, 0
-    for __, c in ipairs(counts) do
-        freq[c] = (freq[c] or 0) + 1
-        if freq[c] > best_n or (freq[c] == best_n and c < best) then best, best_n = c, freq[c] end
-    end
-    if best_n * 2 < #counts then return nil, #counts end
-    return best, #counts
-end
-
-local _rendered_cache = {}   -- [face|px|hint|weight] = rows
--- Rows of the x-height band as drawn now (nil with hinting off, where the design
--- x-height is exact, or when the page can't be measured).
-local function measuredXHeightPx(ui)
-    local hint = getHinting(ui)
-    if hint ~= 1 and hint ~= 2 then return nil end
-    local ok, rows = pcall(function()
+-- x-height as crengine really draws it ----------------------------------------
+-- With native / auto hinting the x-height is asked to the engine itself (patched
+-- koreader-base: doc:getGlyphTops). Without the patch nothing is measured here and
+-- the callers use the FreeType prediction (realXHeightPx).
+-- Let crengine finish the re-layout of the size just set (the engine's styles and
+-- fonts are rebuilt while the page is drawn). Changing sizes several times in a
+-- row without a render in between crashed crengine (setNodeStyle: null parent font).
+-- The drawn page is not read: it only makes the engine up to date.
+local _last_render_key
+local function renderNow(ui)
+    pcall(function()
         local doc, view = ui.document, ui.view
-        if not (doc and doc.drawCurrentView and view and view.visible_area) then return nil end
+        if not (doc and doc.drawCurrentView and view and view.visible_area) then return end
+        -- Already drawn with this face / size / hinting / weight: nothing changed
+        -- since, so the engine is up to date (taps on spacing, margins, ... reopen
+        -- the menu without changing any of these)
         local conf = doc.configurable
-        local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-        local px = drawnPx(ui, conf.font_size, dpi)
-        local key = table.concat({ tostring(doc._document:getFontFace()), px, hint,
-            tostring(conf.font_base_weight) }, "|")
-        if _rendered_cache[key] then return _rendered_cache[key] end
-        -- Redraw the page now (the repaint after a size change has not happened
-        -- yet): drawCurrentView renders into doc.buffer and blits it to the target
+        local key = table.concat({ tostring(doc._document:getFontFace()),
+            tostring(doc._document:getFontSize()), tostring(getHinting(ui)),
+            tostring(conf.font_base_weight), tostring(conf.line_spacing) }, "|")
+        if key == _last_render_key then return end
+        _last_render_key = key
         local Blitbuffer = require("ffi/blitbuffer")
         local rect = view.visible_area
         local scratch = Blitbuffer.new(rect.w, rect.h)
-        local okd, derr = pcall(doc.drawCurrentView, doc, scratch, 0, 0, rect)
+        pcall(doc.drawCurrentView, doc, scratch, 0, 0, rect)
         scratch:free()
-        if not okd then
-            dlog("measuredXHeightPx: drawCurrentView failed:", derr)
-            return nil
-        end
-        local buf = doc.buffer
-        if not buf then return nil end
-        local bpp = buf:getBpp()
-        local step = (bpp == 8 and 1) or (bpp == 32 and 4) or nil
-        if not step then
-            dlog("measuredXHeightPx: unsupported buffer depth", bpp)
-            return nil
-        end
-        local w, h, stride = tonumber(buf.w), tonumber(buf.h), tonumber(buf.stride)
-        -- buf.data is typed by the buffer (ColorRGB32* for color buffers): read raw bytes
-        local data = require("ffi").cast("uint8_t*", buf.data)
-        local ink = {}
-        for y = 0, h - 1 do
-            local rowp = data + y * stride
-            local n = 0
-            for x = 0, w - 1 do
-                if rowp[x * step] < 160 then n = n + 1 end
-            end
-            ink[y + 1] = n
-        end
-        local r, nlines = xHeightRowsFromInk(ink, h)
-        dlog("measuredXHeightPx: px=", px, "hint=", hint, "rows=", r, "lines=", nlines)
-        if r then _rendered_cache[key] = r end
-        return r
     end)
-    if not ok then
-        dlog("measuredXHeightPx failed:", rows)
-        return nil
+end
+
+-- x-height asked straight to crengine (patched koreader-base: doc:getGlyphTops, see
+-- cre_getGlyphTops.patch.txt): the hinted height of the letters exactly as the
+-- engine draws them now. Weighted median over TYPICAL_LETTERS. nil when the
+-- patch is not there (the page measurement below is used then).
+local function engineXHeightPx(ui)
+    local d = ui.document and ui.document._document
+    if not (d and d.getGlyphTops) then return nil end
+    renderNow(ui)   -- the engine's fonts are up to date only after a render
+    -- Letters of the x-height proper: flat tops (u v w x y). The round letters
+    -- (a c e o s...) overshoot it, and with the auto hinter that overshoot appears
+    -- as a whole extra row from some size on (Spectral: 49 px), which would make the
+    -- x-height jump two rows. The flat letters follow the design x-height (what
+    -- hinting Off gives) and so Off / Native / Auto can be compared.
+    local ENGINE_LETTERS = { u = 2.8, v = 1.0, w = 2.4, x = 0.15, y = 2.0 }
+    local letters = {}
+    for ch in pairs(ENGINE_LETTERS) do letters[#letters + 1] = ch end
+    local ok, t = pcall(d.getGlyphTops, d, table.concat(letters))
+    if not ok or type(t) ~= "table" then return nil end
+    local tops, parts = {}, {}
+    for ch, w in pairs(ENGINE_LETTERS) do
+        local v = t[ch]
+        if v and v > 0 then
+            tops[#tops + 1] = { v, w }
+            parts[#parts + 1] = ch .. "=" .. v
+        end
     end
-    return rows
+    table.sort(parts)
+    dlog("engine tops:", table.concat(parts, " "))
+    return weightedMedian(tops)
+end
+
+-- Rows of the x-height as drawn now, from the engine (nil with hinting off, where
+-- the design x-height is exact, or when the engine can't tell).
+local function measuredXHeightPx(ui)
+    local hint = getHinting(ui)
+    if hint ~= 1 and hint ~= 2 then return nil end
+    local eng = engineXHeightPx(ui)
+    dlog("measuredXHeightPx: engine x-height=", eng, "px=",
+        drawnPx(ui, ui.document.configurable.font_size,
+            Device:getDeviceScreenDPI() or Screen:getDPI()))
+    return eng
 end
 
 -- pt that crengine draws at exactly `px` (same formula as ptForXHeight)
@@ -1134,6 +1096,7 @@ refineXHeight = function(ui, target_mm, at_least)
         local rows0 = measuredXHeightPx(ui)
         if not rows0 then return end
         local best_px, best = start_px, score(rows0)
+        if best < 1e-6 then return end   -- already exactly on target
         local dir = (rows0 < target_px) and 1 or -1
         for step = 1, 3 do
             local cand = start_px + dir * step
@@ -1145,7 +1108,9 @@ refineXHeight = function(ui, target_mm, at_least)
             dlog("refineXHeight: px", cand, "rows", r, "target px", target_px, "score", sc)
             if sc < best - 1e-6 then
                 best, best_px = sc, cand
-            elseif sc > best + 1e-6 and best_px ~= start_px then
+            elseif sc > best + 1e-6 then
+                -- The x-height never goes down when the size goes up, so once a
+                -- step is worse than the best one so far, the next ones are too
                 break
             end
         end
@@ -1156,7 +1121,7 @@ refineXHeight = function(ui, target_mm, at_least)
     if not ok then dlog("refineXHeight failed:", err) end
 end
 
--- Measure the x-height rows ON THE PAGE for every px in first..last (hinting 1/2
+-- Measure the x-height (asked to the engine) for every px in first..last (hinting 1/2
 -- only). Each size is set, the page drawn and measured (results cached per
 -- font/px/hinting/weight by measuredXHeightPx); the original size is restored at
 -- the end. Returns { [px] = rows } or nil when nothing could be measured.
@@ -1177,7 +1142,7 @@ local function measureSizesRange(ui, first, last)
     local msg
     local ok, err = pcall(function()
         local InfoMessage = require("ui/widget/infomessage")
-        msg = InfoMessage:new{ text = "Measuring sizes on the page…", dismissable = false }
+        msg = InfoMessage:new{ text = "Measuring x-height of every size…", dismissable = false }
         UIManager:show(msg)
         UIManager:forceRePaint()
         for px = first, last do
@@ -2447,11 +2412,9 @@ local function showSizeCombos(plugin, start, old)
     table.insert(grid, cellFit(footer, inner_w, head_h, Blitbuffer.COLOR_DARK_GRAY))
     local legend = unhinted
         and "◆ x-height edge closest to a whole pixel"
-        or ((summary and summary.from_page) and "◆ least hinting distortion, no ▼"
-            or "◆ least hinting distortion, no ▼ / round-flat flaw")
+        or "◆ least hinting distortion"
     legend = legend .. "  [hinting: " .. hint_name .. "]"
-    table.insert(grid, cellFit(string.format("%s (best %d%%, at least 1 per %d sizes)  ·  tap outside to close",
-        legend, math.floor(COMBO_RENDER_SHARE * 100 + 0.5), COMBO_MARK_GAP),
+    table.insert(grid, cellFit(legend .. "  ·  tap outside to close",
         inner_w, head_h, Blitbuffer.COLOR_DARK_GRAY))
     -- Next to the "◆" legend: what "=" means. It is explained whenever the
     -- x-height is hinted, also when no row carries it, so it is clear why none does.
@@ -2470,8 +2433,8 @@ local function showSizeCombos(plugin, start, old)
     if summary then
         if summary.from_page then
             summary_text = string.format(
-                "Rendering [%s], measured on the page: x-height %+.1fpx avg (%+.0f%%)  ·  ▼ %d of %d",
-                hint_name, summary.avg_diff, summary.avg_pct, summary.shrinks, summary.n)
+                "Rendering [%s]: x-height %+.1fpx (%+.0f%%) from the design on average",
+                hint_name, summary.avg_diff, summary.avg_pct)
         else
             summary_text = string.format(
                 "Rendering [%s]: x-height %+.1fpx avg (%+.0f%%)  ·  round/flat flaw %d/%d  ·  ▼ %d  →  %s",
