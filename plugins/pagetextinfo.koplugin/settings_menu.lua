@@ -49,6 +49,7 @@ local CONTRAST_DEFAULT = 15
 -- Forward declaration: assigned further down, but must be declared here
 -- so every function below sees it as an upvalue (not a global).
 local xHeightRatio
+local sweepFonts   -- debug only, defined after buildSizeCombos
 local measureGlyphRatio   -- assigned after the FreeType block below
 
 
@@ -450,6 +451,11 @@ local function buildRows(ui)
         contrast_row,
         hinting_row,
     }
+    if DEBUG_LOG then
+        table.insert(rows, { title = "Debug",
+            { text = "Sweep fonts", callback = function(u) sweepFonts(u) end },
+        })
+    end
     -- Section labels, shown to the left of each row (a row without a title
     -- gets none: it continues the one above)
     font_preset_row.title = "Font"
@@ -1528,6 +1534,93 @@ local function buildSizeCombos(ui)
 
     dlog("buildSizeCombos: cur_px=", cur_px, "first px=", first, "last px=", last)
     return combos, unhinted, hint_name or "?", summary
+end
+
+-- DEBUG ONLY (button shown when DEBUG_LOG is true): run once to build the size
+-- tables of every installed font with every hinting mode. Writes
+--     <data dir>/pti_sweep_summary.csv   one line per font and hinting mode
+--     <data dir>/pti_sweep_detail.csv    one line per font, mode and pixel size
+-- and logs one "[PTI] SWEEP ..." line per font and mode. Font face and hinting
+-- are restored at the end. The hinting is only set in the configurable (the
+-- tables are measured with FreeType, not drawn), so each mode costs no reflow;
+-- only changing the font face reflows the book.
+sweepFonts = function(ui)
+    if not ui.rolling then return end
+    local UIManager = require("ui/uimanager")
+    local InfoMessage = require("ui/widget/infomessage")
+    local logger = require("logger")
+    if ui.sweep_running then return end
+
+    local faces = ui.font and ui.font.face_list
+    if not faces then
+        local ok, cre = pcall(require, "libs/libkoreader-cre")
+        faces = ok and cre.getFontFaces and cre.getFontFaces() or {}
+    end
+    local list = {}
+    for __, f in ipairs(faces) do list[#list + 1] = f end
+
+    local orig_face = ui.document._document:getFontFace()
+    local orig_hint = getHinting(ui)
+    local dir = require("datastorage"):getDataDir()
+    local sum_f = io.open(dir .. "/pti_sweep_summary.csv", "w")
+    local det_f = io.open(dir .. "/pti_sweep_detail.csv", "w")
+    if not (sum_f and det_f) then
+        UIManager:show(InfoMessage:new{ text = "Sweep: cannot write to " .. dir })
+        return
+    end
+    sum_f:write("face,hinting,verdict,n,mismatch,shrinks,avg_diff_px,avg_pct\n")
+    det_f:write("face,hinting,px,pt,xh_ideal,xh_px,o_px,mm,shrinks,mismatch,plateau\n")
+    local names = { [0] = "off", [1] = "native", [2] = "auto" }
+    local i = 0
+    ui.sweep_running = true
+    logger.info(PTI_TAG, "SWEEP start:", #list, "fonts ->", dir)
+    UIManager:show(InfoMessage:new{ text = "Sweep started: " .. #list .. " fonts (see log)", timeout = 3 })
+
+    local function finish()
+        sum_f:close()
+        det_f:close()
+        ui.sweep_running = nil
+        if orig_face then setFontFace(ui, orig_face) end
+        setHinting(ui, orig_hint)
+        logger.info(PTI_TAG, "SWEEP done:", dir .. "/pti_sweep_summary.csv")
+        UIManager:show(InfoMessage:new{ text = "Sweep done: " .. dir .. "/pti_sweep_*.csv" })
+    end
+
+    local function step()
+        i = i + 1
+        local face = list[i]
+        if not face then return finish() end
+        local ok, err = pcall(function()
+            setFontFace(ui, face)
+            for mode = 0, 2 do
+                ui.document.configurable.font_hinting = mode
+                ui.font.configurable.font_hinting = mode
+                local combos, __, __, summary = buildSizeCombos(ui)
+                if not combos then
+                    logger.info(PTI_TAG, "SWEEP", face, names[mode], "no ratio, skipped")
+                    break
+                end
+                local v = summary or { verdict = "OFF", n = 0, mismatch = 0, shrinks = 0,
+                    avg_diff = 0, avg_pct = 0 }
+                logger.info(PTI_TAG, string.format(
+                    "SWEEP %s [%s] %s n=%d mismatch=%d shrinks=%d diff=%+.2fpx (%+.1f%%)",
+                    face, names[mode], v.verdict, v.n, v.mismatch, v.shrinks, v.avg_diff, v.avg_pct))
+                sum_f:write(string.format('"%s",%s,%s,%d,%d,%d,%.3f,%.2f\n',
+                    face, names[mode], v.verdict, v.n, v.mismatch, v.shrinks, v.avg_diff, v.avg_pct))
+                for __, c in ipairs(combos) do
+                    det_f:write(string.format('"%s",%s,%d,%.2f,%.3f,%.3f,%s,%.4f,%d,%d,%d\n',
+                        face, names[mode], c.px, c.pt, c.xh_ideal, c.xh_px,
+                        c.o_px and tostring(c.o_px) or "", c.mm,
+                        c.shrinks and 1 or 0, c.mismatch and 1 or 0, c.plateau and 1 or 0))
+                end
+            end
+        end)
+        if not ok then logger.warn(PTI_TAG, "SWEEP error on", face, err) end
+        sum_f:flush()
+        det_f:flush()
+        UIManager:scheduleIn(0.05, step)   -- let the UI breathe between fonts
+    end
+    UIManager:scheduleIn(0.5, step)
 end
 
 -- `start` = index of the first visible row (nil: centre on the current size);
