@@ -2274,7 +2274,8 @@ function ShowLongestSessionsWindow:onShow()
 end
 
 function ShowLongestSessionsWindow:onClose()
-    UIManager:close(self)
+    local frame_dimen = self[1] and self[1][1] and self[1][1].dimen
+    UIManager:close(self, "ui", frame_dimen)
     return true
 end
 
