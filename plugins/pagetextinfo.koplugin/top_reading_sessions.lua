@@ -1323,19 +1323,27 @@ local function buildColumns(inner_w, cols, caption_on_top)
     return row
 end
 
--- First row: differential (ΔL), today, yesterday, this week, month, last month, year
+-- Two rows: differential (ΔL), today and yesterday; then this week, month,
+-- last month and year
 local function buildBreakdownCard(card_w, data)
+    local inner_w = cardInnerWidth(card_w)
     local pace = readPace()
     local delta = math.ceil((data.year / 3600) - (data.yday * pace))
-    return makeCard(card_w, buildColumns(cardInnerWidth(card_w), {
-        { (delta > 0 and "+" or "") .. tostring(delta), DELTA_L .. " " .. formatPace(pace) },
-        { secondsToShortHM(data.today),                  _("Today") },
-        { secondsToBreakdownTime(data.yesterday),        _("Yesterday") },
-        { data.week and secondsToStatsTime(data.week) or "-", _("This week") },
-        { secondsToBreakdownTime(data.month),            _("Month") },
-        { secondsToBreakdownTime(data.lmonth),           _("Last month") },
-        { secondsToBreakdownTime(data.year),             _("Year") },
-    }, true))
+    return makeCard(card_w, VerticalGroup:new{
+        align = "center",
+        buildColumns(inner_w, {
+            { (delta > 0 and "+" or "") .. tostring(delta), DELTA_L .. " " .. formatPace(pace) },
+            { secondsToShortHM(data.today),                  _("Today") },
+            { secondsToBreakdownTime(data.yesterday),        _("Yesterday") },
+        }, true),
+        VerticalSpan:new{ width = SPACE.l },
+        buildColumns(inner_w, {
+            { data.week and secondsToStatsTime(data.week) or "-", _("This week") },
+            { secondsToBreakdownTime(data.month),            _("Month") },
+            { secondsToBreakdownTime(data.lmonth),           _("Last month") },
+            { secondsToBreakdownTime(data.year),             _("Year") },
+        }, true),
+    })
 end
 
 -- Reading speed: words per minute and pages of the current session. Read from
@@ -1364,30 +1372,36 @@ local function cleanTopBarText(s)
     return (s:match("^%s*(.-)%s*$"))
 end
 
--- Title, series, words and publication year of the open book, with the time on
--- the book and the session figures on the right
+-- Two rows. First: title, series, words and publication year of the open book,
+-- with the time on this book on the right. Second: the session time, wpm and
+-- pages of the session.
 local function buildBookCard(card_w, session, book)
     local full_w = cardInnerWidth(card_w)
-    local right_w = math.floor(full_w * 0.58)
+    local right_w = math.floor(full_w * 0.28)
     local gap = SPACE.xl
     local inner_w = full_w - right_w - gap  -- width of the title block
 
-    -- Right block, next to the title: time on this book, then the session
-    -- time, wpm and pages of the session
-    local wpm, pages = readWpmSession()
     local right = buildColumns(right_w, {
-        { book and secondsToShortHM(book) or "-",       _("This book") },
+        { book and secondsToShortHM(book) or "-", _("This book") },
+    }, false)
+    local wpm, pages = readWpmSession()
+    local session_row = buildColumns(full_w, {
         { session and secondsToShortHM(session) or "-", _("Session") },
         { tostring(wpm),                                _("wpm") },
         { tostring(pages),                              _("pages") },
     }, false)
     local function withRight(left)
         local h = math.max(left:getSize().h, right:getSize().h)
-        return makeCard(card_w, HorizontalGroup:new{
-            align = "top",
-            CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = h }, left },
-            HorizontalSpan:new{ width = gap },
-            CenterContainer:new{ dimen = Geom:new{ w = right_w, h = h }, right },
+        return makeCard(card_w, VerticalGroup:new{
+            align = "center",
+            HorizontalGroup:new{
+                align = "top",
+                CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = h }, left },
+                HorizontalSpan:new{ width = gap },
+                CenterContainer:new{ dimen = Geom:new{ w = right_w, h = h }, right },
+            },
+            VerticalSpan:new{ width = SPACE.l },
+            session_row,
         })
     end
 
@@ -1812,11 +1826,14 @@ local function yearTitle(name)
     end
 end
 
+local WINDOW_WIDTH_FACTOR = 0.85  -- window width, as a share of the screen width
+
 local VIEWS = {
     {
         -- not a list: it builds its own widgets (the start-menu modules as cards)
         title = _("Reading Summary"),
         build = buildSummaryView,
+        width_factor = 0.65,  -- narrower than the other views (they use WINDOW_WIDTH_FACTOR)
     },
     {
         -- not a list: it builds its own widgets
@@ -2021,7 +2038,7 @@ end
 function ShowLongestSessionsWindow:_buildUI()
     local screen_width = Screen:getWidth()
     local screen_height = Screen:getHeight()
-    local w_width = math.floor(screen_width * 0.85)
+    local w_width = math.floor(screen_width * (VIEWS[self.current_view].width_factor or WINDOW_WIDTH_FACTOR))
     if screen_width > screen_height then
         w_width = math.floor(w_width * screen_height / screen_width)
     end
