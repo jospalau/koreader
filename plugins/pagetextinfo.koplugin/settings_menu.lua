@@ -482,6 +482,10 @@ local function buildRows(ui)
 end
 
 local _ratio_cache = {}   -- [face name] = x-height / size ratio
+-- Size (px) at which the x-height ratio of a face is measured. getXHeight()
+-- returns the x-height stored in the font scaled to that size (not a rounded
+-- pixel count), so a small size is enough: a big one only loads a huge face.
+local XH_MEASURE_PX = 200
 
 
 local FontList = require("fontlist")
@@ -528,13 +532,13 @@ xHeightRatio = function(doc, raw_name)
     local face_name = resolveFace(raw_name)
     if _ratio_cache[face_name] then return _ratio_cache[face_name], face_name end
 
-    local face = Font:getFace(face_name, 200, 0, true)
+    local face = Font:getFace(face_name, XH_MEASURE_PX, 0, true)
     if not face or not face.ftsize then
         require("logger").warn("[PTI] xHeightRatio: cannot load face", raw_name, face_name)
         return nil
     end
     -- Divide by the size the face was really loaded at (it may be DPI-scaled)
-    local real_size = face.size or 200
+    local real_size = face.size or XH_MEASURE_PX
     -- Protected: a 0/nil x-height means the face can't be measured
     local okx, xh = pcall(function() return face.ftsize:getXHeight() end)
     if not okx or not xh or xh <= 0 then
@@ -548,6 +552,152 @@ xHeightRatio = function(doc, raw_name)
     dlog("xHeightRatio: measured face=", face_name, "ratio=", ratio, "real size=", real_size)
     _ratio_cache[face_name] = ratio
     return ratio, face_name
+end
+
+-- Hinted x-height at real pixel sizes ------------------------------------------
+-- With hinting on, crengine snaps the x-height to a whole number of pixels, and
+-- the result can differ from the design x-height (ratio * px) by up to about a
+-- pixel. Font:getFace is no use to measure it (it loads the face at
+-- px * dpi / 72 pixels and getXHeight() returns the unhinted outline value), so
+-- the face is opened straight through FreeType at the real pixel size, with the
+-- load flags of the selected hinting mode. Any failure returns nil and the callers
+-- use the design x-height instead.
+-- NOTE: check these flags against crengine (lvfntman.cpp, where the glyphs are
+-- loaded for each hinting mode) and adjust them if crengine uses others, e.g.
+-- FT_LOAD_TARGET_LIGHT (0x10000). The weight (font_base_weight) is not applied.
+local FT_LOAD_NO_HINTING, FT_LOAD_RENDER = 0x2, 0x4
+local FT_LOAD_FORCE_AUTOHINT, FT_LOAD_NO_AUTOHINT = 0x20, 0x8000
+local HINT_LOAD_FLAGS = {
+    [0] = FT_LOAD_RENDER + FT_LOAD_NO_HINTING,    -- off
+    [1] = FT_LOAD_RENDER + FT_LOAD_NO_AUTOHINT,   -- native (font bytecode)
+    [2] = FT_LOAD_RENDER + FT_LOAD_FORCE_AUTOHINT, -- auto
+}
+
+local _ft   -- { ffi, lib, library } once loaded; false when FreeType can't be reached
+
+-- Same library KOReader's own ffi/freetype.lua uses. The load name changes with
+-- the KOReader version / platform, so several are tried.
+local function loadFreeType()
+    local ffi = require("ffi")
+    require("ffi/freetype_h")   -- C declarations (FT_Library, FT_Face, ...)
+    pcall(require, "ffi/loadlib")
+    local attempts = {
+        function() return ffi.loadlib("freetype", "6") end,
+        function() return ffi.load("freetype") end,
+        function() return ffi.load("libs/libfreetype.so.6") end,
+        function() return ffi.load("libfreetype.so.6") end,
+    }
+    for __, try in ipairs(attempts) do
+        local ok, lib = pcall(try)
+        if ok and lib then return ffi, lib end
+    end
+    return nil
+end
+
+local _xh_cache = {}   -- [font file .. "|" .. hint] = { [px] = x-height in px, or false }
+-- Same keys: height of the round letter "o" at each size. Round letters overshoot
+-- the flat top of "x" and are rounded on their own, so their height can change
+-- at sizes where the flat "x" does not (most letters of a text have round tops).
+-- Used to decide which rows repeat the x-height, and logged by buildSizeCombos.
+local _xo_cache = {}
+
+-- Height above the baseline (px) of the flat top of "x" for every pixel size
+-- first..last, with the load flags of hinting mode `hint`. Returns the cache
+-- table { [px] = height or false } (a size that couldn't be measured is false),
+-- or nil if FreeType can't be used. `path` must be the font file (what
+-- resolveFace returns). Sizes already measured are not measured again.
+local function hintedXHeights(path, first, last, hint)
+    local flags = HINT_LOAD_FLAGS[hint]
+    if not flags or type(path) ~= "string" or not path:find("/", 1, true) then
+        return nil
+    end
+    local key = path .. "|" .. hint
+    local cache = _xh_cache[key]
+    if not cache then
+        cache = {}
+        _xh_cache[key] = cache
+    end
+    local ocache = _xo_cache[key]
+    if not ocache then
+        ocache = {}
+        _xo_cache[key] = ocache
+    end
+    local missing = {}
+    for px = first, last do
+        if cache[px] == nil then table.insert(missing, px) end
+    end
+    if #missing == 0 then return cache end
+
+    local ok, res = pcall(function()
+        if _ft == nil then
+            local ffi, lib = loadFreeType()
+            _ft = false
+            if lib then
+                -- One FreeType library for the whole session. KOReader's cdef has
+                -- no FT_Done_FreeType, so it is created once and never freed.
+                local library = ffi.new("FT_Library[1]")
+                if lib.FT_Init_FreeType(library) == 0 then
+                    _ft = { ffi = ffi, lib = lib, library = library }
+                end
+            end
+        end
+        if not _ft then return false end
+        local ffi, ft, library = _ft.ffi, _ft.lib, _ft.library
+
+        local face = ffi.new("FT_Face[1]")
+        local inner_ok, inner_err = pcall(function()
+            -- Face index 0: right for single fonts (a .ttc would need its index)
+            if ft.FT_New_Face(library[0], path, 0, face) ~= 0 then return end
+            local idx = ft.FT_Get_Char_Index(face[0], string.byte("x"))
+            if idx == 0 then return end
+            local idx_o = ft.FT_Get_Char_Index(face[0], string.byte("o"))
+            for __, px in ipairs(missing) do
+                local top
+                if ft.FT_Set_Pixel_Sizes(face[0], 0, px) == 0 then
+                    if ft.FT_Load_Glyph(face[0], idx, flags) == 0 then
+                        -- "x" sits on the baseline, so the top of its bitmap is its height
+                        top = tonumber(face[0].glyph.bitmap_top)
+                    end
+                    -- "o" overshoots the baseline too: its top is what counts here
+                    if idx_o ~= 0 and ft.FT_Load_Glyph(face[0], idx_o, flags) == 0 then
+                        ocache[px] = tonumber(face[0].glyph.bitmap_top)
+                    end
+                end
+                cache[px] = (top and top > 0) and top or false
+            end
+        end)
+        -- Sizes still unknown are marked as failed, so they are not retried
+        for __, px in ipairs(missing) do
+            if cache[px] == nil then cache[px] = false end
+        end
+        -- Always release the face, even if the measurement failed. The symbol is
+        -- looked up inside the pcall: a missing declaration raises an error.
+        if face[0] ~= nil then pcall(function() ft.FT_Done_Face(face[0]) end) end
+        if not inner_ok then error(inner_err) end
+        return true
+    end)
+    if not ok then
+        require("logger").warn("[PTI] hintedXHeights failed:", res)
+        return nil
+    end
+    if res == false then return nil end   -- FreeType not reachable
+    return cache
+end
+
+-- x-height in px of the current face as crengine draws it at pixel size `px`:
+-- the design x-height (ratio * px) with hinting off, the measured whole-pixel one
+-- with native / auto hinting. Returns x-height, hinted (true when measured), or
+-- nil if the font can't be measured.
+local function realXHeightPx(ui, px)
+    local ratio, face_path = xHeightRatio(ui.document)
+    if not ratio then return nil end
+    local hint = getHinting(ui)
+    if hint == 1 or hint == 2 then
+        local measured = hintedXHeights(face_path, px, px, hint)
+        local v = measured and measured[px]
+        if v then return v, true end
+    end
+    return ratio * px, false
 end
 
 -- New books: make KOReader's own defaults for margins equal to DEFAULTS.margins,
@@ -580,7 +730,9 @@ function PageTextInfo:getXHeightMm()
         local ratio = xHeightRatio(ui.document)
         if not ratio then return nil end
         local px = drawnPx(ui, ui.document.configurable.font_size, dpi)
-        local res = ratio * px / (dpi / 25.4)
+        -- With hinting on the drawn x-height is a whole number of pixels
+        local xh_px = realXHeightPx(ui, px) or ratio * px
+        local res = xh_px / (dpi / 25.4)
         dlog("getXHeightMm: pt=", ui.document.configurable.font_size, "ratio=", ratio,
             "px drawn=", px, "-> mm=", res)
         return res
@@ -600,9 +752,26 @@ end
 function PageTextInfo:ptForXHeight(target_mm)
     local ok, pt = pcall(function()
         local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-        local ratio = xHeightRatio(self.ui.document)
+        local ratio, face_path = xHeightRatio(self.ui.document)
         if not ratio then return nil end
-        local px = math.max(1, math.floor(target_mm * (dpi / 25.4) / ratio + 0.5))
+        local target_px = target_mm * (dpi / 25.4)
+        local px = math.max(1, math.floor(target_px / ratio + 0.5))
+        -- With hinting on the drawn x-height is a whole number of pixels that can
+        -- differ from ratio * px: take the nearby size whose real x-height is the
+        -- closest to the target (the smaller size on a tie)
+        local hint = getHinting(self.ui)
+        if hint == 1 or hint == 2 then
+            hintedXHeights(face_path, math.max(1, px - 3), px + 3, hint)   -- fills the cache
+        end
+        local best_px, best_err = px, nil
+        for cand = math.max(1, px - 3), px + 3 do
+            local xh = realXHeightPx(self.ui, cand)
+            local err = xh and math.abs(xh - target_px)
+            if err and (not best_err or err < best_err - 1e-6) then
+                best_px, best_err = cand, err
+            end
+        end
+        px = best_px
         local res = math.ceil(px * 72 / dpi * 100 + 0.001) / 100
         return math.max(4, math.min(res, 255))
     end)
@@ -933,7 +1102,8 @@ local function buildTitleSegments(ui)
     local face_base = Font:getFace(face_name, px, 0, true)
     if not face_base or not face_base.ftsize then return na end
 
-    local xh_px = ratio * px
+    -- With hinting on the drawn x-height is a whole number of pixels
+    local xh_px = realXHeightPx(ui, px) or ratio * px
     if xh_px <= 0 then return na end
 
     local xh_mm = xh_px * 25.4 / display_dpi
@@ -1052,6 +1222,8 @@ local COMBO_MM_MAX = 2.25
 local COMBO_ROW_FONT = 18     -- table rows
 local COMBO_LABEL_FONT = 16   -- column headers and info lines
 local COMBO_TITLE_FONT = 16   -- title
+-- Highest the size combinations window may be, as a fraction of the screen
+local COMBO_MAX_H_RATIO = 0.85
 
 -- Returns a list of { pt, px, mm, angle, current } (ascending), or nil if the
 -- font can't be measured.
@@ -1068,28 +1240,47 @@ local function buildSizeCombos(ui)
     local first = math.max(1, math.ceil(cps_mm / mm_per_px - 1e-6))
     local last = math.floor(COMBO_MM_MAX / mm_per_px + 1e-6)
 
+    -- KOReader's "Font hinting" option: 0 = off, 1 = native, 2 = auto (same
+    -- reading as the hinting buttons of the menu, default auto)
+    local hint = getHinting(ui)
+    -- Real x-height of every row, loaded with the flags crengine uses for this
+    -- hinting mode (nil when it can't be done: Font:getFace is used then).
+    -- Hinting off needs no measurement. face_name is the resolved font file here.
+    local measured = (hint == 1 or hint == 2)
+        and hintedXHeights(face_name, first, last, hint) or nil
+    dlog("buildSizeCombos: hint=", hint, "measured with FreeType flags=", measured and true or false)
+
     local combos = {}
     for px = first, last do
         -- Smallest pt that crengine draws at this px (same formula as ptForXHeight)
         local pt = math.max(4, math.min(math.ceil(px * 72 / dpi * 100 + 0.001) / 100, 255))
-        local mm = mm_per_px * px
+        local mm_ideal = mm_per_px * px
         local xh_ideal = ratio * px   -- x-height in pixels, before hinting
         -- Real x-height at this px size, as FreeType gives it (hinted)
         local xh_real
-        local okf, face = pcall(Font.getFace, Font, face_name, px, 0, true)
-        if okf and face and face.ftsize then
-            local okx, xh = pcall(function() return face.ftsize:getXHeight() end)
-            if okx and xh and xh > 0 then
-                local size = face.size or px
-                xh_real = (xh < 1) and (xh * size) or xh
-            end
+        if hint == 0 then
+            xh_real = xh_ideal   -- hinting off: nothing is snapped to the grid
+        elseif measured and measured[px] then
+            xh_real = measured[px]   -- loaded with crengine's flags for this mode
         end
+        -- Otherwise xh_real stays nil and the row uses the estimate below (distance
+        -- of the ideal x-height to a whole pixel). Font:getFace is NOT a valid
+        -- fallback: it loads the face at px * dpi / 72 pixels (4.17x on this
+        -- device) and getXHeight() returns the unhinted outline value, so it says
+        -- nothing about how a px-sized glyph is hinted.
+        -- Hinted rows: the x-height really drawn (whole pixels), not the design one
+        local hinted = (measured and measured[px]) and true or false
+        local mm = hinted and (xh_real * 25.4 / dpi) or mm_ideal
         -- Fallback when it can't be measured: distance of the ideal to a whole px
         local sweet = (not xh_real)
             and math.abs(xh_ideal - math.floor(xh_ideal + 0.5)) <= COMBO_RENDER_TOL
-        dlog("combo px=", px, "xh ideal=", xh_ideal, "xh real=", xh_real)
+        local round_top = _xo_cache[face_name .. "|" .. tostring(hint)]
+        local o_px = hinted and round_top and round_top[px] or nil
+        dlog("combo px=", px, "xh ideal=", xh_ideal, "xh real=", xh_real,
+            "round o top=", o_px)
         table.insert(combos, {
-            pt = pt, px = px, mm = mm,
+            pt = pt, px = px, mm = mm, mm_ideal = mm_ideal, hinted = hinted,
+            o_px = o_px,
             xh_px = xh_real or xh_ideal,
             xh_ideal = xh_ideal,
             diff = xh_real and (xh_real - xh_ideal) or nil,
@@ -1098,14 +1289,28 @@ local function buildSizeCombos(ui)
             current = (px == cur_px),
         })
     end
-    -- The hinted x-height may be systematically a bit above/below the ideal one
-    -- (rounding up, overshoot...). What matters is how much it moves from row to
-    -- row, so the typical difference (median) is removed before comparing.
+    -- Rows whose hinted x-height equals the one of the two rows above: a bigger
+    -- size whose letters only get wider, not taller. Both the flat "x" and the
+    -- round "o" must repeat: the round letters can still grow when the flat one
+    -- does not. With a ratio near 0.5 the x-height grows one pixel every two
+    -- sizes, so repeating it once is normal and is not marked; only a longer run is.
+    local function sameHeight(a, b)
+        return math.abs(a.xh_px - b.xh_px) < 0.001
+            and (not (a.o_px and b.o_px) or a.o_px == b.o_px)
+    end
+    for i = 3, #combos do
+        local c, p, pp = combos[i], combos[i - 1], combos[i - 2]
+        if c.hinted and p.hinted and pp.hinted and sameHeight(c, p) and sameHeight(p, pp) then
+            c.plateau = true
+        end
+    end
+    -- With hinting on, the x-height is a whole number of pixels, so every row has
+    -- a crisp edge. What differs is how far hinting moved it from the design
+    -- x-height (ratio * px): that difference is the distortion of the size. It is
+    -- compared as it is. Removing the typical difference (median) made the rows
+    -- with a typical, not a small, distortion win (Georgia, native: even sizes
+    -- grown by +0.3..+0.4 px were marked over odd ones within -0.2..0 px).
     local diffs = {}
-    -- KOReader's "Font hinting" option: 0 = off, 1 = native, 2 = auto. When it
-    -- can't be read, it is guessed below from the measured x-heights.
-    local hint = doc.configurable.font_hinting
-    if hint == nil then hint = G_reader_settings:readSetting("copt_font_hinting") end
     local HINT_NAMES = { [0] = "off", [1] = "native", [2] = "auto" }
     local hint_name = HINT_NAMES[hint]
     local unhinted = (hint == 0)
@@ -1115,7 +1320,7 @@ local function buildSizeCombos(ui)
     if #diffs > 0 then
         table.sort(diffs)
         local median = diffs[math.floor(#diffs / 2) + 1]
-        -- Deviation of every row from the typical difference; the best
+        -- Deviation of every row from the design x-height; the best
         -- COMBO_RENDER_SHARE of the rows are marked (plus any under the tolerance),
         -- so there are always several sizes to choose from.
         -- Without hinting the real x-height equals the ideal one at every size
@@ -1136,7 +1341,7 @@ local function buildSizeCombos(ui)
                 if unhinted then
                     c.dev = math.abs(c.xh_ideal - math.floor(c.xh_ideal + 0.5))
                 else
-                    c.dev = math.abs(c.diff - median)
+                    c.dev = math.abs(c.diff)
                 end
                 table.insert(devs, c.dev)
             end
@@ -1149,6 +1354,9 @@ local function buildSizeCombos(ui)
         dlog("buildSizeCombos: median diff real-ideal=", median, "limit=", limit,
             "unhinted=", unhinted)
     end
+    -- No row could be measured: the marks come from the whole-pixel estimate, so
+    -- the legend must describe that criterion
+    if #diffs == 0 then unhinted = true end
     dlog("buildSizeCombos: cur_px=", cur_px, "first px=", first, "last px=", last)
     return combos, unhinted, hint_name or "?"
 end
@@ -1191,7 +1399,7 @@ local function showSizeCombos(plugin, start, old)
     -- (bold, as the current row is). The fractions are the column widths used
     -- below (pt, x-height mm, x-height px, px).
     local row_size = COMBO_ROW_FONT
-    for __, t in ipairs({ { "◆ 99.99pt", 0.18 }, { "9.99mm", 0.20 }, { "99.99px", 0.20 }, { "999px", 0.14 } }) do
+    for __, t in ipairs({ { "◆ 99.99pt", 0.18 }, { "9.99mm", 0.20 }, { "= 99.99px", 0.20 }, { "999px", 0.14 } }) do
         local max_w = math.floor((inner_w - 2 * thin) * t[2]) - 2 * Size.padding.small
         while row_size > BTN_FONT_MIN do
             local tw = TextWidget:new{ text = t[1], face = Font:getFace("cfont", row_size), bold = true }
@@ -1210,18 +1418,25 @@ local function showSizeCombos(plugin, start, old)
     local nav_h = row_h
 
     -- How many rows fit on the screen
-    local base = title_h + head_h * 5 + gap * 8 + outer_pad * 2
+    -- One more info line (what "=" means) whenever the x-height is hinted
+    local has_plateau, has_hinted = false, false
+    for __, c in ipairs(all) do
+        if c.plateau then has_plateau = true end
+        if c.hinted then has_hinted = true end
+    end
+    local base = title_h + head_h * (has_hinted and 6 or 5)
+        + gap * (has_hinted and 9 or 8) + outer_pad * 2
     local n = #all
     if n == 0 then
         local InfoMessage = require("ui/widget/infomessage")
         UIManager:show(InfoMessage:new{ text = "Size combinations: N/A" })
         return
     end
-    local fit_rows = math.floor((screen.h * 0.9 - base) / (row_h + gap))
+    local fit_rows = math.floor((screen.h * COMBO_MAX_H_RATIO - base) / (row_h + gap))
     local needs_nav = n > fit_rows   -- no scroll buttons when everything fits
     local visible = n
     if needs_nav then
-        visible = math.max(3, math.floor((screen.h * 0.9 - base - nav_h - gap * 2) / (row_h + gap)))
+        visible = math.max(3, math.floor((screen.h * COMBO_MAX_H_RATIO - base - nav_h - gap * 2) / (row_h + gap)))
         visible = math.min(visible, n)
     end
 
@@ -1271,7 +1486,7 @@ local function showSizeCombos(plugin, start, old)
     local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
     table.insert(grid, cell("Size combinations", inner_w, title_h, title_face, Blitbuffer.COLOR_BLACK, true))
     -- Size of one step: crengine draws whole pixels, so 1 px = this much pt / x-height
-    local step_mm = all[1].mm / all[1].px
+    local step_mm = all[1].mm_ideal / all[1].px   -- design value: hinted rows differ
     local xh_ratio = step_mm * dpi / 25.4   -- x-height as a fraction of the font size (em)
     local readability = faceReadability(ui, face_name)
     table.insert(grid, cellFit(string.format("%s (%s) (x-height %.3fem)", face_name, readability, xh_ratio),
@@ -1304,7 +1519,8 @@ local function showSizeCombos(plugin, start, old)
             cell(string.format("%s%.2fpt", sweet and "◆ " or "", c.pt), col_w[1], ch, face, fg, c.current),
             cell(string.format("%dpx", c.px), col_w[2], ch, face, fg, c.current),
             cell(string.format("%.2fmm", c.mm), col_w[3], ch, face, fg, c.current),
-            cell(string.format("%.2fpx", c.xh_px), col_w[4], ch, face, fg, c.current),
+            cell((c.plateau and "= " or "") .. string.format("%.2fpx", c.xh_px),
+                col_w[4], ch, face, fg, c.current),
             LeftContainer:new{
                 dimen = Geom:new{ w = col_w[5], h = ch },
                 HorizontalGroup:new{
@@ -1372,6 +1588,14 @@ local function showSizeCombos(plugin, start, old)
     legend = legend .. "  [hinting: " .. hint_name .. "]"
     table.insert(grid, cellFit(string.format("%s (best %d%% of the sizes)  ·  tap outside to close",
         legend, math.floor(COMBO_RENDER_SHARE * 100 + 0.5)), inner_w, head_h, Blitbuffer.COLOR_DARK_GRAY))
+    -- Next to the "◆" legend: what "=" means. It is explained whenever the
+    -- x-height is hinted, also when no row carries it, so it is clear why none does.
+    if has_hinted then
+        table.insert(grid, cellFit(has_plateau
+            and "= same x-height (flat and round letters) as the two rows above"
+            or "= none: no x-height (flat or round) repeats over 3 sizes in a row",
+            inner_w, head_h, Blitbuffer.COLOR_DARK_GRAY))
+    end
 
     local frame = FrameContainer:new{
         background = Blitbuffer.COLOR_WHITE,
