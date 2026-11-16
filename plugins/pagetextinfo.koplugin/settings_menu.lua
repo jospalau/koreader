@@ -193,6 +193,27 @@ local function setWeight(ui, w)
     ui.font:onSetFontBaseWeight(w)
 end
 
+-- Make the page render again and repaint it, after a setting that crengine caches
+-- (gamma, hinting). The cache-clearing method is not present in every KOReader
+-- build ("clearCacheData" is nil in the one used here), so it is only called when
+-- it exists, on the document or on the crengine object. The re-layout itself
+-- (UpdatePos) and the full repaint do not depend on it.
+local function forceRerender(ui)
+    local doc = ui.document
+    local cleared = false
+    for __, owner in ipairs({ doc, doc._document }) do
+        if not cleared and type(owner.clearCacheData) == "function" then
+            local ok, err = pcall(owner.clearCacheData, owner)
+            dlog("forceRerender: clearCacheData", ok and "OK" or err)
+            cleared = ok
+        end
+    end
+    if not cleared then dlog("forceRerender: no clearCacheData available, skipped") end
+    doc:getCurrentPos()
+    ui:handleEvent(require("ui/event"):new("UpdatePos"))
+    require("ui/uimanager"):setDirty("all", "full")
+end
+
 local function getContrast(ui)
     local conf = ui.document.configurable
     return conf.font_gamma
@@ -210,8 +231,13 @@ end
 local function setHinting(ui, mode)
     dlog("setHinting:", mode)
     ui.document.configurable.font_hinting = mode
+    ui.font.configurable.font_hinting = mode
     -- Same call KOReader's own option makes (applies it, reflows and shows a notification)
     ui.font:onSetFontHinting(mode)
+
+    -- crengine caches the rendered glyphs / page, so changing the hinting alone
+    -- can leave the old rendering on screen: render again and repaint.
+    forceRerender(ui)
 end
 
 local function setContrast(ui, g)
@@ -225,10 +251,7 @@ local function setContrast(ui, g)
 
     -- Gamma is applied when glyphs are drawn, but crengine caches the rendered
     -- page, so force it to render again and repaint.
-    ui.document:clearCacheData()
-    ui.document:getCurrentPos()
-    ui:handleEvent(require("ui/event"):new("UpdatePos"))
-    require("ui/uimanager"):setDirty("all", "full")
+    forceRerender(ui)
 end
 
 -- One index at a time over KOReader's full gamma table (0..56)
@@ -1383,6 +1406,21 @@ local function buildSizeCombos(ui)
             c.plateau = true
         end
     end
+    -- Rendering flaws of a hinted row (they only exist when hinting snaps glyphs):
+    --  * shrinks: the x-height is smaller than the one of the row above, i.e. a
+    --    bigger size draws smaller letters (seen with Auto hinting)
+    --  * mismatch: the round "o" ends LOWER than the flat "x" (round letters should
+    --    overshoot, not undershoot) or overshoots it by 2 px or more
+    -- A one pixel overshoot is normal and is not a flaw.
+    for i, c in ipairs(combos) do
+        if c.hinted then
+            local p = combos[i - 1]
+            if p and p.hinted and c.xh_px < p.xh_px - 0.001 then c.shrinks = true end
+            if c.o_px and (c.o_px < c.xh_px - 0.001 or c.o_px - c.xh_px >= 2) then
+                c.mismatch = true
+            end
+        end
+    end
     -- With hinting on, the x-height is a whole number of pixels, so every row has
     -- a crisp edge. What differs is how far hinting moved it from the design
     -- x-height (ratio * px): that difference is the distortion of the size. It is
@@ -1410,7 +1448,9 @@ local function buildSizeCombos(ui)
                 if unhinted then
                     c.dev = math.abs(c.xh_ideal - math.floor(c.xh_ideal + 0.5))
                 else
-                    c.dev = math.abs(c.diff)
+                    -- A row with a rendering flaw (see above) is pushed back by a
+                    -- whole pixel, so it is not marked while clean rows exist
+                    c.dev = math.abs(c.diff) + ((c.shrinks or c.mismatch) and 1 or 0)
                 end
                 table.insert(devs, c.dev)
             end
@@ -1447,8 +1487,47 @@ local function buildSizeCombos(ui)
     -- No row could be measured: the marks come from the whole-pixel estimate, so
     -- the legend must describe that criterion
     if #diffs == 0 then unhinted = true end
+
+    -- Overall rendering verdict of this font with the selected hinting mode, from
+    -- the hinted rows only (nil when nothing is hinted: nothing to judge).
+    --   POOR: 30% or more of the sizes have a flaw, or the x-height is off by > 5%
+    --   FAIR: some flawed size, or the x-height is off by > 3.5% on average
+    --   GOOD: otherwise
+    -- The thresholds are a coarse judgement, tune them to taste.
+    local summary
+    do
+        local n, bad, mism, shr = 0, 0, 0, 0
+        local sum_diff, sum_spct, sum_apct = 0, 0, 0
+        for __, c in ipairs(combos) do
+            if c.hinted and c.diff then
+                n = n + 1
+                sum_diff = sum_diff + c.diff
+                sum_spct = sum_spct + c.diff / c.xh_ideal * 100
+                sum_apct = sum_apct + math.abs(c.diff) / c.xh_ideal * 100
+                if c.mismatch then mism = mism + 1 end
+                if c.shrinks then shr = shr + 1 end
+                if c.mismatch or c.shrinks then bad = bad + 1 end
+            end
+        end
+        if n > 0 then
+            local abs_pct = sum_apct / n
+            local verdict = "GOOD"
+            if bad / n >= 0.30 or abs_pct > 5 then
+                verdict = "POOR"
+            elseif bad > 0 or abs_pct > 3.5 then
+                verdict = "FAIR"
+            end
+            summary = {
+                n = n, mismatch = mism, shrinks = shr, verdict = verdict,
+                avg_diff = sum_diff / n, avg_pct = sum_spct / n,
+            }
+            dlog("buildSizeCombos: verdict=", verdict, "n=", n, "mismatch=", mism,
+                "shrinks=", shr, "avg diff px=", summary.avg_diff, "abs pct=", abs_pct)
+        end
+    end
+
     dlog("buildSizeCombos: cur_px=", cur_px, "first px=", first, "last px=", last)
-    return combos, unhinted, hint_name or "?"
+    return combos, unhinted, hint_name or "?", summary
 end
 
 -- `start` = index of the first visible row (nil: centre on the current size);
@@ -1479,7 +1558,7 @@ local function showSizeCombos(plugin, start, old)
     end
 
     local ui = plugin.ui
-    local all, unhinted, hint_name = buildSizeCombos(ui)
+    local all, unhinted, hint_name, summary = buildSizeCombos(ui)
     if not all then
         local InfoMessage = require("ui/widget/infomessage")
         UIManager:show(InfoMessage:new{ text = "Size combinations: N/A" })
@@ -1497,7 +1576,7 @@ local function showSizeCombos(plugin, start, old)
     -- (bold, as the current row is). The fractions are the column widths used
     -- below (pt, x-height mm, x-height px, px).
     local row_size = COMBO_ROW_FONT
-    for __, t in ipairs({ { "◆ 99.99pt", 0.18 }, { "9.99mm", 0.20 }, { "= 99.99px", 0.20 }, { "999px", 0.14 } }) do
+    for __, t in ipairs({ { "◆ 99.99pt", 0.18 }, { "9.99mm", 0.20 }, { "▼ 99.99px", 0.20 }, { "999px", 0.14 } }) do
         local max_w = math.floor((inner_w - 2 * thin) * t[2]) - 2 * Size.padding.small
         while row_size > BTN_FONT_MIN do
             local tw = TextWidget:new{ text = t[1], face = Font:getFace("cfont", row_size), bold = true }
@@ -1516,14 +1595,16 @@ local function showSizeCombos(plugin, start, old)
     local nav_h = row_h
 
     -- How many rows fit on the screen
-    -- One more info line (what "=" means) whenever the x-height is hinted
-    local has_plateau, has_hinted = false, false
+    -- One more info line (what "=" / "▼" mean) whenever the x-height is hinted,
+    -- and always one line with the rendering summary
+    local has_plateau, has_shrink, has_hinted = false, false, false
     for __, c in ipairs(all) do
         if c.plateau then has_plateau = true end
+        if c.shrinks then has_shrink = true end
         if c.hinted then has_hinted = true end
     end
-    local base = title_h + head_h * (has_hinted and 6 or 5)
-        + gap * (has_hinted and 9 or 8) + outer_pad * 2
+    local base = title_h + head_h * (has_hinted and 7 or 6)
+        + gap * (has_hinted and 10 or 9) + outer_pad * 2
     local n = #all
     if n == 0 then
         local InfoMessage = require("ui/widget/infomessage")
@@ -1617,7 +1698,7 @@ local function showSizeCombos(plugin, start, old)
             cell(string.format("%s%.2fpt", sweet and "◆ " or "", c.pt), col_w[1], ch, face, fg, c.current),
             cell(string.format("%dpx", c.px), col_w[2], ch, face, fg, c.current),
             cell(string.format("%.2fmm", c.mm), col_w[3], ch, face, fg, c.current),
-            cell((c.plateau and "= " or "") .. string.format("%.2fpx", c.xh_px),
+            cell((c.shrinks and "▼ " or (c.plateau and "= " or "")) .. string.format("%.2fpx", c.xh_px),
                 col_w[4], ch, face, fg, c.current),
             LeftContainer:new{
                 dimen = Geom:new{ w = col_w[5], h = ch },
@@ -1682,7 +1763,7 @@ local function showSizeCombos(plugin, start, old)
     table.insert(grid, cellFit(footer, inner_w, head_h, Blitbuffer.COLOR_DARK_GRAY))
     local legend = unhinted
         and "◆ x-height edge closest to a whole pixel"
-        or "◆ least hinting distortion"
+        or "◆ least hinting distortion, no ▼ / round-flat flaw"
     legend = legend .. "  [hinting: " .. hint_name .. "]"
     table.insert(grid, cellFit(string.format("%s (best %d%%, at least 1 per %d sizes)  ·  tap outside to close",
         legend, math.floor(COMBO_RENDER_SHARE * 100 + 0.5), COMBO_MARK_GAP),
@@ -1690,11 +1771,26 @@ local function showSizeCombos(plugin, start, old)
     -- Next to the "◆" legend: what "=" means. It is explained whenever the
     -- x-height is hinted, also when no row carries it, so it is clear why none does.
     if has_hinted then
-        table.insert(grid, cellFit(has_plateau
-            and "= same x-height (flat and round letters) as the two rows above"
-            or "= none: no x-height (flat or round) repeats over 3 sizes in a row",
-            inner_w, head_h, Blitbuffer.COLOR_DARK_GRAY))
+        local eq_text = has_plateau
+            and "= same x-height (flat and round) as the two rows above"
+            or "= none: no x-height repeats over 3 sizes in a row"
+        local dn_text = has_shrink
+            and "  ·  ▼ x-height smaller than the row above"
+            or "  ·  ▼ none"
+        table.insert(grid, cellFit(eq_text .. dn_text, inner_w, head_h, Blitbuffer.COLOR_DARK_GRAY))
     end
+
+    -- Rendering summary of this font with the selected hinting
+    local summary_text
+    if summary then
+        summary_text = string.format(
+            "Rendering [%s]: x-height %+.1fpx avg (%+.0f%%)  ·  round/flat flaw %d/%d  ·  ▼ %d  →  %s",
+            hint_name, summary.avg_diff, summary.avg_pct, summary.mismatch, summary.n,
+            summary.shrinks, summary.verdict)
+    else
+        summary_text = "Rendering [" .. hint_name .. "]: unhinted, x-height not snapped to pixels"
+    end
+    table.insert(grid, cellFit(summary_text, inner_w, head_h, Blitbuffer.COLOR_BLACK))
 
     local frame = FrameContainer:new{
         background = Blitbuffer.COLOR_WHITE,
