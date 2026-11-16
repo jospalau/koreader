@@ -64,13 +64,57 @@ function PageTextInfo:closeFontsMenu()
     end
 end
 
--- Close the menu, apply the font directly on the reader, then reopen.
+-- Close the menu, apply the font directly on the reader, then reopen. The
+-- x-height (mm) is kept: the size in pt is recalculated for the new face (the
+-- methods come from settings_menu.lua; without them only the face changes).
+-- Both changes are batched with KOReader's BatchedUpdate events, so the book is
+-- re-rendered once and not once per change.
 function PageTextInfo:applyFontAndReopen(face)
     local Event = require("ui/event")
     local page = self.fonts_page
 
+    -- pt mode: KOReader's own behaviour (the pt stays, the x-height follows the face)
+    if self.isXHeightMode and not self:isXHeightMode() then
+        self.ui:handleEvent(Event:new("SetFont", face))
+        UIManager:nextTick(function() self:onShowFonts(page) end)
+        return
+    end
+
+    -- x-height to keep. Every face rounds it to its own whole pixels, so going
+    -- through several faces would drift: the value wanted at the last change is
+    -- remembered, and used again as long as the size has not been touched since
+    -- (the x-height drawn is still the one measured right after that change).
+    local cur = self.getXHeightMm and self:getXHeightMm()
+    local target = cur
+    if cur and self.xh_keep and self.xh_keep_cur
+        and math.abs(cur - self.xh_keep_cur) < 0.001 then
+        target = self.xh_keep
+    end
+
     -- Don't close the dialog: the new one replaces it
-    self.ui:handleEvent(Event:new("SetFont", face))
+    UIManager:broadcastEvent(Event:new("BatchedUpdate"))
+    local ok, err = pcall(function()
+        self.ui:handleEvent(Event:new("SetFont", face))
+        local pt = target and self.ptForXHeight and self:ptForXHeight(target)
+        if pt then
+            self:applyFontSizePt(pt)
+            self.xh_keep = target
+            self.xh_keep_cur = self:getXHeightMm()
+        else
+            self.xh_keep, self.xh_keep_cur = nil, nil   -- face not measurable: size left as it is
+        end
+    end)
+    -- Always close the batch, or the page would never be laid out again
+    UIManager:broadcastEvent(Event:new("BatchedUpdateDone"))
+    if not ok then require("logger").warn("[PTI] applyFontAndReopen failed:", err) end
+
+    -- With native / auto hinting the prediction can be 1 px off: check it on the
+    -- page and correct it (the x-height wanted is the one measured before)
+    if ok and target and self.refineXHeightMm then
+        local ok2, err2 = pcall(self.refineXHeightMm, self, target)
+        if not ok2 then require("logger").warn("[PTI] refineXHeightMm failed:", err2) end
+        self.xh_keep_cur = self.getXHeightMm and self:getXHeightMm() or self.xh_keep_cur
+    end
 
     UIManager:nextTick(function()
         self:onShowFonts(page)

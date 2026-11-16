@@ -163,6 +163,10 @@ function ReaderFont:onReadSettings(config)
                   or G_reader_settings:readSetting("cre_font")
                   or self.ui.document.default_font
     self.ui.document:setFontFace(self.font_face)
+    -- pagetextinfo plugin: a new book starts at a fixed x-height (face is set above)
+    if self.ui.pagetextinfo and self.ui.pagetextinfo.applyDefaultXHeight then
+        self.ui.pagetextinfo:applyDefaultXHeight(config)
+    end
 
     local header_font = G_reader_settings:readSetting("header_font") or self.ui.document.header_font
     self.ui.document:setHeaderFont(header_font)

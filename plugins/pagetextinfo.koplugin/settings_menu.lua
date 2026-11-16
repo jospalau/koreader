@@ -50,7 +50,144 @@ local CONTRAST_DEFAULT = 15
 -- so every function below sees it as an upvalue (not a global).
 local xHeightRatio
 local sweepFonts   -- debug only, defined after buildSizeCombos
+local logGlyphMetrics   -- debug only, defined after sweepFonts
+local refineXHeight     -- assigned after measuredXHeightPx
+local ptForXHeightUi   -- assigned after realXHeightPx
+
+-- Critical print size (CPS): the smallest x-height read fluently. 13 arc minutes
+-- at 40 cm (reader about 50 years old) is 2 * 400 * tan(6.5') = 1.51 mm. Used for
+-- the first font preset, the lower end of the size table and the title warning.
+local CPS_ARCMIN = 13
+local VIEW_DIST_MM = 400
+local CPS_MM = 2 * VIEW_DIST_MM * math.tan(math.rad(CPS_ARCMIN / 60 / 2))
+-- Font presets are x-height targets in mm (the font size in pt follows from them
+-- and the current face / hinting): the CPS, and two bigger fixed values
+-- The default size is no longer a saved pt: it is always DEFAULT_XH_MM of x-height,
+-- whatever the face (it is what "Reset defaults" applies)
+local DEFAULT_XH_MM = 1.8
+local XH_PRESETS_MM = {
+    { label = string.format("CPS %.2fmm", CPS_MM), mm = CPS_MM, at_least = true },
+    { label = string.format("%.1fmm", DEFAULT_XH_MM), mm = DEFAULT_XH_MM },
+    { label = "2.0mm", mm = 2.0 },
+}
 local measureGlyphRatio   -- assigned after the FreeType block below
+
+-- Size mode: "xheight" (sizes are x-height targets in mm) or "pt" (the previous
+-- behaviour: fixed pt presets and a pt saved as default). Global setting; the
+-- current size is never changed by switching the mode.
+local SIZE_MODE_KEY = "pti_size_mode"
+local PT_DEFAULT_SIZE = 9.5
+local PT_SMALL, PT_BIG = 8.5, 11
+local function xhMode()
+    return G_reader_settings:readSetting(SIZE_MODE_KEY) ~= "pt"
+end
+local function setSizeMode(mode)
+    G_reader_settings:saveSetting(SIZE_MODE_KEY, mode)
+    G_reader_settings:flush()
+end
+local function defaultFontSize()
+    return G_reader_settings:readSetting("copt_font_size") or PT_DEFAULT_SIZE
+end
+local SIZE_MODE_ROWS = {   -- { what, x-height mode, pt mode }
+    { "Presets",        "CPS 1.51mm, 1.8mm, 2.0mm",     "Small 8.5pt, Default, Big 11pt" },
+    { "▲ ▼",            "1px per tap",                  "1px per tap" },
+    { "Reset defaults", "1.8mm",                        "Saved size (9.5pt if none)" },
+    { "Long press title", "Saves the face only",        "Saves face and size (pt)" },
+    { "Change face",    "Keeps the x-height (mm)",      "Keeps the size (pt), as KOReader" },
+    { "New books",      "Open at 1.8mm",                "KOReader's default size" },
+    { "mm shown",       "Exact with hinting off, about ±1px with Native / Auto", "Same" },
+}
+
+-- Window explaining what each size mode changes (tap anywhere to close)
+local function showSizeModeInfo()
+    local Blitbuffer = require("ffi/blitbuffer")
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local FrameContainer = require("ui/widget/container/framecontainer")
+    local Geom = require("ui/geometry")
+    local GestureRange = require("ui/gesturerange")
+    local HorizontalGroup = require("ui/widget/horizontalgroup")
+    local HorizontalSpan = require("ui/widget/horizontalspan")
+    local InputContainer = require("ui/widget/container/inputcontainer")
+    local LineWidget = require("ui/widget/linewidget")
+    local Size = require("ui/size")
+    local TextBoxWidget = require("ui/widget/textboxwidget")
+    local UIManager = require("ui/uimanager")
+    local VerticalGroup = require("ui/widget/verticalgroup")
+    local VerticalSpan = require("ui/widget/verticalspan")
+
+    local screen = Screen:getSize()
+    local pad = Size.padding.large
+    local width = math.floor(screen.w * 0.92)
+    local inner_w = width - 2 * pad - 2 * Size.border.window
+    local gap = Size.padding.default
+    local col1 = math.floor(inner_w * 0.26)
+    local col2 = math.floor((inner_w - col1 - 2 * gap) / 2)
+    local col3 = inner_w - col1 - col2 - 2 * gap
+    local face = Font:getFace("cfont", 16)
+    local face_b = Font:getFace("cfont", 16)
+    local xh_now = xhMode()
+
+    local function cell(text, w, bold, fg)
+        return TextBoxWidget:new{ text = text, face = face_b, width = w,
+            bold = bold, fgcolor = fg }
+    end
+    local function line_row(cells)
+        return HorizontalGroup:new{ align = "top",
+            cells[1], HorizontalSpan:new{ width = gap },
+            cells[2], HorizontalSpan:new{ width = gap },
+            cells[3] }
+    end
+    local function rule()
+        return LineWidget:new{ dimen = Geom:new{ w = inner_w, h = Size.line.thin },
+            background = Blitbuffer.COLOR_GRAY }
+    end
+
+    local content = VerticalGroup:new{ align = "left" }
+    table.insert(content, TextBoxWidget:new{
+        text = "Size by", face = Font:getFace("cfont", 22), width = inner_w,
+        alignment = "center", bold = true })
+    table.insert(content, VerticalSpan:new{ width = Size.padding.default })
+    table.insert(content, line_row{
+        cell("", col1, true),
+        cell((xh_now and "● " or "") .. "x-height", col2, true),
+        cell((xh_now and "" or "● ") .. "pt", col3, true),
+    })
+    table.insert(content, VerticalSpan:new{ width = Size.padding.small })
+    table.insert(content, rule())
+    for __, r in ipairs(SIZE_MODE_ROWS) do
+        table.insert(content, VerticalSpan:new{ width = Size.padding.small })
+        table.insert(content, line_row{
+            cell(r[1], col1, true, Blitbuffer.COLOR_DARK_GRAY),
+            cell(r[2], col2, false),
+            cell(r[3], col3, false),
+        })
+        table.insert(content, VerticalSpan:new{ width = Size.padding.small })
+        table.insert(content, rule())
+    end
+    table.insert(content, VerticalSpan:new{ width = Size.padding.default })
+    table.insert(content, TextBoxWidget:new{
+        text = "● = active mode. Switching never changes the current size.",
+        face = Font:getFace("cfont", 14), width = inner_w, alignment = "center",
+        fgcolor = Blitbuffer.COLOR_DARK_GRAY })
+
+    local frame = FrameContainer:new{
+        background = Blitbuffer.COLOR_WHITE,
+        bordersize = Size.border.window,
+        radius = Size.radius.window,
+        padding = pad,
+        content,
+    }
+    local dlg = InputContainer:new{
+        dimen = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
+        ges_events = { Tap = { GestureRange:new{ ges = "tap",
+            range = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h } } } },
+        key_events = Device:hasKeys() and { Close = { { Device.input.group.Back } } } or {},
+    }
+    dlg[1] = CenterContainer:new{ dimen = Geom:new{ w = screen.w, h = screen.h }, frame }
+    function dlg:onTap() UIManager:close(self); return true end
+    function dlg:onClose() UIManager:close(self); return true end
+    UIManager:show(dlg)
+end
 
 
 -- Line spacing presets. All my Calibre books were converted so every
@@ -75,22 +212,13 @@ local MARGIN_PRESETS = {
     { label = "Big",             value = { 50, 50, 50, 50 } },
     { label = "Bigger",          value = { 70, 70, 70, 70 } },
 }
-local DEFAULTS = { font_face = "Capita", font_size = 9.5, line_spacing = 100, font_base_weight = 0,
+local DEFAULTS = { font_face = "Capita", line_spacing = 100, font_base_weight = 0,
                    margins = MARGIN_PRESETS[1].value }
 
 local GAMMA_TABLE = { 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.65, 0.7, 0.75, 0.8, 0.85, 0.9,
     0.95, 0.98, 1, 1.02, 1.05, 1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45,
     1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9,
     3, 3.5, 4, 4.5, 5, 5.5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15 }
-
--- KOReader's configured default size; falls back to this file's DEFAULTS
-local function defaultFontSize()
-    return G_reader_settings:readSetting("copt_font_size") or DEFAULTS.font_size
-end
-
-local function fixedPresets()
-    return { small = 8.5, normal = defaultFontSize(), big = 11 }
-end
 
 local function close(self)
     local UIManager = require("ui/uimanager")
@@ -139,10 +267,12 @@ local function drawnPx(ui, pt, dpi)
     return math.floor(dpi * pt / 72 + 1e-6)
 end
 
--- Step the drawn font size by `dir` whole pixels (-1 / +1). CREngine only
--- distinguishes whole-pixel sizes, so the target px is computed directly and
--- converted to the smallest pt that draws it (same formula as ptForXHeight).
--- This needs a single setFontSize call, i.e. a single reflow per tap.
+-- Step the drawn font size by `dir` (-1 / +1) = 1 px. CREngine only distinguishes
+-- whole-pixel sizes, so the target px is computed directly and converted to the
+-- smallest pt that draws it (same formula as ptForXHeight). This needs a single
+-- setFontSize call, i.e. a single reflow per tap. With hinting the x-height may
+-- stay the same for a few px (a plateau): the measured plateaus were not reliable
+-- enough to skip them, so every px is a step in both size modes.
 local function stepFontSize(ui, dir)
     local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
     local cur_px = drawnPx(ui, ui.font.configurable.font_size, dpi)
@@ -260,15 +390,19 @@ local function stepContrast(ui, dir)
     setContrast(ui, getContrast(ui) + dir)
 end
 
--- Save the current font face and size as KOReader's defaults for new books
--- (what "Font default" and a new book then use). Returns face, pt.
+-- Save the current font face as KOReader's default for new books (what "Reset
+-- defaults" and a new book then use). The size is not saved: the default size is
+-- always DEFAULT_XH_MM of x-height. Returns face.
 local function saveCurrentFontAsDefault(ui)
     local face = ui.document._document:getFontFace()
-    local pt = ui.font.configurable.font_size
-    if not face or not pt then return nil end
-    dlog("saveCurrentFontAsDefault: saving face=", face, "pt=", pt)
+    if not face then return nil end
+    dlog("saveCurrentFontAsDefault: saving face=", face)
     G_reader_settings:saveSetting("cre_font", face)
-    G_reader_settings:saveSetting("copt_font_size", pt)
+    local pt
+    if not xhMode() then
+        pt = ui.font.configurable.font_size
+        G_reader_settings:saveSetting("copt_font_size", pt)
+    end
     G_reader_settings:flush()
     return face, pt
 end
@@ -277,7 +411,16 @@ local function resetDefaults(ui)
     dlog("resetDefaults")
     -- Use the face saved with the long press; fall back to DEFAULTS.font_face
     setFontFace(ui, G_reader_settings:readSetting("cre_font") or DEFAULTS.font_face)
-    setFontSize(ui, defaultFontSize())
+    local pt
+    if xhMode() then
+        pt = ptForXHeightUi(ui, DEFAULT_XH_MM)   -- after the face: the pt depends on it
+    else
+        pt = defaultFontSize()
+    end
+    if pt then
+        setFontSize(ui, pt)
+        if xhMode() then refineXHeight(ui, DEFAULT_XH_MM) end
+    end
     setLineSpacing(ui, DEFAULTS.line_spacing)
     setMargins(ui, DEFAULTS.margins)
     setWeight(ui, DEFAULTS.font_base_weight)
@@ -400,15 +543,48 @@ local function buildRows(ui)
         return math.floor(dpi_now * a / 72 + 1e-6) == math.floor(dpi_now * b / 72 + 1e-6)
     end
 
-    local fx = fixedPresets()
     -- The first button opens the fonts menu (font_selection_menu.lua). Handled in
     -- the dialog's onTap (open_fonts): the callback is not used, because the
     -- settings menu must NOT be reopened over the fonts menu afterwards.
     local font_preset_row = {
         { text = "Face",    open_fonts = true, callback = function() end },
-        { text = "Small",   callback = function(u) setFontSize(u, fx.small) end,  active = near(fs, fx.small) },
-        { text = "Default", callback = function(u) setFontSize(u, fx.normal) end, active = near(fs, fx.normal) },
-        { text = "Big",     callback = function(u) setFontSize(u, fx.big) end,    active = near(fs, fx.big) },
+    }
+    if xhMode() then
+        -- Size presets: x-height targets in mm, converted to the pt of the current
+        -- face and hinting (the same px is "active" when crengine draws the same size)
+        for __, preset in ipairs(XH_PRESETS_MM) do
+            local target_pt = ptForXHeightUi(ui, preset.mm, preset.at_least)
+            table.insert(font_preset_row, {
+                text = preset.label,
+                callback = function(u)
+                    local pt = ptForXHeightUi(u, preset.mm, preset.at_least)
+                    if pt then
+                        setFontSize(u, pt)
+                        refineXHeight(u, preset.mm, preset.at_least)
+                    end
+                end,
+                active = target_pt ~= nil and near(fs, target_pt),
+            })
+        end
+    else
+        local normal = defaultFontSize()
+        for __, p in ipairs({
+            { "Small",   PT_SMALL },
+            { "Default", normal },
+            { "Big",     PT_BIG },
+        }) do
+            table.insert(font_preset_row, {
+                text = p[1],
+                callback = function(u) setFontSize(u, p[2]) end,
+                active = near(fs, p[2]),
+            })
+        end
+    end
+    -- Size mode radio (the "i" button shows what each mode changes)
+    local mode_row = {
+        { text = "pt", callback = function() setSizeMode("pt") end, active = not xhMode() },
+        { text = "x-height", callback = function() setSizeMode("xheight") end, active = xhMode() },
+        { text = "ⓘ", info_fn = showSizeModeInfo },
     }
     for __, b in ipairs(font_preset_row) do
         dlog("buildRows: preset button", b.text, "active=", b.active and true or false,
@@ -442,6 +618,7 @@ local function buildRows(ui)
             { text = "Reset defaults",      callback = resetDefaults },
             { text = "Toggle screen layout", callback = toggleLayout },
         },
+        mode_row,
         font_preset_row,
         font_step_row,
         spacing_row,
@@ -454,10 +631,12 @@ local function buildRows(ui)
     if DEBUG_LOG then
         table.insert(rows, { title = "Debug",
             { text = "Sweep fonts", callback = function(u) sweepFonts(u) end },
+            { text = "Log metrics", callback = function(u) logGlyphMetrics(u) end },
         })
     end
     -- Section labels, shown to the left of each row (a row without a title
     -- gets none: it continues the one above)
+    mode_row.title = "Size by"
     font_preset_row.title = "Font"
     font_step_row.title = "Fine size"
     spacing_row.title = "Line spacing"
@@ -687,6 +866,29 @@ local _xh_cache = {}   -- [font file .. "|" .. hint] = { [px] = x-height in px, 
 -- at sizes where the flat "x" does not (most letters of a text have round tops).
 -- Used to decide which rows repeat the x-height, and logged by buildSizeCombos.
 local _xo_cache = {}
+-- Same keys: height of the flat "x" alone. The hinted rows of the table and the mm
+-- shown use the TYPICAL height instead (see TYPICAL_LETTERS): with native hinting
+-- each glyph is snapped on its own, and "x" can sit one pixel lower than most of
+-- the letters (Georgia, native: "x" grows at even sizes, most letters at odd ones).
+local _xx_cache = {}
+-- Letters whose top is at the x-height, with their frequency in English text (%).
+-- The typical x-height is the weighted median of their hinted tops.
+local TYPICAL_LETTERS = {
+    e = 12.7, a = 8.2, o = 7.5, n = 6.7, s = 6.3, r = 6.0, c = 2.8, u = 2.8,
+    m = 2.4, w = 2.4, g = 2.0, y = 2.0, p = 1.9, v = 1.0, x = 0.15, q = 0.1, z = 0.07,
+}
+local function weightedMedian(tops)   -- tops: { { top, weight }, ... }
+    if #tops == 0 then return nil end
+    table.sort(tops, function(a, b) return a[1] < b[1] end)
+    local total = 0
+    for __, t in ipairs(tops) do total = total + t[2] end
+    local acc = 0
+    for __, t in ipairs(tops) do
+        acc = acc + t[2]
+        if acc >= total / 2 then return t[1] end
+    end
+    return tops[#tops][1]
+end
 
 -- Height above the baseline (px) of the flat top of "x" for every pixel size
 -- first..last, with the load flags of hinting mode `hint`. Returns the cache
@@ -709,6 +911,11 @@ local function hintedXHeights(path, first, last, hint)
         ocache = {}
         _xo_cache[key] = ocache
     end
+    local xcache = _xx_cache[key]
+    if not xcache then
+        xcache = {}
+        _xx_cache[key] = xcache
+    end
     local missing = {}
     for px = first, last do
         if cache[px] == nil then table.insert(missing, px) end
@@ -727,19 +934,34 @@ local function hintedXHeights(path, first, last, hint)
             local idx = ft.FT_Get_Char_Index(face[0], string.byte("x"))
             if idx == 0 then return end
             local idx_o = ft.FT_Get_Char_Index(face[0], string.byte("o"))
+            local letter_idx = {}
+            for ch, w in pairs(TYPICAL_LETTERS) do
+                local gi = ft.FT_Get_Char_Index(face[0], string.byte(ch))
+                if gi ~= 0 then letter_idx[#letter_idx + 1] = { gi, w } end
+            end
             for __, px in ipairs(missing) do
-                local top
+                local top, typical
                 if ft.FT_Set_Pixel_Sizes(face[0], 0, px) == 0 then
                     if ft.FT_Load_Glyph(face[0], idx, flags) == 0 then
                         -- "x" sits on the baseline, so the top of its bitmap is its height
                         top = tonumber(face[0].glyph.bitmap_top)
                     end
+                    local tops = {}
+                    for __, li in ipairs(letter_idx) do
+                        if ft.FT_Load_Glyph(face[0], li[1], flags) == 0 then
+                            local t = tonumber(face[0].glyph.bitmap_top)
+                            if t and t > 0 then tops[#tops + 1] = { t, li[2] } end
+                        end
+                    end
+                    typical = weightedMedian(tops)
                     -- "o" overshoots the baseline too: its top is what counts here
                     if idx_o ~= 0 and ft.FT_Load_Glyph(face[0], idx_o, flags) == 0 then
                         ocache[px] = tonumber(face[0].glyph.bitmap_top)
                     end
                 end
-                cache[px] = (top and top > 0) and top or false
+                xcache[px] = (top and top > 0) and top or false
+                -- Typical height of the letters; the flat "x" if none could be loaded
+                cache[px] = typical or xcache[px]
             end
         end)
         -- Sizes still unknown are marked as failed, so they are not retried
@@ -776,6 +998,208 @@ local function realXHeightPx(ui, px)
     return ratio * px, false
 end
 
+-- x-height measured on the page as crengine really draws it -----------------------
+-- The FreeType prediction above can be one pixel off (each glyph is hinted on its
+-- own and the screen does not always agree), so with native / auto hinting the
+-- x-height shown is measured on the rendered page: the document's own page buffer
+-- is read and the height of the band where most letters have ink is taken from
+-- the ink profile of every text line.
+-- x-height (rows) of the text of a page from its row ink profile.
+-- ink[y] (y = 1..n) = number of dark pixels of row y. Returns rows, nlines.
+local function xHeightRowsFromInk(ink, n)
+    local PEAK_FRAC, MED_FRAC = 0.2, 0.7
+    local counts = {}
+    local y = 1
+    while y <= n do
+        if ink[y] > 0 then
+            local y0 = y
+            while y <= n and ink[y] > 0 do y = y + 1 end
+            local y1 = y - 1
+            if y1 - y0 + 1 >= 15 then
+                local mx, peak = 0, y0
+                for r = y0, y1 do
+                    if ink[r] > mx then mx = ink[r]; peak = r end
+                end
+                local top, bot = peak, peak
+                while top - 1 >= y0 and ink[top - 1] >= PEAK_FRAC * mx do top = top - 1 end
+                while bot + 1 <= y1 and ink[bot + 1] >= PEAK_FRAC * mx do bot = bot + 1 end
+                local h = bot - top + 1
+                if h >= 8 and h <= 60 then
+                    local band = {}
+                    for r = top, bot do band[#band + 1] = ink[r] end
+                    table.sort(band)
+                    local med = band[math.floor((#band + 1) / 2)]
+                    local rows = 0
+                    for r = top, bot do
+                        if ink[r] >= MED_FRAC * med then rows = rows + 1 end
+                    end
+                    counts[#counts + 1] = rows
+                end
+            end
+        else
+            y = y + 1
+        end
+    end
+    if #counts < 3 then return nil, #counts end
+    -- most frequent value; it must be shared by at least half of the lines
+    local freq, best, best_n = {}, nil, 0
+    for __, c in ipairs(counts) do
+        freq[c] = (freq[c] or 0) + 1
+        if freq[c] > best_n or (freq[c] == best_n and c < best) then best, best_n = c, freq[c] end
+    end
+    if best_n * 2 < #counts then return nil, #counts end
+    return best, #counts
+end
+
+local _rendered_cache = {}   -- [face|px|hint|weight] = rows
+-- Rows of the x-height band as drawn now (nil with hinting off, where the design
+-- x-height is exact, or when the page can't be measured).
+local function measuredXHeightPx(ui)
+    local hint = getHinting(ui)
+    if hint ~= 1 and hint ~= 2 then return nil end
+    local ok, rows = pcall(function()
+        local doc, view = ui.document, ui.view
+        if not (doc and doc.drawCurrentView and view and view.visible_area) then return nil end
+        local conf = doc.configurable
+        local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+        local px = drawnPx(ui, conf.font_size, dpi)
+        local key = table.concat({ tostring(doc._document:getFontFace()), px, hint,
+            tostring(conf.font_base_weight) }, "|")
+        if _rendered_cache[key] then return _rendered_cache[key] end
+        -- Redraw the page now (the repaint after a size change has not happened
+        -- yet): drawCurrentView renders into doc.buffer and blits it to the target
+        local Blitbuffer = require("ffi/blitbuffer")
+        local rect = view.visible_area
+        local scratch = Blitbuffer.new(rect.w, rect.h)
+        local okd, derr = pcall(doc.drawCurrentView, doc, scratch, 0, 0, rect)
+        scratch:free()
+        if not okd then
+            dlog("measuredXHeightPx: drawCurrentView failed:", derr)
+            return nil
+        end
+        local buf = doc.buffer
+        if not buf then return nil end
+        local bpp = buf:getBpp()
+        local step = (bpp == 8 and 1) or (bpp == 32 and 4) or nil
+        if not step then
+            dlog("measuredXHeightPx: unsupported buffer depth", bpp)
+            return nil
+        end
+        local w, h, stride = tonumber(buf.w), tonumber(buf.h), tonumber(buf.stride)
+        -- buf.data is typed by the buffer (ColorRGB32* for color buffers): read raw bytes
+        local data = require("ffi").cast("uint8_t*", buf.data)
+        local ink = {}
+        for y = 0, h - 1 do
+            local rowp = data + y * stride
+            local n = 0
+            for x = 0, w - 1 do
+                if rowp[x * step] < 160 then n = n + 1 end
+            end
+            ink[y + 1] = n
+        end
+        local r, nlines = xHeightRowsFromInk(ink, h)
+        dlog("measuredXHeightPx: px=", px, "hint=", hint, "rows=", r, "lines=", nlines)
+        if r then _rendered_cache[key] = r end
+        return r
+    end)
+    if not ok then
+        dlog("measuredXHeightPx failed:", rows)
+        return nil
+    end
+    return rows
+end
+
+-- pt that crengine draws at exactly `px` (same formula as ptForXHeight)
+local function pxToPt(px, dpi)
+    return math.max(4, math.min(math.ceil(px * 72 / dpi * 100 + 0.001) / 100, 255))
+end
+
+-- After a size was set from the prediction, check it on the page and move up to
+-- 3 px towards the size whose MEASURED x-height is closest to `target_mm` (with
+-- at_least: the smallest one that reaches it). Only with native / auto hinting.
+refineXHeight = function(ui, target_mm, at_least)
+    local ok, err = pcall(function()
+        local hint = getHinting(ui)
+        if hint ~= 1 and hint ~= 2 then return end
+        local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+        local target_px = target_mm * dpi / 25.4
+        local function score(rows)
+            if at_least then
+                if rows >= target_px - 1e-6 then return rows - target_px end
+                return 1000 + (target_px - rows)
+            end
+            return math.abs(rows - target_px)
+        end
+        local start_px = drawnPx(ui, ui.document.configurable.font_size, dpi)
+        local rows0 = measuredXHeightPx(ui)
+        if not rows0 then return end
+        local best_px, best = start_px, score(rows0)
+        local dir = (rows0 < target_px) and 1 or -1
+        for step = 1, 3 do
+            local cand = start_px + dir * step
+            if cand < 1 then break end
+            setFontSize(ui, pxToPt(cand, dpi))
+            local r = measuredXHeightPx(ui)
+            if not r then break end
+            local sc = score(r)
+            dlog("refineXHeight: px", cand, "rows", r, "target px", target_px, "score", sc)
+            if sc < best - 1e-6 then
+                best, best_px = sc, cand
+            elseif sc > best + 1e-6 and best_px ~= start_px then
+                break
+            end
+        end
+        local now = drawnPx(ui, ui.document.configurable.font_size, dpi)
+        if now ~= best_px then setFontSize(ui, pxToPt(best_px, dpi)) end
+        dlog("refineXHeight: target mm", target_mm, "start px", start_px, "-> px", best_px)
+    end)
+    if not ok then dlog("refineXHeight failed:", err) end
+end
+
+-- Measure the x-height rows ON THE PAGE for every px in first..last (hinting 1/2
+-- only). Each size is set, the page drawn and measured (results cached per
+-- font/px/hinting/weight by measuredXHeightPx); the original size is restored at
+-- the end. Returns { [px] = rows } or nil when nothing could be measured.
+local _range_cache = {}   -- [face|hint|weight|first|last] = { [px] = rows }
+local function measureSizesRange(ui, first, last)
+    local hint = getHinting(ui)
+    if hint ~= 1 and hint ~= 2 then return nil end
+    local UIManager = require("ui/uimanager")
+    local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+    local orig_pt = ui.document.configurable.font_size
+    local orig_px = drawnPx(ui, orig_pt, dpi)
+    -- Whole range already measured for this font/hinting/weight: no size change,
+    -- no message, no flicker (opening, scrolling or refreshing the table)
+    local rkey = table.concat({ tostring(ui.document._document:getFontFace()), hint,
+        tostring(ui.document.configurable.font_base_weight), first, last }, "|")
+    if _range_cache[rkey] then return _range_cache[rkey] end
+    local res, got = {}, 0
+    local msg
+    local ok, err = pcall(function()
+        local InfoMessage = require("ui/widget/infomessage")
+        msg = InfoMessage:new{ text = "Measuring sizes on the page…", dismissable = false }
+        UIManager:show(msg)
+        UIManager:forceRePaint()
+        for px = first, last do
+            setFontSize(ui, pxToPt(px, dpi))
+            local r = measuredXHeightPx(ui)
+            if r then res[px] = r; got = got + 1 end
+        end
+    end)
+    -- Restore the size the user had (also after an error)
+    pcall(function()
+        if drawnPx(ui, ui.document.configurable.font_size, dpi) ~= orig_px then
+            setFontSize(ui, orig_pt)
+        end
+    end)
+    if msg then pcall(UIManager.close, UIManager, msg) end
+    if not ok then dlog("measureSizesRange failed:", err) end
+    dlog("measureSizesRange: px", first, "-", last, "measured", got)
+    if got == 0 then return nil end
+    _range_cache[rkey] = res
+    return res
+end
+
 -- New books: seed KOReader's own defaults for margins with DEFAULTS.margins,
 -- so a book without settings of its own opens on them (and the matching preset
 -- button shows as active). Nothing hooks into the book opening: this only
@@ -807,8 +1231,9 @@ function PageTextInfo:getXHeightMm()
         local ratio = xHeightRatio(ui.document)
         if not ratio then return nil end
         local px = drawnPx(ui, ui.document.configurable.font_size, dpi)
-        -- With hinting on the drawn x-height is a whole number of pixels
-        local xh_px = realXHeightPx(ui, px) or ratio * px
+        -- With hinting on the drawn x-height is a whole number of pixels; measured
+        -- on the page when possible, else the FreeType prediction
+        local xh_px = measuredXHeightPx(ui) or realXHeightPx(ui, px) or ratio * px
         local res = xh_px / (dpi / 25.4)
         dlog("getXHeightMm: pt=", ui.document.configurable.font_size, "ratio=", ratio,
             "px drawn=", px, "-> mm=", res)
@@ -824,28 +1249,34 @@ function PageTextInfo:getFaceName()
     return ok and ratio and face_name or nil
 end
 
--- pt size that gives `target_mm` of x-height with the CURRENT face, rounded to
--- the whole-pixel size crengine really draws.
-function PageTextInfo:ptForXHeight(target_mm)
+ptForXHeightUi = function(ui, target_mm, at_least)
     local ok, pt = pcall(function()
         local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-        local ratio, face_path = xHeightRatio(self.ui.document)
+        local ratio, face_path = xHeightRatio(ui.document)
         if not ratio then return nil end
         local target_px = target_mm * (dpi / 25.4)
         local px = math.max(1, math.floor(target_px / ratio + 0.5))
         -- With hinting on the drawn x-height is a whole number of pixels that can
         -- differ from ratio * px: take the nearby size whose real x-height is the
         -- closest to the target (the smaller size on a tie)
-        local hint = getHinting(self.ui)
+        local hint = getHinting(ui)
         if hint == 1 or hint == 2 then
             hintedXHeights(face_path, math.max(1, px - 3), px + 3, hint)   -- fills the cache
         end
         local best_px, best_err = px, nil
         for cand = math.max(1, px - 3), px + 3 do
-            local xh = realXHeightPx(self.ui, cand)
+            local xh = realXHeightPx(ui, cand)
             local err = xh and math.abs(xh - target_px)
             if err and (not best_err or err < best_err - 1e-6) then
                 best_px, best_err = cand, err
+            end
+        end
+        -- "At least" (CPS is a minimum): the smallest nearby size whose real
+        -- x-height reaches the target, so it never reads "below critical size"
+        if at_least then
+            for cand = math.max(1, px - 3), px + 3 do
+                local xh = realXHeightPx(ui, cand)
+                if xh and xh >= target_px - 1e-6 then best_px = cand; break end
             end
         end
         px = best_px
@@ -855,10 +1286,46 @@ function PageTextInfo:ptForXHeight(target_mm)
     return ok and pt or nil
 end
 
+-- pt size that gives `target_mm` of x-height with the CURRENT face, rounded to
+-- the whole-pixel size crengine really draws.
+function PageTextInfo:ptForXHeight(target_mm, at_least)
+    return ptForXHeightUi(self.ui, target_mm, at_least)
+end
+
+-- Move to the size whose x-height, measured on the page, is closest to `mm`
+-- (used by the fonts menu after a face change). Only with native / auto hinting.
+function PageTextInfo:refineXHeightMm(mm, at_least)
+    refineXHeight(self.ui, mm, at_least)
+end
+
 -- Set the font size without a notification, keeping configurables in sync.
 function PageTextInfo:applyFontSizePt(pt)
     dlog("applyFontSizePt:", pt)
     setFontSize(self.ui, pt)
+end
+
+-- Called by ReaderFont:onReadSettings (patched KOReader, see readerfont.patch),
+-- right after the face is set and before the size is applied. A book that has
+-- never been closed has no size of its own saved (Configurable:saveSettings writes
+-- every option when a book is closed), so it starts at DEFAULT_XH_MM of x-height
+-- instead of KOReader's default size. Books that already have settings keep them.
+function PageTextInfo:isXHeightMode()
+    return xhMode()
+end
+
+function PageTextInfo:applyDefaultXHeight(config)
+    local ui = self.ui
+    if not xhMode() then return end   -- pt mode: KOReader's own default size
+    if not (ui and ui.document and config) or config:has("copt_font_size") then return end
+    local pt = ptForXHeightUi(ui, DEFAULT_XH_MM)
+    if not pt then
+        dlog("applyDefaultXHeight: x-height not measurable, size left as it is")
+        return
+    end
+    -- ReaderFont and the document share this table, and ReaderFont applies its
+    -- font_size right after this call
+    ui.document.configurable.font_size = pt
+    dlog("applyDefaultXHeight: new book ->", pt, "pt for", DEFAULT_XH_MM, "mm")
 end
 
 -- Empty stand-ins for the removed rem/em compensation: they only exist so that
@@ -1188,7 +1655,7 @@ local function buildTitleSegments(ui)
     local doc = ui.document
     local configurable = doc.configurable
     local display_dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-    local reading_distance_mm = 400
+    local reading_distance_mm = VIEW_DIST_MM
 
     local na = {
         { { text = "Angle @40cm: N/A" } },
@@ -1202,13 +1669,21 @@ local function buildTitleSegments(ui)
     local face_base = Font:getFace(face_name, px, 0, true)
     if not face_base or not face_base.ftsize then return na end
 
-    -- With hinting on the drawn x-height is a whole number of pixels
-    local xh_px = realXHeightPx(ui, px) or ratio * px
+    -- With hinting on the drawn x-height is a whole number of pixels: measured on
+    -- the page, else predicted with FreeType (shown with a "~")
+    local xh_px = measuredXHeightPx(ui)
+    local xh_estimated = false
+    if not xh_px then
+        local hinted
+        xh_px, hinted = realXHeightPx(ui, px)
+        xh_px = xh_px or ratio * px
+        xh_estimated = hinted and true or false
+    end
     if xh_px <= 0 then return na end
 
     local xh_mm = xh_px * 25.4 / display_dpi
     local angle = math.deg(2 * math.atan(xh_mm / (2 * reading_distance_mm))) * 60
-    local angle_class = angle < 12 and "Below critical size" or "Fluent range"
+    local angle_class = angle < CPS_ARCMIN and "Below critical size" or "Fluent range"
 
     -- Line 1: font (readability) and size, rem
     local line1 = {}
@@ -1237,7 +1712,7 @@ local function buildTitleSegments(ui)
     -- Line 2: angle, x-height, class
     local angle_line = {
         { text = string.format("Angle @40cm: %.1f′, ", angle) },
-        { text = string.format("%.2fmm", xh_mm), bold = true },
+        { text = (xh_estimated and "~" or "") .. string.format("%.2fmm", xh_mm), bold = true },
         { text = " [" .. angle_class .. "]", bold = true },
     }
 
@@ -1322,8 +1797,8 @@ local COMBO_RENDER_SHARE = 0.25   -- fraction of the rows (the best ones) that g
 -- in one part of it (the distortion drifts with the size), leaving the other sizes
 -- without any choice: so every run of COMBO_MARK_GAP rows gets its best row marked.
 local COMBO_MARK_GAP = 5
-local COMBO_CPS_ARCMIN = 12
-local COMBO_DIST_MM = 400
+local COMBO_CPS_ARCMIN = CPS_ARCMIN
+local COMBO_DIST_MM = VIEW_DIST_MM
 local COMBO_MM_MAX = 2.25
 -- Font sizes of the window (biggest wanted, lowered when a text does not fit):
 -- a bit bigger than the ones of the settings menu
@@ -1335,7 +1810,7 @@ local COMBO_MAX_H_RATIO = 0.85
 
 -- Returns a list of { pt, px, mm, angle, current } (ascending), or nil if the
 -- font can't be measured.
-local function buildSizeCombos(ui)
+local function buildSizeCombos(ui, use_page)
     local doc = ui.document
     local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
     local ratio, face_name = xHeightRatio(doc)
@@ -1343,7 +1818,7 @@ local function buildSizeCombos(ui)
 
     local mm_per_px = ratio * 25.4 / dpi
     local cur_px = drawnPx(ui, doc.configurable.font_size, dpi)
-    -- x-height that subtends COMBO_CPS_ARCMIN at COMBO_DIST_MM (about 1.40 mm)
+    -- x-height that subtends COMBO_CPS_ARCMIN at COMBO_DIST_MM (CPS_MM, about 1.51 mm)
     local cps_mm = 2 * COMBO_DIST_MM * math.tan(math.rad(COMBO_CPS_ARCMIN / 60 / 2))
     local first = math.max(1, math.ceil(cps_mm / mm_per_px - 1e-6))
     local last = math.floor(COMBO_MM_MAX / mm_per_px + 1e-6)
@@ -1354,8 +1829,18 @@ local function buildSizeCombos(ui)
     -- Real x-height of every row, loaded with the flags crengine uses for this
     -- hinting mode (nil when it can't be done: the estimate below is used then).
     -- Hinting off needs no measurement. face_name is the resolved font file here.
-    local measured = (hint == 1 or hint == 2)
-        and hintedXHeights(face_name, first, last, hint) or nil
+    -- Preferred: the rows really drawn on the page (use_page); FreeType
+    -- predictions can differ from the screen by 1 px
+    local from_page = false
+    local measured
+    if use_page and (hint == 1 or hint == 2) then
+        measured = measureSizesRange(ui, first, last)
+        from_page = measured ~= nil
+    end
+    if not measured then
+        measured = (hint == 1 or hint == 2)
+            and hintedXHeights(face_name, first, last, hint) or nil
+    end
     dlog("buildSizeCombos: hint=", hint, "measured with FreeType flags=", measured and true or false)
 
     local combos = {}
@@ -1383,32 +1868,34 @@ local function buildSizeCombos(ui)
         local sweet = (not xh_real)
             and math.abs(xh_ideal - math.floor(xh_ideal + 0.5)) <= COMBO_RENDER_TOL
         local round_top = _xo_cache[face_name .. "|" .. tostring(hint)]
-        local o_px = hinted and round_top and round_top[px] or nil
+        local o_px = hinted and not from_page and round_top and round_top[px] or nil
+        local flat_top = _xx_cache[face_name .. "|" .. tostring(hint)]
+        local x_px = hinted and not from_page and flat_top and flat_top[px] or nil
         dlog("combo px=", px, "xh ideal=", xh_ideal, "xh real=", xh_real,
             "round o top=", o_px)
         table.insert(combos, {
             pt = pt, px = px, mm = mm, mm_ideal = mm_ideal, hinted = hinted,
-            o_px = o_px,
+            o_px = o_px, x_px = x_px,
             xh_px = xh_real or xh_ideal,
             xh_ideal = xh_ideal,
-            diff = xh_real and (xh_real - xh_ideal) or nil,
+            -- Distortion (and so the verdict and the marks) is judged on the flat "x",
+            -- as in the sweep CSVs: the typical height also includes the round overshoot
+            diff = xh_real and ((x_px or xh_real) - xh_ideal) or nil,
             sweet = sweet,
             angle = math.deg(2 * math.atan(mm / (2 * 400))) * 60,
             current = (px == cur_px),
         })
     end
-    -- Rows whose hinted x-height equals the one of the two rows above: a bigger
-    -- size whose letters only get wider, not taller. Both the flat "x" and the
-    -- round "o" must repeat: the round letters can still grow when the flat one
-    -- does not. With a ratio near 0.5 the x-height grows one pixel every two
-    -- sizes, so repeating it once is normal and is not marked; only a longer run is.
+    -- Rows whose hinted x-height equals the one of the row above: a bigger size
+    -- whose letters only get wider, not taller (marked "="). With the flat "x" and
+    -- the round "o" both repeating when they are known (FreeType prediction).
     local function sameHeight(a, b)
         return math.abs(a.xh_px - b.xh_px) < 0.001
             and (not (a.o_px and b.o_px) or a.o_px == b.o_px)
     end
-    for i = 3, #combos do
-        local c, p, pp = combos[i], combos[i - 1], combos[i - 2]
-        if c.hinted and p.hinted and pp.hinted and sameHeight(c, p) and sameHeight(p, pp) then
+    for i = 2, #combos do
+        local c, p = combos[i], combos[i - 1]
+        if c.hinted and p.hinted and sameHeight(c, p) then
             c.plateau = true
         end
     end
@@ -1422,7 +1909,9 @@ local function buildSizeCombos(ui)
         if c.hinted then
             local p = combos[i - 1]
             if p and p.hinted and c.xh_px < p.xh_px - 0.001 then c.shrinks = true end
-            if c.o_px and (c.o_px < c.xh_px - 0.001 or c.o_px - c.xh_px >= 2) then
+            -- (judged on the flat "x" itself, not on the typical height)
+            local flat = c.x_px or c.xh_px
+            if c.o_px and (c.o_px < flat - 0.001 or c.o_px - flat >= 2) then
                 c.mismatch = true
             end
         end
@@ -1526,6 +2015,7 @@ local function buildSizeCombos(ui)
             summary = {
                 n = n, mismatch = mism, shrinks = shr, verdict = verdict,
                 avg_diff = sum_diff / n, avg_pct = sum_spct / n,
+                from_page = from_page,
             }
             dlog("buildSizeCombos: verdict=", verdict, "n=", n, "mismatch=", mism,
                 "shrinks=", shr, "avg diff px=", summary.avg_diff, "abs pct=", abs_pct)
@@ -1623,6 +2113,107 @@ sweepFonts = function(ui)
     UIManager:scheduleIn(0.5, step)
 end
 
+-- Debug: one-shot log of everything that can explain why the x-height measured
+-- here differs from what crengine draws. All lines start with [PTI] GLYPH:
+--     ./kodev run ... | grep -F "[PTI] GLYPH"
+-- 1. environment (FreeType version, face flags, KOReader's hinting / weight / size)
+-- 2. for every px around the current size and each hinting mode (0 off, 1 native,
+--    2 auto): bitmap_top of "x" and "o" (what crengine uses as glyph origin Y),
+--    bitmap rows of "x", the unrounded bearing of "x" (26.6 -> px) and the
+--    design x-height (ratio * px), all with the same load flags as crengine.
+logGlyphMetrics = function(ui)
+    local logger = require("logger")
+    local function out(...) logger.info(PTI_TAG, "GLYPH", ...) end
+    local function try(f, default)
+        local ok, v = pcall(f)
+        if ok and v ~= nil then return v end
+        return default
+    end
+    local doc = ui.document
+    local conf = doc.configurable
+    local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+    local ratio, face_path = xHeightRatio(doc)
+    local cur_px = drawnPx(ui, conf.font_size, dpi)
+    out("--- begin: face=", try(function() return doc._document:getFontFace() end, "?"),
+        "path=", tostring(face_path), "ratio=", ratio)
+    out("kopt: font_size(pt)=", conf.font_size, "drawn px=", cur_px,
+        "crengine getFontSize=", try(function() return doc._document:getFontSize() end, "?"),
+        "dpi=", dpi)
+    out("kopt: font_hinting(configurable)=", tostring(conf.font_hinting),
+        "getHinting=", getHinting(ui),
+        "ui.font hinting=", tostring(ui.font and ui.font.configurable and ui.font.configurable.font_hinting),
+        "global copt_font_hinting=", tostring(G_reader_settings:readSetting("copt_font_hinting")))
+    out("kopt: font_base_weight=", tostring(conf.font_base_weight),
+        "font_gamma=", tostring(conf.font_gamma),
+        "embolden=", tostring(conf.embolden), "bold=", tostring(conf.bold),
+        "fallback font=", tostring(G_reader_settings:readSetting("fallback_font")))
+    local fts = getFreeType()
+    if not fts or type(face_path) ~= "string" then
+        out("FreeType not reachable or face path unknown, nothing more to log")
+        return
+    end
+    local ffi, ft, library = fts.ffi, fts.lib, fts.library
+    out("FreeType version=", try(function()
+        local a, b, c = ffi.new("int[1]"), ffi.new("int[1]"), ffi.new("int[1]")
+        ft.FT_Library_Version(library[0], a, b, c)
+        return a[0] .. "." .. b[0] .. "." .. c[0]
+    end, "n/a (FT_Library_Version not declared)"))
+    local face = ffi.new("FT_Face[1]")
+    if ft.FT_New_Face(library[0], face_path, 0, face) ~= 0 then
+        out("FT_New_Face failed for", face_path)
+        return
+    end
+    pcall(function()
+        local f = face[0]
+        out("face: family=", try(function() return ffi.string(f.family_name) end, "?"),
+            "style=", try(function() return ffi.string(f.style_name) end, "?"),
+            "format=", try(function() return ffi.string(ft.FT_Get_Font_Format(f)) end, "n/a"),
+            "flags=", try(function() return string.format("0x%x", tonumber(f.face_flags)) end, "?"),
+            "units_per_EM=", try(function() return tonumber(f.units_per_EM) end, "?"),
+            "num_faces=", try(function() return tonumber(f.num_faces) end, "?"))
+        -- face_flags: 0x1 scalable, 0x1000 hinter, 0x2000 tricky, 0x20 hinter-capable
+        local idx_x = ft.FT_Get_Char_Index(f, string.byte("x"))
+        local idx_o = ft.FT_Get_Char_Index(f, string.byte("o"))
+        local names = { [0] = "off", "native", "auto" }
+        for px = math.max(1, cur_px - 6), cur_px + 6 do
+            for hint = 0, 2 do
+                local flags = HINT_LOAD_FLAGS[hint]
+                local parts = {}
+                local letters = {}
+                if ft.FT_Set_Pixel_Sizes(f, 0, px) == 0 then
+                    local tops = {}
+                    for ch in ("acegmnopqrsuvwxyz"):gmatch(".") do
+                        local gi = ft.FT_Get_Char_Index(f, string.byte(ch))
+                        if gi ~= 0 and ft.FT_Load_Glyph(f, gi, flags) == 0 then
+                            local t = tonumber(f.glyph.bitmap_top)
+                            letters[#letters + 1] = ch .. "=" .. t
+                            tops[#tops + 1] = { t, TYPICAL_LETTERS[ch] or 1 }
+                        end
+                    end
+                    parts[#parts + 1] = "typical=" .. tostring(weightedMedian(tops))
+                    if ft.FT_Load_Glyph(f, idx_x, flags) == 0 then
+                        local g = f.glyph
+                        parts[#parts + 1] = string.format("x_top=%d x_rows=%d x_bearingY=%.3f",
+                            tonumber(g.bitmap_top), tonumber(g.bitmap.rows),
+                            tonumber(g.metrics.horiBearingY) / 64)
+                    end
+                    if ft.FT_Load_Glyph(f, idx_o, flags) == 0 then
+                        local g = f.glyph
+                        parts[#parts + 1] = string.format("o_top=%d o_rows=%d",
+                            tonumber(g.bitmap_top), tonumber(g.bitmap.rows))
+                    end
+                end
+                out(string.format("px=%d hint=%d(%s) flags=0x%x %s design_xh=%.3f%s  tops: %s",
+                    px, hint, names[hint], flags, table.concat(parts, " "),
+                    (ratio or 0) * px, px == cur_px and "  <== current" or "",
+                    table.concat(letters, " ")))
+            end
+        end
+    end)
+    pcall(function() ft.FT_Done_Face(face[0]) end)
+    out("--- end")
+end
+
 -- `start` = index of the first visible row (nil: centre on the current size);
 -- `old` = the previous combos dialog, replaced when scrolling.
 local function showSizeCombos(plugin, start, old)
@@ -1651,7 +2242,7 @@ local function showSizeCombos(plugin, start, old)
     end
 
     local ui = plugin.ui
-    local all, unhinted, hint_name, summary = buildSizeCombos(ui)
+    local all, unhinted, hint_name, summary = buildSizeCombos(ui, true)
     if not all then
         local InfoMessage = require("ui/widget/infomessage")
         UIManager:show(InfoMessage:new{ text = "Size combinations: N/A" })
@@ -1856,7 +2447,8 @@ local function showSizeCombos(plugin, start, old)
     table.insert(grid, cellFit(footer, inner_w, head_h, Blitbuffer.COLOR_DARK_GRAY))
     local legend = unhinted
         and "◆ x-height edge closest to a whole pixel"
-        or "◆ least hinting distortion, no ▼ / round-flat flaw"
+        or ((summary and summary.from_page) and "◆ least hinting distortion, no ▼"
+            or "◆ least hinting distortion, no ▼ / round-flat flaw")
     legend = legend .. "  [hinting: " .. hint_name .. "]"
     table.insert(grid, cellFit(string.format("%s (best %d%%, at least 1 per %d sizes)  ·  tap outside to close",
         legend, math.floor(COMBO_RENDER_SHARE * 100 + 0.5), COMBO_MARK_GAP),
@@ -1865,8 +2457,8 @@ local function showSizeCombos(plugin, start, old)
     -- x-height is hinted, also when no row carries it, so it is clear why none does.
     if has_hinted then
         local eq_text = has_plateau
-            and "= same x-height (flat and round) as the two rows above"
-            or "= none: no x-height repeats over 3 sizes in a row"
+            and "= same x-height as the row above (letters only get wider)"
+            or "= none: no size repeats the x-height of the row above"
         local dn_text = has_shrink
             and "  ·  ▼ x-height smaller than the row above"
             or "  ·  ▼ none"
@@ -1876,10 +2468,16 @@ local function showSizeCombos(plugin, start, old)
     -- Rendering summary of this font with the selected hinting
     local summary_text
     if summary then
-        summary_text = string.format(
-            "Rendering [%s]: x-height %+.1fpx avg (%+.0f%%)  ·  round/flat flaw %d/%d  ·  ▼ %d  →  %s",
-            hint_name, summary.avg_diff, summary.avg_pct, summary.mismatch, summary.n,
-            summary.shrinks, summary.verdict)
+        if summary.from_page then
+            summary_text = string.format(
+                "Rendering [%s], measured on the page: x-height %+.1fpx avg (%+.0f%%)  ·  ▼ %d of %d",
+                hint_name, summary.avg_diff, summary.avg_pct, summary.shrinks, summary.n)
+        else
+            summary_text = string.format(
+                "Rendering [%s]: x-height %+.1fpx avg (%+.0f%%)  ·  round/flat flaw %d/%d  ·  ▼ %d  →  %s",
+                hint_name, summary.avg_diff, summary.avg_pct, summary.mismatch, summary.n,
+                summary.shrinks, summary.verdict) .. "  ·  approx. ±1px"
+        end
     else
         summary_text = "Rendering [" .. hint_name .. "]: unhinted, x-height not snapped to pixels"
     end
@@ -2115,6 +2713,22 @@ function PageTextInfo:onShowSettingsMenu()
                 if j > 1 then table.insert(row, HorizontalSpan:new{ width = gap }) end
                 -- Rounded buttons. The active one is inverted (white text on black),
                 -- which reads much better on e-ink than a thicker border.
+                -- Shrink the font of a button whose text doesn't fit its cell, so
+                -- a label like "CPS 1.51mm" is never cut
+                local this_face = btn_face
+                do
+                    local avail = cell_w - 2 * Size.padding.small
+                    local size = btn_size
+                    while size > 8 do
+                        local tw = TextWidget:new{ text = b.text, face = Font:getFace("cfont", size),
+                            bold = b.active and true or false }
+                        local w = tw:getSize().w
+                        tw:free()
+                        if w <= avail then break end
+                        size = size - 1
+                    end
+                    if size ~= btn_size then this_face = Font:getFace("cfont", size) end
+                end
                 local frame = FrameContainer:new{
                     bordersize = thin,
                     color = b.active and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY,
@@ -2126,7 +2740,7 @@ function PageTextInfo:onShowSettingsMenu()
                         dimen = Geom:new{ w = cell_w - 2 * thin, h = cell_h - 2 * thin },
                         TextWidget:new{
                             text = b.text,
-                            face = btn_face,
+                            face = this_face,
                             fgcolor = b.active and Blitbuffer.COLOR_WHITE
                                 or (b.disabled and Blitbuffer.COLOR_DARK_GRAY or Blitbuffer.COLOR_BLACK),
                             bold = b.active and true or false,
@@ -2136,7 +2750,7 @@ function PageTextInfo:onShowSettingsMenu()
                 }
                 table.insert(row, frame)
                 table.insert(buttons, { frame = frame, callback = b.callback, text = b.text,
-                    open_fonts = b.open_fonts })
+                    open_fonts = b.open_fonts, info_fn = b.info_fn })
             end
             table.insert(grid, row)
             table.insert(grid, VerticalSpan:new{ width = gap })
@@ -2279,6 +2893,11 @@ function PageTextInfo:onShowSettingsMenu()
                     end
                     return true
                 end
+                -- Info button: show the text on top, leave the menu as it is
+                if b.info_fn then
+                    pcall(b.info_fn)
+                    return true
+                end
                 local ok, err = pcall(b.callback, self.plugin.ui)
                 dlog("settings menu tap:", b.text, ok and "OK" or err)
                 -- Reopen after the reflow so the active state is refreshed
@@ -2321,11 +2940,11 @@ function PageTextInfo:onShowSettingsMenu()
         local plugin = self.plugin
         local ok, face, pt = pcall(saveCurrentFontAsDefault, plugin.ui)
         local text
-        if ok and face then
-            local mm = plugin:getXHeightMm()
-            text = mm
-                and string.format("Default font saved:\n%s, %.2fpt (%.2fmm)", face, pt, mm)
-                or string.format("Default font saved:\n%s, %.2fpt", face, pt)
+        if ok and face and xhMode() then
+            text = string.format("Default font saved:\n%s\n(default size: %.1fmm x-height)",
+                face, DEFAULT_XH_MM)
+        elseif ok and face then
+            text = string.format("Default font saved:\n%s, %.2fpt", face, pt or 0)
         else
             -- face holds the error message when pcall fails
             require("logger").warn("[PTI] saveCurrentFontAsDefault failed:", face)
