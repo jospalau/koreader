@@ -812,7 +812,29 @@ end
 -- Paints the note icon on the words of the current page that have a note.
 -- The geometry is cached (it is only recomputed when the page, position, font or layout
 -- change), so a repaint of the same page only paints.
+-- Signature of the notes that are marked (the words of the annotations with a note). When it
+-- changes (a note was added or deleted) the marks are rebuilt, so a deleted note loses its mark.
+local function notesSignature(self)
+    local parts = {}
+    for _, item in ipairs(self.ui.annotation and self.ui.annotation.annotations or {}) do
+        if item.note and item.text and not item.text:find("%s") then
+            parts[#parts + 1] = normalizeNoteWord(item.text)
+        end
+    end
+    return #parts .. ":" .. table.concat(parts, "|")
+end
+
 function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
+    -- A note was added or deleted since the marks were built: build them again
+    if self.pages_notes then
+        local sig = notesSignature(self)
+        if self._notes_signature ~= nil and self._notes_signature ~= sig then
+            self._notes_draw_cache = nil
+            self:updateNotes()
+        end
+        self._notes_signature = sig
+    end
+
     local page_notes = self.pages_notes and self.pages_notes[self.ui.view.state.page]
     if not page_notes then
         self._notes_draw_cache = nil   -- no notes on this page: a tap must not use the previous one
@@ -2173,6 +2195,146 @@ function PageTextInfo:onTapVocabularyWord(ges)
             end
         end
     end
+    return false
+end
+
+-- showNote (moved here from main.lua, so remove it from there)
+-- If no argument, the call is coming from a new entry Notes added in the readerhighlight.lua source
+-- to show possible notes associate to a word
+function PageTextInfo:showNote(text_note)
+    local UIManager = require("ui/uimanager")
+    local TextViewer = require("ui/widget/textviewer")
+    local _ = require("gettext")
+    if text_note then
+        -- local text = ""
+        -- local annotations = self.ui.annotation.annotations
+        -- for i, item in ipairs(annotations) do
+        --     if item.note and item.text:upper() == text_note:upper() then
+        --         text = text .. '<p style="display:block;font-size:1.25em;">' .. item.note .. "</p>"
+        --     end
+        -- end
+        -- local FootnoteWidget = require("ui/widget/footnotewidget")
+        -- local popup
+        -- popup = FootnoteWidget:new{
+        --     html = text,
+        --     doc_font_name = self.ui.font.font_face,
+        --     doc_font_size = Screen:scaleBySize(self.document.configurable.font_size),
+        --     doc_margins = self.document:getPageMargins(),
+        --     follow_callback = function() -- follow the link on swipe west
+        --         UIManager:close(popup)
+        --     end,
+        --     dialog = self.dialog,
+        -- }
+        -- UIManager:show(popup)
+        -- return true
+
+        local annotations = self.ui.annotation.annotations
+        for i, item in ipairs(annotations) do
+            if item.note and item.text:upper() == text_note:upper() then
+                local bookmark_note = item.note
+                local index = i
+                local textviewer
+                textviewer = TextViewer:new{
+                    title = _("Note"),
+                    show_menu = false,
+                    text = bookmark_note,
+                    width = math.floor(math.min(self.ui.highlight.screen_w, self.ui.highlight.screen_h) * 0.8),
+                    height = math.floor(math.max(self.ui.highlight.screen_w, self.ui.highlight.screen_h) * 0.4),
+                    anchor = function()
+                        return self.ui.highlight:_getDialogAnchor(textviewer, index)
+                    end,
+                    buttons_table = {
+                        {
+                            {
+                                text = _("Delete note"),
+                                callback = function()
+                                    UIManager:close(textviewer)
+                                    -- Deleting the highlight also deletes its note
+                                    self.ui.highlight:deleteHighlight(index)
+                                    if self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap") or self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
+                                        self:updateNotes()
+                                        UIManager:setDirty("all", "full")
+                                    end
+                                end,
+                            },
+                            {
+                                text = _("Edit note"),
+                                callback = function()
+                                    UIManager:close(textviewer)
+                                    self.ui.highlight:editNote(index)
+                                end,
+                            },
+                        },
+                        {
+                            {
+                                text = _("Delete highlight"),
+                                callback = function()
+                                    UIManager:close(textviewer)
+                                    self.ui.highlight:deleteHighlight(index)
+                                end,
+                            },
+                            {
+                                text = _("Highlight menu"),
+                                callback = function()
+                                    UIManager:close(textviewer)
+                                    self.ui.highlight:showHighlightDialog(index)
+                                end,
+                            },
+                        },
+                    },
+                }
+                UIManager:show(textviewer)
+                return true
+            end
+        end
+    end
+
+    local text = nil
+    local annotations = self.ui.annotation.annotations
+    for i, item in ipairs(annotations) do
+        if item.text == self.ui.highlight.selected_text.text then
+            text = item.note
+        end
+    end
+    if self.ui.highlight.highlight_dialog then
+        UIManager:close(self.ui.highlight.highlight_dialog)
+    end
+    local FootnoteWidget = require("ui/widget/footnotewidget")
+    local popup = nil
+    if text then
+        text = '<p style="display:block;font-size:1.25em;">' .. text .. "</p>"
+        --if true then
+            --UIManager:show( require("ui/widget/textviewer"):new{text = text})
+        --end
+        popup = FootnoteWidget:new{
+            html = text,
+            doc_font_name = self.ui.font.font_face,
+            doc_font_size = Screen:scaleBySize(self.document.configurable.font_size),
+            doc_margins = self.document:getPageMargins(),
+            follow_callback = function() -- follow the link on swipe west
+                UIManager:close(popup)
+            end,
+            dialog = self.dialog,
+        }
+    else
+        popup = FootnoteWidget:new{
+            html = "No notes",
+            doc_font_name = self.ui.font.font_face,
+            doc_font_size = Screen:scaleBySize(self.document.configurable.font_size),
+            doc_margins = self.document:getPageMargins(),
+            follow_callback = function() -- follow the link on swipe west
+                UIManager:close(popup)
+            end,
+            dialog = self.dialog,
+        }
+        -- local UIManager = require("ui/uimanager")
+        -- local Notification = require("ui/widget/notification")
+        -- UIManager:show(Notification:new{
+        --     text = _("No note"),
+        -- })
+    end
+    UIManager:show(popup)
+    self.ui.highlight:clear()
     return false
 end
 
