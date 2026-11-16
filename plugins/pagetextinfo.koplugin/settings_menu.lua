@@ -943,6 +943,12 @@ local function faGlyph(face, char)
         return face.ftsize:renderGlyph(code)
     end)
     if ok and g and g.bb and g.bb:getWidth() > 0 and g.bb:getHeight() > 0 then return g end
+    -- Failures used to be silent (the title just showed N/A): say why
+    if not ok then
+        dlog("faGlyph: error on", char, "->", g)   -- g holds the error message here
+    else
+        dlog("faGlyph: no glyph / empty bitmap for", char)
+    end
     return nil
 end
 
@@ -1084,14 +1090,20 @@ end
 -- be measured. `face_path` is the name/path Font:getFace accepts.
 local function faAnalyze(face_path)
     local face = Font:getFace(face_path, FA.MEASURE_PX, 0, true)
-    if not face or not face.ftsize then return nil end
+    if not face or not face.ftsize then
+        dlog("faAnalyze: cannot load face", face_path)
+        return nil
+    end
     local upm = face.size or FA.MEASURE_PX
     local min_span = FA.MIN_SPAN_RATIO * upm
 
     local stem = faStemWidth(face, min_span)
     local thin = faThinWidth(face, min_span)
     local xh = faGlyphHeight(face, { "x", "n", "e" })
-    if not (stem and thin and xh and stem > 0 and thin > 0 and xh > 0) then return nil end
+    if not (stem and thin and xh and stem > 0 and thin > 0 and xh > 0) then
+        dlog("faAnalyze: measurement failed for", face_path, "stem=", stem, "thin=", thin, "xh=", xh)
+        return nil
+    end
 
     local xh_ratio, thin_ratio = xh / upm, thin / upm
     local visibility = math.min(thin_ratio / FA.VISIBILITY_SAT, 1.0)
@@ -1118,6 +1130,7 @@ local _fa_cache = {}   -- [face path] = "RATING: reason" | false
 local function readabilityOfPath(path)
     local cached = _fa_cache[path]
     if cached == nil then
+        dlog("readabilityOfPath: analysing", path)
         local ok, res = pcall(faAnalyze, path)
         if not ok then
             require("logger").warn("[PTI] faAnalyze failed:", res)
@@ -1457,6 +1470,14 @@ local function showSizeCombos(plugin, start, old)
     local HorizontalSpan = require("ui/widget/horizontalspan")
     local LineWidget = require("ui/widget/linewidget")
 
+    -- A fresh open (not a scroll / refresh, which pass the previous dialog) is
+    -- ignored while the window is already open: a double tap can reach both
+    -- onTap and onDoubleTap of the settings menu and would stack two windows.
+    if not old and plugin.combos_dialog then
+        dlog("showSizeCombos: already open, ignored")
+        return
+    end
+
     local ui = plugin.ui
     local all, unhinted, hint_name = buildSizeCombos(ui)
     if not all then
@@ -1704,6 +1725,7 @@ local function showSizeCombos(plugin, start, old)
     }
 
     local function closeCombos()
+        if plugin.combos_dialog == dialog then plugin.combos_dialog = nil end
         UIManager:close(dialog, "ui", frame_rect)
     end
 
@@ -1763,6 +1785,7 @@ local function showSizeCombos(plugin, start, old)
 
     function dialog:onClose() closeCombos() return true end
 
+    plugin.combos_dialog = dialog   -- replaces `old` when scrolling / refreshing
     UIManager:show(dialog, "ui", frame_rect)
     if old then UIManager:close(old, "ui", frame_rect) end
 end
