@@ -5,8 +5,8 @@
 --     require("settings_menu")(PageTextInfo)
 --
 -- It adds these methods to PageTextInfo:
---     onShowSettingsMenu, getXHeightMm, ptForXHeight, applyFontSizePt,
---     getFontReadability
+--     onShowSettingsMenu, getXHeightMm, getFaceName, ptForXHeight,
+--     applyFontSizePt, getFontReadability
 -- (plus hasRemStyles / reapplyFontCompensation: empty stand-ins, so code in
 -- main.lua that still calls them keeps working)
 --
@@ -48,6 +48,7 @@ local CONTRAST_DEFAULT = 15
 -- Forward declaration: assigned further down, but must be declared here
 -- so every function below sees it as an upvalue (not a global).
 local xHeightRatio
+local measureGlyphRatio   -- assigned after the FreeType block below
 
 
 -- Line spacing presets. All my Calibre books were converted so every
@@ -94,6 +95,12 @@ local function close(self)
     self.settings_dialog = nil
     self.settings_offset = nil   -- the next time it opens it is at its place again
     dlog("settings menu closed")
+    -- A single tap on the title waits for a possible second tap: if the menu is
+    -- closed meanwhile, that pending action must not open the reference afterwards
+    if d and d.title_tap_fn then
+        UIManager:unschedule(d.title_tap_fn)
+        d.title_tap_fn = nil
+    end
     -- The window may have been moved: refresh where it is now
     if d then UIManager:close(d, "ui", (d.frame and d.frame.dimen) or d.frame_rect) end
 end
@@ -526,11 +533,21 @@ end
 
 -- x-height / font size ratio of a face (the current one by default), measured
 -- at a large size so hinting/rounding doesn't matter. Cached per face name.
--- Returns ratio, face_name (or nil if it can't be measured).
+-- The height of the real "x" glyph is used (the same glyph the hinted heights
+-- are measured on); the x-height value stored in the font (OS/2 sxHeight, what
+-- getXHeight() returns) is only the fallback, as some fonts lack it or have a
+-- wrong one. Returns ratio, face_name (or nil if it can't be measured).
 xHeightRatio = function(doc, raw_name)
     raw_name = raw_name or doc._document:getFontFace() or "?"
     local face_name = resolveFace(raw_name)
     if _ratio_cache[face_name] then return _ratio_cache[face_name], face_name end
+
+    local glyph_ratio = measureGlyphRatio and measureGlyphRatio(face_name)
+    if glyph_ratio then
+        dlog("xHeightRatio: measured from the glyph face=", face_name, "ratio=", glyph_ratio)
+        _ratio_cache[face_name] = glyph_ratio
+        return glyph_ratio, face_name
+    end
 
     local face = Font:getFace(face_name, XH_MEASURE_PX, 0, true)
     if not face or not face.ftsize then
@@ -594,6 +611,49 @@ local function loadFreeType()
     return nil
 end
 
+-- The FreeType library, loaded and initialised once. Returns { ffi, lib, library },
+-- or nil when FreeType can't be reached.
+local function getFreeType()
+    if _ft == nil then
+        local ffi, lib = loadFreeType()
+        _ft = false
+        if lib then
+            -- One FreeType library for the whole session. KOReader's cdef has
+            -- no FT_Done_FreeType, so it is created once and never freed.
+            local library = ffi.new("FT_Library[1]")
+            if lib.FT_Init_FreeType(library) == 0 then
+                _ft = { ffi = ffi, lib = lib, library = library }
+            end
+        end
+    end
+    return _ft or nil
+end
+
+-- x-height / em of a font file, from the unhinted "x" glyph rendered at a large
+-- size (1000 px). nil if it can't be measured.
+measureGlyphRatio = function(path)
+    if type(path) ~= "string" or not path:find("/", 1, true) then return nil end
+    local ok, res = pcall(function()
+        local ft = getFreeType()
+        if not ft then return nil end
+        local face = ft.ffi.new("FT_Face[1]")
+        local ratio
+        local inner_ok, inner_err = pcall(function()
+            if ft.lib.FT_New_Face(ft.library[0], path, 0, face) ~= 0 then return end
+            local idx = ft.lib.FT_Get_Char_Index(face[0], string.byte("x"))
+            if idx == 0 then return end
+            if ft.lib.FT_Set_Pixel_Sizes(face[0], 0, 1000) ~= 0 then return end
+            if ft.lib.FT_Load_Glyph(face[0], idx, FT_LOAD_RENDER + FT_LOAD_NO_HINTING) ~= 0 then return end
+            local top = tonumber(face[0].glyph.bitmap_top)
+            if top and top > 0 then ratio = top / 1000 end
+        end)
+        if face[0] ~= nil then pcall(function() ft.lib.FT_Done_Face(face[0]) end) end
+        if not inner_ok then error(inner_err) end
+        return ratio
+    end)
+    return ok and res or nil
+end
+
 local _xh_cache = {}   -- [font file .. "|" .. hint] = { [px] = x-height in px, or false }
 -- Same keys: height of the round letter "o" at each size. Round letters overshoot
 -- the flat top of "x" and are rounded on their own, so their height can change
@@ -629,20 +689,9 @@ local function hintedXHeights(path, first, last, hint)
     if #missing == 0 then return cache end
 
     local ok, res = pcall(function()
-        if _ft == nil then
-            local ffi, lib = loadFreeType()
-            _ft = false
-            if lib then
-                -- One FreeType library for the whole session. KOReader's cdef has
-                -- no FT_Done_FreeType, so it is created once and never freed.
-                local library = ffi.new("FT_Library[1]")
-                if lib.FT_Init_FreeType(library) == 0 then
-                    _ft = { ffi = ffi, lib = lib, library = library }
-                end
-            end
-        end
-        if not _ft then return false end
-        local ffi, ft, library = _ft.ffi, _ft.lib, _ft.library
+        local fts = getFreeType()
+        if not fts then return false end
+        local ffi, ft, library = fts.ffi, fts.lib, fts.library
 
         local face = ffi.new("FT_Face[1]")
         local inner_ok, inner_err = pcall(function()
@@ -1208,10 +1257,11 @@ end
 -- up/down (or the arrows) to scroll. Tap a row to apply it.
 local TITLE_DOUBLE_TAP_S = 0.4   -- max time between the two taps on the title
 -- Rows marked "◆" are the sizes where this font renders best: the x-height that
--- FreeType really gives at that px size (hinted, measured per row) differs from
--- the ideal one (ratio * px) by at most COMBO_RENDER_TOL px, so hinting has
--- almost nothing to round. If the measurement fails, the row falls back to the
--- estimate (distance of ratio * px to a whole number).
+-- FreeType really gives at that px size (hinted, measured per row) is closest to
+-- the ideal one (ratio * px), i.e. hinting distorts it the least. The best
+-- COMBO_RENDER_SHARE of the rows get the mark, plus any row whose distortion is
+-- under COMBO_RENDER_TOL px. With hinting off, or if the measurement fails, the
+-- criterion is the distance of ratio * px to a whole number of pixels.
 local COMBO_RENDER_TOL = 0.10
 local COMBO_RENDER_SHARE = 0.25   -- fraction of the rows (the best ones) that get the mark
 local COMBO_CPS_ARCMIN = 12
@@ -1244,7 +1294,7 @@ local function buildSizeCombos(ui)
     -- reading as the hinting buttons of the menu, default auto)
     local hint = getHinting(ui)
     -- Real x-height of every row, loaded with the flags crengine uses for this
-    -- hinting mode (nil when it can't be done: Font:getFace is used then).
+    -- hinting mode (nil when it can't be done: the estimate below is used then).
     -- Hinting off needs no measurement. face_name is the resolved font file here.
     local measured = (hint == 1 or hint == 2)
         and hintedXHeights(face_name, first, last, hint) or nil
@@ -1318,8 +1368,6 @@ local function buildSizeCombos(ui)
         if c.diff then table.insert(diffs, c.diff) end
     end
     if #diffs > 0 then
-        table.sort(diffs)
-        local median = diffs[math.floor(#diffs / 2) + 1]
         -- Deviation of every row from the design x-height; the best
         -- COMBO_RENDER_SHARE of the rows are marked (plus any under the tolerance),
         -- so there are always several sizes to choose from.
@@ -1327,14 +1375,6 @@ local function buildSizeCombos(ui)
         -- (differences ~0): then the hinting criterion says nothing, and what
         -- matters is how far the x-height edge is from a whole pixel (a half
         -- pixel gives a blurry grey edge).
-        local max_abs = 0
-        for __, c in ipairs(combos) do
-            if c.diff then max_abs = math.max(max_abs, math.abs(c.diff)) end
-        end
-        if hint == nil then
-            unhinted = max_abs < 0.05
-            hint_name = unhinted and "off?" or "on?"
-        end
         local devs = {}
         for __, c in ipairs(combos) do
             if c.diff then
@@ -1351,8 +1391,7 @@ local function buildSizeCombos(ui)
         for __, c in ipairs(combos) do
             if c.dev then c.sweet = c.dev <= limit end
         end
-        dlog("buildSizeCombos: median diff real-ideal=", median, "limit=", limit,
-            "unhinted=", unhinted)
+        dlog("buildSizeCombos: limit=", limit, "unhinted=", unhinted)
     end
     -- No row could be measured: the marks come from the whole-pixel estimate, so
     -- the legend must describe that criterion
