@@ -25,6 +25,27 @@ local VerticalSpan = require("ui/widget/verticalspan")
 local Widget = require("ui/widget/widget")
 local _ = require("gettext")
 
+-- ── Performance logging ──────────────────────────────────────────────────────
+-- Timings go to the log (crash.log) with the prefix [LS-PERF]:
+--     grep LS-PERF crash.log
+-- Kept in one table to use a single top-level local.
+
+local DEBUG_PERF = false  -- true: log timings; false: no timing work at all
+
+local Perf = { open_t0 = nil }  -- open_t0: start of the opening (set by the event handler)
+
+function Perf.start()
+    if not DEBUG_PERF then return nil end
+    return require("ui/time").now()
+end
+
+function Perf.log(label, start)
+    if not DEBUG_PERF or not start then return end
+    local UITime = require("ui/time")
+    logger.info(string.format("[LS-PERF] %-40s %8.1f ms", label,
+        UITime.to_ms(UITime.since(start))))
+end
+
 local DEVICE_NAMES = {
     [0]   = _("Unknown device"),
     [1]   = "Kobo Libra 2",
@@ -238,6 +259,7 @@ end
 -- nil and a message when the database cannot be read; the connection is
 -- closed in every case.
 local function queryAll(sql_stmt, map)
+    local t0 = Perf.start()
     local SQ3 = require("lua-ljsqlite3/init")
     local items = {}
     local ok, err = pcall(function()
@@ -256,6 +278,9 @@ local function queryAll(sql_stmt, map)
     if not ok then
         logger.warn("longest sessions: query failed:", err)
         return nil, _("Could not read the statistics database")
+    end
+    if DEBUG_PERF then
+        Perf.log("queryAll (" .. #items .. " rows) " .. (sql_stmt:gsub("%s+", " ")):sub(1, 40), t0)
     end
     return items
 end
@@ -1152,6 +1177,7 @@ local DEFAULT_PACE = 2                                    -- hours per day
 -- The pace is a setting of the reading differential module. This plugin may
 -- not be able to load that module's settings store; then the default is used.
 local function readPace()
+    local t0 = Perf.start()
     local loaders = {
         function() return require("lib/bookshelf_settings_store") end,
         function() return dofile("plugins/bookshelf.koplugin/lib/bookshelf_settings_store.lua") end,
@@ -1161,14 +1187,19 @@ local function readPace()
         if ok and type(Store) == "table" and Store.read then
             local ok_read, v = pcall(Store.read, DELTA_PACE_KEY)
             v = ok_read and tonumber(v) or nil
-            if v and v > 0 then return v end
+            if v and v > 0 then
+                Perf.log("readPace (loader " .. _i .. ")", t0)
+                return v
+            end
         end
     end
+    Perf.log("readPace (default)", t0)
     return DEFAULT_PACE
 end
 
 -- Reads every figure of the summary. Returns nil when the database cannot be read.
 local function loadSummaryData()
+    local t0 = Perf.start()
     local lfs = require("libs/libkoreader-lfs")
     local path = getStatsDbPath()
     if lfs.attributes(path, "mode") ~= "file" then return nil end
@@ -1205,14 +1236,17 @@ local function loadSummaryData()
                 overlap:clearbind():reset()
                 return secs
             end
+            local t_span = Perf.start()
             out.today     = span(day_start, now)
             out.yesterday = span(day_start - SECONDS_PER_DAY, day_start - 1)
             out.month     = span(month_start, now)
             out.lmonth    = span(lmonth_start, month_start - 1)
             out.year      = span(year_start, now)
             overlap:close()
+            Perf.log("  loadSummaryData: 5 spans", t_span)
 
             -- Per-page statistics (reading stats module); optional
+            local t_page = Perf.start()
             pcall(function()
                 local stmt = conn:prepare([[
                     SELECT COALESCE(SUM(duration), 0),
@@ -1226,6 +1260,7 @@ local function loadSummaryData()
                 out.week = tonumber(row[1]) or 0
                 stmt:close()
             end)
+            Perf.log("  loadSummaryData: page_stat_data", t_page)
         end)
         conn:close()
         if not ok_q then error(err_q, 0) end
@@ -1234,6 +1269,7 @@ local function loadSummaryData()
         logger.warn("longest sessions: summary query failed:", err)
         return nil
     end
+    Perf.log("loadSummaryData TOTAL", t0)
     return out
 end
 
@@ -1575,6 +1611,7 @@ local SHELF_STATUS = {
 }
 
 local function getShelfCounts()
+    local t0 = Perf.start()
     local total = 0
     local counts = { reading = 0, tbr = 0, mbr = 0, finished = 0, unread = 0 }
     local all_files = rawget(_G, "all_files")
@@ -1588,6 +1625,7 @@ local function getShelfCounts()
             counts[bucket] = counts[bucket] + 1
         end
     end
+    Perf.log("  getShelfCounts (" .. total .. " files)", t0)
     return total, counts
 end
 
@@ -1628,31 +1666,48 @@ end
 
 -- The whole screen: the cards, in a scrollable list when they do not fit.
 local function buildSummaryView(w_width, parent)
+    local t_all = Perf.start()
     local data = loadSummaryData()
     if not data then return nil, _("Could not read the statistics database") end
+    local t_sess = Perf.start()
     local session, book = getSessionInfo()
+    Perf.log("  getSessionInfo", t_sess)
 
     local function buildCards(card_w)
+        local t_cards = Perf.start()
         summary_tap_zones = {}
         local cards = VerticalGroup:new{ align = "center" }
-        local list = {
-            buildShelfCard(card_w),
-            buildBreakdownCard(card_w, data),
-            buildBookCard(card_w, session, book),
-        }
+
+        local t = Perf.start()
+        local shelf = buildShelfCard(card_w)
+        Perf.log("  buildShelfCard", t)
+        t = Perf.start()
+        local breakdown = buildBreakdownCard(card_w, data)
+        Perf.log("  buildBreakdownCard", t)
+        t = Perf.start()
+        local book_card = buildBookCard(card_w, session, book)
+        Perf.log("  buildBookCard", t)
+
+        local list = { shelf, breakdown, book_card }
         for i, card in ipairs(list) do
             if i > 1 then cards[#cards + 1] = VerticalSpan:new{ width = SPACE.m } end
             cards[#cards + 1] = card
         end
+        Perf.log("  buildCards TOTAL", t_cards)
         return cards
     end
 
     local cards = buildCards(w_width)
     local max_h = math.floor(Screen:getHeight() * 0.7)
-    if cards:getSize().h <= max_h then return { cards } end
+    if cards:getSize().h <= max_h then
+        Perf.log("buildSummaryView TOTAL", t_all)
+        return { cards }
+    end
 
+    if DEBUG_PERF then logger.info("[LS-PERF] summary does not fit: rebuilding with scroll") end
     cards:free()
     cards = buildCards(w_width - ScrollableContainer:getScrollbarWidth())
+    Perf.log("buildSummaryView TOTAL (rebuilt)", t_all)
     return { SwipePassthroughScrollable:new{
         dimen = Geom:new{ w = w_width, h = max_h },
         show_parent = parent,
@@ -1734,6 +1789,7 @@ end
 
 -- Returns the SQL condition that selects the finished books, or "0" if none
 local function getFinishedBooksFilter()
+    local t0 = Perf.start()
     local DocSettings = require("docsettings")
     local ReadHistory = require("readhistory")
     local util = require("util")
@@ -1801,6 +1857,7 @@ local function getFinishedBooksFilter()
     if #list > 0 then
         conditions[#conditions + 1] = "lower(trim(book.title)) IN (" .. table.concat(list, ",") .. ")"
     end
+    Perf.log("getFinishedBooksFilter (" .. finished_info .. ")", t0)
     if #conditions == 0 then return "0" end
     return "(" .. table.concat(conditions, " OR ") .. ")"
 end
@@ -2036,6 +2093,7 @@ function ShowLongestSessionsWindow:init()
 end
 
 function ShowLongestSessionsWindow:_buildUI()
+    local t_ui = Perf.start()
     local screen_width = Screen:getWidth()
     local screen_height = Screen:getHeight()
     local w_width = math.floor(screen_width * (VIEWS[self.current_view].width_factor or WINDOW_WIDTH_FACTOR))
@@ -2056,6 +2114,7 @@ function ShowLongestSessionsWindow:_buildUI()
     -- container, or whatever the view builds itself.
     local view_def = VIEWS[self.current_view]
     local body
+    local t_body = Perf.start()
     if view_def.build then
         local widgets, err = view_def.build(w_width, self)
         if not widgets then return fail(err) end
@@ -2082,6 +2141,7 @@ function ShowLongestSessionsWindow:_buildUI()
             body[#body + 1] = makeSummaryLine(w_width, view_def.summary(items))
         end
     end
+    Perf.log("view body (view " .. self.current_view .. ")", t_body)
 
     -- Title on the left, "n / total" on the right
     local title_text = type(view_def.title) == "function" and view_def.title() or view_def.title
@@ -2154,14 +2214,19 @@ function ShowLongestSessionsWindow:_buildUI()
             GestureRange:new{ ges = "swipe", range = self.dimen },
         }
     end
+    Perf.log("_buildUI TOTAL (view " .. self.current_view .. ")", t_ui)
 end
 
 -- Builds the window for a view and shows it. Returns the window, or nil when
 -- it could not be built (the user has been told why).
 local function showWindow(current_view)
+    local t_new = Perf.start()
     local widget = ShowLongestSessionsWindow:new{ current_view = current_view }
+    Perf.log("ShowLongestSessionsWindow:new", t_new)
     if widget.failed then return nil end
+    local t_show = Perf.start()
     UIManager:show(widget, "ui", widget.dimen)
+    Perf.log("UIManager:show", t_show)
     return widget
 end
 
@@ -2181,8 +2246,12 @@ function ShowLongestSessionsWindow:onSwipe(arg, ges)
         return false
     end
     -- the new view first: if it fails, this one stays
+    Perf.open_t0 = Perf.start()  -- time of the view change, up to the first paint
     local widget = ShowLongestSessionsWindow:new{ current_view = next_view }
-    if widget.failed then return true end
+    if widget.failed then
+        Perf.open_t0 = nil
+        return true
+    end
     UIManager:close(self)
     UIManager:show(widget, "ui", widget.dimen)
     return true
@@ -2192,6 +2261,15 @@ function ShowLongestSessionsWindow:onShow()
     UIManager:setDirty(self, function()
         return "ui", self[1][1].dimen
     end)
+    if DEBUG_PERF and Perf.open_t0 then
+        local t0 = Perf.open_t0
+        Perf.log("onShow (from start)", t0)
+        -- the real paint happens in the next UIManager cycle
+        UIManager:nextTick(function()
+            Perf.log("FIRST PAINT (from start)", t0)
+        end)
+        Perf.open_t0 = nil
+    end
     return true
 end
 
@@ -2233,11 +2311,16 @@ return function(PageTextInfo)
 
     -- Reader: the plugin receives the event
     function PageTextInfo:onShowLongestSessions()
+        Perf.open_t0 = Perf.start()
+        local t_total = Perf.open_t0
         -- save the session in progress first, so it is in the lists
         if self.ui and self.ui.statistics then
+            local t_db = Perf.start()
             self.ui.statistics:insertDB()
+            Perf.log("statistics:insertDB", t_db)
         end
         showWindow()
+        Perf.log("onShowLongestSessions TOTAL (sync)", t_total)
         return true
     end
 
@@ -2245,7 +2328,10 @@ return function(PageTextInfo)
     -- handled by the file manager itself
     local FileManager = require("apps/filemanager/filemanager")
     function FileManager:onShowLongestSessions()
+        Perf.open_t0 = Perf.start()
+        local t_total = Perf.open_t0
         showWindow()
+        Perf.log("onShowLongestSessions TOTAL (sync, FM)", t_total)
         return true
     end
 
