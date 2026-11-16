@@ -383,7 +383,25 @@ end
 -- Queries the dictionary for a word and returns a short inline gloss.
 -- Tries each result in order until one yields a non-empty translation,
 -- so that if WordReference fails Babylon is used as fallback.
-local DICTIONARIES = { "WordReference_EN_ES", "Babylon English-Spanish" }
+local DICTIONARIES = { "Babylon English-Spanish", "WordReference_EN_ES" }
+
+-- Orders sdcv results by the position of their dictionary in DICTIONARIES (the first one
+-- is the preferred); the other dictionaries go last. sdcv returns the results in its own
+-- order, so the order of DICTIONARIES alone does not decide which dictionary is used.
+local function sortByPreferredDictionary(results)
+    local rank = {}
+    for i, name in ipairs(DICTIONARIES) do rank[name] = i end
+    local indexed = {}
+    for i, r in ipairs(results) do indexed[i] = { r = r, i = i } end
+    table.sort(indexed, function(a, b)
+        local ra, rb = rank[a.r.dict] or math.huge, rank[b.r.dict] or math.huge
+        if ra ~= rb then return ra < rb end
+        return a.i < b.i   -- table.sort is not stable: keep the sdcv order inside a rank
+    end)
+    local sorted = {}
+    for i, e in ipairs(indexed) do sorted[i] = e.r end
+    return sorted
+end
 
 -- Runs sdcv synchronously with a plain io.popen and returns the decoded entries
 -- (the same list startSdcv returns, minus its dummy "no result" entry).
@@ -469,7 +487,7 @@ local function getTranslation(self, word)
     if #results == 0 then
         results = sdcvLookup(dictionary, key, nil, true)
     end
-    results = preferExactEntries(results, key)
+    results = sortByPreferredDictionary(preferExactEntries(results, key))
 
     local translation = ""
 
@@ -1670,7 +1688,7 @@ local function collectExactTranslations(ui, key)
         end
     end
 
-    add(sdcvLookup(dictionary, key, DICTIONARIES, false))
+    add(sortByPreferredDictionary(sdcvLookup(dictionary, key, DICTIONARIES, false)))
     add(sdcvLookup(dictionary, key, nil, false))
     return list
 end
