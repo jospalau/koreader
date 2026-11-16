@@ -11,7 +11,8 @@
 -- main.lua that still calls them keeps working)
 --
 -- PLAIN VERSION: no "Scale by x-height" and no "Compensate rem/em". Font sizes
--- are applied exactly as set; the book's own font-size styles are never read.
+-- are applied exactly as set; the book's own font-size styles are never changed
+-- (the title only reports, read-only, whether the book sizes its text in rem).
 
 local Device = require("device")
 local Font = require("ui/font")
@@ -55,13 +56,14 @@ local measureGlyphRatio   -- assigned after the FreeType block below
 -- line-height is a unitless 1.2 (see the Calibre "Transform styles" rules).
 -- KOReader's percentage multiplies on top of that, so 100% = the 1.2em
 -- baseline, and the other steps are ~1.1em / 1.3em / 1.4em
--- (e.g. 1.1/1.2 = 92%, 1.3/1.2 = 109%, 1.4/1.2 = 117%).
+-- (e.g. 1.1/1.2 = 92%, 1.3/1.2 = 108%, 1.4/1.2 = 117%). These are the same
+-- values the fine step (stepLineSpacing) produces, so presets and steps agree.
 -- Labels are only accurate with "Book styles" enabled in KOReader and for
 -- books that went through that conversion.
 local LINE_SPACINGS = {
     { percent = 92,  label = "1.1em" },
     { percent = 100, label = "1.2em" },
-    { percent = 109, label = "1.3em" },
+    { percent = 108, label = "1.3em" },
     { percent = 117, label = "1.4em" },
 }
 
@@ -136,25 +138,18 @@ local function drawnPx(ui, pt, dpi)
     return math.floor(dpi * pt / 72 + 1e-6)
 end
 
--- Step the font size by `delta` pt, repeating until the rendering engine
--- actually changes size. CREngine only distinguishes discrete sizes, so a
--- small step (e.g. 0.1 pt) may leave the drawn size unchanged. Each call therefore
--- keeps adding `delta` (rounded to 0.01 to avoid float drift) until
--- getFontSize() reports a new value. The 40 iterations cap avoids an endless
--- loop when the minimum or maximum font size is reached.
-local function stepFontSize(ui, delta)
-    local function cre_size() return ui.document._document:getFontSize() end
-    local before = cre_size()
-    local pt = ui.font.configurable.font_size
-    dlog("stepFontSize: delta=", delta, "start pt=", pt, "cre size=", before)
-    local iterations = 0
-    for __ = 1, 40 do
-        iterations = iterations + 1
-        pt = math.floor((pt + delta) * 100 + 0.5) / 100
-        setFontSize(ui, pt)
-        if cre_size() ~= before then break end
-    end
-    dlog("stepFontSize: end pt=", pt, "cre size=", cre_size(), "iterations=", iterations)
+-- Step the drawn font size by `dir` whole pixels (-1 / +1). CREngine only
+-- distinguishes whole-pixel sizes, so the target px is computed directly and
+-- converted to the smallest pt that draws it (same formula as ptForXHeight).
+-- This needs a single setFontSize call, i.e. a single reflow per tap.
+local function stepFontSize(ui, dir)
+    local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+    local cur_px = drawnPx(ui, ui.font.configurable.font_size, dpi)
+    local new_px = math.max(1, cur_px + dir)
+    local pt = math.ceil(new_px * 72 / dpi * 100 + 0.001) / 100
+    pt = math.max(4, math.min(pt, 255))
+    dlog("stepFontSize: dir=", dir, "px", cur_px, "->", new_px, "pt=", pt)
+    setFontSize(ui, pt)
 end
 
 local function setLineSpacing(ui, percent)
@@ -396,8 +391,8 @@ local function buildRows(ui)
             "fs=", fs)
     end
     local font_step_row = {
-        { text = "▼", callback = function(u) stepFontSize(u, -0.1) end },
-        { text = "▲", callback = function(u) stepFontSize(u,  0.1) end },
+        { text = "▼", callback = function(u) stepFontSize(u, -1) end },
+        { text = "▲", callback = function(u) stepFontSize(u,  1) end },
     }
     local spacing_row, margins_row = {}, {}
     local spacing_step_row = {
@@ -448,9 +443,9 @@ local function buildRows(ui)
         table.insert(spacing_row, {
             text = spacing.label,
             callback = function(u) setLineSpacing(u, spacing.percent) end,
-            -- The presets are rounded percentages (1.3em = 109%, stepping gives 108%):
-            -- tolerate 1 point so the preset still lights up
-            active = ls and math.abs(ls - spacing.percent) <= 1,
+            -- Presets use the same rounded percentages as the fine step, so an
+            -- (almost) exact match is enough
+            active = ls and math.abs(ls - spacing.percent) < 0.5,
         })
     end
     for __, p in ipairs(MARGIN_PRESETS) do
@@ -752,18 +747,19 @@ local function realXHeightPx(ui, px)
     return ratio * px, false
 end
 
--- New books: make KOReader's own defaults for margins equal to DEFAULTS.margins,
+-- New books: seed KOReader's own defaults for margins with DEFAULTS.margins,
 -- so a book without settings of its own opens on them (and the matching preset
 -- button shows as active). Nothing hooks into the book opening: this only
--- writes KOReader's global defaults, and only when they differ.
+-- writes KOReader's global defaults, and ONLY when none of them has ever been
+-- set, so margins the user later chooses as default in KOReader are not
+-- overwritten on the next start.
 do
     local m = DEFAULTS.margins
-    local h = G_reader_settings:readSetting("copt_h_page_margins")
-    local same = h and approx(h[1], m[1]) and approx(h[2], m[3])
-        and approx(G_reader_settings:readSetting("copt_t_page_margin"), m[2])
-        and approx(G_reader_settings:readSetting("copt_b_page_margin"), m[4])
-    if not same then
-        dlog("default margins: saving as KOReader defaults")
+    local unset = G_reader_settings:readSetting("copt_h_page_margins") == nil
+        and G_reader_settings:readSetting("copt_t_page_margin") == nil
+        and G_reader_settings:readSetting("copt_b_page_margin") == nil
+    if unset then
+        dlog("default margins: not set yet, saving as KOReader defaults")
         G_reader_settings:saveSetting("copt_h_page_margins", { m[1], m[3] })
         G_reader_settings:saveSetting("copt_t_page_margin", m[2])
         G_reader_settings:saveSetting("copt_b_page_margin", m[4])
@@ -845,12 +841,19 @@ function PageTextInfo:reapplyFontCompensation() end
 -- Does the book set font sizes in rem? Looks at the font-size declarations of
 -- its style sheets (a rem value other than 1) and at a font-size in rem on the
 -- <html> / <body> tag of the first text files (inline style). Cached per book.
--- Returns true / false, or nil if the book can't be read.
+-- Returns true / false, or nil if the book can't be read. The "can't be read"
+-- outcome is cached too (UNKNOWN), so formats that aren't zip archives are not
+-- opened again every time the menu is redrawn.
+local UNKNOWN = "unknown"
 local _rem_cache = {}
 local function bookUsesRem(doc)
     local file = doc.file
     if not file then return nil end
-    if _rem_cache[file] ~= nil then return _rem_cache[file] end
+    local cached = _rem_cache[file]
+    if cached ~= nil then
+        if cached == UNKNOWN then return nil end
+        return cached
+    end
     local ok, res = pcall(function()
         local Archiver = require("ffi/archiver")
         local arc = Archiver.Reader:new()
@@ -884,7 +887,10 @@ local function bookUsesRem(doc)
         return found
     end)
     if not ok then dlog("bookUsesRem ERROR:", res) end
-    if not ok or res == nil then return nil end
+    if not ok or res == nil then
+        _rem_cache[file] = UNKNOWN
+        return nil
+    end
     _rem_cache[file] = res
     dlog("bookUsesRem:", file, "->", res)
     return res
