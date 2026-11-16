@@ -100,12 +100,12 @@ end
 
 local function findBestHyphenatedMatch(doc, hyphenatedWord)
     local attempts = {
-        tailAfterFirstHyphen(hyphenatedWord),       -- nivel 1
-        nestedTail(hyphenatedWord, 2),              -- nivel 2
-        nestedTail(hyphenatedWord, 3),              -- nivel 3
-        nestedTail(hyphenatedWord, 4),              -- nivel 4
-        nestedTail(hyphenatedWord, 5),              -- nivel 5
-        (hyphenatedWord:gsub("%-", "")),            -- sin guiones
+        tailAfterFirstHyphen(hyphenatedWord),       -- level 1
+        nestedTail(hyphenatedWord, 2),              -- level 2
+        nestedTail(hyphenatedWord, 3),              -- level 3
+        nestedTail(hyphenatedWord, 4),              -- level 4
+        nestedTail(hyphenatedWord, 5),              -- level 5
+        (hyphenatedWord:gsub("%-", "")),            -- without hyphens
     }
 
     for _, suggestion in ipairs(attempts) do
@@ -114,68 +114,6 @@ local function findBestHyphenatedMatch(doc, hyphenatedWord)
     end
 
     return nil
-end
-
-function PageTextInfo:updateNotes()
-    -- self.search:fullTextSearch("Citra")
-    self.pages_notes = {}
-    self.notes = {}
-    local annotations = self.ui.annotation.annotations
-    local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false)
-    if res and res.text then
-        local t = util.splitToWords2(res.text) -- contar palabras
-        local words_page = {}
-        for i=1, #t do
-            words_page[t[i]] = "";
-        end
-        if words_page and annotations then
-            for i, item in ipairs(annotations) do
-                local words = nil
-                local hyphenated = false
-                if words_page[item.text] then
-                    if t[1] == item.text then -- If first word is hyphenated
-                        local cre = require("libs/libkoreader-cre")
-                        local hyphenation = cre.getHyphenationForWord(item.text)
-
-                        if hyphenation:find("-") then
-                            hyphenated = true
-                            words = findBestHyphenatedMatch(self.document, hyphenation)
-                        else
-                            words = self.document:findText(item.text, 1, false, true, -1, false, 1)
-                        end
-                    else
-                        words = self.document:findText(item.text, 1, false, true, -1, false, 60)
-                    end
-                    -- words = self.document:findText(item.text, 1, false, true, -1, false, 30)
-                    if words then
-                        if item.note and not item.text:find("%s+") then
-                            table.insert(self.notes, item)
-                            for i, word in ipairs(words) do
-                                word.note = item.note
-                                word.text = item.text
-                                if hyphenated then
-                                    word.hyphenated = true
-                                else
-
-                                end
-                                local page = self.document:getPageFromXPointer(word.start)
-                                if not self.pages_notes[page] then
-                                    self.pages_notes[page]={}
-                                end
-                                table.insert(self.pages_notes[page], word)
-                                local page2 = self.document:getPageFromXPointer(word["end"])
-                                if not self.pages_notes[page2] then
-                                    self.pages_notes[page2]={}
-                                end
-                                table.insert(self.pages_notes[page2], word)
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    self.ui.document:clearSelection()
 end
 
 local function removeDupes(tab)
@@ -188,99 +126,6 @@ local function removeDupes(tab)
         end
     end
     return result
-end
-
-function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
-    -- Getting screen boxes is done for each tap on screen (changing pages,
-    -- showing menu...). We might want to cache these boxes per page (and
-    -- clear that cache when page layout change or highlights are added
-    -- or removed).
-    -- Even in page mode, it's safer to use pos and ui.dimen.h
-    -- than pages' xpointers pos, even if ui.dimen.h is a bit
-    -- larger than pages' heights
-    local cur_view_top = self.document:getCurrentPos()
-    local cur_view_bottom
-    if self.view_mode == "page" and self.document:getVisiblePageCount() > 1 then
-        cur_view_bottom = cur_view_top + 2 * self.ui.dimen.h
-    else
-        cur_view_bottom = cur_view_top + self.ui.dimen.h
-    end
-    local colorful
---    if true then
---        local dump = require("dump")
---        UIManager:show( require("ui/widget/textviewer"):new{text = dump(self.ui.notes)})
---    end
---
-    if self.pages_notes[self.ui.view.state.page] then
-        for _, item in ipairs(self.pages_notes[self.ui.view.state.page]) do
-            -- document:getScreenBoxesFromPositions() is expensive, so we
-            -- first check if this item is on current page
-            local start_pos = self.document:getPosFromXPointer(item.start)
-            --if start_pos > cur_view_bottom then return colorful end -- this and all next highlights are after the current page
-            local end_pos = self.document:getPosFromXPointer(item["end"])
-            if end_pos >= cur_view_top then
-                local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true) -- get_segments=true
-                if boxes then
-                    local word = self.ui.document._document:getTextFromPositions(boxes[1].x, boxes[1].y, boxes[1].x, boxes[1].y, false, false)
-                    word.text = word.text:match("[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+$") or word.text
-                    if (item.hyphenated and word.text:upper() == item.text:upper()) or word.text:upper() == item.text:upper() then
-                        if item.hyphenated and word.text:upper() == item.text:upper() then
-                            boxes = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
-                        else
-                            boxes = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
-                        end
-                        if boxes then
-                            for _, box in ipairs(boxes) do
-                                if box.h ~= 0 then
-                                    local mark = FrameContainer:new{
-                                        left_container:new{
-                                            dimen = Geom:new(),
-                                            TextWidget:new{
-                                                text =  "\u{EB4D}",
-                                                face = Font:getFace("symbols", 12),
-                                                fgcolor = Blitbuffer.COLOR_BLACK,
-                                            },
-                                        },
-                                        -- background = Blitbuffer.COLOR_WHITE,
-                                        bordersize = 0,
-                                        padding = 0,
-                                        padding_bottom = self.bottom_padding,
-                                    }
-                                    -- self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
-                                    mark:paintTo(bb, box.x, box.y)
-                                end
-                            end
-                        end
-                        if item.hyphenated then
-                            if boxes then
-                                for _, box in ipairs(boxes) do
-                                    if box.h ~= 0 then
-                                        local mark = FrameContainer:new{
-                                            left_container:new{
-                                                dimen = Geom:new(),
-                                                TextWidget:new{
-                                                    text =  "\u{EB4D}",
-                                                    face = Font:getFace("symbols", 12),
-                                                    fgcolor = Blitbuffer.COLOR_BLACK,
-                                                },
-                                            },
-                                            -- background = Blitbuffer.COLOR_WHITE,
-                                            bordersize = 0,
-                                            padding = 0,
-                                            padding_bottom = self.bottom_padding,
-                                        }
-                                        -- self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
-                                        mark:paintTo(bb, box.x, box.y)
-                                    end
-                                end
-                            end
-                        end
-                    end
-                end
-            end
-        end
-    end
-    return colorful
 end
 
 -- Extracts the shortest, cleanest translation from a dictionary definition.
@@ -830,20 +675,229 @@ end
 
 -- ─────────────────────────────────────────────────────────────────────────────
 
--- Estilo del subrayado (ajusta aquí)
+-- Underline style (adjust here)
 -- (VOCAB_UNDERLINE_COLOR and VOCAB_UNDERLINE_THICK are currently unused)
-local VOCAB_UNDERLINE_COLOR = Blitbuffer.COLOR_DARK_GRAY -- necesitas: local Blitbuffer = require("ffi/blitbuffer")
+local VOCAB_UNDERLINE_COLOR = Blitbuffer.COLOR_DARK_GRAY -- needs: local Blitbuffer = require("ffi/blitbuffer") (already required at the top)
 local VOCAB_UNDERLINE_THICK = Size.line.medium
 -- (VOCAB_MIN_TRANSLATION_SIZE is declared again below with the other style constants)
 -- local VOCAB_MIN_TRANSLATION_SIZE = 7
 
--- Deja solo la última palabra del texto devuelto por el motor, normalizando el apóstrofo tipográfico.
+-- Keeps only the last word of the text returned by the engine, normalising the typographic apostrophe.
 local function lastWord(text)
     text = (text:gsub("’", "'"):gsub("%s+$", ""))
     return text:match("[A-Za-zÁÉÍÓÚÜÑáéíóúüñ']+$") or text
 end
 
 
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Notes
+-- Marks, with a small icon, the words that have a note in the annotations of the book.
+-- This code lives here, after the vocabulary helpers (firstWordIsWhole, isOnFirstLine,
+-- insideAnyMatch, lastWord), because it reuses them.
+
+-- Normalises a word so that it can be compared: lowercase, plain apostrophe and without
+-- the invisible characters (non-breaking space, zero-width space) that e-book text may have.
+local function normalizeNoteWord(text)
+    text = tostring(text or ""):gsub("\xC2\xA0", ""):gsub("\xE2\x80\x8B", "")
+    return (text:lower():gsub("’", "'"))
+end
+
+-- Shallow copy of a search result, so each annotation can carry its own note.
+local function copyHit(hit)
+    local copy = {}
+    for k, v in pairs(hit) do copy[k] = v end
+    return copy
+end
+
+-- Finds the occurrences of the annotated word `text` (up to 60, from the current page on).
+-- `is_first_word`: the word is the first one of the page, so it may be the tail of a word
+-- split from the previous page. Same strategy as updateWordsVocabulary: a normal search,
+-- plus a search of the tail only when the first word is not whole on this page.
+local function findNoteHits(self, text, res, is_first_word)
+    local hits = self.document:findText(text, 1, false, true, -1, false, 60)
+
+    -- The annotation may use the typographic apostrophe and the book the plain one, or vice versa.
+    if not (hits and #hits > 0) then
+        local alt
+        if text:find("'", 1, true) then
+            alt = text:gsub("'", "’")
+        elseif text:find("’", 1, true) then
+            alt = text:gsub("’", "'")
+        end
+        if alt then
+            hits = self.document:findText(alt, 1, false, true, -1, false, 60)
+        end
+    end
+
+    if is_first_word and not firstWordIsWhole(self, hits, res) then
+        local cre = require("libs/libkoreader-cre")
+        local hyphenation = cre.getHyphenationForWord(text)
+        if hyphenation:find("-") then
+            local tail_hits = findBestHyphenatedMatch(self.document, hyphenation)
+            if tail_hits then
+                hits = hits or {}
+                for _, hit in ipairs(tail_hits) do
+                    -- skip a hit inside a word the normal search already found,
+                    -- and a hit that is not on the first line of the page
+                    if not insideAnyMatch(hits, hit.start) and isOnFirstLine(self, hit) then
+                        hit.hyphenated = true
+                        table.insert(hits, hit)
+                    end
+                end
+            end
+        end
+    end
+    return hits
+end
+
+-- Builds self.pages_notes (page -> list of occurrences, each one with its `note`) and
+-- self.notes (the annotations that were found on the page).
+function PageTextInfo:updateNotes()
+    self.pages_notes = {}
+    self.notes = {}
+    local annotations = self.ui.annotation.annotations
+    local res = self.document._document:getTextFromPositions(0, 0, Screen:getWidth(), Screen:getHeight(), false)
+    if res and res.text and annotations then
+        local t = util.splitToWords2(res.text)
+        -- Words of the page (normalised): annotations of other words are skipped
+        local words_page = {}
+        for i = 1, #t do
+            words_page[normalizeNoteWord(t[i])] = true
+        end
+        local first_key = t[1] and normalizeNoteWord(t[1])
+        -- Search results by word: annotations of the same word share one search
+        local hits_cache = {}
+
+        for _, item in ipairs(annotations) do
+            -- Only notes on a single word are marked. This is checked first, so highlights
+            -- without a note (most of the annotations) never trigger a search.
+            if item.note and item.text and not item.text:find("%s") then
+                local key = normalizeNoteWord(item.text)
+                if key ~= "" and words_page[key] then
+                    local hits = hits_cache[key]
+                    if hits == nil then
+                        hits = findNoteHits(self, item.text, res, key == first_key) or false
+                        hits_cache[key] = hits
+                    end
+                    if hits then
+                        table.insert(self.notes, item)
+                        for _, hit in ipairs(hits) do
+                            -- own copy per annotation: the hits are shared between them
+                            local word = copyHit(hit)
+                            word.note = item.note
+                            word.text = item.text
+                            local page = self.document:getPageFromXPointer(word.start)
+                            if not self.pages_notes[page] then
+                                self.pages_notes[page] = {}
+                            end
+                            table.insert(self.pages_notes[page], word)
+                            -- a word split over two pages belongs to both of them
+                            local page2 = self.document:getPageFromXPointer(word["end"])
+                            if page2 ~= page then
+                                if not self.pages_notes[page2] then
+                                    self.pages_notes[page2] = {}
+                                end
+                                table.insert(self.pages_notes[page2], word)
+                            end
+                        end
+                    end
+                end
+            end
+        end
+    end
+    self.ui.document:clearSelection()
+end
+
+-- Paints the note icon on the words of the current page that have a note.
+-- The geometry is cached (it is only recomputed when the page, position, font or layout
+-- change), so a repaint of the same page only paints.
+function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
+    local page_notes = self.pages_notes and self.pages_notes[self.ui.view.state.page]
+    if not page_notes then return end
+
+    local cur_view_top = self.document:getCurrentPos()
+    local key = table.concat({
+        self.ui.view.state.page, cur_view_top, self.ui.document:getFontFace(),
+        self.ui.document.configurable.font_size,
+        self.document:getPageCount(),
+        Screen:getWidth(), Screen:getHeight(),
+        tostring(self.ui.document.configurable.line_spacing),
+    }, ":")
+
+    -- (not the same cache as the vocabulary: that one is self._draw_cache)
+    local cache = self._notes_draw_cache
+    if not cache or cache.key ~= key or cache.pages_notes ~= self.pages_notes then
+        local entries = {}
+        local seen = {}
+        for _, item in ipairs(page_notes) do
+            -- the same word can come from several annotations: it is only marked once
+            local id = tostring(item.start) .. "|" .. tostring(item["end"])
+            if not seen[id] then
+                seen[id] = true
+                -- Cheap check first: skip words above the viewport.
+                -- getScreenBoxesFromPositions() is expensive.
+                local end_pos = self.document:getPosFromXPointer(item["end"])
+                if end_pos >= cur_view_top then
+                    local boxes = self.document:getScreenBoxesFromPositions(item.start, item["end"], true) -- get_segments=true
+                    if boxes and boxes[1] then
+                        -- Sample from the center of the first box so we don't land on a neighbor word
+                        local mid_x = boxes[1].x + math.floor(boxes[1].w / 2)
+                        local mid_y = boxes[1].y + math.floor(boxes[1].h / 2)
+                        local word = self.ui.document._document:getTextFromPositions(
+                            mid_x, mid_y, mid_x, mid_y, false, false)
+                        if word and word.text
+                            and normalizeNoteWord(lastWord(word.text)) == normalizeNoteWord(item.text) then
+                            -- Text matches: recompute precise boxes for the word
+                            local precise
+                            if item.hyphenated then
+                                precise = self.document:getScreenBoxesFromPositions(word.pos0, word.pos1, true)
+                            else
+                                precise = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
+                            end
+                            if precise then
+                                entries[#entries + 1] = { boxes = precise }
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        cache = { key = key, entries = entries, pages_notes = self.pages_notes }
+        self._notes_draw_cache = cache
+    end
+
+    -- The icon widget is built once and painted at every box
+    local mark = self._note_mark
+    if not mark then
+        mark = FrameContainer:new{
+            left_container:new{
+                dimen = Geom:new(),
+                TextWidget:new{
+                    text =  "\u{EB4D}",
+                    face = Font:getFace("symbols", 12),
+                    fgcolor = Blitbuffer.COLOR_BLACK,
+                },
+            },
+            -- background = Blitbuffer.COLOR_WHITE,
+            bordersize = 0,
+            padding = 0,
+            padding_bottom = self.bottom_padding,
+        }
+        self._note_mark = mark
+    end
+
+    for _, entry in ipairs(cache.entries) do
+        for _, box in ipairs(entry.boxes) do
+            if box.h ~= 0 then
+                -- self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
+                mark:paintTo(bb, box.x, box.y)
+            end
+        end
+    end
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
 
 local RenderText = require("ui/rendertext")
 -- (Blitbuffer is already required at the top of the file)
