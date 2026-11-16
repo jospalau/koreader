@@ -787,6 +787,7 @@ function PageTextInfo:updateNotes()
                             local word = copyHit(hit)
                             word.note = item.note
                             word.text = item.text
+                            word.annotation = item   -- to open the note from the page
                             local page = self.document:getPageFromXPointer(word.start)
                             if not self.pages_notes[page] then
                                 self.pages_notes[page] = {}
@@ -814,7 +815,13 @@ end
 -- change), so a repaint of the same page only paints.
 function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
     local page_notes = self.pages_notes and self.pages_notes[self.ui.view.state.page]
-    if not page_notes then return end
+    if not page_notes then
+        self._notes_draw_cache = nil   -- no notes on this page: a tap must not use the previous one
+        return
+    end
+
+    -- The taps on the notes go through the tap zone of the vocabulary (see onTapVocabularyWord)
+    self:registerWordTap()
 
     local cur_view_top = self.document:getCurrentPos()
     local key = table.concat({
@@ -830,10 +837,24 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
     if not cache or cache.key ~= key or cache.pages_notes ~= self.pages_notes then
         local entries = {}
         local seen = {}
+        local entry_of = {}   -- id of a word -> its entry
         for _, item in ipairs(page_notes) do
             -- the same word can come from several annotations: it is only marked once
             local id = tostring(item.start) .. "|" .. tostring(item["end"])
-            if not seen[id] then
+            if seen[id] then
+                -- another annotation of the same word: keep its note too
+                local entry = entry_of[id]
+                if entry and not entry.note:find(item.note, 1, true) then
+                    entry.note = entry.note .. "\n\n" .. item.note
+                end
+                if entry then
+                    local known = false
+                    for _, annotation in ipairs(entry.annotations) do
+                        if annotation == item.annotation then known = true; break end
+                    end
+                    if not known then table.insert(entry.annotations, item.annotation) end
+                end
+            else
                 seen[id] = true
                 -- Cheap check first: skip words above the viewport.
                 -- getScreenBoxesFromPositions() is expensive.
@@ -856,14 +877,18 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
                                 precise = self.document:getScreenBoxesFromPositions(item.start, word.pos1, true)
                             end
                             if precise then
-                                entries[#entries + 1] = { boxes = precise }
+                                local entry = { boxes = precise, text = item.text, note = item.note,
+                                                annotations = { item.annotation } }
+                                entries[#entries + 1] = entry
+                                entry_of[id] = entry
                             end
                         end
                     end
                 end
             end
         end
-        cache = { key = key, entries = entries, pages_notes = self.pages_notes }
+        cache = { key = key, entries = entries, pages_notes = self.pages_notes,
+                  page = self.ui.view.state.page }
         self._notes_draw_cache = cache
     end
 
@@ -895,6 +920,186 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
             end
         end
     end
+end
+
+-- Index of an annotation in the annotation list of the book (nil when it is not there)
+local function annotationIndex(self, annotation)
+    for i, item in ipairs(self.ui.annotation.annotations) do
+        if item == annotation then return i end
+    end
+    return nil
+end
+
+-- Rebuilds the marks after a note was changed, and repaints the page
+local function refreshNotes(self)
+    self._notes_draw_cache = nil
+    pcall(function() self:updateNotes() end)
+    require("ui/uimanager"):setDirty("all", "ui")
+end
+
+-- Own editor, only used when the standard one of KOReader cannot be opened (see
+-- openNoteEditor below). Applies a new text to the note of an annotation (an empty text
+-- deletes the note) and repaints the page.
+local function applyNoteChange(self, annotation, text)
+    text = (text or ""):gsub("^%s+", ""):gsub("%s+$", "")
+    local had_note = annotation.note ~= nil and annotation.note ~= ""
+    local has_note = text ~= ""
+    annotation.note = has_note and text or nil
+    annotation.datetime_updated = os.date("%Y-%m-%d %H:%M:%S")
+
+    -- Tell KOReader (annotation counters, sidebar...); the book saves the annotations itself
+    local payload = { annotation }
+    if had_note and not has_note then
+        payload.nb_notes_added = -1
+    elseif has_note and not had_note then
+        payload.nb_notes_added = 1
+    end
+    pcall(function()
+        self.ui:handleEvent(require("ui/event"):new("AnnotationsModified", payload))
+    end)
+
+    refreshNotes(self)
+end
+
+-- Own editor: a text box with Cancel / Delete / Save
+local function openFallbackNoteEditor(self, annotation)
+    local UIManager = require("ui/uimanager")
+    local InputDialog = require("ui/widget/inputdialog")
+    local T = require("gettext")
+    local dialog
+    dialog = InputDialog:new{
+        title = annotation.text,
+        input = annotation.note or "",
+        allow_newline = true,
+        buttons = {
+            {
+                {
+                    text = T("Cancel"),
+                    id = "close",
+                    callback = function() UIManager:close(dialog) end,
+                },
+                {
+                    text = T("Delete"),
+                    callback = function()
+                        UIManager:close(dialog)
+                        applyNoteChange(self, annotation, "")
+                    end,
+                },
+                {
+                    text = T("Save"),
+                    is_enter_default = true,
+                    callback = function()
+                        local text = dialog:getInputText()
+                        UIManager:close(dialog)
+                        applyNoteChange(self, annotation, text)
+                    end,
+                },
+            },
+        },
+    }
+    UIManager:show(dialog)
+    dialog:onShowKeyboard()
+end
+
+-- Opens the note of one annotation in the standard note editor of KOReader (the same one
+-- that the highlights use). Which module has it depends on the version of KOReader, so
+-- they are tried one after the other; if none works, the own editor above is used.
+local function openNoteEditor(self, annotation)
+    local logger = require("logger")
+    local index = annotationIndex(self, annotation)
+    if index then
+        local bookmark, highlight = self.ui.bookmark, self.ui.highlight
+        local function refresh() refreshNotes(self) end
+        local attempts = {
+            -- the editor of the notes: it calls the last argument once the note is saved
+            { "bookmark:setBookmarkNote", function()
+                return bookmark and bookmark.setBookmarkNote
+                    and bookmark:setBookmarkNote(index, false, nil, refresh) ~= false
+            end },
+            { "highlight:editNote", function()
+                return highlight and highlight.editNote
+                    and highlight:editNote(index) ~= false
+            end },
+            -- the dialog of the highlight (it has the "Edit note" button)
+            { "highlight:showHighlightDialog", function()
+                return highlight and highlight.showHighlightDialog
+                    and highlight:showHighlightDialog(index) ~= false
+            end },
+        }
+        for _, attempt in ipairs(attempts) do
+            local ok, done = pcall(attempt[2])
+            if ok and done then
+                logger.dbg("[PTI] note opened with", attempt[1])
+                return
+            elseif not ok then
+                logger.warn("[PTI] could not open the note with", attempt[1], done)
+            end
+        end
+    end
+    logger.dbg("[PTI] note opened with the own editor")
+    openFallbackNoteEditor(self, annotation)
+end
+
+-- First characters of a note, for a button label (utf8 aware, so no letter is cut in half)
+local function noteLabel(note, max_chars)
+    note = tostring(note):gsub("%s+", " ")
+    if utf8 and utf8.len(note) and utf8.len(note) > max_chars then
+        local cut = utf8.offset(note, max_chars + 1)
+        if cut then note = note:sub(1, cut - 1) .. "…" end
+    end
+    return note
+end
+
+-- Opens the note of a word. A word with several notes (several annotations of the same
+-- word) first asks which one.
+local function openNote(self, entry)
+    local annotations = entry.annotations
+    if not (annotations and annotations[1]) then return end
+    if #annotations == 1 then
+        openNoteEditor(self, annotations[1])
+        return
+    end
+    local UIManager = require("ui/uimanager")
+    local dialog
+    local buttons = {}
+    for _, annotation in ipairs(annotations) do
+        buttons[#buttons + 1] = {
+            {
+                text = noteLabel(annotation.note, 40),
+                callback = function()
+                    UIManager:close(dialog)
+                    openNoteEditor(self, annotation)
+                end,
+            },
+        }
+    end
+    dialog = require("ui/widget/buttondialog"):new{ title = entry.text, buttons = buttons }
+    UIManager:show(dialog)
+end
+
+-- Tap on a note (the word that has the mark): opens the note. Returns false when the tap is
+-- not on a note, so it goes on (to the vocabulary words and to the rest of the reader).
+-- It is called from onTapVocabularyWord, and only works in the vocabulary mode ("Highlight
+-- all words vocabulary builder and notes"), like the marks themselves.
+function PageTextInfo:onTapNoteWord(ges)
+    local cache = self._notes_draw_cache
+    if not (cache and ges and ges.pos) then return false end
+    -- the cache belongs to the page that was painted last
+    if cache.page ~= self.ui.view.state.page then return false end
+    if not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then return false end
+    local pad = Screen:scaleBySize(4)   -- a little margin: the words are small
+    for _, entry in ipairs(cache.entries) do
+        -- the boxes of the word (several when it is split over two lines)
+        for _, box in ipairs(entry.boxes) do
+            if box.h ~= 0
+                and ges.pos.x >= box.x - pad and ges.pos.x <= box.x + box.w + pad
+                and ges.pos.y >= box.y - pad and ges.pos.y <= box.y + box.h + pad then
+                openNote(self, entry)
+                return true
+            end
+        end
+    end
+    return false
 end
 
 -- ─────────────────────────────────────────────────────────────────────────────
@@ -2014,6 +2219,9 @@ installDefaultDictionaryPanel()
 -- Tap handler: opens the full translation if the tap lands on an underlined word.
 -- Returns false otherwise, so the tap goes on to the rest of the reader (turning page...).
 function PageTextInfo:onTapVocabularyWord(ges)
+    -- A tap on a note opens the note. It goes first because it must also work on pages
+    -- without vocabulary words, and because the word of a note may be in the vocabulary too.
+    if self:onTapNoteWord(ges) then return true end
     if not (self._draw_cache and ges and ges.pos) then return false end
     -- Only in the highlight mode ("Highlight all words vocabulary builder and notes")
     if not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then return false end
