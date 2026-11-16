@@ -148,6 +148,31 @@ function FileManager:initGesListener()
                 return false
             end,
         },
+        {
+            id = "filemanager_two_finger_swipe",
+            ges = "two_finger_swipe",
+            screen_zone = {
+                ratio_x = 0, ratio_y = 0,
+                ratio_w = 1, ratio_h = 1,
+            },
+            overrides = {
+                "two_finger_swipe_east",
+                "two_finger_swipe_west",
+                "filemanager_two_finger_swipe_east_gestures",
+                "filemanager_two_finger_swipe_west_gestures",
+            },
+            handler = function(ges)
+                local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
+                if direction == "west" then
+                    self:openBookshelfOnStatus("tbr")
+                    return true
+                elseif direction == "east" then
+                    self:openBookshelfOnStatus("mbr")
+                    return true
+                end
+                return false
+            end,
+        },
     })
     -- UIManager:scheduleIn(3, function()
     --     for i, z in ipairs(self._ordered_touch_zones or {}) do
@@ -2018,4 +2043,73 @@ function FileManager:onToggleSortByMode()
     return true
 end
 
+-- Id of the Bookshelf chip that shows the books of a status ("tbr", "mbr"...):
+-- the one whose id or label is the status, or whose filter has that status.
+local function findStatusChipKey(status)
+    local ok, TabModel = pcall(require, "lib/bookshelf_tab_model")
+    if not ok or not TabModel or not TabModel.getActive then return nil end
+    for _i, tab in ipairs(TabModel.getActive()) do
+        local label = tostring(tab.label or ""):lower():gsub("[^%w]", "")
+        local f = tab.filter
+        local by_filter = type(f) == "table" and type(f.statuses) == "table" and f.statuses[status]
+        if tab.id == status or label == status or by_filter then
+            return tab.id
+        end
+    end
+end
+
+-- Makes `key` the active chip of a Bookshelf widget that is NOT showing (state
+-- only, no rebuild or repaint), as top_reading_sessions does.
+local function presetChip(widget, key)
+    pcall(function()
+        if widget._markOpdsNav then widget:_markOpdsNav() end
+        widget._opds_fail_url, widget._opds_fail_err = nil, nil
+        if widget._clearDpadFocus then widget:_clearDpadFocus() end
+        widget._drilldown_path = {}
+        widget.chip = key
+        widget._cursor = 1
+        if widget._syncPageFromCursor then widget:_syncPageFromCursor() end
+        widget._switching_shelf = true
+    end)
+end
+
+-- Saves the active chip, so a Bookshelf widget created later starts on it.
+local function saveActiveChip(key)
+    pcall(function()
+        local Store = require("lib/bookshelf_settings_store")
+        local save = Store.saveDeferred or Store.save
+        save("active_chip", key)
+    end)
+end
+
+-- Goes to the chip of a status ("tbr"): if Bookshelf is showing, only changes
+-- the chip; if not, opens it already on that chip.
+function FileManager:openBookshelfOnStatus(status)
+    local plugin = self.bookshelf
+    if not plugin then return end
+
+    local key = findStatusChipKey(status)
+    local widget = plugin._widget
+    local showing = plugin._isShowing and plugin:_isShowing()
+
+    if showing then
+        if key and widget and widget._selectChip then widget:_selectChip(key) end
+        return
+    end
+
+    if key then
+        if widget then presetChip(widget, key) end
+        saveActiveChip(key)
+    end
+    self:handleEvent(Event:new("ToggleBookshelf"))
+
+    if not key then
+        -- the chip model may not be loaded until Bookshelf shows
+        UIManager:nextTick(function()
+            local late_key = findStatusChipKey(status)
+            local w = plugin._widget
+            if late_key and w and w._selectChip then w:_selectChip(late_key) end
+        end)
+    end
+end
 return FileManager
