@@ -812,6 +812,62 @@ end
 -- Paints the note icon on the words of the current page that have a note.
 -- The geometry is cached (it is only recomputed when the page, position, font or layout
 -- change), so a repaint of the same page only paints.
+-- Style of the note indicator: "bubble" (speech bubble with three dots), "page" (page with
+-- a folded corner and lines) or "dot" (small filled dot).
+local NOTE_MARK_STYLE = "page"
+local NOTE_MARK_RADIUS = 3   -- only for "dot": radius (scaled to the screen)
+
+local function paintNoteMark(bb, box)
+    local sc = Screen.scaleBySize
+    local black, white = Blitbuffer.COLOR_BLACK, Blitbuffer.COLOR_WHITE
+    local W = Screen:getWidth()
+    if NOTE_MARK_STYLE == "bubble" then
+        local w, h = sc(Screen, 13), sc(Screen, 9)
+        local x = math.min(box.x + box.w - math.floor(w * 0.6), W - w - 1)
+        local y = box.y - math.floor(h * 0.55)
+        -- white halo, so it reads over the text of the line above
+        bb:paintRoundedRect(x - 1, y - 1, w + 2, h + 2, white, sc(Screen, 3))
+        bb:paintRoundedRect(x, y, w, h, black, sc(Screen, 3))
+        -- tail: three rows that get narrower
+        local tx = x + sc(Screen, 2)
+        for i = 0, 2 do
+            bb:paintRect(tx, y + h + i - 1, math.max(1, sc(Screen, 4) - i * 2), 1, black)
+        end
+        -- the three dots
+        local d = math.max(1, sc(Screen, 1))
+        local gap = math.floor((w - 3 * d) / 4)
+        for i = 0, 2 do
+            bb:paintRect(x + gap + i * (d + gap), y + math.floor((h - d) / 2), d, d, white)
+        end
+    elseif NOTE_MARK_STYLE == "page" then
+        local w, h = sc(Screen, 9), sc(Screen, 12)
+        local x = math.min(box.x + box.w - math.floor(w * 0.5), W - w - 1)
+        local y = box.y - math.floor(h * 0.6)
+        local fold = sc(Screen, 3)
+        local bw = math.max(1, Size.border.thin)
+        bb:paintRect(x - 1, y - 1, w + 2, h + 2, white)            -- halo
+        bb:paintRect(x, y, w, h, black)                             -- outline
+        bb:paintRect(x + bw, y + bw, w - 2 * bw, h - 2 * bw, white) -- paper
+        -- folded corner (top right): black triangle made of rows
+        for i = 0, fold - 1 do
+            bb:paintRect(x + w - fold + i, y, fold - i, i + 1, black)
+        end
+        -- text lines
+        for i = 0, 2 do
+            local ly = y + fold + sc(Screen, 2) * i + bw
+            if ly < y + h - bw - 1 then
+                bb:paintRect(x + sc(Screen, 2), ly, w - sc(Screen, 4), 1, black)
+            end
+        end
+    else -- "dot"
+        local r = sc(Screen, NOTE_MARK_RADIUS)
+        local cx = math.min(box.x + box.w, W - r - 1)
+        local cy = box.y + r
+        bb:paintCircle(cx, cy, r + Size.border.thin, white)
+        bb:paintCircle(cx, cy, r, black)
+    end
+end
+
 -- Signature of the notes that are marked (the words of the annotations with a note). When it
 -- changes (a note was added or deleted) the marks are rebuilt, so a deleted note loses its mark.
 local function notesSignature(self)
@@ -897,32 +953,16 @@ function PageTextInfo:drawXPointerSavedHighlightNotes(bb, x, y)
         self._notes_draw_cache = cache
     end
 
-    -- The icon widget is built once and painted at every box
-    local mark = self._note_mark
-    if not mark then
-        mark = FrameContainer:new{
-            left_container:new{
-                dimen = Geom:new(),
-                TextWidget:new{
-                    text =  "\u{EB4D}",
-                    face = Font:getFace("symbols", 12),
-                    fgcolor = Blitbuffer.COLOR_BLACK,
-                },
-            },
-            -- background = Blitbuffer.COLOR_WHITE,
-            bordersize = 0,
-            padding = 0,
-            padding_bottom = self.bottom_padding,
-        }
-        self._note_mark = mark
-    end
-
+    -- Note indicator at the top right corner of the word (the last box of it, when the word
+    -- is split over two lines). It is drawn with the blitbuffer, so it does not depend on
+    -- any font. Style: NOTE_MARK_STYLE.
     for _, entry in ipairs(cache.entries) do
+        local last_box
         for _, box in ipairs(entry.boxes) do
-            if box.h ~= 0 then
-                -- self.ui.view:drawHighlightRect(bb, x, y, box, "underscore", nil, false)
-                mark:paintTo(bb, box.x, box.y)
-            end
+            if box.h ~= 0 then last_box = box end
+        end
+        if last_box then
+            paintNoteMark(bb, last_box)
         end
     end
 end
