@@ -618,6 +618,7 @@ function PageTextInfo:onShowFonts(page)
     -- Swipe left/right: next / previous page (wraps around)
     function dialog:onSwipe(arg, ges)
         if self:closeIfOutside(ges) then return true end
+        if self.busy then return true end   -- a font is being applied
         -- Diagonal swipes ("northwest", "southeast"...) count too: only the
         -- horizontal part matters
         local dir = ges.direction or ""
@@ -638,6 +639,7 @@ function PageTextInfo:onShowFonts(page)
     -- first / last page
     function dialog:onHold(arg, ges)
         if self:closeIfOutside(ges) then return true end
+        if self.busy then return true end   -- a font is being applied
         -- Font cells
         for __, cell in ipairs(cells) do
             if cell.frame.dimen and ges.pos:intersectWith(cell.frame.dimen) then
@@ -900,9 +902,9 @@ function PageTextInfo:onShowFonts(page)
         end
         cap_widgets[1]:setText(c1)
         if c2 then cap_widgets[2]:setText(c2) end
-        local cap = Geom:new{ x = frame_rect.x, y = frame_rect.y, w = frame_rect.w,
-            h = outer_pad + Size.border.window + #cap_widgets * label_h + thin + gap }
-        UIManager:setDirty(self, "ui", cap)
+        -- No refresh of its own: right after a change the page is about to be
+        -- refreshed, and one more refresh of another mode on top of it is what
+        -- glitched. The menu is refreshed once, after the layout (see onTap).
     end
 
     -- Tap handling
@@ -910,6 +912,9 @@ function PageTextInfo:onShowFonts(page)
         -- Font cells
         for __, cell in ipairs(cells) do
             if cell.frame.dimen and ges.pos:intersectWith(cell.frame.dimen) then
+                -- A font is being applied: no second selection until the book has been
+                -- laid out again and the menu refreshed (a tap outside still closes it)
+                if self.busy then return true end
                 -- Same face already applied: skip the extra SetFont and reflow
                 if cell.face ~= current then
                     local plugin, face = self.plugin, cell.face
@@ -931,6 +936,7 @@ function PageTextInfo:onShowFonts(page)
                             end
                         end
                     end
+                    self.busy = true
                     UIManager:setDirty(self, "ui", region)
                     UIManager:forceRePaint()
                     -- Like KOReader's own font menu: the font is applied right here,
@@ -947,6 +953,7 @@ function PageTextInfo:onShowFonts(page)
                         -- menu is refreshed once more on its own, with the "ui" mode.
                         local dlg = self
                         UIManager:scheduleIn(0.35, function()
+                            dlg.busy = nil   -- the layout is done: selectable again
                             if plugin.fonts_dialog ~= dlg then return end
                             -- The layout is done now: check that the x-height kept is
                             -- the one wanted, now that the engine has laid the book out
@@ -974,6 +981,7 @@ function PageTextInfo:onShowFonts(page)
                         end)
                     else
                         require("logger").warn("[PTI] applyFont failed:", err)
+                        self.busy = nil
                         plugin:onShowFonts(plugin.fonts_page)   -- draw the real state again
                     end
                 end
@@ -982,6 +990,7 @@ function PageTextInfo:onShowFonts(page)
         end
 
         if ges.pos:intersectWith(frame_rect) then
+            if self.busy then return true end   -- a font is being applied
             -- Navigation buttons: use the real on-screen area of each one
             if btn_prev.dimen and ges.pos:intersectWith(btn_prev.dimen) then
                 if has_prev then
