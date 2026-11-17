@@ -877,6 +877,11 @@ local TYPICAL_LETTERS = {
     e = 12.7, a = 8.2, o = 7.5, n = 6.7, s = 6.3, r = 6.0, c = 2.8, u = 2.8,
     m = 2.4, w = 2.4, g = 2.0, y = 2.0, p = 1.9, v = 1.0, x = 0.15, q = 0.1, z = 0.07,
 }
+-- Letters of the x-height proper: flat tops. The round letters (a c e o s...)
+-- overshoot it, and with the auto hinter that overshoot appears as a whole extra row
+-- from some size on (Spectral: 49 px). The flat letters follow the design x-height
+-- (what hinting Off gives), so Off / Native / Auto can be compared.
+local FLAT_LETTERS = { u = 2.8, v = 1.0, w = 2.4, x = 0.15, y = 2.0 }
 local function weightedMedian(tops)   -- tops: { { top, weight }, ... }
     if #tops == 0 then return nil end
     table.sort(tops, function(a, b) return a[1] < b[1] end)
@@ -935,7 +940,7 @@ local function hintedXHeights(path, first, last, hint)
             if idx == 0 then return end
             local idx_o = ft.FT_Get_Char_Index(face[0], string.byte("o"))
             local letter_idx = {}
-            for ch, w in pairs(TYPICAL_LETTERS) do
+            for ch, w in pairs(FLAT_LETTERS) do
                 local gi = ft.FT_Get_Char_Index(face[0], string.byte(ch))
                 if gi ~= 0 then letter_idx[#letter_idx + 1] = { gi, w } end
             end
@@ -1032,22 +1037,10 @@ end
 -- cre_getGlyphTops.patch.txt): the hinted height of the letters exactly as the
 -- engine draws them now. Weighted median over TYPICAL_LETTERS. nil when the
 -- patch is not there (the page measurement below is used then).
-local function engineXHeightPx(ui)
-    local d = ui.document and ui.document._document
-    if not (d and d.getGlyphTops) then return nil end
-    renderNow(ui)   -- the engine's fonts are up to date only after a render
-    -- Letters of the x-height proper: flat tops (u v w x y). The round letters
-    -- (a c e o s...) overshoot it, and with the auto hinter that overshoot appears
-    -- as a whole extra row from some size on (Spectral: 49 px), which would make the
-    -- x-height jump two rows. The flat letters follow the design x-height (what
-    -- hinting Off gives) and so Off / Native / Auto can be compared.
-    local ENGINE_LETTERS = { u = 2.8, v = 1.0, w = 2.4, x = 0.15, y = 2.0 }
-    local letters = {}
-    for ch in pairs(ENGINE_LETTERS) do letters[#letters + 1] = ch end
-    local ok, t = pcall(d.getGlyphTops, d, table.concat(letters))
-    if not ok or type(t) ~= "table" then return nil end
+-- Weighted median of the flat-letter tops returned by the engine
+local function topsMedian(t)
     local tops, parts = {}, {}
-    for ch, w in pairs(ENGINE_LETTERS) do
+    for ch, w in pairs(FLAT_LETTERS) do
         local v = t[ch]
         if v and v > 0 then
             tops[#tops + 1] = { v, w }
@@ -1057,6 +1050,45 @@ local function engineXHeightPx(ui)
     table.sort(parts)
     dlog("engine tops:", table.concat(parts, " "))
     return weightedMedian(tops)
+end
+
+local _flat_chars
+local function flatChars()
+    if not _flat_chars then
+        local l = {}
+        for ch in pairs(FLAT_LETTERS) do l[#l + 1] = ch end
+        _flat_chars = table.concat(l)
+    end
+    return _flat_chars
+end
+
+-- x-height at ANY size `px`, asked to the engine without touching the book (needs
+-- the sized form of the patch: doc:getGlyphTops(chars, size) returns the tops
+-- and the size it really used). nil when the patch is older or the engine scaled
+-- the size (then the value would not be the one drawn).
+local function engineXHeightAt(ui, px)
+    local d = ui.document and ui.document._document
+    if not (d and d.getGlyphTops) then return nil end
+    local ok, t, used = pcall(d.getGlyphTops, d, flatChars(), px)
+    if not ok or type(t) ~= "table" or used ~= px then return nil end
+    return topsMedian(t)
+end
+
+local function currentPx(ui)
+    return drawnPx(ui, ui.document.configurable.font_size,
+        Device:getDeviceScreenDPI() or Screen:getDPI())
+end
+
+-- x-height of the size now drawn
+local function engineXHeightPx(ui)
+    local d = ui.document and ui.document._document
+    if not (d and d.getGlyphTops) then return nil end
+    local direct = engineXHeightAt(ui, currentPx(ui))   -- no render needed
+    if direct then return direct end
+    renderNow(ui)   -- unsized form of the patch (current size only): the engine is up to date only after a render
+    local ok, t = pcall(d.getGlyphTops, d, flatChars())
+    if not ok or type(t) ~= "table" then return nil end
+    return topsMedian(t)
 end
 
 -- Rows of the x-height as drawn now, from the engine (nil with hinting off, where
@@ -1093,6 +1125,22 @@ refineXHeight = function(ui, target_mm, at_least)
             return math.abs(rows - target_px)
         end
         local start_px = drawnPx(ui, ui.document.configurable.font_size, dpi)
+        -- Sized form of the patch (getGlyphTops with a size): look at the sizes around straight in the
+        -- engine (no reflow) and set the best one once. On a tie the smaller wins.
+        if engineXHeightAt(ui, start_px) then
+            local best_px, best
+            for cand = math.max(1, start_px - 3), start_px + 3 do
+                local r = engineXHeightAt(ui, cand)
+                if r then
+                    local sc = score(r)
+                    if not best or sc < best - 1e-6 then best, best_px = sc, cand end
+                end
+            end
+            if best_px and best_px ~= start_px then setFontSize(ui, pxToPt(best_px, dpi)) end
+            dlog("refineXHeight (no reflow): target mm", target_mm, "start px", start_px,
+                "-> px", best_px)
+            return
+        end
         local rows0 = measuredXHeightPx(ui)
         if not rows0 then return end
         local best_px, best = start_px, score(rows0)
@@ -1121,48 +1169,29 @@ refineXHeight = function(ui, target_mm, at_least)
     if not ok then dlog("refineXHeight failed:", err) end
 end
 
--- Measure the x-height (asked to the engine) for every px in first..last (hinting 1/2
--- only). Each size is set, the page drawn and measured (results cached per
--- font/px/hinting/weight by measuredXHeightPx); the original size is restored at
--- the end. Returns { [px] = rows } or nil when nothing could be measured.
-local _range_cache = {}   -- [face|hint|weight|first|last] = { [px] = rows }
+-- x-height (asked to the engine, no reflow) for every px in first..last (hinting
+-- 1/2 only). Returns { [px] = rows }, or nil when the engine patch (getGlyphTops
+-- with a size argument) is missing: the table then falls back to FreeType.
 local function measureSizesRange(ui, first, last)
     local hint = getHinting(ui)
     if hint ~= 1 and hint ~= 2 then return nil end
-    local UIManager = require("ui/uimanager")
-    local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
-    local orig_pt = ui.document.configurable.font_size
-    local orig_px = drawnPx(ui, orig_pt, dpi)
-    -- Whole range already measured for this font/hinting/weight: no size change,
-    -- no message, no flicker (opening, scrolling or refreshing the table)
-    local rkey = table.concat({ tostring(ui.document._document:getFontFace()), hint,
-        tostring(ui.document.configurable.font_base_weight), first, last }, "|")
-    if _range_cache[rkey] then return _range_cache[rkey] end
-    local res, got = {}, 0
-    local msg
-    local ok, err = pcall(function()
-        local InfoMessage = require("ui/widget/infomessage")
-        msg = InfoMessage:new{ text = "Measuring x-height of every size…", dismissable = false }
-        UIManager:show(msg)
-        UIManager:forceRePaint()
+    -- Sized form of the patch: every size straight from the engine, the book
+    -- is not touched (no reflow, no page drawn, no memory spike)
+    if engineXHeightAt(ui, currentPx(ui)) then
+        local res, got = {}, 0
+        local misses = 0
         for px = first, last do
-            setFontSize(ui, pxToPt(px, dpi))
-            local r = measuredXHeightPx(ui)
-            if r then res[px] = r; got = got + 1 end
+            local r = engineXHeightAt(ui, px)
+            if r then res[px] = r; got = got + 1; misses = 0
+            else
+                misses = misses + 1
+                if got == 0 and misses >= 3 then break end   -- no glyphs: do not keep creating fonts
+            end
         end
-    end)
-    -- Restore the size the user had (also after an error)
-    pcall(function()
-        if drawnPx(ui, ui.document.configurable.font_size, dpi) ~= orig_px then
-            setFontSize(ui, orig_pt)
-        end
-    end)
-    if msg then pcall(UIManager.close, UIManager, msg) end
-    if not ok then dlog("measureSizesRange failed:", err) end
-    dlog("measureSizesRange: px", first, "-", last, "measured", got)
-    if got == 0 then return nil end
-    _range_cache[rkey] = res
-    return res
+        dlog("measureSizesRange (no reflow): px", first, "-", last, "measured", got)
+        if got > 0 then return res end
+    end
+    return nil
 end
 
 -- New books: seed KOReader's own defaults for margins with DEFAULTS.margins,
@@ -1603,6 +1632,48 @@ local function readabilityOfPath(path)
     return cached or "N/A"
 end
 
+-- Hinting that keeps the x-height closest to the design for this font over the
+-- sizes of the table: "Native", "Auto", or "Off" when even the best of the two
+-- is off by 1 px or more on average. FreeType with crengine's load flags, no
+-- reflow, a few ms; cached per font file. nil when it can't be told.
+local _best_hint_cache = {}
+local function bestHinting(doc)
+    local ratio, path = xHeightRatio(doc)
+    if not ratio or type(path) ~= "string" then return nil end
+    local cached = _best_hint_cache[path]
+    if cached ~= nil then return cached or nil end
+    local result = false
+    local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+    local mm_per_px = ratio * 25.4 / dpi
+    local cps_mm = 2 * VIEW_DIST_MM * math.tan(math.rad(CPS_ARCMIN / 60 / 2))
+    local first = math.max(1, math.ceil(cps_mm / mm_per_px - 1e-6))
+    local last = math.floor(2.25 / mm_per_px + 1e-6)
+    if last <= 300 and last - first <= 120 then
+        local best_err, best_name
+        for hint, name in pairs({ [1] = "Native", [2] = "Auto" }) do
+            local xh = hintedXHeights(path, first, last, hint)
+            if xh then
+                local sum, n = 0, 0
+                for px = first, last do
+                    if xh[px] then sum = sum + math.abs(xh[px] - ratio * px); n = n + 1 end
+                end
+                if n > 0 then
+                    local err = sum / n
+                    -- tie: Native
+                    if not best_err or err < best_err - 1e-9
+                        or (math.abs(err - best_err) <= 1e-9 and hint == 1) then
+                        best_err, best_name = err, name
+                    end
+                end
+            end
+        end
+        if best_name then result = (best_err >= 1) and "Off" or best_name end
+    end
+    _best_hint_cache[path] = result
+    dlog("bestHinting:", path, "->", tostring(result))
+    return result or nil
+end
+
 -- Readability of a face given by its name (as used by the document)
 local function faceReadability(ui, face_name)
     return readabilityOfPath(resolveFace(face_name))
@@ -1665,6 +1736,12 @@ local function buildTitleSegments(ui)
             table.insert(line1, { text = (why and (": " .. why) or "") .. ") " })
         else
             table.insert(line1, { text = " (" .. res .. ") " })
+        end
+        local best = bestHinting(doc)
+        if best then
+            table.insert(line1, { text = "(best hinting: " })
+            table.insert(line1, { text = best, bold = true })
+            table.insert(line1, { text = ") " })
         end
     end
     table.insert(line1, { text = string.format("%gpt", pt), bold = true })
@@ -1787,6 +1864,13 @@ local function buildSizeCombos(ui, use_page)
     local cps_mm = 2 * COMBO_DIST_MM * math.tan(math.rad(COMBO_CPS_ARCMIN / 60 / 2))
     local first = math.max(1, math.ceil(cps_mm / mm_per_px - 1e-6))
     local last = math.floor(COMBO_MM_MAX / mm_per_px + 1e-6)
+    -- A font with no usable Latin x-height (Arabic, Devanagari, ...) gives an absurd
+    -- ratio and thousands of sizes up to 16000 px: measuring those exhausts memory.
+    -- Nothing sensible to show for such a font.
+    if last > 300 or last - first > 120 then
+        dlog("buildSizeCombos: absurd size range", first, "-", last, "for", tostring(face_name), "-> skipped")
+        return nil
+    end
 
     -- KOReader's "Font hinting" option: 0 = off, 1 = native, 2 = auto (same
     -- reading as the hinting buttons of the menu, default auto)
@@ -1806,7 +1890,7 @@ local function buildSizeCombos(ui, use_page)
         measured = (hint == 1 or hint == 2)
             and hintedXHeights(face_name, first, last, hint) or nil
     end
-    dlog("buildSizeCombos: hint=", hint, "measured with FreeType flags=", measured and true or false)
+    dlog("buildSizeCombos: hint=", hint, "x-heights from", from_page and "the engine" or (measured and "FreeType" or "design (no hinting)"))
 
     local combos = {}
     for px = first, last do
@@ -2012,7 +2096,15 @@ sweepFonts = function(ui)
         faces = ok and cre.getFontFaces and cre.getFontFaces() or {}
     end
     local list = {}
-    for __, f in ipairs(faces) do list[#list + 1] = f end
+    -- Fonts without Latin letters have no x-height to measure
+    local NON_LATIN = { "Naskh", "Arabic", "Bengali", "Devanagari" }
+    for __, f in ipairs(faces) do
+        local skip = false
+        for __, w in ipairs(NON_LATIN) do
+            if tostring(f):find(w, 1, true) then skip = true; break end
+        end
+        if not skip then list[#list + 1] = f end
+    end
 
     local orig_face = ui.document._document:getFontFace()
     local orig_hint = getHinting(ui)
@@ -2050,7 +2142,10 @@ sweepFonts = function(ui)
             for mode = 0, 2 do
                 ui.document.configurable.font_hinting = mode
                 ui.font.configurable.font_hinting = mode
-                local combos, __, __, summary = buildSizeCombos(ui)
+                -- Apply it to the engine too (the table now asks the engine, which
+                -- would otherwise keep measuring with the previous hinting)
+                pcall(ui.font.onSetFontHinting, ui.font, mode)
+                local combos, __, __, summary = buildSizeCombos(ui, true)
                 if not combos then
                     logger.info(PTI_TAG, "SWEEP", face, names[mode], "no ratio, skipped")
                     break
