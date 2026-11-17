@@ -382,6 +382,45 @@ local function installTopmostHook()
 end
 installTopmostHook()
 
+-- Code that moves windows around by hand (e.g. Bookshelf "park" re-orders
+-- UIManager._window_stack without going through UIManager:show) bypasses the show
+-- hook below and can leave a non-toast widget above the overlays. Before every
+-- repaint, put any registered overlay back above all non-toast windows (a plain
+-- table move, no close/show) and mark it dirty. Shared registry: whichever overlay
+-- loads first installs the hook, both register their widget in it.
+local function keepOverlaysOnTop(ui)
+    local stack = ui._window_stack
+    for ov in pairs(ui._pti_overlays) do
+        local idx, blocked
+        for i = #stack, 1, -1 do
+            local w = stack[i].widget
+            if w == ov then
+                idx = i
+                break
+            elseif not w.toast then
+                blocked = true
+            end
+        end
+        if idx and blocked then
+            local win = table.remove(stack, idx)
+            table.insert(stack, win)
+            ui:setDirty(ov, REFRESH_MODE, ov.dimen)
+        end
+    end
+end
+
+local function installRepaintHook()
+    UIManager._pti_overlays = UIManager._pti_overlays or {}
+    if UIManager._pti_repaint_hooked then return end
+    UIManager._pti_repaint_hooked = true
+    local orig_repaint = UIManager._repaint
+    UIManager._repaint = function(self, ...)
+        local ok, err = pcall(keepOverlaysOnTop, self)
+        if not ok then logger.warn("overlay (keep on top):", err) end
+        return orig_repaint(self, ...)
+    end
+end
+
 local show_hooked = false
 local send_hooked = false
 local desired = false
@@ -437,6 +476,8 @@ local function apply()
         if overlay then return end
         installShowHook()
         overlay = Overlay:new{}
+        installRepaintHook()
+        UIManager._pti_overlays[overlay] = true
         UIManager:show(overlay)
         installSendHook()
         UIManager:scheduleIn(POLL_SECS, poll)
@@ -444,6 +485,7 @@ local function apply()
         UIManager:unschedule(poll)
         local o = overlay
         overlay = nil
+        UIManager._pti_overlays[o] = nil
         -- explicit refresh of the area the box covered: a plain close() queues
         -- no refresh, so the box would stay on screen until the next repaint
         local d = o.dimen
