@@ -35,6 +35,26 @@ dlog("settings_menu module loaded")
 
 local WEIGHT_STEP = 0.5
 
+-- Width of a text in the "cfont" face at a given size. Measuring needs a TextWidget
+-- (text shaping), and the menus measure dozens of texts at several sizes every time
+-- they open to find the biggest font that fits. The widths never change during a
+-- session, so they are measured once. The cache is emptied if it ever grows big
+-- (the title texts hold numbers that change).
+local _tw_cache, _tw_count = {}, 0
+local function textWidth(text, size, bold)
+    local key = size .. (bold and "b|" or "|") .. text
+    local w = _tw_cache[key]
+    if w then return w end
+    local tw = require("ui/widget/textwidget"):new{
+        text = text, face = Font:getFace("cfont", size), bold = bold and true or false }
+    w = tw:getSize().w
+    tw:free()
+    if _tw_count >= 600 then _tw_cache, _tw_count = {}, 0 end
+    _tw_cache[key] = w
+    _tw_count = _tw_count + 1
+    return w
+end
+
 -- Sizes shared by the settings menu and the size combinations window, so both
 -- look the same. Font sizes are in points and are the biggest wanted: each
 -- window lowers them only as much as needed for its texts to fit.
@@ -124,11 +144,10 @@ local function showSizeModeInfo()
     local col2 = math.floor((inner_w - col1 - 2 * gap) / 2)
     local col3 = inner_w - col1 - col2 - 2 * gap
     local face = Font:getFace("cfont", 16)
-    local face_b = Font:getFace("cfont", 16)
     local xh_now = xhMode()
 
     local function cell(text, w, bold, fg)
-        return TextBoxWidget:new{ text = text, face = face_b, width = w,
+        return TextBoxWidget:new{ text = text, face = face, width = w,
             bold = bold, fgcolor = fg }
     end
     local function line_row(cells)
@@ -1749,6 +1768,16 @@ function PageTextInfo:warmUpOnReady()
         end,
         function() measuredXHeightPx(ui) end,
         function() bookUsesRem(doc) end,
+        -- Texts of the menu at the sizes it normally ends up using (see textWidth)
+        function()
+            for __, row_def in ipairs(buildRows(ui)) do
+                if row_def.title then textWidth(row_def.title, LABEL_FONT_SIZE, false) end
+                for __, b in ipairs(row_def) do
+                    textWidth(b.text, BTN_FONT_SIZE, true)
+                    textWidth(b.text, BTN_FONT_SIZE, false)
+                end
+            end
+        end,
     }
     for i, step in ipairs(steps) do
         local ok, err = pcall(step)
@@ -2406,10 +2435,7 @@ local function showSizeCombos(plugin, start, old)
     for __, t in ipairs({ { "◆ 99.99pt", 0.18 }, { "9.99mm", 0.20 }, { "▼ 99.99px", 0.20 }, { "999px", 0.14 } }) do
         local max_w = math.floor((inner_w - 2 * thin) * t[2]) - 2 * Size.padding.small
         while row_size > BTN_FONT_MIN do
-            local tw = TextWidget:new{ text = t[1], face = Font:getFace("cfont", row_size), bold = true }
-            local w = tw:getSize().w
-            tw:free()
-            if w <= max_w then break end
+            if textWidth(t[1], row_size, true) <= max_w then break end
             row_size = row_size - 1
         end
     end
@@ -2476,10 +2502,7 @@ local function showSizeCombos(plugin, start, old)
     local function cellFit(text, w, h, fg)
         local size = COMBO_LABEL_FONT
         while size > LABEL_FONT_MIN do
-            local tw = TextWidget:new{ text = text, face = Font:getFace("cfont", size) }
-            local tw_w = tw:getSize().w
-            tw:free()
-            if tw_w <= w - 2 * Size.padding.small then break end
+            if textWidth(text, size, false) <= w - 2 * Size.padding.small then break end
             size = size - 1
         end
         return cell(text, w, h, Font:getFace("cfont", size), fg)
@@ -2782,10 +2805,7 @@ function PageTextInfo:onShowSettingsMenu()
             local max_w = math.floor((buttons_w - gap * (n - 1)) / n) - 2 * Size.padding.small
             for __, b in ipairs(row_def) do
                 while btn_size > BTN_FONT_MIN do
-                    local tw = TextWidget:new{ text = b.text, face = Font:getFace("cfont", btn_size), bold = true }
-                    local w = tw:getSize().w
-                    tw:free()
-                    if w <= max_w then break end
+                    if textWidth(b.text, btn_size, true) <= max_w then break end
                     btn_size = btn_size - 1
                 end
             end
@@ -2797,10 +2817,7 @@ function PageTextInfo:onShowSettingsMenu()
     for __, row_def in ipairs(menu_rows) do
         if row_def.title then
             while label_size > LABEL_FONT_MIN do
-                local tw = TextWidget:new{ text = row_def.title, face = Font:getFace("cfont", label_size) }
-                local w = tw:getSize().w
-                tw:free()
-                if w <= label_w - 2 * gap then break end
+                if textWidth(row_def.title, label_size, false) <= label_w - 2 * gap then break end
                 label_size = label_size - 1
             end
         end
@@ -2861,11 +2878,7 @@ function PageTextInfo:onShowSettingsMenu()
                     local avail = cell_w - 2 * Size.padding.small
                     local size = btn_size
                     while size > 8 do
-                        local tw = TextWidget:new{ text = b.text, face = Font:getFace("cfont", size),
-                            bold = b.active and true or false }
-                        local w = tw:getSize().w
-                        tw:free()
-                        if w <= avail then break end
+                        if textWidth(b.text, size, b.active) <= avail then break end
                         size = size - 1
                     end
                     if size ~= btn_size then this_face = Font:getFace("cfont", size) end
@@ -2902,14 +2915,11 @@ function PageTextInfo:onShowSettingsMenu()
     -- The biggest title size at which the longest line fits the window
     local title_size = TITLE_FONT_SIZE
     while title_size > TITLE_FONT_MIN do
-        local face = Font:getFace("cfont", title_size)
         local widest = 0
         for __, line in ipairs(title_lines) do
             local w = 0
             for __, seg in ipairs(line) do
-                local tw = TextWidget:new{ text = seg.text, face = face, bold = seg.bold or false }
-                w = w + tw:getSize().w
-                tw:free()
+                w = w + textWidth(seg.text, title_size, seg.bold)
             end
             widest = math.max(widest, w)
         end

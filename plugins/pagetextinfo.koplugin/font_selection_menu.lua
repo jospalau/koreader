@@ -98,6 +98,13 @@ local function purgeFontFaces(self)
         rss_before, "-> after GC", rss_gc, "-> after malloc_trim", residentMb())
 end
 
+-- Freeing the faces forces a full garbage collection and a malloc_trim, which can
+-- take a good part of a second. It runs two ticks later, after the change of menu
+-- has been painted, so the screen never waits for it.
+local function purgeFontFacesLater(self)
+    UIManager:tickAfterNext(function() purgeFontFaces(self) end)
+end
+
 -- Close the fonts menu and repaint the page underneath
 function PageTextInfo:closeFontsMenu()
     local d = self.fonts_dialog
@@ -106,7 +113,7 @@ function PageTextInfo:closeFontsMenu()
     if d then
         UIManager:close(d, "ui", d.frame_rect)
     end
-    purgeFontFaces(self)
+    purgeFontFacesLater(self)
 
     -- Opened from the settings menu: go back to it (flag set in settings_menu.lua)
     if self.fonts_from_settings then
@@ -143,7 +150,7 @@ function PageTextInfo:applyFontAndReopen(face)
         lap("pt mode: SetFont")
         UIManager:nextTick(function()
             self:onShowFonts(page)
-            purgeFontFaces(self)
+            purgeFontFacesLater(self)
             lap("pt mode: fonts menu shown")
             if self.warmUpCaches then self:warmUpCaches() end
         end)
@@ -193,7 +200,7 @@ function PageTextInfo:applyFontAndReopen(face)
 
     UIManager:nextTick(function()
         self:onShowFonts(page)
-        purgeFontFaces(self)
+        purgeFontFacesLater(self)
         lap("fonts menu shown")
         -- Compute in the background what the settings menu will need for this font
         if self.warmUpCaches then self:warmUpCaches() end
@@ -745,7 +752,8 @@ function PageTextInfo:onShowFonts(page)
         table.insert(row, cell_frame)
         col = col + 1
         if face then
-            table.insert(cells, { frame = cell_frame, face = face, label = label })
+            table.insert(cells, { frame = cell_frame, face = face, label = label,
+                text = text_widget, current = is_current })
         end
     end
 
@@ -835,11 +843,42 @@ function PageTextInfo:onShowFonts(page)
     -- Tap handling
     function dialog:onTap(arg, ges)
         -- Font cells
+        -- A font was already chosen and is being applied: ignore further taps
+        if self.applying then return true end
         for __, cell in ipairs(cells) do
             if cell.frame.dimen and ges.pos:intersectWith(cell.frame.dimen) then
                 -- Same face already applied: skip the extra SetFont and reflow
                 if cell.face ~= current then
-                    self.plugin:applyFontAndReopen(cell.face)
+                    -- Show the choice first: the chosen cell is inverted (and the
+                    -- one that was active is not any more) and only that area is
+                    -- refreshed. The font is applied two ticks later, once that has
+                    -- been painted: the reflow takes a while and, without this, the
+                    -- screen would show nothing until it was done.
+                    self.applying = true
+                    local region
+                    for __, c in ipairs(cells) do
+                        if c == cell or c.current then
+                            local on = (c == cell)
+                            c.frame.background = on and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE
+                            c.frame.color = on and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY
+                            c.text.fgcolor = on and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
+                            c.current = on
+                            if c.frame.dimen then
+                                region = region and region:combine(c.frame.dimen)
+                                    or c.frame.dimen:copy()
+                            end
+                        end
+                    end
+                    UIManager:setDirty(self, "ui", region)
+                    local plugin, face = self.plugin, cell.face
+                    local dlg = self
+                    UIManager:tickAfterNext(function()
+                        local ok, err = pcall(plugin.applyFontAndReopen, plugin, face)
+                        if not ok then
+                            dlg.applying = nil   -- let the menu be used again
+                            require("logger").warn("[PTI] applyFontAndReopen failed:", err)
+                        end
+                    end)
                 end
                 return true
             end
