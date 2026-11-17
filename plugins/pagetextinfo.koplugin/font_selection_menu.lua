@@ -42,6 +42,35 @@ local function buildFacePathMap()
 end
 
 -- Close the fonts menu and repaint the page underneath
+-- Font:getFace keeps every face it loads in Font.faces for good, and a face is a
+-- whole font file mapped in memory. The menu draws each name in its own font (and
+-- the info window loads one at 100 px), so browsing the list piled up hundreds of
+-- them until the device crawled. This takes the fonts of the list out of that
+-- cache: widgets still showing one keep it alive, the rest is freed by the
+-- collection forced at the end (the Lua GC alone does not see that memory).
+local function purgeFontFaces(self)
+    local faces = require("ui/font").faces
+    if type(faces) ~= "table" or not self.font_paths then return end
+    local paths = {}
+    for __, path in pairs(self.font_paths) do
+        if type(path) == "string" then paths[path] = true end
+    end
+    local drop = {}
+    for key, face in pairs(faces) do
+        local realname = type(face) == "table" and face.realname
+        local match = realname and paths[realname]
+        if not match and type(key) == "string" then
+            for path in pairs(paths) do
+                if key:sub(1, #path) == path then match = true; break end
+            end
+        end
+        if match then drop[#drop + 1] = key end
+    end
+    for __, key in ipairs(drop) do faces[key] = nil end
+    collectgarbage()
+    require("logger").info("[PTI] purgeFontFaces: dropped", #drop, "faces")
+end
+
 function PageTextInfo:closeFontsMenu()
     local d = self.fonts_dialog
     self.fonts_dialog = nil
@@ -49,6 +78,7 @@ function PageTextInfo:closeFontsMenu()
     if d then
         UIManager:close(d, "ui", d.frame_rect)
     end
+    purgeFontFaces(self)
 
     -- Opened from the settings menu: go back to it (flag set in settings_menu.lua)
     if self.fonts_from_settings then
@@ -72,11 +102,22 @@ end
 function PageTextInfo:applyFontAndReopen(face)
     local Event = require("ui/event")
     local page = self.fonts_page
+    -- Timing of every phase (wall clock, ms), always logged: grep "[PTI] timing"
+    local time = require("ui/time")
+    local t0 = time.now()
+    local function lap(name)
+        require("logger").info("[PTI] timing: font change,", name, time.to_ms(time.since(t0)), "ms")
+    end
 
     -- pt mode: KOReader's own behaviour (the pt stays, the x-height follows the face)
     if self.isXHeightMode and not self:isXHeightMode() then
         self.ui:handleEvent(Event:new("SetFont", face))
-        UIManager:nextTick(function() self:onShowFonts(page) end)
+        lap("pt mode: SetFont")
+        UIManager:nextTick(function()
+            self:onShowFonts(page)
+            purgeFontFaces(self)
+            lap("pt mode: fonts menu shown")
+        end)
         return
     end
 
@@ -95,9 +136,12 @@ function PageTextInfo:applyFontAndReopen(face)
     UIManager:broadcastEvent(Event:new("BatchedUpdate"))
     local ok, err = pcall(function()
         self.ui:handleEvent(Event:new("SetFont", face))
+        lap("SetFont")
         local pt = target and self.ptForXHeight and self:ptForXHeight(target)
+        lap("ptForXHeight")
         if pt then
             self:applyFontSizePt(pt)
+            lap("applyFontSizePt")
             self.xh_keep = target
             self.xh_keep_cur = self:getXHeightMm()
         else
@@ -106,6 +150,7 @@ function PageTextInfo:applyFontAndReopen(face)
     end)
     -- Always close the batch, or the page would never be laid out again
     UIManager:broadcastEvent(Event:new("BatchedUpdateDone"))
+    lap("BatchedUpdateDone (re-layout)")
     if not ok then require("logger").warn("[PTI] applyFontAndReopen failed:", err) end
 
     -- With native / auto hinting the prediction can be 1 px off: check it on the
@@ -114,10 +159,13 @@ function PageTextInfo:applyFontAndReopen(face)
         local ok2, err2 = pcall(self.refineXHeightMm, self, target)
         if not ok2 then require("logger").warn("[PTI] refineXHeightMm failed:", err2) end
         self.xh_keep_cur = self.getXHeightMm and self:getXHeightMm() or self.xh_keep_cur
+        lap("refineXHeightMm")
     end
 
     UIManager:nextTick(function()
         self:onShowFonts(page)
+        purgeFontFaces(self)
+        lap("fonts menu shown")
     end)
 end
 
@@ -207,6 +255,19 @@ function PageTextInfo:showFontInfo(face, label)
             end
             if desc_h then
                 table.insert(metrics_lines, "Descender: " .. pct(desc_h))
+            end
+        end
+    end
+
+    -- x-height (design) and the hinting that keeps it best (methods from
+    -- settings_menu.lua; skipped if that file isn't loaded)
+    if self.getFontXHeightInfo then
+        local xi = self:getFontXHeightInfo(face)
+        if xi then
+            table.insert(metrics_lines, string.format(
+                "x-height (design): %.1f%% of em, %.2f mm at %gpt", xi.ratio * 100, xi.mm, xi.pt))
+            if xi.best then
+                table.insert(metrics_lines, "Best hinting: " .. xi.best)
             end
         end
     end
@@ -590,25 +651,38 @@ function PageTextInfo:onShowFonts(page)
     end
 
     local caption = string.format("Fonts: %d  |  Used: %d", #fonts, used_count)
-    if readability_txt then
-        caption = caption .. "  |  Readability: " .. readability_txt
+    -- x-height (design, at the size now set) and best hinting of the current font,
+    -- before the readability reason, which is the long one that may get cut
+    if self.getFontXHeightInfo and current then
+        local xi = self:getFontXHeightInfo(current)
+        if xi then
+            caption = caption .. string.format("  |  x-height: %.2fmm", xi.mm)
+            if xi.best then
+                caption = caption .. "  |  Best hinting: " .. xi.best
+            end
+        end
     end
+    -- Second row: the readability reason is long, so it gets a line of its own
+    local caption2 = readability_txt and ("Readability: " .. readability_txt) or nil
 
     local grid = VerticalGroup:new{ align = "center" }
 
-    -- Small caption with a thin separator below it (same look as the settings menu)
-    table.insert(grid, LeftContainer:new{
-        dimen = Geom:new{ w = dialog_w, h = label_h },
-        HorizontalGroup:new{
-            HorizontalSpan:new{ width = gap },
-            TextWidget:new{
-                text = caption,
-                face = Font:getFace("cfont", 11),
-                fgcolor = Blitbuffer.COLOR_DARK_GRAY,
-                max_width = dialog_w - 2 * gap,
+    -- Small caption (one or two rows) with a thin separator below it (same look as
+    -- the settings menu)
+    for __, text in ipairs(caption2 and { caption, caption2 } or { caption }) do
+        table.insert(grid, LeftContainer:new{
+            dimen = Geom:new{ w = dialog_w, h = label_h },
+            HorizontalGroup:new{
+                HorizontalSpan:new{ width = gap },
+                TextWidget:new{
+                    text = text,
+                    face = Font:getFace("cfont", 11),
+                    fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+                    max_width = dialog_w - 2 * gap,
+                },
             },
-        },
-    })
+        })
+    end
     table.insert(grid, LineWidget:new{
         dimen = Geom:new{ w = dialog_w, h = thin },
         background = Blitbuffer.COLOR_DARK_GRAY,

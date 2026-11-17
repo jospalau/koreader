@@ -51,7 +51,7 @@ local CONTRAST_DEFAULT = 15
 local xHeightRatio
 local sweepFonts   -- debug only, defined after buildSizeCombos
 local logGlyphMetrics   -- debug only, defined after sweepFonts
-local refineXHeight     -- assigned after measuredXHeightPx
+local refineXHeight     -- assigned after engineXHeightAt
 local ptForXHeightUi   -- assigned after realXHeightPx
 
 -- Critical print size (CPS): the smallest x-height read fluently. 13 arc minutes
@@ -740,6 +740,25 @@ end
 -- are measured on); the x-height value stored in the font (OS/2 sxHeight, what
 -- getXHeight() returns) is only the fallback, as some fonts lack it or have a
 -- wrong one. Returns ratio, face_name (or nil if it can't be measured).
+-- Font:getFace keeps every face it loads in Font.faces for good, and a face is a
+-- whole font file mapped in memory. The faces made only to measure (every font
+-- touched makes one at 1000 px, one at 200 px and one at the drawn size) piled up
+-- until the device crawled. releaseFace takes a measuring face out of that cache
+-- and, every few of them, forces the collection that frees the FreeType side
+-- (the Lua GC alone does not see that memory and lets it grow).
+local _released_faces = 0
+local function releaseFace(face)
+    if not face then return end
+    local faces = Font.faces
+    if type(faces) == "table" then
+        for k, v in pairs(faces) do
+            if v == face then faces[k] = nil; break end
+        end
+    end
+    _released_faces = _released_faces + 1
+    if _released_faces % 4 == 0 then collectgarbage() end
+end
+
 xHeightRatio = function(doc, raw_name)
     raw_name = raw_name or doc._document:getFontFace() or "?"
     local face_name = resolveFace(raw_name)
@@ -755,12 +774,15 @@ xHeightRatio = function(doc, raw_name)
     local face = Font:getFace(face_name, XH_MEASURE_PX, 0, true)
     if not face or not face.ftsize then
         require("logger").warn("[PTI] xHeightRatio: cannot load face", raw_name, face_name)
+        releaseFace(face)
         return nil
     end
     -- Divide by the size the face was really loaded at (it may be DPI-scaled)
     local real_size = face.size or XH_MEASURE_PX
     -- Protected: a 0/nil x-height means the face can't be measured
     local okx, xh = pcall(function() return face.ftsize:getXHeight() end)
+    releaseFace(face)   -- only the numbers are needed
+    face = nil
     if not okx or not xh or xh <= 0 then
         require("logger").warn("[PTI] xHeightRatio: no x-height for", face_name)
         return nil
@@ -1005,39 +1027,12 @@ end
 
 -- x-height as crengine really draws it ----------------------------------------
 -- With native / auto hinting the x-height is asked to the engine itself (patched
--- koreader-base: doc:getGlyphTops). Without the patch nothing is measured here and
--- the callers use the FreeType prediction (realXHeightPx).
--- Let crengine finish the re-layout of the size just set (the engine's styles and
--- fonts are rebuilt while the page is drawn). Changing sizes several times in a
--- row without a render in between crashed crengine (setNodeStyle: null parent font).
--- The drawn page is not read: it only makes the engine up to date.
-local _last_render_key
-local function renderNow(ui)
-    pcall(function()
-        local doc, view = ui.document, ui.view
-        if not (doc and doc.drawCurrentView and view and view.visible_area) then return end
-        -- Already drawn with this face / size / hinting / weight: nothing changed
-        -- since, so the engine is up to date (taps on spacing, margins, ... reopen
-        -- the menu without changing any of these)
-        local conf = doc.configurable
-        local key = table.concat({ tostring(doc._document:getFontFace()),
-            tostring(doc._document:getFontSize()), tostring(getHinting(ui)),
-            tostring(conf.font_base_weight), tostring(conf.line_spacing) }, "|")
-        if key == _last_render_key then return end
-        _last_render_key = key
-        local Blitbuffer = require("ffi/blitbuffer")
-        local rect = view.visible_area
-        local scratch = Blitbuffer.new(rect.w, rect.h)
-        pcall(doc.drawCurrentView, doc, scratch, 0, 0, rect)
-        scratch:free()
-    end)
-end
+-- koreader-base: doc:getGlyphTops(chars, size), see cre_getGlyphTops.patch.txt).
+-- Without the patch nothing is measured here and the callers use the FreeType
+-- prediction (realXHeightPx).
 
--- x-height asked straight to crengine (patched koreader-base: doc:getGlyphTops, see
--- cre_getGlyphTops.patch.txt): the hinted height of the letters exactly as the
--- engine draws them now. Weighted median over TYPICAL_LETTERS. nil when the
--- patch is not there (the page measurement below is used then).
--- Weighted median of the flat-letter tops returned by the engine
+-- Weighted median of the flat-letter tops (FLAT_LETTERS) returned by the engine:
+-- the hinted height of the letters exactly as crengine draws them.
 local function topsMedian(t)
     local tops, parts = {}, {}
     for ch, w in pairs(FLAT_LETTERS) do
@@ -1063,9 +1058,9 @@ local function flatChars()
 end
 
 -- x-height at ANY size `px`, asked to the engine without touching the book (needs
--- the sized form of the patch: doc:getGlyphTops(chars, size) returns the tops
--- and the size it really used). nil when the patch is older or the engine scaled
--- the size (then the value would not be the one drawn).
+-- the patch: doc:getGlyphTops(chars, size) returns the tops and the size it really
+-- used). nil without the patch, or when the engine scaled the size (then the
+-- value would not be the one drawn).
 local function engineXHeightAt(ui, px)
     local d = ui.document and ui.document._document
     if not (d and d.getGlyphTops) then return nil end
@@ -1079,16 +1074,9 @@ local function currentPx(ui)
         Device:getDeviceScreenDPI() or Screen:getDPI())
 end
 
--- x-height of the size now drawn
+-- x-height of the size now drawn (nil without the patch)
 local function engineXHeightPx(ui)
-    local d = ui.document and ui.document._document
-    if not (d and d.getGlyphTops) then return nil end
-    local direct = engineXHeightAt(ui, currentPx(ui))   -- no render needed
-    if direct then return direct end
-    renderNow(ui)   -- unsized form of the patch (current size only): the engine is up to date only after a render
-    local ok, t = pcall(d.getGlyphTops, d, flatChars())
-    if not ok or type(t) ~= "table" then return nil end
-    return topsMedian(t)
+    return engineXHeightAt(ui, currentPx(ui))
 end
 
 -- Rows of the x-height as drawn now, from the engine (nil with hinting off, where
@@ -1108,9 +1096,10 @@ local function pxToPt(px, dpi)
     return math.max(4, math.min(math.ceil(px * 72 / dpi * 100 + 0.001) / 100, 255))
 end
 
--- After a size was set from the prediction, check it on the page and move up to
--- 3 px towards the size whose MEASURED x-height is closest to `target_mm` (with
--- at_least: the smallest one that reaches it). Only with native / auto hinting.
+-- After a size was set from the prediction, check the sizes within 3 px with the
+-- engine and move to the one whose MEASURED x-height is closest to `target_mm`
+-- (with at_least: the smallest one that reaches it). Only with native / auto
+-- hinting.
 refineXHeight = function(ui, target_mm, at_least)
     local ok, err = pcall(function()
         local hint = getHinting(ui)
@@ -1125,8 +1114,8 @@ refineXHeight = function(ui, target_mm, at_least)
             return math.abs(rows - target_px)
         end
         local start_px = drawnPx(ui, ui.document.configurable.font_size, dpi)
-        -- Sized form of the patch (getGlyphTops with a size): look at the sizes around straight in the
-        -- engine (no reflow) and set the best one once. On a tie the smaller wins.
+        -- Look at the sizes around straight in the engine (no reflow) and set the
+        -- best one once. On a tie the smaller wins. Without the patch: nothing.
         if engineXHeightAt(ui, start_px) then
             local best_px, best
             for cand = math.max(1, start_px - 3), start_px + 3 do
@@ -1141,30 +1130,6 @@ refineXHeight = function(ui, target_mm, at_least)
                 "-> px", best_px)
             return
         end
-        local rows0 = measuredXHeightPx(ui)
-        if not rows0 then return end
-        local best_px, best = start_px, score(rows0)
-        if best < 1e-6 then return end   -- already exactly on target
-        local dir = (rows0 < target_px) and 1 or -1
-        for step = 1, 3 do
-            local cand = start_px + dir * step
-            if cand < 1 then break end
-            setFontSize(ui, pxToPt(cand, dpi))
-            local r = measuredXHeightPx(ui)
-            if not r then break end
-            local sc = score(r)
-            dlog("refineXHeight: px", cand, "rows", r, "target px", target_px, "score", sc)
-            if sc < best - 1e-6 then
-                best, best_px = sc, cand
-            elseif sc > best + 1e-6 then
-                -- The x-height never goes down when the size goes up, so once a
-                -- step is worse than the best one so far, the next ones are too
-                break
-            end
-        end
-        local now = drawnPx(ui, ui.document.configurable.font_size, dpi)
-        if now ~= best_px then setFontSize(ui, pxToPt(best_px, dpi)) end
-        dlog("refineXHeight: target mm", target_mm, "start px", start_px, "-> px", best_px)
     end)
     if not ok then dlog("refineXHeight failed:", err) end
 end
@@ -1175,8 +1140,8 @@ end
 local function measureSizesRange(ui, first, last)
     local hint = getHinting(ui)
     if hint ~= 1 and hint ~= 2 then return nil end
-    -- Sized form of the patch: every size straight from the engine, the book
-    -- is not touched (no reflow, no page drawn, no memory spike)
+    -- Every size straight from the engine: the book is not touched (no reflow, no
+    -- page drawn, no memory spike)
     if engineXHeightAt(ui, currentPx(ui)) then
         local res, got = {}, 0
         local misses = 0
@@ -1226,7 +1191,7 @@ function PageTextInfo:getXHeightMm()
         if not ratio then return nil end
         local px = drawnPx(ui, ui.document.configurable.font_size, dpi)
         -- With hinting on the drawn x-height is a whole number of pixels; measured
-        -- on the page when possible, else the FreeType prediction
+        -- from the engine when possible, else the FreeType prediction
         local xh_px = measuredXHeightPx(ui) or realXHeightPx(ui, px) or ratio * px
         local res = xh_px / (dpi / 25.4)
         dlog("getXHeightMm: pt=", ui.document.configurable.font_size, "ratio=", ratio,
@@ -1286,7 +1251,7 @@ function PageTextInfo:ptForXHeight(target_mm, at_least)
     return ptForXHeightUi(self.ui, target_mm, at_least)
 end
 
--- Move to the size whose x-height, measured on the page, is closest to `mm`
+-- Move to the size whose x-height, measured by the engine, is closest to `mm`
 -- (used by the fonts menu after a face change). Only with native / auto hinting.
 function PageTextInfo:refineXHeightMm(mm, at_least)
     refineXHeight(self.ui, mm, at_least)
@@ -1578,8 +1543,7 @@ end
 
 -- Measures a face and returns "RATING: reason" (or "RATING"), nil if it can't
 -- be measured. `face_path` is the name/path Font:getFace accepts.
-local function faAnalyze(face_path)
-    local face = Font:getFace(face_path, FA.MEASURE_PX, 0, true)
+local function faAnalyzeFace(face_path, face)
     if not face or not face.ftsize then
         dlog("faAnalyze: cannot load face", face_path)
         return nil
@@ -1613,6 +1577,16 @@ local function faAnalyze(face_path)
     return reason ~= "" and (rating .. ": " .. reason) or rating
 end
 
+-- The face at 1000 px is only needed during the measurement: it is released
+-- afterwards, whatever the outcome
+local function faAnalyze(face_path)
+    local face = Font:getFace(face_path, FA.MEASURE_PX, 0, true)
+    local ok, res = pcall(faAnalyzeFace, face_path, face)
+    releaseFace(face)
+    if not ok then error(res) end
+    return res
+end
+
 local _fa_cache = {}   -- [face path] = "RATING: reason" | false
 
 -- Readability of a font file, computed here (no precomputed table):
@@ -1637,8 +1611,7 @@ end
 -- is off by 1 px or more on average. FreeType with crengine's load flags, no
 -- reflow, a few ms; cached per font file. nil when it can't be told.
 local _best_hint_cache = {}
-local function bestHinting(doc)
-    local ratio, path = xHeightRatio(doc)
+local function bestHintingFor(ratio, path)
     if not ratio or type(path) ~= "string" then return nil end
     local cached = _best_hint_cache[path]
     if cached ~= nil then return cached or nil end
@@ -1674,6 +1647,12 @@ local function bestHinting(doc)
     return result or nil
 end
 
+-- Same for the font the book is using now
+local function bestHinting(doc)
+    local ratio, path = xHeightRatio(doc)
+    return bestHintingFor(ratio, path)
+end
+
 -- Readability of a face given by its name (as used by the document)
 local function faceReadability(ui, face_name)
     return readabilityOfPath(resolveFace(face_name))
@@ -1684,6 +1663,33 @@ end
 function PageTextInfo:getFontReadability(path)
     if not path then return "N/A" end
     return readabilityOfPath(path)
+end
+
+-- Public method (used by the fonts menu info window in font_selection_menu.lua):
+-- design x-height of a face (by name, as the fonts menu has it) as a fraction of
+-- the em, the same in mm at the size now set in the book, and the hinting that
+-- keeps it closest to the design. Returns { ratio, mm, pt, best } or nil.
+function PageTextInfo:getFontXHeightInfo(face)
+    local ui = self.ui
+    if not (ui and ui.document and face) then return nil end
+    local ok, info = pcall(function()
+        local ratio, path = xHeightRatio(ui.document, face)
+        if not ratio then return nil end
+        local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+        local pt = ui.document.configurable.font_size
+        local px = drawnPx(ui, pt, dpi)
+        return {
+            ratio = ratio,
+            mm = ratio * px * 25.4 / dpi,
+            pt = pt,
+            best = bestHintingFor(ratio, path),
+        }
+    end)
+    if not ok then
+        require("logger").warn("[PTI] getFontXHeightInfo failed:", info)
+        return nil
+    end
+    return info
 end
 
 -- Returns three lines, each a list of segments: { font line, angle line, leading line }
@@ -1726,7 +1732,10 @@ local function buildTitleSegments(ui)
     local font_name = doc._document:getFontFace()
     if font_name and font_name ~= "" then
         -- Font name and rating (HIGH / MEDIUM / LOW) in bold, the reason in regular
+        local time = require("ui/time")
+        local t_read = time.now()
         local res = faceReadability(ui, font_name)
+        require("logger").info("[PTI] timing: title, faceReadability", time.to_ms(time.since(t_read)), "ms")
         local rating, why = res:match("^(%u+): (.+)$")
         if not rating and res:match("^%u+$") then rating = res end
         table.insert(line1, { text = font_name, bold = true })
@@ -1737,7 +1746,9 @@ local function buildTitleSegments(ui)
         else
             table.insert(line1, { text = " (" .. res .. ") " })
         end
+        local t_best = time.now()
         local best = bestHinting(doc)
+        require("logger").info("[PTI] timing: title, bestHinting", time.to_ms(time.since(t_best)), "ms")
         if best then
             table.insert(line1, { text = "(best hinting: " })
             table.insert(line1, { text = best, bold = true })
@@ -1764,6 +1775,7 @@ local function buildTitleSegments(ui)
     local ok, xh2, ascender, descender = pcall(function()
         return face_base.ftsize:getAscDesc()
     end)
+    releaseFace(face_base)   -- one per font and size touched: do not keep them all
     if ok and xh2 and ascender and descender then
         local leading_factor = (1.2 * px * line_spacing_factor) / xh_px
         local safe_min = (ascender + descender) / xh2
@@ -1878,7 +1890,7 @@ local function buildSizeCombos(ui, use_page)
     -- Real x-height of every row, loaded with the flags crengine uses for this
     -- hinting mode (nil when it can't be done: the estimate below is used then).
     -- Hinting off needs no measurement. face_name is the resolved font file here.
-    -- Preferred: the rows really drawn on the page (use_page); FreeType
+    -- Preferred: the rows the engine really draws (use_page); FreeType
     -- predictions can differ from the screen by 1 px
     local from_page = false
     local measured
