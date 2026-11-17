@@ -413,6 +413,20 @@ return function(PageTextInfo)
         return true
     end
 
+    function PageTextInfo:onExitTimingToggled(enable)
+        if enable == nil then
+            -- no value given (e.g. from an action): flip the saved flag
+            enable = not G_reader_settings:isTrue("exittiming_enabled")
+            G_reader_settings:saveSetting("exittiming_enabled", enable)
+            G_reader_settings:flush()
+        end
+        local ok, ExitTiming = pcall(require, "exit_timing")
+        if ok and ExitTiming then
+            ExitTiming.setEnabled(enable)
+        end
+        return true
+    end
+
     function PageTextInfo:onToggleDebugVerbose()
         local dbg = require("dbg")
         local DataStorage = require("datastorage")
@@ -506,8 +520,15 @@ return function(PageTextInfo)
             end,
         })
         table.insert(actions, {
+            label = "Exit timing",
+            -- Reflects the saved setting
+            active = function() return G_reader_settings:isTrue("exittiming_enabled") end,
+            callback = function()
+                self.ui:handleEvent(Event:new("ExitTimingToggled"))
+            end,
+        })
+        table.insert(actions, {
             label = "Verbose logging",
-            full_width = true, -- spans both columns
             -- Reflects the saved setting (takes effect after a restart)
             active = function() return G_reader_settings:isTrue("debug_verbose") end,
             callback = function() self:onToggleDebugVerbose() end,

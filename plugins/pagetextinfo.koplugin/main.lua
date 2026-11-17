@@ -25,6 +25,7 @@ local FrameContainer = require("ui/widget/container/framecontainer")
 local TextViewer = require("ui/widget/textviewer")
 local CrashLog = require("crashlog_overlay")
 local MemoryOverlay = require("memory_overlay")
+local ExitTiming = require("exit_timing")
 local Geom = require("ui/geometry")
 local Size = require("ui/size")
 local Screen = require("device").screen
@@ -936,6 +937,9 @@ function PageTextInfo:onTap(_, ges)
 end
 
 function PageTextInfo:init()
+    local _time = require("ui/time")
+    local _t_init = _time.now()
+    ExitTiming.setEnabled(G_reader_settings:isTrue("exittiming_enabled"))
     -- UIManager:scheduleIn(2, function()
     --     FileManager.instance:setupLayout()
     -- end)
@@ -1147,6 +1151,7 @@ function PageTextInfo:init()
     end
     CrashLog.setEnabled(G_reader_settings:isTrue("crashlog_enabled"))
     MemoryOverlay.setEnabled(G_reader_settings:isTrue("memoryoverlay_enabled"))
+    ExitTiming.record("PageTextInfo.init", _time.to_ms(_time.since(_t_init)))
 end
 
 -- function PageTextInfo:_postInit()
@@ -1171,7 +1176,11 @@ function PageTextInfo:readSettingsFile()
 end
 
 function PageTextInfo:onReaderReady()
+    local _time = require("ui/time")
+    local _t_ready = _time.now()
     if self.warmUpOnReady then self:warmUpOnReady() end
+    ExitTiming.record("PageTextInfo.warmUpOnReady", _time.to_ms(_time.since(_t_ready)))
+    ExitTiming.readerReady()
     -- self.ui.menu:registerToMainMenu(self)
     self.view:registerViewModule("pagetextinfo", self)
     self.initialized = true
@@ -1385,6 +1394,19 @@ function PageTextInfo:addToMainMenu(menu_items)
                         G_reader_settings:flush()
                         local Event = require("ui/event")
                         UIManager:broadcastEvent(Event:new("MemoryOverlayToggled", enable))
+                        return true
+                    end,
+                },
+                {
+                    text = _("Exit timing"),
+                    checked_func = function() return G_reader_settings:isTrue("exittiming_enabled") end,
+                    help_text = _([[Print (stdout) where the time goes when a book is opened or closed and the file manager is built again: plugin init, reader close and file manager creation. Nothing is hooked while it is off.]]),
+                    callback = function()
+                        local enable = not G_reader_settings:isTrue("exittiming_enabled")
+                        G_reader_settings:saveSetting("exittiming_enabled", enable)
+                        G_reader_settings:flush()
+                        local Event = require("ui/event")
+                        UIManager:broadcastEvent(Event:new("ExitTimingToggled", enable))
                         return true
                     end,
                 },
@@ -1815,6 +1837,19 @@ This is to be active only if the option flash buttons and menu items or the opti
                     end,
                 },
                 {
+                    text = _("Exit timing"),
+                    checked_func = function() return G_reader_settings:isTrue("exittiming_enabled") end,
+                    help_text = _([[Print (stdout) where the time goes when a book is opened or closed and the file manager is built again: plugin init, reader close and file manager creation. Nothing is hooked while it is off.]]),
+                    callback = function()
+                        local enable = not G_reader_settings:isTrue("exittiming_enabled")
+                        G_reader_settings:saveSetting("exittiming_enabled", enable)
+                        G_reader_settings:flush()
+                        local Event = require("ui/event")
+                        UIManager:broadcastEvent(Event:new("ExitTimingToggled", enable))
+                        return true
+                    end,
+                },
+                {
                     text = _("Python server configuration"),
                     sub_item_table = {
                         {
@@ -2006,12 +2041,15 @@ end
 
 
 function PageTextInfo:onCloseDocument()
+    local _time = require("ui/time")
+    local _t_close = _time.now()
     -- UIManager:unschedule(self.insertSession)
     self.ui.gestures:onIgnoreHoldCorners(false)
     self.ui.disable_double_tap = false
     self.settings:saveSetting("highlight_all_notes_and_allow_to_edit_them_on_tap", false)
     self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", false)
     self.settings:flush()
+    ExitTiming.record("PageTextInfo.onCloseDocument", _time.to_ms(_time.since(_t_close)))
 end
 
 -- function PageTextInfo:onPreserveCurrentSession()
