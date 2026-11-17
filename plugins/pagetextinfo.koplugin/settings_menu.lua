@@ -1723,7 +1723,7 @@ function PageTextInfo:warmUpCaches()
         local step = steps[i]
         if not step then
             _warm_pending = false
-            require("logger").info("[PTI] timing: warm-up done", time.to_ms(time.since(t0)), "ms")
+            require("logger").dbg("[PTI] timing: warm-up done", time.to_ms(time.since(t0)), "ms")
             return
         end
         local ok, err = pcall(step)
@@ -1776,7 +1776,7 @@ local function buildTitleSegments(ui)
         local time = require("ui/time")
         local t_read = time.now()
         local res = faceReadability(ui, font_name)
-        require("logger").info("[PTI] timing: title, faceReadability", time.to_ms(time.since(t_read)), "ms")
+        require("logger").dbg("[PTI] timing: title, faceReadability", time.to_ms(time.since(t_read)), "ms")
         local rating, why = res:match("^(%u+): (.+)$")
         if not rating and res:match("^%u+$") then rating = res end
         table.insert(line1, { text = font_name, bold = true })
@@ -1789,7 +1789,7 @@ local function buildTitleSegments(ui)
         end
         local t_best = time.now()
         local best = bestHinting(doc)
-        require("logger").info("[PTI] timing: title, bestHinting", time.to_ms(time.since(t_best)), "ms")
+        require("logger").dbg("[PTI] timing: title, bestHinting", time.to_ms(time.since(t_best)), "ms")
         if best then
             table.insert(line1, { text = "(best hinting: " })
             table.insert(line1, { text = best, bold = true })

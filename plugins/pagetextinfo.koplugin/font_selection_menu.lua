@@ -90,7 +90,7 @@ local function purgeFontFaces(self)
         ffi.cdef("int malloc_trim(size_t pad);")
         ffi.C.malloc_trim(0)
     end)
-    require("logger").info("[PTI] purgeFontFaces: dropped", #drop, "faces; RSS MB:",
+    require("logger").dbg("[PTI] purgeFontFaces: dropped", #drop, "faces; RSS MB:",
         rss_before, "-> after GC", rss_gc, "-> after malloc_trim", residentMb())
 end
 
@@ -129,7 +129,7 @@ function PageTextInfo:applyFontAndReopen(face)
     local time = require("ui/time")
     local t0 = time.now()
     local function lap(name)
-        require("logger").info("[PTI] timing: font change,", name, time.to_ms(time.since(t0)), "ms")
+        require("logger").dbg("[PTI] timing: font change,", name, time.to_ms(time.since(t0)), "ms")
     end
 
     -- pt mode: KOReader's own behaviour (the pt stays, the x-height follows the face)
