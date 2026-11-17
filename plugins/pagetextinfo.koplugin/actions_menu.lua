@@ -505,16 +505,20 @@ return function(PageTextInfo)
         })
         table.insert(actions, {
             label = "Verbose logging",
+            full_width = true, -- spans both columns
             -- Reflects the saved setting (takes effect after a restart)
             active = function() return G_reader_settings:isTrue("debug_verbose") end,
             callback = function() self:onToggleDebugVerbose() end,
         })
 
+        -- "Miscellaneous" section: last book (if any) + top reading sessions.
+        -- The header goes on the first entry of the section.
+        local misc_header = "Miscellaneous"
         local last = self:getLastBook()
         if last then
             table.insert(actions, {
-                header = "Continue reading...",
-                label = last.title,
+                header = misc_header,
+                label = "Continue reading: " .. last.title,
                 full_width = true,
                 callback = function()
                     if self.ui and self.ui.switchDocument then
@@ -524,7 +528,17 @@ return function(PageTextInfo)
                     end
                 end,
             })
+            misc_header = nil
         end
+
+        table.insert(actions, {
+            header = misc_header,
+            label = "Reading summary",
+            full_width = true,
+            -- Opens the Reading Summary window (top_reading_sessions.lua registers
+            -- the ShowLongestSessions event for both reader and file manager)
+            callback = function() self.ui:handleEvent(Event:new("ShowLongestSessions")) end,
+        })
 
         table.insert(actions, { header = "Restart or Exit", label = "Restart", callback = function() PageTextInfo.restartKOReader() end })
         table.insert(actions, { label = "Exit", callback = function() self.ui:handleEvent(Event:new("Exit")) end })
@@ -552,20 +566,79 @@ return function(PageTextInfo)
     -- Face using the font configured in the reader (falls back to the UI font)
     function PageTextInfo:getMenuFace(size)
         local Font = require("ui/font")
-        local face_name = self.ui and self.ui.font and self.ui.font.font_face
-        if not face_name then
-            face_name = G_reader_settings and G_reader_settings:readSetting("cre_font")
+        local logger = require("logger")
+
+        -- Current font name, trying the most reliable sources first
+        local face_name
+        local function try(fn)
+            local ok, v = pcall(fn)
+            if ok and type(v) == "string" and v ~= "" then return v end
         end
-        if face_name then
-            local ok, FontList = pcall(require, "fontlist")
-            if ok and FontList and FontList.fontinfo then
-                for path, info in pairs(FontList.fontinfo) do
-                    local f = info and info[1]
-                    if f and f.name == face_name and not f.bold and not f.italic then
-                        local ok2, face = pcall(Font.getFace, Font, path, size)
-                        if ok2 and face then return face end
+        face_name = try(function() return self.ui.font.font_face end)
+            or try(function() return self.ui.document:getFontFace() end)
+            or try(function() return self.ui.doc_settings:readSetting("font_face") end)
+            -- No book open (file manager): font of the last book read
+            or try(function()
+                local ReadHistory = require("readhistory")
+                local DocSettings = require("docsettings")
+                local lfs = require("libs/libkoreader-lfs")
+                for _, item in ipairs(ReadHistory.hist or {}) do
+                    if lfs.attributes(item.file, "mode") == "file" then
+                        local face = DocSettings:open(item.file):readSetting("font_face")
+                        if face then return face end
+                        break
                     end
                 end
+            end)
+            or try(function() return G_reader_settings:readSetting("cre_font") end)
+        logger.dbg("actions_menu: font name =", face_name)
+        self._font_debug = "font name: " .. tostring(face_name)
+            .. "\nui.font: " .. tostring(self.ui and self.ui.font ~= nil)
+            .. "\ndocument: " .. tostring(self.ui and self.ui.document ~= nil)
+
+        if face_name then
+            local ok, FontList = pcall(require, "fontlist")
+            if ok and FontList then
+                -- fontinfo is filled lazily: make sure it is populated
+                -- (e.g. when the menu is opened from the file manager)
+                pcall(function() FontList:getFontList() end)
+                -- Compare ignoring case, spaces and punctuation
+                -- ("Tiempos Text" == "TiemposText" == "tiempos-text")
+                local function norm(str) return (tostring(str):lower():gsub("[^%w]", "")) end
+                local wanted = norm(face_name)
+                local best, fallback, loose
+                for path, info in pairs(FontList.fontinfo or {}) do
+                    local f = info and info[1]
+                    if f and f.name and norm(f.name) == wanted then
+                        if not f.bold and not f.italic then
+                            best = path
+                            break
+                        end
+                        fallback = fallback or path
+                    elseif not loose and norm(path:match("([^/]+)$") or ""):find(wanted, 1, true) then
+                        -- last resort: the file name contains the font name
+                        loose = path
+                    end
+                end
+                fallback = fallback or loose
+                local path = best or fallback
+                self._font_debug = self._font_debug .. "\nfile: " .. tostring(path)
+                if path then
+                    local ok2, face = pcall(Font.getFace, Font, path, size)
+                    if ok2 and face then
+                        -- The file may be missing or unreadable: prove the face
+                        -- renders text, otherwise fall back to the system font
+                        local TextWidget = require("ui/widget/textwidget")
+                        local ok3 = pcall(function()
+                            local tw = TextWidget:new{ text = "Ag", face = face }
+                            tw:getSize()
+                            tw:free()
+                        end)
+                        if ok3 then return face end
+                        self._font_debug = self._font_debug .. "\n(file failed, using system font)"
+                    end
+                end
+                logger.dbg("actions_menu: no font file found for", face_name)
             end
         end
         return Font:getFace("cfont", size)
@@ -590,7 +663,7 @@ return function(PageTextInfo)
         if self.actions_dialog then return true end
 
         local COLUMNS = 2
-        local FONT_SIZE = 22
+        local FONT_SIZE = 18
 
         local actions = self:getMenuActions()
 
@@ -747,6 +820,12 @@ return function(PageTextInfo)
         self.actions_dialog = dialog
 
         UIManager:show(dialog, "ui", frame_rect)
+        -- DEBUG: set to false once the font works
+        local DEBUG_FONT = false
+        if DEBUG_FONT and self._font_debug then
+            local InfoMessage = require("ui/widget/infomessage")
+            UIManager:show(InfoMessage:new{ text = self._font_debug, timeout = 8 })
+        end
         return true
     end
 
