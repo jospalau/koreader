@@ -1017,6 +1017,7 @@ end
     A "DocumentRerendered" event will be then sent if it has changed.
     Provide force=true to get it emitted even if nothing has changed.
 --]]
+
 function ReaderRolling:onUpdatePos(force)
     if self.batched_update_count > 0 then
         return
@@ -1028,7 +1029,16 @@ function ReaderRolling:onUpdatePos(force)
         return true
     end
 
-    Input:inhibitInput(true) -- Inhibit any past and upcoming input events.
+    -- PageTextInfo: while its fonts menu, its settings menu or its size combinations
+    -- window is open, input is not inhibited: a tap outside the menu made right after a
+    -- change would be lost, and every change would log "Inhibiting user input" /
+    -- "Restoring user input handling".
+    local pti = self.ui.pagetextinfo
+    local keep_input = (pti and (pti.fonts_dialog or pti.settings_dialog or pti.combos_dialog)) and true or false
+
+    if not keep_input then
+        Input:inhibitInput(true) -- Inhibit any past and upcoming input events.
+    end
     Device:setIgnoreInput(true) -- Avoid ANRs on Android with unprocessed events.
 
     -- Calling this now ensures the re-rendering is done by crengine
@@ -1047,9 +1057,11 @@ function ReaderRolling:onUpdatePos(force)
     self:updatePos(force)
 
     Device:setIgnoreInput(false) -- Allow processing of events (on Android).
-    Input:inhibitInputUntil(0.2) -- Discard input events, which might have occurred (double tap).
-    -- We can use a smaller duration than the default (quite large to avoid accidental dismissals),
-    -- to allow for quicker setting changes and rendering comparisons.
+    if not keep_input then
+        Input:inhibitInputUntil(0.2) -- Discard input events, which might have occurred (double tap).
+        -- We can use a smaller duration than the default (quite large to avoid accidental dismissals),
+        -- to allow for quicker setting changes and rendering comparisons.
+    end
 end
 
 function ReaderRolling:updatePos(force)

@@ -99,10 +99,19 @@ local function purgeFontFaces(self)
 end
 
 -- Freeing the faces forces a full garbage collection and a malloc_trim, which can
--- take a good part of a second. It runs two ticks later, after the change of menu
--- has been painted, so the screen never waits for it.
+-- take a good part of a second, so the screen must never wait for it.
+-- Later still, and only once: every change of font (and closing the menu) asks for
+-- it, and each one ran a full collection + malloc_trim right after the change, which is
+-- when the settings menu is usually opened next. Now they are joined into a single one
+-- that runs 2 s after the last request.
+local purge_fn
 local function purgeFontFacesLater(self)
-    UIManager:tickAfterNext(function() purgeFontFaces(self) end)
+    if purge_fn then UIManager:unschedule(purge_fn) end
+    purge_fn = function()
+        purge_fn = nil
+        purgeFontFaces(self)
+    end
+    UIManager:scheduleIn(2, purge_fn)
 end
 
 -- Close the fonts menu and repaint the page underneath
@@ -149,7 +158,8 @@ function PageTextInfo:applyFontAndReopen(face)
         self.ui:handleEvent(Event:new("SetFont", face))
         lap("pt mode: SetFont")
         UIManager:nextTick(function()
-            self:onShowFonts(page)
+            -- The menu was closed while the font was being applied: don't reopen it
+            if self.fonts_dialog then self:onShowFonts(page) end
             purgeFontFacesLater(self)
             lap("pt mode: fonts menu shown")
             if self.warmUpCaches then self:warmUpCaches() end
@@ -199,7 +209,8 @@ function PageTextInfo:applyFontAndReopen(face)
     end
 
     UIManager:nextTick(function()
-        self:onShowFonts(page)
+        -- The menu was closed while the font was being applied: don't reopen it
+        if self.fonts_dialog then self:onShowFonts(page) end
         purgeFontFacesLater(self)
         lap("fonts menu shown")
         -- Compute in the background what the settings menu will need for this font
@@ -378,6 +389,12 @@ function PageTextInfo:showFontInfo(face, label)
 
     local info_dialog = InputContainer:new{
         dimen = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
+        -- Double tap off while this window is on top. KOReader works it out again
+        -- every time a widget is closed (UIManager:close) from the topmost widget that
+        -- states it, and this one stated nothing: the reader below (with double tap
+        -- on) won, so after the window was reopened (show new, close old) taps were
+        -- delayed and a second quick tap came as "double_tap", which nobody handled.
+        disable_double_tap = true,
         ges_events = {
             Tap = { GestureRange:new{
                 ges = "tap",
@@ -575,6 +592,12 @@ function PageTextInfo:onShowFonts(page)
 
     local dialog = InputContainer:new{
         dimen = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
+        -- Double tap off while this window is on top. KOReader works it out again
+        -- every time a widget is closed (UIManager:close) from the topmost widget that
+        -- states it, and this one stated nothing: the reader below (with double tap
+        -- on) won, so after the window was reopened (show new, close old) taps were
+        -- delayed and a second quick tap came as "double_tap", which nobody handled.
+        disable_double_tap = true,
         ges_events = {
             Tap = { GestureRange:new{
                 ges = "tap",
@@ -844,7 +867,13 @@ function PageTextInfo:onShowFonts(page)
     function dialog:onTap(arg, ges)
         -- Font cells
         -- A font was already chosen and is being applied: ignore further taps
-        if self.applying then return true end
+        if self.applying then
+            -- A tap outside closes the menu even while the font is being applied
+            if not ges.pos:intersectWith(frame_rect) then
+                self.plugin:closeFontsMenu()
+            end
+            return true
+        end
         for __, cell in ipairs(cells) do
             if cell.frame.dimen and ges.pos:intersectWith(cell.frame.dimen) then
                 -- Same face already applied: skip the extra SetFont and reflow

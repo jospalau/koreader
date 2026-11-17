@@ -198,6 +198,12 @@ local function showSizeModeInfo()
     }
     local dlg = InputContainer:new{
         dimen = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
+        -- Double tap off while this window is on top. KOReader works it out again
+        -- every time a widget is closed (UIManager:close) from the topmost widget that
+        -- states it, and this one stated nothing: the reader below (with double tap
+        -- on) won, so after the window was reopened (show new, close old) taps were
+        -- delayed and a second quick tap came as "double_tap", which nobody handled.
+        disable_double_tap = true,
         ges_events = { Tap = { GestureRange:new{ ges = "tap",
             range = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h } } } },
         key_events = Device:hasKeys() and { Close = { { Device.input.group.Back } } } or {},
@@ -765,7 +771,11 @@ local function releaseFace(face)
         end
     end
     _released_faces = _released_faces + 1
-    if _released_faces % 4 == 0 then collectgarbage() end
+    -- The forced collection every 4 released faces is disabled: it took 400 ms on the
+    -- Kobo, and as the settings menu releases a face on some openings, every 4th
+    -- opening was slow. The fonts menu already frees the faces and collects when it
+    -- is used (purgeFontFaces), so nothing piles up.
+    -- if _released_faces % 4 == 0 then collectgarbage() end
 end
 
 xHeightRatio = function(doc, raw_name)
@@ -2659,6 +2669,8 @@ local function showSizeCombos(plugin, start, old)
     local full = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h }
     local dialog = InputContainer:new{
         dimen = full,
+        -- Double tap off while this window is on top (see the settings window below)
+        disable_double_tap = true,
         ges_events = {
             Tap = { GestureRange:new{ ges = "tap", range = full } },
             Swipe = { GestureRange:new{ ges = "swipe", range = full } },
@@ -2827,6 +2839,12 @@ function PageTextInfo:onShowSettingsMenu()
 
     local dialog = InputContainer:new{
         dimen = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h },
+        -- Double tap off while this window is on top. KOReader works it out again
+        -- every time a widget is closed (UIManager:close) from the topmost widget that
+        -- states it, and this one stated nothing: the reader below (with double tap
+        -- on) won, so after the window was reopened (show new, close old) taps were
+        -- delayed and a second quick tap came as "double_tap", which nobody handled.
+        disable_double_tap = true,
         ges_events = {
             Tap = { GestureRange:new{ ges = "tap",
                 range = Geom:new{ x = 0, y = 0, w = screen.w, h = screen.h } } },
