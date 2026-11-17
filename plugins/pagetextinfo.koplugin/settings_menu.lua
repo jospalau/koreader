@@ -1692,6 +1692,47 @@ function PageTextInfo:getFontXHeightInfo(face)
     return info
 end
 
+-- Everything the title and the size table need for the current font is computed
+-- the first time that font is seen (the readability analysis alone loads the font
+-- at 1000 px), and cached. Doing it when the menu opens made the first opening
+-- slow and the next ones fast. This computes it in the background instead, in
+-- small steps, after every font change from the fonts menu (where the user is
+-- already busy with fonts). Never when the book opens: that would block reading.
+local _warm_pending = false
+function PageTextInfo:warmUpCaches()
+    local ui = self.ui
+    if _warm_pending or not (ui and ui.rolling and ui.document and ui.document._document) then
+        return
+    end
+    _warm_pending = true
+    local UIManager = require("ui/uimanager")
+    local time = require("ui/time")
+    local t0 = time.now()
+    local steps = {
+        function() xHeightRatio(ui.document) end,
+        function()
+            local name = ui.document._document:getFontFace()
+            if name and name ~= "" then faceReadability(ui, name) end
+        end,
+        function() bestHinting(ui.document) end,
+        function() measuredXHeightPx(ui) end,
+    }
+    local i = 0
+    local function run()
+        i = i + 1
+        local step = steps[i]
+        if not step then
+            _warm_pending = false
+            require("logger").info("[PTI] timing: warm-up done", time.to_ms(time.since(t0)), "ms")
+            return
+        end
+        local ok, err = pcall(step)
+        if not ok then require("logger").warn("[PTI] warm-up step failed:", err) end
+        UIManager:scheduleIn(0.3, run)
+    end
+    UIManager:scheduleIn(1, run)
+end
+
 -- Returns three lines, each a list of segments: { font line, angle line, leading line }
 local function buildTitleSegments(ui)
     local doc = ui.document

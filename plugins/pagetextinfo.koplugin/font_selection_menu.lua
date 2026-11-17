@@ -48,6 +48,19 @@ end
 -- them until the device crawled. This takes the fonts of the list out of that
 -- cache: widgets still showing one keep it alive, the rest is freed by the
 -- collection forced at the end (the Lua GC alone does not see that memory).
+-- Resident memory of the process in MB (nil where /proc is not available)
+local function residentMb()
+    local fh = io.open("/proc/self/status", "r")
+    if not fh then return nil end
+    local mb
+    for line in fh:lines() do
+        local kb = line:match("^VmRSS:%s+(%d+)")
+        if kb then mb = math.floor(tonumber(kb) / 1024 + 0.5); break end
+    end
+    fh:close()
+    return mb
+end
+
 local function purgeFontFaces(self)
     local faces = require("ui/font").faces
     if type(faces) ~= "table" or not self.font_paths then return end
@@ -66,9 +79,19 @@ local function purgeFontFaces(self)
         end
         if match then drop[#drop + 1] = key end
     end
+    local rss_before = residentMb()
     for __, key in ipairs(drop) do faces[key] = nil end
     collectgarbage()
-    require("logger").info("[PTI] purgeFontFaces: dropped", #drop, "faces")
+    local rss_gc = residentMb()
+    -- glibc keeps the memory it was given even when it is free again, so the
+    -- resident size creeps up with every font loaded and freed: hand it back
+    pcall(function()
+        local ffi = require("ffi")
+        ffi.cdef("int malloc_trim(size_t pad);")
+        ffi.C.malloc_trim(0)
+    end)
+    require("logger").info("[PTI] purgeFontFaces: dropped", #drop, "faces; RSS MB:",
+        rss_before, "-> after GC", rss_gc, "-> after malloc_trim", residentMb())
 end
 
 function PageTextInfo:closeFontsMenu()
@@ -117,6 +140,7 @@ function PageTextInfo:applyFontAndReopen(face)
             self:onShowFonts(page)
             purgeFontFaces(self)
             lap("pt mode: fonts menu shown")
+            if self.warmUpCaches then self:warmUpCaches() end
         end)
         return
     end
@@ -166,6 +190,8 @@ function PageTextInfo:applyFontAndReopen(face)
         self:onShowFonts(page)
         purgeFontFaces(self)
         lap("fonts menu shown")
+        -- Compute in the background what the settings menu will need for this font
+        if self.warmUpCaches then self:warmUpCaches() end
     end)
 end
 
