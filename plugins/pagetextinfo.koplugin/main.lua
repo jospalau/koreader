@@ -24,6 +24,7 @@ local left_container = require("ui/widget/container/leftcontainer")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local TextViewer = require("ui/widget/textviewer")
 local CrashLog = require("crashlog_overlay")
+local MemoryOverlay = require("memory_overlay")
 local Geom = require("ui/geometry")
 local Size = require("ui/size")
 local Screen = require("device").screen
@@ -1145,6 +1146,7 @@ function PageTextInfo:init()
         end
     end
     CrashLog.setEnabled(G_reader_settings:isTrue("crashlog_enabled"))
+    MemoryOverlay.setEnabled(G_reader_settings:isTrue("memoryoverlay_enabled"))
 end
 
 -- function PageTextInfo:_postInit()
@@ -1368,6 +1370,20 @@ function PageTextInfo:addToMainMenu(menu_items)
                         G_reader_settings:flush()
                         local Event = require("ui/event")
                         UIManager:broadcastEvent(Event:new("CrashLogToggled", enable))
+                        return true
+                    end,
+                },
+                -- Menu entry
+                {
+                    text = _("Memory overlay"),
+                    checked_func = function() return G_reader_settings:isTrue("memoryoverlay_enabled") end,
+                    help_text = _([[Show the memory of KOReader (Lua heap, resident memory, free memory), updated live, on every screen.]]),
+                    callback = function()
+                        local enable = not G_reader_settings:isTrue("memoryoverlay_enabled")
+                        G_reader_settings:saveSetting("memoryoverlay_enabled", enable)
+                        G_reader_settings:flush()
+                        local Event = require("ui/event")
+                        UIManager:broadcastEvent(Event:new("MemoryOverlayToggled", enable))
                         return true
                     end,
                 },
@@ -1780,6 +1796,20 @@ This is to be active only if the option flash buttons and menu items or the opti
                         G_reader_settings:flush()
                         local Event = require("ui/event")
                         UIManager:broadcastEvent(Event:new("CrashLogToggled", enable))
+                        return true
+                    end,
+                },
+                -- Menu entry
+                {
+                    text = _("Memory overlay"),
+                    checked_func = function() return G_reader_settings:isTrue("memoryoverlay_enabled") end,
+                    help_text = _([[Show the memory of KOReader (Lua heap, resident memory, free memory), updated live, on every screen.]]),
+                    callback = function()
+                        local enable = not G_reader_settings:isTrue("memoryoverlay_enabled")
+                        G_reader_settings:saveSetting("memoryoverlay_enabled", enable)
+                        G_reader_settings:flush()
+                        local Event = require("ui/event")
+                        UIManager:broadcastEvent(Event:new("MemoryOverlayToggled", enable))
                         return true
                     end,
                 },

@@ -17,6 +17,11 @@ return function(PageTextInfo)
         local ok, mod = pcall(require, "crashlog")
         return ok and mod or rawget(_G, "CrashLog")
     end
+    -- Same for the memory overlay (memory_overlay.lua, next to this file)
+    local function getMemoryOverlay()
+        local ok, mod = pcall(require, "memory_overlay")
+        return ok and mod or nil
+    end
 
     -- Per-platform paths (defined once, shared by both functions)
     local function getPlatformPaths()
@@ -391,6 +396,20 @@ return function(PageTextInfo)
         return true
     end
 
+    function PageTextInfo:onMemoryOverlayToggled(enable)
+        if enable == nil then
+            -- no value given (e.g. from an action): flip the saved flag
+            enable = not G_reader_settings:isTrue("memoryoverlay_enabled")
+            G_reader_settings:saveSetting("memoryoverlay_enabled", enable)
+            G_reader_settings:flush()
+        end
+        local MemoryOverlay = getMemoryOverlay()
+        if MemoryOverlay then
+            MemoryOverlay.setEnabled(enable)
+        end
+        return true
+    end
+
     function PageTextInfo:onToggleDebugVerbose()
         local dbg = require("dbg")
         local DataStorage = require("datastorage")
@@ -477,6 +496,14 @@ return function(PageTextInfo)
             end,
         })
         table.insert(actions, {
+            label = "Memory overlay",
+            -- Reflects the saved setting
+            active = function() return G_reader_settings:isTrue("memoryoverlay_enabled") end,
+            callback = function()
+                self.ui:handleEvent(Event:new("MemoryOverlayToggled"))
+            end,
+        })
+        table.insert(actions, {
             label = "Verbose logging",
             -- Reflects the saved setting (takes effect after a restart)
             active = function() return G_reader_settings:isTrue("debug_verbose") end,
@@ -502,6 +529,14 @@ return function(PageTextInfo)
         table.insert(actions, { header = "Restart or Exit", label = "Restart", callback = function() PageTextInfo.restartKOReader() end })
         table.insert(actions, { label = "Exit", callback = function() self.ui:handleEvent(Event:new("Exit")) end })
         return actions
+    end
+
+    -- Bring the memory overlay back if it was left enabled (setEnabled is deferred,
+    -- so it is safe to call while the plugin is still loading; calling it twice,
+    -- for the file manager and for the reader, does nothing the second time)
+    if G_reader_settings:isTrue("memoryoverlay_enabled") then
+        local MemoryOverlay = getMemoryOverlay()
+        if MemoryOverlay then MemoryOverlay.setEnabled(true) end
     end
 
     -- Close the menu and repaint the area underneath
