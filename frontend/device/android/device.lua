@@ -287,6 +287,7 @@ function Device:init()
         gocolor7_2 = true,
         hibreak = true,
         moaanmix7 = true,
+        ["tab-executive"] = true,
         xiaomi_reader = true,
     }
 
