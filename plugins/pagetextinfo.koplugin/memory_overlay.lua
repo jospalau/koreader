@@ -107,6 +107,7 @@ end
 local Overlay = WidgetContainer:extend{
     name = "memory_overlay",
     toast = true,
+    skip_topmost = true,   -- see installTopmostHook(): not counted as "topmost visible widget"
 }
 
 function Overlay:init()
@@ -360,6 +361,27 @@ end
 -- ─── module state (singleton, shared by FM and reader) ──────────────────────
 
 local overlay
+-- Core code (e.g. ReaderRolling's background re-render / reload automation, the
+-- footer and header repaint checks) only acts when getTopmostVisibleWidget() is
+-- the ReaderUI. A toast overlay on top of the stack hides it, so a typographic
+-- change would never be reloaded. Make UIManager skip widgets flagged with
+-- `skip_topmost`. Shared marker: install once, whichever overlay loads first.
+local function installTopmostHook()
+    if UIManager._pti_topmost_hooked then return end
+    UIManager._pti_topmost_hooked = true
+    local orig = UIManager.getTopmostVisibleWidget
+    UIManager.getTopmostVisibleWidget = function(self, ...)
+        for i = #self._window_stack, 1, -1 do
+            local w = self._window_stack[i].widget
+            if not w.invisible and not w.skip_topmost then
+                return w
+            end
+        end
+        return orig(self, ...)
+    end
+end
+installTopmostHook()
+
 local show_hooked = false
 local send_hooked = false
 local desired = false
@@ -422,7 +444,11 @@ local function apply()
         UIManager:unschedule(poll)
         local o = overlay
         overlay = nil
-        UIManager:close(o)
+        -- explicit refresh of the area the box covered: a plain close() queues
+        -- no refresh, so the box would stay on screen until the next repaint
+        local d = o.dimen
+        local region = d and Geom:new{ x = d.x, y = d.y, w = d.w, h = d.h } or nil
+        UIManager:close(o, region and REFRESH_MODE or nil, region)
         o:free()
     end
 end
