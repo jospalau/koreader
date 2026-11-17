@@ -170,7 +170,7 @@ function PageTextInfo:applyFont(face)
         target = self.xh_keep
     end
 
-    require("logger").info("[PTI] xh: change to", face, "target=", target, "cur=", cur,
+    require("logger").dbg("[PTI] xh: change to", face, "target=", target, "cur=", cur,
         "keep=", self.xh_keep, "keep_cur=", self.xh_keep_cur)
     UIManager:broadcastEvent(Event:new("BatchedUpdate"))
     local ok, err = pcall(function()
@@ -200,7 +200,7 @@ function PageTextInfo:applyFont(face)
         self.xh_keep_cur = self.getXHeightMm and self:getXHeightMm() or self.xh_keep_cur
         lap("refineXHeightMm")
     end
-    require("logger").info("[PTI] xh: after change, measured=", self.getXHeightMm and self:getXHeightMm(),
+    require("logger").dbg("[PTI] xh: after change, measured=", self.getXHeightMm and self:getXHeightMm(),
         "wanted=", target)
     return lap
 end
@@ -700,14 +700,20 @@ function PageTextInfo:onShowFonts(page)
                 if xi.best then
                     caption = caption .. "  |  Best hinting: " .. xi.best
                 end
+            else
+                -- The font can't be measured (no Latin "x" in it, or its file was not
+                -- found by name): say so instead of leaving the row bare
+                caption = caption .. "  |  x-height: n/a"
+                require("logger").dbg("[PTI] caption: no x-height info for", cur,
+                    "path=", cur_path)
             end
         end
         -- Second row: the readability reason is long, so it gets a line of its own
-        -- Always two rows (a blank one when the font has no readability rating): the
+        -- Always two rows ("n/a" when the font has no readability rating): the
         -- number of rows never changes with the font, so the window is never built
         -- again after a change, only its texts are replaced (building it again right
         -- after a change, with the page refresh going on, was what glitched)
-        local caption2 = readability_txt and ("Readability: " .. readability_txt) or " "
+        local caption2 = "Readability: " .. (readability_txt or "n/a")
         return caption, caption2
     end
     local caption, caption2 = buildCaptions(current)
@@ -960,7 +966,7 @@ function PageTextInfo:onShowFonts(page)
                             -- with the new face, and correct it once if it is not
                             local want = plugin.xh_keep
                             local now = want and plugin.getXHeightMm and plugin:getXHeightMm()
-                            require("logger").info("[PTI] xh: after layout, measured=", now, "wanted=", want)
+                            require("logger").dbg("[PTI] xh: after layout, measured=", now, "wanted=", want)
                             if want and now and math.abs(now - want) > 0.04
                                 and plugin.ptForXHeight and plugin.applyFontSizePt then
                                 local pt = plugin:ptForXHeight(want)
@@ -968,7 +974,7 @@ function PageTextInfo:onShowFonts(page)
                                     pcall(plugin.applyFontSizePt, plugin, pt)
                                     if plugin.refineXHeightMm then pcall(plugin.refineXHeightMm, plugin, want) end
                                     plugin.xh_keep_cur = plugin.getXHeightMm and plugin:getXHeightMm() or plugin.xh_keep_cur
-                                    require("logger").info("[PTI] xh: corrected to", plugin.xh_keep_cur, "pt=", pt)
+                                    require("logger").dbg("[PTI] xh: corrected to", plugin.xh_keep_cur, "pt=", pt)
                                     dlg:updateCaptions(face)
                                 end
                             end
