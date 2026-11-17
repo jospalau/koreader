@@ -262,6 +262,7 @@ function Overlay:finishDrag(dx, dy)
     self:updateDimen()          -- clamps to the screen
     self.pos = { x = self.dimen.x, y = self.dimen.y }
     G_reader_settings:saveSetting(POS_SETTING, self.pos)
+    G_reader_settings:flush()
     -- repaint what is under the old spot, and draw the box in the new one
     UIManager:setDirty("all", REFRESH_MODE, old)
     UIManager:setDirty("all", REFRESH_MODE, self.dimen)

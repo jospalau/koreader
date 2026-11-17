@@ -41,7 +41,6 @@ local function buildFacePathMap()
     return regular
 end
 
--- Close the fonts menu and repaint the page underneath
 -- Font:getFace keeps every face it loads in Font.faces for good, and a face is a
 -- whole font file mapped in memory. The menu draws each name in its own font (and
 -- the info window loads one at 100 px), so browsing the list piled up hundreds of
@@ -60,6 +59,8 @@ local function residentMb()
     fh:close()
     return mb
 end
+
+local malloc_trim_declared   -- the C declaration is made once
 
 local function purgeFontFaces(self)
     local faces = require("ui/font").faces
@@ -87,13 +88,17 @@ local function purgeFontFaces(self)
     -- resident size creeps up with every font loaded and freed: hand it back
     pcall(function()
         local ffi = require("ffi")
-        ffi.cdef("int malloc_trim(size_t pad);")
+        if not malloc_trim_declared then
+            ffi.cdef("int malloc_trim(size_t pad);")
+            malloc_trim_declared = true
+        end
         ffi.C.malloc_trim(0)
     end)
     require("logger").dbg("[PTI] purgeFontFaces: dropped", #drop, "faces; RSS MB:",
         rss_before, "-> after GC", rss_gc, "-> after malloc_trim", residentMb())
 end
 
+-- Close the fonts menu and repaint the page underneath
 function PageTextInfo:closeFontsMenu()
     local d = self.fonts_dialog
     self.fonts_dialog = nil
@@ -393,37 +398,6 @@ end
 
 -- Fonts shown first in the fonts menu, in this order.
 -- Matching ignores case and spaces ("Chare Ink 7SP" == "chareink7sp").
--- local PINNED_FONTS = {
---     "Alegreya",
---     "AmasisMTW1G",
---     "AndadaPro",
---     "Average",
---     "BitterPro",
---     "Bookerly",
---     "PMNCaeciliaLT",
---     "CanelaText",
---     "Capita",
---     "ChareInk7SP",
---     "Constantia",
---     "CrimsonPro",
---     "EBGaramond",
---     "GentiumBookPlus",
---     "Georgia",
---     "GoudyOldStyle",
---     "IBMPlexSerif",
---     "IowanOldStBT",
---     "LexiaDaMa",
---     "LiberationSerif",
---     "LibreBaskerville",
---     "Literata7pt",
---     "Luciole",
---     "Merriweather",
---     "Palatino",
---     "Souvenir",
---     "Spectral",
---     "Vollkorn",
--- }
-
 local PINNED_FONTS = {
 }
 
@@ -719,7 +693,7 @@ function PageTextInfo:onShowFonts(page)
     local col = 0   -- cells in the current row (spacers don't count)
 
     local function addCell(face, label)
-        local cell_w = (col == COLUMNS - 1) and last_cell_w or cell_w
+        local w = (col == COLUMNS - 1) and last_cell_w or cell_w
         local is_current = face ~= nil and face == current
         -- The active cell is inverted (white text on black)
         local fg = is_current and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
@@ -734,7 +708,7 @@ function PageTextInfo:onShowFonts(page)
                     fgcolor = fg,
                     forced_height = text_h,
                     forced_baseline = baseline,
-                    max_width = cell_w - 2 * Size.padding.small,
+                    max_width = w - 2 * Size.padding.small,
                 }
             end
         end
@@ -746,7 +720,7 @@ function PageTextInfo:onShowFonts(page)
                 fgcolor = fg,
                 forced_height = text_h,
                 forced_baseline = baseline,
-                max_width = cell_w - 2 * Size.padding.small,
+                max_width = w - 2 * Size.padding.small,
             }
         end
 
@@ -761,7 +735,7 @@ function PageTextInfo:onShowFonts(page)
             padding = 0,
             CenterContainer:new{
                 dimen = Geom:new{
-                    w = cell_w - 2 * thin,
+                    w = w - 2 * thin,
                     h = cell_h - 2 * thin,
                 },
                 text_widget,

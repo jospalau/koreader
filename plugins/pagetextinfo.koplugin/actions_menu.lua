@@ -547,20 +547,6 @@ return function(PageTextInfo)
         return actions
     end
 
-    -- Bring the crash log overlay back if it was left enabled (same deferred, idempotent call)
-    if G_reader_settings:isTrue("crashlog_enabled") then
-        local CrashLog = getCrashLog()
-        if CrashLog then CrashLog.setEnabled(true) end
-    end
-
-    -- Bring the memory overlay back if it was left enabled (setEnabled is deferred,
-    -- so it is safe to call while the plugin is still loading; calling it twice,
-    -- for the file manager and for the reader, does nothing the second time)
-    if G_reader_settings:isTrue("memoryoverlay_enabled") then
-        local MemoryOverlay = getMemoryOverlay()
-        if MemoryOverlay then MemoryOverlay.setEnabled(true) end
-    end
-
     -- Close the menu and repaint the area underneath
     function PageTextInfo:closeActionsMenu()
         local UIManager = require("ui/uimanager")

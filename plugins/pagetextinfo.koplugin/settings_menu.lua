@@ -325,21 +325,9 @@ local function setWeight(ui, w)
 end
 
 -- Make the page render again and repaint it, after a setting that crengine caches
--- (gamma, hinting). The cache-clearing method is not present in every KOReader
--- build ("clearCacheData" is nil in the one used here), so it is only called when
--- it exists, on the document or on the crengine object. The re-layout itself
--- (UpdatePos) and the full repaint do not depend on it.
+-- (gamma, hinting): re-layout (UpdatePos) and a full repaint.
 local function forceRerender(ui)
     local doc = ui.document
-    local cleared = false
-    for __, owner in ipairs({ doc, doc._document }) do
-        if not cleared and type(owner.clearCacheData) == "function" then
-            local ok, err = pcall(owner.clearCacheData, owner)
-            dlog("forceRerender: clearCacheData", ok and "OK" or err)
-            cleared = ok
-        end
-    end
-    if not cleared then dlog("forceRerender: no clearCacheData available, skipped") end
     doc:getCurrentPos()
     ui:handleEvent(require("ui/event"):new("UpdatePos"))
     require("ui/uimanager"):setDirty("all", "partial")
@@ -586,9 +574,11 @@ local function buildRows(ui)
         { text = "x-height", callback = function() setSizeMode("xheight") end, active = xhMode() },
         { text = "ⓘ", info_fn = showSizeModeInfo },
     }
-    for __, b in ipairs(font_preset_row) do
-        dlog("buildRows: preset button", b.text, "active=", b.active and true or false,
-            "fs=", fs)
+    if DEBUG_LOG then
+        for __, b in ipairs(font_preset_row) do
+            dlog("buildRows: preset button", b.text, "active=", b.active and true or false,
+                "fs=", fs)
+        end
     end
     local font_step_row = {
         { text = "▼", callback = function(u) stepFontSize(u, -1) end },
@@ -1085,9 +1075,7 @@ local function measuredXHeightPx(ui)
     local hint = getHinting(ui)
     if hint ~= 1 and hint ~= 2 then return nil end
     local eng = engineXHeightPx(ui)
-    dlog("measuredXHeightPx: engine x-height=", eng, "px=",
-        drawnPx(ui, ui.document.configurable.font_size,
-            Device:getDeviceScreenDPI() or Screen:getDPI()))
+    dlog("measuredXHeightPx: engine x-height=", eng)
     return eng
 end
 
@@ -1618,8 +1606,7 @@ local function bestHintingFor(ratio, path)
     local result = false
     local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
     local mm_per_px = ratio * 25.4 / dpi
-    local cps_mm = 2 * VIEW_DIST_MM * math.tan(math.rad(CPS_ARCMIN / 60 / 2))
-    local first = math.max(1, math.ceil(cps_mm / mm_per_px - 1e-6))
+    local first = math.max(1, math.ceil(CPS_MM / mm_per_px - 1e-6))
     local last = math.floor(2.25 / mm_per_px + 1e-6)
     if last <= 300 and last - first <= 120 then
         local best_err, best_name
@@ -1654,7 +1641,7 @@ local function bestHinting(doc)
 end
 
 -- Readability of a face given by its name (as used by the document)
-local function faceReadability(ui, face_name)
+local function faceReadability(face_name)
     return readabilityOfPath(resolveFace(face_name))
 end
 
@@ -1712,7 +1699,7 @@ function PageTextInfo:warmUpCaches()
         function() xHeightRatio(ui.document) end,
         function()
             local name = ui.document._document:getFontFace()
-            if name and name ~= "" then faceReadability(ui, name) end
+            if name and name ~= "" then faceReadability(name) end
         end,
         function() bestHinting(ui.document) end,
         function() measuredXHeightPx(ui) end,
@@ -1733,6 +1720,43 @@ function PageTextInfo:warmUpCaches()
     UIManager:scheduleIn(1, run)
 end
 
+-- (ascender + descender) / x-height of a face: it is the same at any size, so it is
+-- measured once per face (that needs the face loaded) and kept. Loading a face on
+-- every opening of the menu (and the garbage collection that releasing it forces
+-- every few openings) made the opening time uneven.
+local _safe_min_cache = {}   -- [face name] = number
+
+-- Everything the settings menu needs for this book and font is computed once, right
+-- when the book is ready: KOReader sends ReaderReady while the book is still being
+-- opened (the BookLoadCover patch is still showing the cover then), so the wait
+-- happens where it is expected and the first opening of the menu costs the same as
+-- the following ones. Synchronous on purpose: no timers, no later refresh. Each
+-- step is protected, so a failure only leaves that value for the menu to compute.
+-- Called from PageTextInfo:onReaderReady() in main.lua (it can't be named
+-- onReaderReady here: main.lua defines that one after loading this file and would
+-- replace it).
+function PageTextInfo:warmUpOnReady()
+    local ui = self.ui
+    if not (ui and ui.rolling and ui.document and ui.document._document) then return end
+    local doc = ui.document
+    local steps = {
+        function() for __, def in ipairs(TWEAK_BUTTONS) do tweakId(def) end end,
+        function() xHeightRatio(doc) end,
+        function() bestHinting(doc) end,
+        function()
+            local name = doc._document:getFontFace()
+            if name and name ~= "" then faceReadability(name) end
+        end,
+        function() measuredXHeightPx(ui) end,
+        function() bookUsesRem(doc) end,
+    }
+    for i, step in ipairs(steps) do
+        local ok, err = pcall(step)
+        if not ok then require("logger").warn("[PTI] ready warm-up step", i, "failed:", err) end
+    end
+    dlog("warmUpOnReady: caches warmed")
+end
+
 -- Returns three lines, each a list of segments: { font line, angle line, leading line }
 local function buildTitleSegments(ui)
     local doc = ui.document
@@ -1749,8 +1773,6 @@ local function buildTitleSegments(ui)
     local ratio, face_name = xHeightRatio(doc)
     if not ratio then return na end
     local px = drawnPx(ui, pt, display_dpi)   -- whole px, as drawn by crengine
-    local face_base = Font:getFace(face_name, px, 0, true)
-    if not face_base or not face_base.ftsize then return na end
 
     -- With hinting on the drawn x-height is a whole number of pixels: measured on
     -- the page, else predicted with FreeType (shown with a "~")
@@ -1775,7 +1797,7 @@ local function buildTitleSegments(ui)
         -- Font name and rating (HIGH / MEDIUM / LOW) in bold, the reason in regular
         local time = require("ui/time")
         local t_read = time.now()
-        local res = faceReadability(ui, font_name)
+        local res = faceReadability(font_name)
         require("logger").dbg("[PTI] timing: title, faceReadability", time.to_ms(time.since(t_read)), "ms")
         local rating, why = res:match("^(%u+): (.+)$")
         if not rating and res:match("^%u+$") then rating = res end
@@ -1813,13 +1835,22 @@ local function buildTitleSegments(ui)
     -- Line 3: leading, weight, contrast
     local line2 = { { text = "Leading: " } }
     local line_spacing_factor = (configurable.line_spacing or 100) / 100
-    local ok, xh2, ascender, descender = pcall(function()
-        return face_base.ftsize:getAscDesc()
-    end)
-    releaseFace(face_base)   -- one per font and size touched: do not keep them all
-    if ok and xh2 and ascender and descender then
+    local safe_min = _safe_min_cache[face_name]
+    if not safe_min then
+        local face_base = Font:getFace(face_name, px, 0, true)
+        if face_base and face_base.ftsize then
+            local ok, xh2, ascender, descender = pcall(function()
+                return face_base.ftsize:getAscDesc()
+            end)
+            if ok and xh2 and ascender and descender and xh2 > 0 then
+                safe_min = (ascender + descender) / xh2
+                _safe_min_cache[face_name] = safe_min
+            end
+        end
+        releaseFace(face_base)   -- one per face touched: do not keep them all
+    end
+    if safe_min then
         local leading_factor = (1.2 * px * line_spacing_factor) / xh_px
-        local safe_min = (ascender + descender) / xh2
         local leading_class
         if leading_factor < safe_min then
             leading_class = "Collision"
@@ -1873,7 +1904,7 @@ end
 -- "combination": the smallest pt that produces it, the px drawn, the x-height
 -- in mm and the visual angle at 40 cm. Shown in a popup (double tap on the
 -- title) for every px size from the critical print size (CPS: the x-height
--- seen at COMBO_CPS_ARCMIN arc minutes from COMBO_DIST_MM) up to COMBO_MM_MAX.
+-- seen at CPS_ARCMIN arc minutes from VIEW_DIST_MM) up to COMBO_MM_MAX.
 -- If everything fits on the screen there are no scroll buttons; otherwise swipe
 -- up/down (or the arrows) to scroll. Tap a row to apply it: the window stays
 -- open.
@@ -1892,8 +1923,6 @@ local COMBO_RENDER_SHARE = 0.25   -- fraction of the rows (the best ones) that g
 -- in one part of it (the distortion drifts with the size), leaving the other sizes
 -- without any choice: so every run of COMBO_MARK_GAP rows gets its best row marked.
 local COMBO_MARK_GAP = 5
-local COMBO_CPS_ARCMIN = CPS_ARCMIN
-local COMBO_DIST_MM = VIEW_DIST_MM
 local COMBO_MM_MAX = 2.25
 -- Font sizes of the window (biggest wanted, lowered when a text does not fit):
 -- a bit bigger than the ones of the settings menu
@@ -1913,9 +1942,8 @@ local function buildSizeCombos(ui, use_page)
 
     local mm_per_px = ratio * 25.4 / dpi
     local cur_px = drawnPx(ui, doc.configurable.font_size, dpi)
-    -- x-height that subtends COMBO_CPS_ARCMIN at COMBO_DIST_MM (CPS_MM, about 1.51 mm)
-    local cps_mm = 2 * COMBO_DIST_MM * math.tan(math.rad(COMBO_CPS_ARCMIN / 60 / 2))
-    local first = math.max(1, math.ceil(cps_mm / mm_per_px - 1e-6))
+    -- first size: the x-height of the critical print size (CPS_MM, about 1.51 mm)
+    local first = math.max(1, math.ceil(CPS_MM / mm_per_px - 1e-6))
     local last = math.floor(COMBO_MM_MAX / mm_per_px + 1e-6)
     -- A font with no usable Latin x-height (Arabic, Devanagari, ...) gives an absurd
     -- ratio and thousands of sizes up to 16000 px: measuring those exhausts memory.
@@ -1973,8 +2001,10 @@ local function buildSizeCombos(ui, use_page)
         local o_px = hinted and not from_page and round_top and round_top[px] or nil
         local flat_top = _xx_cache[face_name .. "|" .. tostring(hint)]
         local x_px = hinted and not from_page and flat_top and flat_top[px] or nil
-        dlog("combo px=", px, "xh ideal=", xh_ideal, "xh real=", xh_real,
-            "round o top=", o_px)
+        if DEBUG_LOG then
+            dlog("combo px=", px, "xh ideal=", xh_ideal, "xh real=", xh_real,
+                "round o top=", o_px)
+        end
         table.insert(combos, {
             pt = pt, px = px, mm = mm, mm_ideal = mm_ideal, hinted = hinted,
             o_px = o_px, x_px = x_px,
@@ -2464,7 +2494,7 @@ local function showSizeCombos(plugin, start, old)
     -- Size of one step: crengine draws whole pixels, so 1 px = this much pt / x-height
     local step_mm = all[1].mm_ideal / all[1].px   -- design value: hinted rows differ
     local xh_ratio = step_mm * dpi / 25.4   -- x-height as a fraction of the font size (em)
-    local readability = faceReadability(ui, face_name)
+    local readability = faceReadability(face_name)
     table.insert(grid, cellFit(string.format("%s (%s) (x-height %.3fem)", face_name, readability, xh_ratio),
         inner_w, head_h, Blitbuffer.COLOR_DARK_GRAY))
     table.insert(grid, cellFit(string.format("step: 1px = %.2fpt = %.3fmm @%ddpi", 72 / dpi, step_mm, dpi),

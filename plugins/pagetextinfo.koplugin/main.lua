@@ -1171,6 +1171,7 @@ function PageTextInfo:readSettingsFile()
 end
 
 function PageTextInfo:onReaderReady()
+    if self.warmUpOnReady then self:warmUpOnReady() end
     -- self.ui.menu:registerToMainMenu(self)
     self.view:registerViewModule("pagetextinfo", self)
     self.initialized = true
