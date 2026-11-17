@@ -14,8 +14,11 @@ return function(PageTextInfo)
     local T = require("ffi/util").template
     -- CrashLog is resolved lazily and safely: a missing module must not break loading
     local function getCrashLog()
-        local ok, mod = pcall(require, "crashlog")
-        return ok and mod or rawget(_G, "CrashLog")
+        for __, name in ipairs({ "crashlog_overlay", "crashlog" }) do
+            local ok, mod = pcall(require, name)
+            if ok and type(mod) == "table" then return mod end
+        end
+        return rawget(_G, "CrashLog")
     end
     -- Same for the memory overlay (memory_overlay.lua, next to this file)
     local function getMemoryOverlay()
@@ -488,10 +491,9 @@ return function(PageTextInfo)
         })
         table.insert(actions, {
             label = "Crash log overlay",
-            -- Tracks the overlay state locally
-            active = function() return self.crash_log_overlay_on == true end,
+            -- Reflects the saved setting
+            active = function() return G_reader_settings:isTrue("crashlog_enabled") end,
             callback = function()
-                self.crash_log_overlay_on = not self.crash_log_overlay_on
                 self.ui:handleEvent(Event:new("CrashLogToggled"))
             end,
         })
@@ -543,6 +545,12 @@ return function(PageTextInfo)
         table.insert(actions, { header = "Restart or Exit", label = "Restart", callback = function() PageTextInfo.restartKOReader() end })
         table.insert(actions, { label = "Exit", callback = function() self.ui:handleEvent(Event:new("Exit")) end })
         return actions
+    end
+
+    -- Bring the crash log overlay back if it was left enabled (same deferred, idempotent call)
+    if G_reader_settings:isTrue("crashlog_enabled") then
+        local CrashLog = getCrashLog()
+        if CrashLog then CrashLog.setEnabled(true) end
     end
 
     -- Bring the memory overlay back if it was left enabled (setEnabled is deferred,
