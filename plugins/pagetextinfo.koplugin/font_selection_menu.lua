@@ -99,11 +99,11 @@ local function purgeFontFaces(self)
 end
 
 -- Freeing the faces forces a full garbage collection and a malloc_trim, which can
--- take a good part of a second, so the screen must never wait for it.
+-- take a good part of a second. It runs two ticks later, after the change of menu
+-- has been painted, so the screen never waits for it.
 -- Later still, and only once: every change of font (and closing the menu) asks for
--- it, and each one ran a full collection + malloc_trim right after the change, which is
--- when the settings menu is usually opened next. Now they are joined into a single one
--- that runs 2 s after the last request.
+-- it; they are joined into a single one that runs 2 s after the last request, so it
+-- does not get in the way of the next thing the user does.
 local purge_fn
 local function purgeFontFacesLater(self)
     if purge_fn then UIManager:unschedule(purge_fn) end
@@ -138,14 +138,13 @@ function PageTextInfo:closeFontsMenu()
     end
 end
 
--- Close the menu, apply the font directly on the reader, then reopen. The
--- x-height (mm) is kept: the size in pt is recalculated for the new face (the
--- methods come from settings_menu.lua; without them only the face changes).
--- Both changes are batched with KOReader's BatchedUpdate events, so the book is
--- re-rendered once and not once per change.
-function PageTextInfo:applyFontAndReopen(face)
+-- Apply the font directly on the reader (synchronously). The x-height (mm) is
+-- kept: the size in pt is recalculated for the new face (the methods come from
+-- settings_menu.lua; without them only the face changes). Both changes are
+-- batched with KOReader's BatchedUpdate events, so the book is re-rendered once
+-- and not once per change. Returns the timing function `lap`.
+function PageTextInfo:applyFont(face)
     local Event = require("ui/event")
-    local page = self.fonts_page
     -- Timing of every phase (wall clock, ms), always logged: grep "[PTI] timing"
     local time = require("ui/time")
     local t0 = time.now()
@@ -157,14 +156,7 @@ function PageTextInfo:applyFontAndReopen(face)
     if self.isXHeightMode and not self:isXHeightMode() then
         self.ui:handleEvent(Event:new("SetFont", face))
         lap("pt mode: SetFont")
-        UIManager:nextTick(function()
-            -- The menu was closed while the font was being applied: don't reopen it
-            if self.fonts_dialog then self:onShowFonts(page) end
-            purgeFontFacesLater(self)
-            lap("pt mode: fonts menu shown")
-            if self.warmUpCaches then self:warmUpCaches() end
-        end)
-        return
+        return lap
     end
 
     -- x-height to keep. Every face rounds it to its own whole pixels, so going
@@ -178,7 +170,8 @@ function PageTextInfo:applyFontAndReopen(face)
         target = self.xh_keep
     end
 
-    -- Don't close the dialog: the new one replaces it
+    require("logger").info("[PTI] xh: change to", face, "target=", target, "cur=", cur,
+        "keep=", self.xh_keep, "keep_cur=", self.xh_keep_cur)
     UIManager:broadcastEvent(Event:new("BatchedUpdate"))
     local ok, err = pcall(function()
         self.ui:handleEvent(Event:new("SetFont", face))
@@ -197,7 +190,7 @@ function PageTextInfo:applyFontAndReopen(face)
     -- Always close the batch, or the page would never be laid out again
     UIManager:broadcastEvent(Event:new("BatchedUpdateDone"))
     lap("BatchedUpdateDone (re-layout)")
-    if not ok then require("logger").warn("[PTI] applyFontAndReopen failed:", err) end
+    if not ok then require("logger").warn("[PTI] applyFont failed:", err) end
 
     -- With native / auto hinting the prediction can be 1 px off: check it on the
     -- page and correct it (the x-height wanted is the one measured before)
@@ -207,7 +200,15 @@ function PageTextInfo:applyFontAndReopen(face)
         self.xh_keep_cur = self.getXHeightMm and self:getXHeightMm() or self.xh_keep_cur
         lap("refineXHeightMm")
     end
+    require("logger").info("[PTI] xh: after change, measured=", self.getXHeightMm and self:getXHeightMm(),
+        "wanted=", target)
+    return lap
+end
 
+-- Apply the font, then show the menu again (kept for callers that need a new menu)
+function PageTextInfo:applyFontAndReopen(face)
+    local page = self.fonts_page
+    local lap = self:applyFont(face)
     UIManager:nextTick(function()
         -- The menu was closed while the font was being applied: don't reopen it
         if self.fonts_dialog then self:onShowFonts(page) end
@@ -616,11 +617,14 @@ function PageTextInfo:onShowFonts(page)
     }
     -- Swipe left/right: next / previous page (wraps around)
     function dialog:onSwipe(arg, ges)
-        local dir = ges.direction
+        if self:closeIfOutside(ges) then return true end
+        -- Diagonal swipes ("northwest", "southeast"...) count too: only the
+        -- horizontal part matters
+        local dir = ges.direction or ""
         local target
-        if dir == "west" then
+        if dir:find("west") then
             target = has_next and page + 1 or 1              -- last -> first
-        elseif dir == "east" then
+        elseif dir:find("east") then
             target = has_prev and page - 1 or total_pages    -- first -> last
         end
         if target and target ~= page then
@@ -633,6 +637,7 @@ function PageTextInfo:onShowFonts(page)
     -- Long press: on a font cell shows its info; on the arrows jumps to the
     -- first / last page
     function dialog:onHold(arg, ges)
+        if self:closeIfOutside(ges) then return true end
         -- Font cells
         for __, cell in ipairs(cells) do
             if cell.frame.dimen and ges.pos:intersectWith(cell.frame.dimen) then
@@ -662,54 +667,67 @@ function PageTextInfo:onShowFonts(page)
         end
     end
 
-    -- Readability of the current font (cached per face; method comes from
+    -- Captions of the menu for a font `cur` (the current one): they are built again
+    -- when the font changes, to update the rows in place.
+    -- Readability of the font (cached per face; method comes from
     -- settings_menu.lua, skipped if that file isn't loaded)
-    local readability_txt
-    local cur_path = self.font_paths[current]
-    if cur_path and self.getFontReadability then
-        self.fonts_readability = self.fonts_readability or {}
-        local res = self.fonts_readability[current]
-        if not res then
-            local ok, r = pcall(self.getFontReadability, self, cur_path)
-            res = ok and r or false
-            self.fonts_readability[current] = res
-        end
-        if res then
-            local rating, why = res:match("^(%u+): (.+)$")
-            readability_txt = rating and (rating .. " (" .. why .. ")") or res
-        end
-    end
-
-    local caption = string.format("Fonts: %d  |  Used: %d", #fonts, used_count)
-    -- x-height (design, at the size now set) and best hinting of the current font,
-    -- before the readability reason, which is the long one that may get cut
-    if self.getFontXHeightInfo and current then
-        local xi = self:getFontXHeightInfo(current)
-        if xi then
-            caption = caption .. string.format("  |  x-height: %.2fmm", xi.mm)
-            if xi.best then
-                caption = caption .. "  |  Best hinting: " .. xi.best
+    local function buildCaptions(cur)
+        local readability_txt
+        local cur_path = self.font_paths[cur]
+        if cur_path and self.getFontReadability then
+            self.fonts_readability = self.fonts_readability or {}
+            local res = self.fonts_readability[cur]
+            if not res then
+                local ok, r = pcall(self.getFontReadability, self, cur_path)
+                res = ok and r or false
+                self.fonts_readability[cur] = res
+            end
+            if res then
+                local rating, why = res:match("^(%u+): (.+)$")
+                readability_txt = rating and (rating .. " (" .. why .. ")") or res
             end
         end
+
+        local caption = string.format("Fonts: %d  |  Used: %d", #fonts, used_count)
+        -- x-height (design, at the size now set) and best hinting of the font,
+        -- before the readability reason, which is the long one that may get cut
+        if self.getFontXHeightInfo and cur then
+            local xi = self:getFontXHeightInfo(cur)
+            if xi then
+                caption = caption .. string.format("  |  x-height: %.2fmm", xi.mm)
+                if xi.best then
+                    caption = caption .. "  |  Best hinting: " .. xi.best
+                end
+            end
+        end
+        -- Second row: the readability reason is long, so it gets a line of its own
+        -- Always two rows (a blank one when the font has no readability rating): the
+        -- number of rows never changes with the font, so the window is never built
+        -- again after a change, only its texts are replaced (building it again right
+        -- after a change, with the page refresh going on, was what glitched)
+        local caption2 = readability_txt and ("Readability: " .. readability_txt) or " "
+        return caption, caption2
     end
-    -- Second row: the readability reason is long, so it gets a line of its own
-    local caption2 = readability_txt and ("Readability: " .. readability_txt) or nil
+    local caption, caption2 = buildCaptions(current)
 
     local grid = VerticalGroup:new{ align = "center" }
 
     -- Small caption (one or two rows) with a thin separator below it (same look as
     -- the settings menu)
+    local cap_widgets = {}   -- the caption rows, to change their text in place
     for __, text in ipairs(caption2 and { caption, caption2 } or { caption }) do
+        local text_w = TextWidget:new{
+            text = text,
+            face = Font:getFace("cfont", 11),
+            fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+            max_width = dialog_w - 2 * gap,
+        }
+        cap_widgets[#cap_widgets + 1] = text_w
         table.insert(grid, LeftContainer:new{
             dimen = Geom:new{ w = dialog_w, h = label_h },
             HorizontalGroup:new{
                 HorizontalSpan:new{ width = gap },
-                TextWidget:new{
-                    text = text,
-                    face = Font:getFace("cfont", 11),
-                    fgcolor = Blitbuffer.COLOR_DARK_GRAY,
-                    max_width = dialog_w - 2 * gap,
-                },
+                text_w,
             },
         })
     end
@@ -863,27 +881,42 @@ function PageTextInfo:onShowFonts(page)
         h = fsize.h,
     }
 
+    -- A gesture that starts outside the window closes the menu (a tap with a bit of
+    -- movement comes as a swipe or a hold, and used to be swallowed)
+    function dialog:closeIfOutside(ges)
+        if not (ges and ges.pos) or ges.pos:intersectWith(frame_rect) then return false end
+        self.plugin:closeFontsMenu()
+        return true
+    end
+
+    -- The font changed: update the caption rows in place (x-height, hinting,
+    -- readability of the new font). If the number of rows differs (the new font has
+    -- no readability row, or the old one had none) the menu is built again.
+    function dialog:updateCaptions(face)
+        local c1, c2 = buildCaptions(face)
+        if (c2 ~= nil) ~= (cap_widgets[2] ~= nil) then
+            self.plugin:onShowFonts(page)
+            return
+        end
+        cap_widgets[1]:setText(c1)
+        if c2 then cap_widgets[2]:setText(c2) end
+        local cap = Geom:new{ x = frame_rect.x, y = frame_rect.y, w = frame_rect.w,
+            h = outer_pad + Size.border.window + #cap_widgets * label_h + thin + gap }
+        UIManager:setDirty(self, "ui", cap)
+    end
+
     -- Tap handling
     function dialog:onTap(arg, ges)
         -- Font cells
-        -- A font was already chosen and is being applied: ignore further taps
-        if self.applying then
-            -- A tap outside closes the menu even while the font is being applied
-            if not ges.pos:intersectWith(frame_rect) then
-                self.plugin:closeFontsMenu()
-            end
-            return true
-        end
         for __, cell in ipairs(cells) do
             if cell.frame.dimen and ges.pos:intersectWith(cell.frame.dimen) then
                 -- Same face already applied: skip the extra SetFont and reflow
                 if cell.face ~= current then
+                    local plugin, face = self.plugin, cell.face
                     -- Show the choice first: the chosen cell is inverted (and the
                     -- one that was active is not any more) and only that area is
-                    -- refreshed. The font is applied two ticks later, once that has
-                    -- been painted: the reflow takes a while and, without this, the
-                    -- screen would show nothing until it was done.
-                    self.applying = true
+                    -- refreshed and painted right now, so it is on the screen
+                    -- before the reflow, which takes a while.
                     local region
                     for __, c in ipairs(cells) do
                         if c == cell or c.current then
@@ -899,15 +932,50 @@ function PageTextInfo:onShowFonts(page)
                         end
                     end
                     UIManager:setDirty(self, "ui", region)
-                    local plugin, face = self.plugin, cell.face
-                    local dlg = self
-                    UIManager:tickAfterNext(function()
-                        local ok, err = pcall(plugin.applyFontAndReopen, plugin, face)
-                        if not ok then
-                            dlg.applying = nil   -- let the menu be used again
-                            require("logger").warn("[PTI] applyFontAndReopen failed:", err)
-                        end
-                    end)
+                    UIManager:forceRePaint()
+                    -- Like KOReader's own font menu: the font is applied right here,
+                    -- in the tap, and the menu on the screen is the same one (no
+                    -- waiting state, no second dialog)
+                    local ok, err = pcall(plugin.applyFont, plugin, face)
+                    if ok then
+                        current = face
+                        self:updateCaptions(face)
+                        -- The book is laid out again a couple of ticks from now and the
+                        -- whole page is refreshed with the "partial" mode, which can
+                        -- leave the menu on top of it grey or ghosted. Once that is done
+                        -- (the timer is due after the layout, which blocks the loop) the
+                        -- menu is refreshed once more on its own, with the "ui" mode.
+                        local dlg = self
+                        UIManager:scheduleIn(0.35, function()
+                            if plugin.fonts_dialog ~= dlg then return end
+                            -- The layout is done now: check that the x-height kept is
+                            -- the one wanted, now that the engine has laid the book out
+                            -- with the new face, and correct it once if it is not
+                            local want = plugin.xh_keep
+                            local now = want and plugin.getXHeightMm and plugin:getXHeightMm()
+                            require("logger").info("[PTI] xh: after layout, measured=", now, "wanted=", want)
+                            if want and now and math.abs(now - want) > 0.04
+                                and plugin.ptForXHeight and plugin.applyFontSizePt then
+                                local pt = plugin:ptForXHeight(want)
+                                if pt then
+                                    pcall(plugin.applyFontSizePt, plugin, pt)
+                                    if plugin.refineXHeightMm then pcall(plugin.refineXHeightMm, plugin, want) end
+                                    plugin.xh_keep_cur = plugin.getXHeightMm and plugin:getXHeightMm() or plugin.xh_keep_cur
+                                    require("logger").info("[PTI] xh: corrected to", plugin.xh_keep_cur, "pt=", pt)
+                                    dlg:updateCaptions(face)
+                                end
+                            end
+                            UIManager:setDirty(dlg, "ui", dlg.frame_rect)
+                        end)
+                        UIManager:nextTick(function()
+                            purgeFontFacesLater(plugin)
+                            -- Compute in the background what the settings menu will need
+                            if plugin.warmUpCaches then plugin:warmUpCaches() end
+                        end)
+                    else
+                        require("logger").warn("[PTI] applyFont failed:", err)
+                        plugin:onShowFonts(plugin.fonts_page)   -- draw the real state again
+                    end
                 end
                 return true
             end
