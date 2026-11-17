@@ -170,7 +170,7 @@ function PageTextInfo:applyFont(face)
         target = self.xh_keep
     end
 
-    require("logger").dbg("[PTI] xh: change to", face, "target=", target, "cur=", cur,
+    require("logger").info("[PTI] xh: change to", face, "target=", target, "cur=", cur,
         "keep=", self.xh_keep, "keep_cur=", self.xh_keep_cur)
     UIManager:broadcastEvent(Event:new("BatchedUpdate"))
     local ok, err = pcall(function()
@@ -200,7 +200,7 @@ function PageTextInfo:applyFont(face)
         self.xh_keep_cur = self.getXHeightMm and self:getXHeightMm() or self.xh_keep_cur
         lap("refineXHeightMm")
     end
-    require("logger").dbg("[PTI] xh: after change, measured=", self.getXHeightMm and self:getXHeightMm(),
+    require("logger").info("[PTI] xh: after change, measured=", self.getXHeightMm and self:getXHeightMm(),
         "wanted=", target)
     return lap
 end
@@ -704,7 +704,7 @@ function PageTextInfo:onShowFonts(page)
                 -- The font can't be measured (no Latin "x" in it, or its file was not
                 -- found by name): say so instead of leaving the row bare
                 caption = caption .. "  |  x-height: n/a"
-                require("logger").dbg("[PTI] caption: no x-height info for", cur,
+                require("logger").info("[PTI] caption: no x-height info for", cur,
                     "path=", cur_path)
             end
         end
@@ -913,6 +913,25 @@ function PageTextInfo:onShowFonts(page)
         -- glitched. The menu is refreshed once, after the layout (see onTap).
     end
 
+    -- Invert the chosen cell (and restore the one that was active): done only after
+    -- the font has really been applied. Returns the area to refresh.
+    local function markCurrent(cell)
+        local region
+        for __, c in ipairs(cells) do
+            if c == cell or c.current then
+                local on = (c == cell)
+                c.frame.background = on and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE
+                c.frame.color = on and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY
+                c.text.fgcolor = on and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
+                c.current = on
+                if c.frame.dimen then
+                    region = region and region:combine(c.frame.dimen) or c.frame.dimen:copy()
+                end
+            end
+        end
+        return region
+    end
+
     -- Tap handling
     function dialog:onTap(arg, ges)
         -- Font cells
@@ -924,27 +943,10 @@ function PageTextInfo:onShowFonts(page)
                 -- Same face already applied: skip the extra SetFont and reflow
                 if cell.face ~= current then
                     local plugin, face = self.plugin, cell.face
-                    -- Show the choice first: the chosen cell is inverted (and the
-                    -- one that was active is not any more) and only that area is
-                    -- refreshed and painted right now, so it is on the screen
-                    -- before the reflow, which takes a while.
-                    local region
-                    for __, c in ipairs(cells) do
-                        if c == cell or c.current then
-                            local on = (c == cell)
-                            c.frame.background = on and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE
-                            c.frame.color = on and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY
-                            c.text.fgcolor = on and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
-                            c.current = on
-                            if c.frame.dimen then
-                                region = region and region:combine(c.frame.dimen)
-                                    or c.frame.dimen:copy()
-                            end
-                        end
-                    end
+                    -- The cell is NOT highlighted yet: it is only marked as the current
+                    -- font once the font has been applied and the book laid out again
+                    -- (see markCurrent, called from the timer below)
                     self.busy = true
-                    UIManager:setDirty(self, "ui", region)
-                    UIManager:forceRePaint()
                     -- Like KOReader's own font menu: the font is applied right here,
                     -- in the tap, and the menu on the screen is the same one (no
                     -- waiting state, no second dialog)
@@ -959,14 +961,17 @@ function PageTextInfo:onShowFonts(page)
                         -- menu is refreshed once more on its own, with the "ui" mode.
                         local dlg = self
                         UIManager:scheduleIn(0.35, function()
-                            dlg.busy = nil   -- the layout is done: selectable again
-                            if plugin.fonts_dialog ~= dlg then return end
+                            if plugin.fonts_dialog ~= dlg then dlg.busy = nil; return end
+                            markCurrent(cell)   -- the font is applied now: show it
                             -- The layout is done now: check that the x-height kept is
                             -- the one wanted, now that the engine has laid the book out
                             -- with the new face, and correct it once if it is not
-                            local want = plugin.xh_keep
+                            -- Only in x-height mode: in pt mode the size must stay as it is
+                            -- (xh_keep can be left over from when x-height mode was on)
+                            local want = (plugin.isXHeightMode and plugin:isXHeightMode())
+                                and plugin.xh_keep or nil
                             local now = want and plugin.getXHeightMm and plugin:getXHeightMm()
-                            require("logger").dbg("[PTI] xh: after layout, measured=", now, "wanted=", want)
+                            require("logger").info("[PTI] xh: after layout, measured=", now, "wanted=", want)
                             if want and now and math.abs(now - want) > 0.04
                                 and plugin.ptForXHeight and plugin.applyFontSizePt then
                                 local pt = plugin:ptForXHeight(want)
@@ -974,16 +979,19 @@ function PageTextInfo:onShowFonts(page)
                                     pcall(plugin.applyFontSizePt, plugin, pt)
                                     if plugin.refineXHeightMm then pcall(plugin.refineXHeightMm, plugin, want) end
                                     plugin.xh_keep_cur = plugin.getXHeightMm and plugin:getXHeightMm() or plugin.xh_keep_cur
-                                    require("logger").dbg("[PTI] xh: corrected to", plugin.xh_keep_cur, "pt=", pt)
+                                    require("logger").info("[PTI] xh: corrected to", plugin.xh_keep_cur, "pt=", pt)
                                     dlg:updateCaptions(face)
                                 end
                             end
                             UIManager:setDirty(dlg, "ui", dlg.frame_rect)
-                        end)
-                        UIManager:nextTick(function()
+                            -- Everything is done in this step (layout, correction, caches).
+                            -- Taps made while the loop was blocked are still queued and
+                            -- reach the dialog after this function returns, so the menu
+                            -- stays locked a little longer and they are dropped; only then
+                            -- is it selectable again.
                             purgeFontFacesLater(plugin)
-                            -- Compute in the background what the settings menu will need
                             if plugin.warmUpCaches then plugin:warmUpCaches() end
+                            UIManager:scheduleIn(0.5, function() dlg.busy = nil end)
                         end)
                     else
                         require("logger").warn("[PTI] applyFont failed:", err)

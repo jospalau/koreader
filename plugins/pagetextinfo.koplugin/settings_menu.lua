@@ -115,7 +115,7 @@ local SIZE_MODE_ROWS = {   -- { what, x-height mode, pt mode }
     { "Long press title", "Saves the face only",        "Saves face and size (pt)" },
     { "Change face",    "Keeps the x-height (mm)",      "Keeps the size (pt), as KOReader" },
     { "New books",      "Open at 1.8mm",                "KOReader's default size" },
-    { "mm shown",       "Exact with hinting off, about ±1px with Native / Auto", "Same" },
+    { "mm shown",       "Rows drawn of the typical letters, in every hinting mode", "Same" },
 }
 
 -- Window explaining what each size mode changes (tap anywhere to close)
@@ -922,7 +922,10 @@ local TYPICAL_LETTERS = {
 -- overshoot it, and with the auto hinter that overshoot appears as a whole extra row
 -- from some size on (Spectral: 49 px). The flat letters follow the design x-height
 -- (what hinting Off gives), so Off / Native / Auto can be compared.
-local FLAT_LETTERS = { u = 2.8, v = 1.0, w = 2.4, x = 0.15, y = 2.0 }
+-- The same letters are measured in EVERY hinting mode (Off, Native, Auto), the typical
+-- ones above: round letters included, with their overshoot, as they are drawn. That is
+-- what the eye judges ("e" is the letter most used), so the mm shown follow the page.
+local FLAT_LETTERS = TYPICAL_LETTERS
 local function weightedMedian(tops)   -- tops: { { top, weight }, ... }
     if #tops == 0 then return nil end
     table.sort(tops, function(a, b) return a[1] < b[1] end)
@@ -1029,14 +1032,14 @@ local function hintedXHeights(path, first, last, hint)
 end
 
 -- x-height in px of the current face as crengine draws it at pixel size `px`:
--- the design x-height (ratio * px) with hinting off, the measured whole-pixel one
--- with native / auto hinting. Returns x-height, hinted (true when measured), or
+-- the measured whole-pixel one in every hinting mode (off, native, auto); the design
+-- x-height (ratio * px) only when it can't be measured. Returns x-height, hinted (true when measured), or
 -- nil if the font can't be measured.
 local function realXHeightPx(ui, px)
     local ratio, face_path = xHeightRatio(ui.document)
     if not ratio then return nil end
     local hint = getHinting(ui)
-    if hint == 1 or hint == 2 then
+    if HINT_LOAD_FLAGS[hint] then
         local measured = hintedXHeights(face_path, px, px, hint)
         local v = measured and measured[px]
         if v then return v, true end
@@ -1098,11 +1101,10 @@ local function engineXHeightPx(ui)
     return engineXHeightAt(ui, currentPx(ui))
 end
 
--- Rows of the x-height as drawn now, from the engine (nil with hinting off, where
--- the design x-height is exact, or when the engine can't tell).
+-- Rows of the x-height as drawn now, from the engine (nil when the engine can't tell).
 local function measuredXHeightPx(ui)
     local hint = getHinting(ui)
-    if hint ~= 1 and hint ~= 2 then return nil end
+    if not HINT_LOAD_FLAGS[hint] then return nil end
     local eng = engineXHeightPx(ui)
     dlog("measuredXHeightPx: engine x-height=", eng)
     return eng
@@ -1120,7 +1122,7 @@ end
 refineXHeight = function(ui, target_mm, at_least)
     local ok, err = pcall(function()
         local hint = getHinting(ui)
-        if hint ~= 1 and hint ~= 2 then return end
+        if not HINT_LOAD_FLAGS[hint] then return end
         local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
         local target_px = target_mm * dpi / 25.4
         local function score(rows)
@@ -1156,7 +1158,7 @@ end
 -- with a size argument) is missing: the table then falls back to FreeType.
 local function measureSizesRange(ui, first, last)
     local hint = getHinting(ui)
-    if hint ~= 1 and hint ~= 2 then return nil end
+    if not HINT_LOAD_FLAGS[hint] then return nil end
     -- Every size straight from the engine: the book is not touched (no reflow, no
     -- page drawn, no memory spike)
     if engineXHeightAt(ui, currentPx(ui)) then
@@ -1236,7 +1238,7 @@ ptForXHeightUi = function(ui, target_mm, at_least)
         -- differ from ratio * px: take the nearby size whose real x-height is the
         -- closest to the target (the smaller size on a tie)
         local hint = getHinting(ui)
-        if hint == 1 or hint == 2 then
+        if HINT_LOAD_FLAGS[hint] then
             hintedXHeights(face_path, math.max(1, px - 3), px + 3, hint)   -- fills the cache
         end
         local best_px, best_err = px, nil
@@ -2002,12 +2004,12 @@ local function buildSizeCombos(ui, use_page)
     -- predictions can differ from the screen by 1 px
     local from_page = false
     local measured
-    if use_page and (hint == 1 or hint == 2) then
+    if use_page and HINT_LOAD_FLAGS[hint] then
         measured = measureSizesRange(ui, first, last)
         from_page = measured ~= nil
     end
     if not measured then
-        measured = (hint == 1 or hint == 2)
+        measured = HINT_LOAD_FLAGS[hint]
             and hintedXHeights(face_name, first, last, hint) or nil
     end
     dlog("buildSizeCombos: hint=", hint, "x-heights from", from_page and "the engine" or (measured and "FreeType" or "design (no hinting)"))
@@ -2020,10 +2022,10 @@ local function buildSizeCombos(ui, use_page)
         local xh_ideal = ratio * px   -- x-height in pixels, before hinting
         -- Real x-height at this px size, as FreeType gives it (hinted)
         local xh_real
-        if hint == 0 then
-            xh_real = xh_ideal   -- hinting off: nothing is snapped to the grid
-        elseif measured and measured[px] then
-            xh_real = measured[px]   -- loaded with crengine's flags for this mode
+        if measured and measured[px] then
+            xh_real = measured[px]   -- loaded with crengine's flags for this mode (Off too)
+        elseif hint == 0 then
+            xh_real = xh_ideal   -- hinting off and not measurable: the design value
         end
         -- Otherwise xh_real stays nil and the row uses the estimate below (distance
         -- of the ideal x-height to a whole pixel). Font:getFace is NOT a valid
