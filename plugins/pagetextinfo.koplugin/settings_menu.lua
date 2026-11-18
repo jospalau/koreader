@@ -179,13 +179,17 @@ local function setWeight(ui, w)
     ui.font:onSetFontBaseWeight(w)
 end
 
--- Make the page render again and repaint it, after a setting that crengine caches
--- (gamma, hinting): re-layout (UpdatePos) and a full repaint.
-local function forceRerender(ui)
-    local doc = ui.document
-    doc:getCurrentPos()
-    ui:handleEvent(require("ui/event"):new("UpdatePos"))
-    require("ui/uimanager"):setDirty("all", "partial")
+-- `apply` is the change itself (it sends its own UpdatePos). It is batched, as KOReader
+-- does for several changes, so the page is laid out ONCE and the input is inhibited
+-- once, not twice (the change alone, then an extra UpdatePos of our own).
+local function rerenderOnce(ui, apply)
+    local UIManager = require("ui/uimanager")
+    local Event = require("ui/event")
+    UIManager:broadcastEvent(Event:new("BatchedUpdate"))
+    local ok, err = pcall(apply)
+    -- Always close the batch, or the page would never be laid out again
+    UIManager:broadcastEvent(Event:new("BatchedUpdateDone"))
+    if not ok then require("logger").warn("[PTI] rerenderOnce failed:", err) end
 end
 
 local function getContrast(ui)
@@ -207,11 +211,7 @@ local function setHinting(ui, mode)
     ui.document.configurable.font_hinting = mode
     ui.font.configurable.font_hinting = mode
     -- Same call KOReader's own option makes (applies it, reflows and shows a notification)
-    ui.font:onSetFontHinting(mode)
-
-    -- crengine caches the rendered glyphs / page, so changing the hinting alone
-    -- can leave the old rendering on screen: render again and repaint.
-    forceRerender(ui)
+    rerenderOnce(ui, function() ui.font:onSetFontHinting(mode) end)
 end
 
 local function setContrast(ui, g)
@@ -221,11 +221,7 @@ local function setContrast(ui, g)
     ui.font.configurable.font_gamma = g
 
     -- Same call KOReader's own handler makes (also shows its notification)
-    ui.font:onSetFontGamma(g)
-
-    -- Gamma is applied when glyphs are drawn, but crengine caches the rendered
-    -- page, so force it to render again and repaint.
-    forceRerender(ui)
+    rerenderOnce(ui, function() ui.font:onSetFontGamma(g) end)
 end
 
 -- One index at a time over KOReader's full gamma table (0..56)
@@ -542,16 +538,172 @@ local function xHeightRatioOfPath(path)
     return ratio or nil
 end
 
+-- Rows of the x-height as crengine draws them --------------------------------
+-- What the eye sees is a whole number of pixel rows, not the design value of the
+-- font file: crengine draws whole pixel sizes, and the hinting snaps the letters to
+-- the pixel grid. So the number shown is the height in rows of the typical letters
+-- (round ones included, the way the eye judges them), measured at the pixel size
+-- really drawn and with the hinting in use:
+--   1) asked to the engine itself (patched koreader-base: doc:getGlyphTops, only for
+--      the face now in the book);
+--   2) else FreeType, opened directly with the load flags crengine uses for the
+--      hinting mode (shown with a "~");
+--   3) else the design value ratio * px (also "~").
+
+-- Letters whose top is at the x-height, with their frequency in English text (%)
+local TYPICAL_LETTERS = {
+    e = 12.7, a = 8.2, o = 7.5, n = 6.7, s = 6.3, r = 6.0, c = 2.8, u = 2.8,
+    m = 2.4, w = 2.4, g = 2.0, y = 2.0, p = 1.9, v = 1.0, x = 0.15, q = 0.1, z = 0.07,
+}
+
+local function weightedMedian(tops)   -- tops: { { top, weight }, ... }
+    if #tops == 0 then return nil end
+    table.sort(tops, function(a, b) return a[1] < b[1] end)
+    local total = 0
+    for __, t in ipairs(tops) do total = total + t[2] end
+    local acc = 0
+    for __, t in ipairs(tops) do
+        acc = acc + t[2]
+        if acc >= total / 2 then return t[1] end
+    end
+    return tops[#tops][1]
+end
+
+-- The load flags crengine uses (lvfntman.cpp): [hinting mode] = flags
+local FT_LOAD_NO_HINTING, FT_LOAD_RENDER = 0x2, 0x4
+local FT_LOAD_FORCE_AUTOHINT, FT_LOAD_NO_AUTOHINT = 0x20, 0x8000
+local FT_LOAD_TARGET_LIGHT = 0x10000
+local HINT_LOAD_FLAGS = {
+    [0] = FT_LOAD_RENDER + FT_LOAD_TARGET_LIGHT + FT_LOAD_NO_AUTOHINT + FT_LOAD_NO_HINTING,   -- off
+    [1] = FT_LOAD_RENDER + FT_LOAD_TARGET_LIGHT + FT_LOAD_NO_AUTOHINT,                        -- native
+    [2] = FT_LOAD_RENDER + FT_LOAD_TARGET_LIGHT + FT_LOAD_FORCE_AUTOHINT,                     -- auto
+}
+
+-- Same library KOReader's own ffi/freetype.lua uses; the load name changes with the
+-- version / platform, so several are tried. Loaded and initialised once.
+local _ft   -- { ffi, lib, library }, or false when FreeType can't be reached
+local function getFreeType()
+    if _ft ~= nil then return _ft or nil end
+    _ft = false
+    local ok = pcall(function()
+        local ffi = require("ffi")
+        require("ffi/freetype_h")   -- C declarations (FT_Library, FT_Face, ...)
+        pcall(require, "ffi/loadlib")
+        local lib
+        for __, try in ipairs({
+            function() return ffi.loadlib("freetype", "6") end,
+            function() return ffi.load("freetype") end,
+            function() return ffi.load("libs/libfreetype.so.6") end,
+            function() return ffi.load("libfreetype.so.6") end,
+        }) do
+            local ok2, l = pcall(try)
+            if ok2 and l then lib = l; break end
+        end
+        if not lib then return end
+        local library = ffi.new("FT_Library[1]")   -- one for the whole session
+        if lib.FT_Init_FreeType(library) == 0 then
+            _ft = { ffi = ffi, lib = lib, library = library }
+        end
+    end)
+    if not ok then _ft = false end
+    return _ft or nil
+end
+
+local _rows_cache = {}   -- [key] = rows, or false when it can't be measured
+
+-- Rows of the typical letters at `px`, loaded straight through FreeType
+local function freeTypeRows(path, px, hint)
+    local flags = HINT_LOAD_FLAGS[hint]
+    if not flags or type(path) ~= "string" or not path:find("/", 1, true) then return nil end
+    local key = path .. "|" .. hint .. "|" .. px .. "|ft"
+    if _rows_cache[key] ~= nil then return _rows_cache[key] or nil end
+    local rows = false
+    pcall(function()
+        local ft = getFreeType()
+        if not ft then return end
+        local face = ft.ffi.new("FT_Face[1]")
+        pcall(function()
+            if ft.lib.FT_New_Face(ft.library[0], path, 0, face) ~= 0 then return end
+            if ft.lib.FT_Set_Pixel_Sizes(face[0], 0, px) ~= 0 then return end
+            local tops = {}
+            for ch, w in pairs(TYPICAL_LETTERS) do
+                local gi = ft.lib.FT_Get_Char_Index(face[0], string.byte(ch))
+                if gi ~= 0 and ft.lib.FT_Load_Glyph(face[0], gi, flags) == 0 then
+                    local t = tonumber(face[0].glyph.bitmap_top)
+                    if t and t > 0 then tops[#tops + 1] = { t, w } end
+                end
+            end
+            rows = weightedMedian(tops) or false
+        end)
+        -- Always release the face, even if the measurement failed
+        if face[0] ~= nil then pcall(function() ft.lib.FT_Done_Face(face[0]) end) end
+    end)
+    _rows_cache[key] = rows
+    return rows or nil
+end
+
+-- Rows of the typical letters asked to the engine for the face now in the book
+-- (needs the getGlyphTops patch; nil without it, or when the engine scaled the size)
+local _letters
+local function engineRows(ui, px, hint)
+    local d = ui.document and ui.document._document
+    if not (d and d.getGlyphTops) then
+        dlog("engineRows: doc:getGlyphTops is NOT available")
+        return nil
+    end
+    local weight = ui.document.configurable.font_base_weight or 0
+    local key = tostring(ui.font and ui.font.font_face) .. "|" .. hint .. "|" .. px .. "|" .. weight .. "|eng"
+    if _rows_cache[key] ~= nil then return _rows_cache[key] or nil end
+    if not _letters then
+        local l = {}
+        for ch in pairs(TYPICAL_LETTERS) do l[#l + 1] = ch end
+        _letters = table.concat(l)
+    end
+    local rows = false
+    local ok, t, used = pcall(d.getGlyphTops, d, _letters, px)
+    dlog("engineRows: asked px=", px, "used=", used, "ok=", ok)
+    if ok and type(t) == "table" and used == px then
+        local tops = {}
+        for ch, w in pairs(TYPICAL_LETTERS) do
+            local v = t[ch]
+            if v and v > 0 then tops[#tops + 1] = { v, w } end
+        end
+        rows = weightedMedian(tops) or false
+    end
+    _rows_cache[key] = rows
+    return rows or nil
+end
+
 -- Public method (used by the fonts menu in font_selection_menu.lua): x-height of a
--- face (by name) as a fraction of the em, and in mm at the size now set in the
--- book. Returns { ratio, mm, pt } or nil when it can't be read.
+-- face (by name) at the size now set in the book. Returns { ratio, mm, pt, px, rows,
+-- estimated } or nil when it can't be read. `ratio` is the design x-height as a
+-- fraction of the em (from the font file); `mm` is the one drawn (rows of pixels).
+-- `estimated` is true when it did not come from the engine.
 local function xHeightInfo(ui, face)
     if not (ui and ui.document and face) then return nil end
     local ok, info = pcall(function()
-        local ratio = xHeightRatioOfPath(resolveFace(face))
+        local path = resolveFace(face)
+        local ratio = xHeightRatioOfPath(path)
         if not ratio then return nil end
         local pt = ui.font.configurable.font_size
-        return { ratio = ratio, mm = ratio * pt * 25.4 / 72, pt = pt }
+        local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+        -- Pixel size really drawn (whole pixels, as crengine does it)
+        local px
+        local okp, n = pcall(function() return ui.document._document:getFontSize() end)
+        if okp and n and n > 0 then px = n else px = math.floor(dpi * pt / 72 + 1e-6) end
+        local hint = getHinting(ui)
+        local rows, estimated
+        if face == currentFace(ui) then rows = engineRows(ui, px, hint) end
+        if not rows then
+            rows = freeTypeRows(path, px, hint)
+            estimated = true
+        end
+        if not rows then rows = ratio * px end
+        dlog("xHeightInfo:", face, "px=", px, "hint=", hint,
+            "weight=", ui.document.configurable.font_base_weight, "rows=", rows,
+            estimated and "(FreeType/design)" or "(engine)")
+        return { ratio = ratio, mm = rows * 25.4 / dpi, pt = pt, px = px, rows = rows,
+                 estimated = estimated and true or false }
     end)
     if not ok then
         require("logger").warn("[PTI] getFontXHeightInfo failed:", info)
@@ -617,7 +769,7 @@ local function buildTitleSegments(ui)
     table.insert(line1, { text = string.format("%gpt", pt), bold = true })
     table.insert(line1, { text = "  |  x-height " })
     local info = xHeightInfo(ui, font_name)
-    table.insert(line1, { text = info and string.format("%.2fmm", info.mm) or "n/a", bold = true })
+    table.insert(line1, { text = info and string.format("%s%.2fmm", info.estimated and "~" or "", info.mm) or "n/a", bold = true })
 
     local line2 = {}
     local weight = configurable.font_base_weight or 0
@@ -924,15 +1076,23 @@ function PageTextInfo:onShowSettingsMenu()
                     end
                     return true
                 end
-                local ok, err = pcall(b.callback, self.plugin.ui)
-                dlog("settings menu tap:", b.text, ok and "OK" or err)
-                -- Reopen after the reflow so the active state is refreshed
-                UIManager:nextTick(function()
-                    local plugin = self.plugin
+                -- A change is being applied: ignore the taps that come meanwhile. Kept in
+                -- the plugin, because the dialog is replaced by a new one after every change.
+                if self.plugin.settings_busy then return true end
+                self.plugin.settings_busy = true
+                -- Like KOReader's own config panel (ConfigDialog:onConfigChoose): the change
+                -- is applied two ticks after the tap, not inside the tap handler, so the
+                -- gesture is completely handled before the re-layout blocks and inhibits
+                -- the input. The menu is rebuilt right after it (active state refreshed).
+                local plugin = self.plugin
+                UIManager:tickAfterNext(function()
+                    local ok, err = pcall(b.callback, plugin.ui)
+                    dlog("settings menu tap:", b.text, ok and "OK" or err)
                     plugin:onShowSettingsMenu()
                     if plugin.view and plugin.view.topbar then
                         plugin.view.topbar:toggleBar()
                     end
+                    plugin.settings_busy = nil
                 end)
                 return true
             end

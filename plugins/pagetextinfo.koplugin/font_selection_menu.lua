@@ -216,7 +216,8 @@ function PageTextInfo:showFontInfo(face, label)
     local metrics_lines = {}
     local xi = self.getFontXHeightInfo and self:getFontXHeightInfo(face)
     table.insert(metrics_lines, xi
-        and string.format("x-height: %.1f%% of em, %.2f mm at %gpt", xi.ratio * 100, xi.mm, xi.pt)
+        and string.format("x-height: %s%.2f mm (%d px) at %gpt; design %.1f%% of em",
+            xi.estimated and "~" or "", xi.mm, xi.px, xi.pt, xi.ratio * 100)
         or "x-height: n/a")
 
     local lines = {
@@ -562,7 +563,8 @@ function PageTextInfo:onShowFonts(page)
     local function buildCaption(cur)
         local text = string.format("Fonts: %d  |  Used: %d", #fonts, used_count)
         local xi = cur and self.getFontXHeightInfo and self:getFontXHeightInfo(cur)
-        return text .. (xi and string.format("  |  x-height: %.2fmm", xi.mm) or "  |  x-height: n/a")
+        return text .. (xi and string.format("  |  x-height: %s%.2fmm", xi.estimated and "~" or "", xi.mm)
+            or "  |  x-height: n/a")
     end
     local caption = buildCaption(current)
 
@@ -784,9 +786,12 @@ function PageTextInfo:onShowFonts(page)
                     -- font once the font has been applied and the book laid out again
                     -- (see markCurrent, called from the timer below)
                     self.busy = true
-                    -- Like KOReader's own font menu: the font is applied right here,
-                    -- in the tap, and the menu on the screen is the same one (no
-                    -- waiting state, no second dialog)
+                    -- Like KOReader's own config panel (ConfigDialog:onConfigChoose): the
+                    -- change is applied two ticks after the tap, not inside the tap
+                    -- handler, so the gesture is completely handled before the re-layout
+                    -- blocks and inhibits the input
+                    UIManager:tickAfterNext(function()
+                    if plugin.fonts_dialog ~= self then self.busy = nil; return end
                     local ok, err = pcall(plugin.applyFont, plugin, face)
                     if ok then
                         current = face
@@ -814,6 +819,7 @@ function PageTextInfo:onShowFonts(page)
                         self.busy = nil
                         plugin:onShowFonts(plugin.fonts_page)   -- draw the real state again
                     end
+                    end)
                 end
                 return true
             end
@@ -843,7 +849,6 @@ function PageTextInfo:onShowFonts(page)
         self.plugin:closeFontsMenu()
         return true
     end
-
     dialog.plugin = self
     dialog.frame_ref = frame
     dialog.frame_rect = frame_rect
