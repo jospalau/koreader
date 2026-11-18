@@ -810,7 +810,9 @@ function PageTextInfo:onShowFonts(page)
                     local ok, err = pcall(plugin.applyFont, plugin, face)
                     if ok then
                         current = face
-                        self:updateCaptions(face)
+                        -- The caption (x-height, rating) is NOT updated here: the book has
+                        -- not been laid out again yet and the engine would still measure
+                        -- the previous state. It is done in the timer below.
                         -- The book is laid out again a couple of ticks from now and the
                         -- whole page is refreshed with the "partial" mode, which can
                         -- leave the menu on top of it grey or ghosted. Once that is done
@@ -820,6 +822,8 @@ function PageTextInfo:onShowFonts(page)
                         UIManager:scheduleIn(0.35, function()
                             if plugin.fonts_dialog ~= dlg then dlg.busy = nil; return end
                             markCurrent(cell)   -- the font is applied now: show it
+                            -- The layout is done: now the x-height can be measured
+                            dlg:updateCaptions(face)
                             UIManager:setDirty(dlg, "ui", dlg.frame_rect)
                             -- Everything is done in this step (layout, correction, caches).
                             -- Taps made while the loop was blocked are still queued and

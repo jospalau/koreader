@@ -1135,6 +1135,9 @@ function PageTextInfo:onShowSettingsMenu()
     function dialog:onTap(arg, ges)
         -- Tap on the title: open the reference popup from typography_popup.lua
         if title_frame.dimen and ges.pos:intersectWith(title_frame.dimen) then
+            -- A change is being applied: the book is not laid out yet and the x-height
+            -- the popup would show (and keep in its cache) is not the final one
+            if self.plugin.settings_busy then return true end
             local plugin_ui = self.plugin.ui
             if plugin_ui and plugin_ui.onShowTypographyReference then
                 plugin_ui:onShowTypographyReference()
@@ -1167,15 +1170,24 @@ function PageTextInfo:onShowSettingsMenu()
                 -- is applied two ticks after the tap, not inside the tap handler, so the
                 -- gesture is completely handled before the re-layout blocks and inhibits
                 -- the input. The menu is rebuilt right after it (active state refreshed).
-                local plugin = self.plugin
+                local plugin, dlg = self.plugin, self
                 UIManager:tickAfterNext(function()
                     local ok, err = pcall(b.callback, plugin.ui)
                     dlog("settings menu tap:", b.text, ok and "OK" or err)
-                    plugin:onShowSettingsMenu()
-                    if plugin.view and plugin.view.topbar then
-                        plugin.view.topbar:toggleBar()
-                    end
-                    plugin.settings_busy = nil
+                    -- The book is laid out again a couple of ticks from now, and the title
+                    -- of this menu shows the x-height, which can only be measured once that
+                    -- is done. So the menu is rebuilt from the timer, which is due after the
+                    -- layout (it blocks the loop), not right here.
+                    UIManager:scheduleIn(0.35, function()
+                        -- closed meanwhile (tap outside): don't bring it back
+                        if plugin.settings_dialog == dlg then
+                            plugin:onShowSettingsMenu()
+                            if plugin.view and plugin.view.topbar then
+                                plugin.view.topbar:toggleBar()
+                            end
+                        end
+                        plugin.settings_busy = nil
+                    end)
                 end)
                 return true
             end
