@@ -108,6 +108,17 @@ local function close(self)
     if d then UIManager:close(d, "ui", (d.frame and d.frame.dimen) or d.frame_rect) end
 end
 
+-- The screen changed size (rotation): rebuild the window for the new size, once.
+-- Called from the window's own resize event (so it is replaced BEFORE the first
+-- paint at the new size) and, as a fallback, right after the rotation call.
+local function rebuildIfResized(plugin, dlg)
+    if plugin.settings_dialog ~= dlg or dlg.built_w == Screen:getWidth() then return end
+    dlog("screen resized: rebuilding menu", dlg.built_w, "->", Screen:getWidth())
+    -- the old offset belongs to the old orientation
+    if dlg.movable then pcall(dlg.movable.setMovedOffset, dlg.movable, { x = 0, y = 0 }) end
+    plugin:onShowSettingsMenu()
+end
+
 -- Actions ---------------------------------------------------------------
 
 -- Name of the face the book is using now
@@ -257,7 +268,9 @@ end
 local function toggleLayout(ui)
     local Event = require("ui/event")
     dlog("toggleLayout: SwapRotation")
-    ui:handleEvent(Event:new("SwapRotation"))
+    -- Batched, like the other changes: the book is laid out ONCE for the new
+    -- orientation instead of once per step of the rotation
+    rerenderOnce(ui, function() ui:handleEvent(Event:new("SwapRotation")) end)
 end
 
 -- Menu definition -------------------------------------------------------
@@ -398,7 +411,9 @@ local function buildRows(ui)
     local rows = {
         { title = "General",
             { text = "Reset defaults",      callback = resetDefaults },
-            { text = "Toggle screen layout", callback = toggleLayout },
+            -- rotate = true: handled in the dialog's onTap (close first, rotate,
+            -- reopen once), so the menu is never drawn at the old size
+            { text = "Toggle screen layout", rotate = true, callback = toggleLayout },
         },
         font_preset_row,
         font_step_row,
@@ -1039,7 +1054,7 @@ function PageTextInfo:onShowSettingsMenu()
                 }
                 table.insert(row, frame)
                 table.insert(buttons, { frame = frame, callback = b.callback, text = b.text,
-                    open_fonts = b.open_fonts })
+                    open_fonts = b.open_fonts, rotate = b.rotate })
             end
             table.insert(grid, row)
             table.insert(grid, VerticalSpan:new{ width = gap })
@@ -1162,6 +1177,23 @@ function PageTextInfo:onShowSettingsMenu()
                     end
                     return true
                 end
+                -- Screen rotation: the window never disappears. The screen size is
+                -- already the new one when the rotation call returns, so the new window
+                -- is built right away (show new, close old, in one go) at its place.
+                if b.rotate then
+                    local plugin = self.plugin
+                    if plugin.settings_busy then return true end
+                    plugin.settings_busy = true
+                    UIManager:tickAfterNext(function()
+                        local ok, err = pcall(b.callback, plugin.ui)
+                        dlog("settings menu rotate:", ok and "OK" or err)
+                        -- Normally the window already rebuilt itself from the resize
+                        -- event; this only catches the case where that event didn't come
+                        rebuildIfResized(plugin, plugin.settings_dialog)
+                        plugin.settings_busy = nil
+                    end)
+                    return true
+                end
                 -- A change is being applied: ignore the taps that come meanwhile. Kept in
                 -- the plugin, because the dialog is replaced by a new one after every change.
                 if self.plugin.settings_busy then return true end
@@ -1229,6 +1261,11 @@ function PageTextInfo:onShowSettingsMenu()
 
     function dialog:onClose() close(self.plugin) return true end
 
+    -- Screen rotated: replace this window before anything is painted at the new size
+    function dialog:onScreenResize() rebuildIfResized(self.plugin, self) end
+    function dialog:onSetDimensions() rebuildIfResized(self.plugin, self) end
+
+    dialog.built_w = screen.w
     dialog.plugin = self
     dialog.frame_rect = frame_rect
     self.settings_dialog = dialog
