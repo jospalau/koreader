@@ -735,8 +735,159 @@ local function xHeightInfo(ui, face)
     return info
 end
 
+-- rem scale of the book's main text ---------------------------------------------
+-- Many epubs set the main text in rem (0.88rem, 0.75rem...), so what is really on
+-- screen is smaller than the size chosen. The book's own style is read here (once
+-- per book, cached): the stylesheets and a sample of the larger chapters of the epub.
+-- The class most used by the main text (p, div, li, blockquote) with a font-size in rem
+-- gives the factor. The x-height shown is multiplied by it, unless a style tweak that
+-- puts the main text at the chosen size is on ("Reset main text font size" or
+-- "Ignore publisher font sizes").
+local REM_MIN_SHARE = 0.30   -- the class must be on at least 30% of the main text blocks
+
+-- Pure calculation: htmls / csss are lists of texts. Returns the factor or nil.
+local function bodyRemFromContent(htmls, csss)
+    local MAIN = { p = true, div = true, li = true, blockquote = true }
+    local counts, total = {}, 0
+    for __, h in ipairs(htmls) do
+        for raw_tag, attrs in h:gmatch("<(%a[%w]*)([^>]*)>") do
+            local tag = raw_tag:lower()
+            if MAIN[tag] then
+                total = total + 1
+                counts[tag] = (counts[tag] or 0) + 1
+                local cls = attrs:match('%sclass%s*=%s*"([^"]*)"') or attrs:match("%sclass%s*=%s*'([^']*)'")
+                if cls then
+                    for c in cls:gmatch("%S+") do
+                        counts["." .. c] = (counts["." .. c] or 0) + 1
+                    end
+                end
+            end
+        end
+    end
+    if total == 0 then return nil end
+
+    local rules = {}    -- ".class" or "p" -> font-size in rem (the last rule wins)
+    for __, css in ipairs(csss) do
+        css = (css:gsub("/%*.-%*/", ""))
+        for head, body in css:gmatch("([^{}]+){([^{}]*)}") do
+            local v = body:match("font%-size%s*:%s*([%d%.]+)%s*rem")
+            v = v and tonumber(v)
+            if v then
+                for sel in head:gmatch("[^,]+") do
+                    local last = sel:match("([^%s>+~]+)%s*$")
+                    if last and not last:find(":", 1, true) and not last:find("[", 1, true) then
+                        local cls = last:match("^%a*%.([%w_-]+)$")      -- .x  or  p.x
+                        local key = cls and ("." .. cls)
+                            or (MAIN[last:lower()] and last:lower()) or nil
+                        if key then rules[key] = v end
+                    end
+                end
+            end
+        end
+    end
+
+    local best_key, best_n
+    for key in pairs(rules) do
+        local n = counts[key] or 0
+        if not best_n or n > best_n then best_key, best_n = key, n end
+    end
+    dlog("bodyRem: main blocks=", total, "best class=", best_key, "blocks=", best_n,
+        "rem=", best_key and rules[best_key])
+    if not best_key or best_n / total < REM_MIN_SHARE then return nil end
+    local v = rules[best_key]
+    if math.abs(v - 1) < 0.01 then return nil end
+    return v
+end
+
+-- Reads the stylesheets and the largest chapters of the epub (KOReader's archiver).
+local function loadEpubContent(path)
+    local ok, Archiver = pcall(require, "ffi/archiver")
+    if not ok then return nil end
+    local arc = Archiver.Reader:new()
+    if not arc:open(path) then return nil end
+    local css_names, html_files = {}, {}
+    for entry in arc:iterate() do
+        if entry.mode == "file" then
+            local low = entry.path:lower()
+            if low:match("%.css$") and (entry.size or 0) < 2000000 then
+                css_names[#css_names + 1] = entry.path
+            elseif (low:match("%.xhtml$") or low:match("%.html?$")) and (entry.size or 0) > 3000 then
+                html_files[#html_files + 1] = { path = entry.path, size = entry.size or 0 }
+            end
+        end
+    end
+    table.sort(html_files, function(a, b) return a.size > b.size end)
+    local csss, htmls = {}, {}
+    for __, name in ipairs(css_names) do
+        csss[#csss + 1] = arc:extractToMemory(name) or ""
+    end
+    for i = 1, math.min(10, #html_files) do
+        htmls[#htmls + 1] = arc:extractToMemory(html_files[i].path) or ""
+    end
+    arc:close()
+    return htmls, csss
+end
+
+local _rem_cache = {}   -- [book path] = factor, or false when there is none
+local function bookRemFactor(path)
+    if type(path) ~= "string" or not path:lower():match("%.epub$") then return nil end
+    local c = _rem_cache[path]
+    if c == nil then
+        c = false
+        local ok, scale = pcall(function()
+            local htmls, csss = loadEpubContent(path)
+            return htmls and bodyRemFromContent(htmls, csss)
+        end)
+        if ok and scale then c = scale
+        elseif not ok then require("logger").warn("[PTI] book rem scale failed:", scale) end
+        dlog("bookRemFactor:", path, c)
+        _rem_cache[path] = c
+    end
+    return c or nil
+end
+
+local function bookRemScale(ui)
+    local scale = bookRemFactor(ui and ui.document and ui.document.file)
+    dlog("bookRemScale: factor=", scale, "styletweak=", ui and ui.styletweak ~= nil)
+    if not scale then return nil end
+    -- Tweaks that put the main text at the chosen size: the factor no longer applies
+    local st = ui.styletweak
+    if st and st.isTweakEnabled and st.enabled ~= false then
+        for __, id in ipairs({ "font_size_most_reset", "font_size_all_inherit" }) do
+            local ok, on = pcall(st.isTweakEnabled, st, id)
+            if ok and on then dlog("bookRemScale: off,", id, "is on"); return nil end
+        end
+    end
+    return scale
+end
+PageTextInfo.getBookRemScale = function(self) return bookRemScale(self.ui) end
+
+-- Done when the book is opened, before its first page is shown (KOReader sends
+-- ReadSettings first of all), so showing the x-height later never waits for it.
+-- A handler that main.lua defined before loading this file is kept and called first.
+local prev_on_read_settings = PageTextInfo.onReadSettings
+function PageTextInfo:onReadSettings(...)
+    local result
+    if prev_on_read_settings then result = prev_on_read_settings(self, ...) end
+    local file = self.ui and self.ui.document and self.ui.document.file
+    dlog("onReadSettings: file=", file)
+    bookRemFactor(file)   -- fills the cache
+    return result
+end
+
 function PageTextInfo:getFontXHeightInfo(face)
-    return xHeightInfo(self.ui, face)
+    local xi = xHeightInfo(self.ui, face)
+    local scale = xi and bookRemScale(self.ui)
+    if scale then
+        local copy = {}
+        for k, v in pairs(xi) do copy[k] = v end
+        copy.rem = scale                     -- shown as "(rem)"
+        copy.mm_nominal = xi.mm              -- at the size chosen, without the book's scale
+        copy.mm = xi.mm * scale
+        copy.rows = xi.rows and xi.rows * scale
+        return copy
+    end
+    return xi
 end
 
 -- Readability rating of a font (HIGH / MEDIUM / LOW) -------------------------
@@ -874,8 +1025,10 @@ local function buildTitleSegments(ui)
     end
     table.insert(line1, { text = string.format("%gpt", pt), bold = true })
     table.insert(line1, { text = "  |  x-height " })
-    local info = xHeightInfo(ui, font_name)
-    table.insert(line1, { text = info and string.format("%s%.2fmm", info.estimated and "~" or "", info.mm) or "n/a", bold = true })
+    -- Through getFontXHeightInfo, so the rem scale of the book's text is applied
+    local info = PageTextInfo.getFontXHeightInfo({ ui = ui }, font_name)
+    table.insert(line1, { text = info and string.format("%s%.2fmm%s", info.estimated and "~" or "", info.mm,
+        info.rem and " (rem)" or "") or "n/a", bold = true })
 
     local line2 = {}
     local weight = configurable.font_base_weight or 0

@@ -631,6 +631,9 @@ local function gatherData(ui)
     -- Only the ascender / descender still come from a face of the font (for Leading)
     local face_base = Font:getFace(data.font_face_clean, px, 0, true)
     local xh_px, xh_estimated
+    -- rem factor of the book's text (pagetextinfo): the x-height of `info` is already
+    -- multiplied by it, because the text is really drawn that much smaller
+    data.xh_rem = info and info.rem or nil
     if info then
         xh_px, xh_estimated = info.rows, info.estimated
     elseif face_base then
@@ -650,7 +653,10 @@ local function gatherData(ui)
             end)
 
             if ok and xh2 and ascender and descender then
-                data.leading_factor = (1.2 * px * line_spacing_factor) / xh_px
+                -- Leading is a ratio between two lengths of the same text: with a book in
+                -- rem both shrink by the same factor, so the x-height WITHOUT it is used
+                local xh_lead = data.xh_rem and (xh_px / data.xh_rem) or xh_px
+                data.leading_factor = (1.2 * px * line_spacing_factor) / xh_lead
                 data.leading_key, data.leading_text =
                     classifyLeading(data.leading_factor, xh2, ascender, descender)
             else
@@ -670,6 +676,10 @@ local function gatherData(ui)
         data.x_height_px     = mark .. ((xh_px == math.floor(xh_px)) and string.format("%dpx", xh_px)
                                 or string.format("%.1fpx", xh_px))
         data.x_height_mm     = string.format("%s%.2fmm", mark, xh_mm)
+        if data.xh_rem then
+            data.x_height_px = data.x_height_px .. " (rem)"
+            data.x_height_mm = data.x_height_mm .. " (rem)"
+        end
         -- Evidence-based part: angle + band (Legge & Bigelow)
         data.x_height_arcmin = string.format("%.1f′  [%s]", angle, classifyAngle(angle))
         -- Continuous multiple of the critical print size (data, not a verdict)
@@ -990,7 +1000,9 @@ local function buildReferenceSections(data, fonts, layout)
         table.insert(rows, { cells = { { kind = "mono", span = 4,
             text = "Above ~22–25′ you lose text per page without any measurable gain in reading speed, since the plateau is flat. If comfort is the goal there is room to go larger, but pages turn more often." } } })
         addSection(sections, fonts, L,
-            string.format("ANGLE → SIZE  (@%dcm)", READING_DISTANCE_MM / 10),
+            data.xh_rem
+                and string.format("ANGLE → SIZE  (@%dcm, book text rem ×%.2f)", READING_DISTANCE_MM / 10, data.xh_rem)
+                or string.format("ANGLE → SIZE  (@%dcm)", READING_DISTANCE_MM / 10),
             buildTable(fonts, L, { 0.16, 0.38, 0.23, 0.23 }, rows))
     end
 

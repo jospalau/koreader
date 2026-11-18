@@ -216,9 +216,13 @@ function PageTextInfo:showFontInfo(face, label)
     local metrics_lines = {}
     local xi = self.getFontXHeightInfo and self:getFontXHeightInfo(face)
     table.insert(metrics_lines, xi
-        and string.format("x-height: %s%.2fmm (%dpx) at %gpt; design %.1f%% of em",
-            xi.estimated and "~" or "", xi.mm, xi.px, xi.pt, xi.ratio * 100)
+        and string.format("x-height: %s%.2fmm%s (%dpx) at %gpt; design %.1f%% of em",
+            xi.estimated and "~" or "", xi.mm, xi.rem and " (rem)" or "", xi.px, xi.pt, xi.ratio * 100)
         or "x-height: n/a")
+    if xi and xi.rem then
+        table.insert(metrics_lines, string.format(
+            "Book text is set in rem: x%.2f of the chosen size (%.2fmm without it)", xi.rem, xi.mm_nominal))
+    end
 
     -- Readability from readability_table.lua, with the reason the script gives
     local rating, why
@@ -574,7 +578,8 @@ function PageTextInfo:onShowFonts(page)
     local function buildCaption(cur)
         local text = string.format("Fonts: %d  |  Used: %d", #fonts, used_count)
         local xi = cur and self.getFontXHeightInfo and self:getFontXHeightInfo(cur)
-        text = text .. (xi and string.format("  |  x-height: %s%.2fmm", xi.estimated and "~" or "", xi.mm)
+        text = text .. (xi and string.format("  |  x-height: %s%.2fmm%s", xi.estimated and "~" or "", xi.mm,
+            xi.rem and " (rem)" or "")
             or "  |  x-height: n/a")
         -- How good the font is: HIGH / MEDIUM / LOW from readability_table.lua
         local rating = cur and self.getFontReadability
