@@ -697,10 +697,20 @@ local function gatherData(ui)
     end
 
     -- Readability table (from pagetextinfo if available)
-    if ui.pagetextinfo and ui.pagetextinfo.readability_table then
-        data.readability = ui.pagetextinfo.readability_table[data.font_face_clean] or "N/A"
-    else
-        data.readability = "N/A"
+    -- Rating from readability_table.lua (generateFontsInformation.py). The plugin
+    -- tries every spelling of the name the script writes; if it is not there, the
+    -- old direct lookup is kept.
+    data.readability = "N/A"
+    local pti2 = ui.pagetextinfo
+    if pti2 and pti2.getFontReadability then
+        local okr, rating, why = pcall(pti2.getFontReadability, pti2,
+            (ui.font and ui.font.font_face) or data.font_face)
+        if okr and rating then
+            data.readability = why and (rating .. ": " .. why) or rating
+        end
+    end
+    if data.readability == "N/A" and pti2 and pti2.readability_table then
+        data.readability = pti2.readability_table[data.font_face_clean] or "N/A"
     end
 
     -- Device

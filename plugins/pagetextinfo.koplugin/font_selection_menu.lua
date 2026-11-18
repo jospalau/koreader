@@ -220,6 +220,12 @@ function PageTextInfo:showFontInfo(face, label)
             xi.estimated and "~" or "", xi.mm, xi.px, xi.pt, xi.ratio * 100)
         or "x-height: n/a")
 
+    -- Readability from readability_table.lua, with the reason the script gives
+    local rating, why
+    if self.getFontReadability then rating, why = self:getFontReadability(face, path) end
+    table.insert(metrics_lines, "Readability: " .. (rating
+        and (why and (rating .. " (" .. why .. ")") or rating) or "n/a"))
+
     local lines = {
         "File: " .. filename,
         "Folder: " .. dir,
@@ -563,8 +569,12 @@ function PageTextInfo:onShowFonts(page)
     local function buildCaption(cur)
         local text = string.format("Fonts: %d  |  Used: %d", #fonts, used_count)
         local xi = cur and self.getFontXHeightInfo and self:getFontXHeightInfo(cur)
-        return text .. (xi and string.format("  |  x-height: %s%.2fmm", xi.estimated and "~" or "", xi.mm)
+        text = text .. (xi and string.format("  |  x-height: %s%.2fmm", xi.estimated and "~" or "", xi.mm)
             or "  |  x-height: n/a")
+        -- How good the font is: HIGH / MEDIUM / LOW from readability_table.lua
+        local rating = cur and self.getFontReadability
+            and self:getFontReadability(cur, self.font_paths and self.font_paths[cur])
+        return text .. "  |  " .. (rating or "n/a")
     end
     local caption = buildCaption(current)
 
