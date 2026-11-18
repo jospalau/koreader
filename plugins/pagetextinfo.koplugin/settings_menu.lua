@@ -518,6 +518,19 @@ local function resolveFace(raw_name)
         end
     end
 
+    -- No family called like that: look at the file names ("NV_Scarlet-Regular.ttf" for
+    -- "NVScarlet"), ignoring case and everything that is not a letter or a digit
+    if not best and not any then
+        local function alnum(x) return (x:lower():gsub("[^%w]", "")) end
+        local w = alnum(raw_name)
+        for path in pairs(FontList.fontinfo or {}) do
+            local stem = alnum((path:match("([^/]+)$") or path):gsub("%.%w+$", ""))
+            if stem == w .. "regular" or stem == w then
+                if not best or path < best then best = path end
+            end
+        end
+    end
+
     -- Only cache real matches. The "Name-Regular" guess is not cached
     -- (the font list may not be ready yet).
     if best or any then
@@ -879,6 +892,16 @@ local function bookRemScale(ui)
     return scale
 end
 PageTextInfo.getBookRemScale = function(self) return bookRemScale(self.ui) end
+PageTextInfo.resolveFace = function(self, name) return resolveFace(name) end
+-- Loadable name (real file when it is found) of the face now in the book. Used by the
+-- top bar, which otherwise builds the made-up "Name-Regular" that is not a file.
+PageTextInfo.getFaceName = function(self)
+    local face = self.ui and self.ui.font and self.ui.font.font_face
+    if not face and self.ui and self.ui.document and self.ui.document._document then
+        face = self.ui.document._document:getFontFace()
+    end
+    return face and resolveFace(face) or nil
+end
 
 function PageTextInfo:getFontXHeightInfo(face)
     local xi = xHeightInfo(self.ui, face)

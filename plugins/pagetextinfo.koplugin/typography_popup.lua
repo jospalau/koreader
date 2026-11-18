@@ -629,7 +629,11 @@ local function gatherData(ui)
 
     -- x-height
     -- Only the ascender / descender still come from a face of the font (for Leading)
-    local face_base = Font:getFace(data.font_face_clean, px, 0, true)
+    -- Through the real file of the font when the plugin can find it: the made-up name
+    -- "Name-Regular" is not a file and KOReader logs an error for it every time
+    local face_path = (pti and pti.resolveFace and pti:resolveFace(
+        (ui.font and ui.font.font_face) or data.font_face)) or data.font_face_clean
+    local face_base = Font:getFace(face_path, px, 0, true)
     local xh_px, xh_estimated
     -- rem factor of the book's text (pagetextinfo): the x-height of `info` is already
     -- multiplied by it, because the text is really drawn that much smaller
