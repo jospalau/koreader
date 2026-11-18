@@ -1486,6 +1486,23 @@ function Dispatcher:isActionEnabled(action)
     return not disabled
 end
 
+-- Parsed profiles.lua, cached and reloaded only when the file changes on disk.
+local profiles_cache = { mtime = nil, data = {} }
+function Dispatcher._getProfilesData()
+    local DataStorage = require("datastorage")
+    local lfs = require("libs/libkoreader-lfs")
+    local profiles_file = DataStorage:getSettingsDir() .. "/profiles.lua"
+    local mtime = lfs.attributes(profiles_file, "modification")
+    if mtime == nil then
+        profiles_cache.mtime, profiles_cache.data = nil, {}
+    elseif mtime ~= profiles_cache.mtime then
+        local LuaSettings = require("luasettings")
+        profiles_cache.data = LuaSettings:open(profiles_file).data or {}
+        profiles_cache.mtime = mtime
+    end
+    return profiles_cache.data
+end
+
 function Dispatcher._showAsMenu(settings, exec_props, rename_callback, rename_hold_callback)
     local title = settings.settings.name
     local keep_open_on_apply = settings.settings.keep_open_on_apply
@@ -1514,6 +1531,13 @@ function Dispatcher._showAsMenu(settings, exec_props, rename_callback, rename_ho
         }})
     end
     local Size = require("ui/size")
+    -- Load profiles.lua ONCE per menu build (it used to be parsed from disk for every action)
+    local ui = require("apps/reader/readerui").instance
+    local font_size = 0
+    if ui and ui.document and ui.document.configurable and ui.document.configurable.font_size then
+        font_size = ui.document.configurable.font_size
+    end
+    local profiles_data = Dispatcher._getProfilesData()
     for _, v in ipairs(display_list) do
         local text = util.tableGetValue(settings, "settings", "quickmenu_action_names", v.key) -- custom name
         if text then
@@ -1529,11 +1553,7 @@ function Dispatcher._showAsMenu(settings, exec_props, rename_callback, rename_ho
             -- end
 
 
-            local ui = require("apps/reader/readerui").instance
-            local font_size = 0
-            if ui and ui.document.configurable.font_size then
-                font_size = ui.document.configurable.font_size
-            end
+            -- ui, font_size and profiles_data are computed once before the loop (see above)
 
             -- -- See the source main.lua in the profiles plugin to see the tweaked sizes for different devices
             -- if Device.model == "Kobo_goldfinch" then -- Clara2E
@@ -1572,11 +1592,7 @@ function Dispatcher._showAsMenu(settings, exec_props, rename_callback, rename_ho
             --     font_size = font_size - 9
             -- end
 
-            local DataStorage = require("datastorage")
-            local LuaSettings = require("luasettings")
-            local profiles_file = DataStorage:getSettingsDir() .. "/profiles.lua"
-            local profiles = LuaSettings:open(profiles_file)
-            local data = profiles.data
+            local data = profiles_data
 
             for _,profo in pairs(data) do
 
@@ -1692,6 +1708,7 @@ function Dispatcher._showAsMenu(settings, exec_props, rename_callback, rename_ho
                             --     font_size = font_size - 9
                             -- end
 
+                            local data = Dispatcher._getProfilesData()
                             for prof, buttonqm in ipairs(quickmenu.buttons) do
                                 if buttonqm[1] and string.match(buttonqm[1].text, " ✔") then
                                     buttonqm[1].text = buttonqm[1].text:gsub(" ✔", "")
@@ -1700,11 +1717,6 @@ function Dispatcher._showAsMenu(settings, exec_props, rename_callback, rename_ho
                                 --     buttonqm[1].text = buttonqm[1].text .. " ✔"
                                 -- end
 
-                                local DataStorage = require("datastorage")
-                                local LuaSettings = require("luasettings")
-                                local profiles_file = DataStorage:getSettingsDir() .. "/profiles.lua"
-                                local profiles = LuaSettings:open(profiles_file)
-                                local data = profiles.data
                                 -- settings.settings.order[[prof]]
 
                                 -- The font module is not loaded for pdfs in readerui.lua
