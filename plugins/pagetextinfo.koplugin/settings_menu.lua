@@ -724,6 +724,28 @@ end
 -- and without spaces and with and without "-Regular". Every one of those spellings
 -- is tried, for the face name the book uses and for the font file.
 -- Returns the text of the table ("HIGH: large x-height 52%, ...") or nil.
+-- Same name with case, spaces, hyphens, underscores... ignored: "Gentium-Book-Plus" and
+-- "gentiumbookplus" are the same key. Built once from the table (sorted, so a clash
+-- always resolves to the same key).
+local function normName(name)
+    return (name:lower():gsub("[^%w]", ""))
+end
+local _norm_index, _norm_index_of
+local function normalizedIndex(t)
+    if _norm_index_of ~= t then
+        local keys = {}
+        for k in pairs(t) do if type(k) == "string" then keys[#keys + 1] = k end end
+        table.sort(keys)
+        _norm_index = {}
+        for __, k in ipairs(keys) do
+            local n = normName(k)
+            if n ~= "" and _norm_index[n] == nil then _norm_index[n] = k end
+        end
+        _norm_index_of = t
+    end
+    return _norm_index
+end
+
 local function readabilityText(face, path)
     local t = PageTextInfo.readability_table
     if type(t) ~= "table" then return nil end
@@ -734,19 +756,31 @@ local function readabilityText(face, path)
             cands[#cands + 1] = name
         end
     end
+    local base
     if type(path) == "string" then
-        local base = path:match("([^/]+)$")
-        if base then add((base:gsub("%.%w+$", ""))) end
+        base = path:match("([^/]+)$")
+        if base then base = base:gsub("%.%w+$", "") end
+        add(base)
     end
     if type(face) == "string" then
         local nospace = face:gsub("%s+", "")
         add(face); add(nospace)
         add(face .. "-Regular"); add(nospace .. "-Regular")
     end
+    -- 1) the exact spellings the script writes
     for __, name in ipairs(cands) do
         if t[name] then return t[name] end
     end
-    return nil
+    -- 2) the same, ignoring case and punctuation
+    local idx = normalizedIndex(t)
+    -- (explicit calls: ipairs would stop at a nil `base`)
+    local function byNorm(name)
+        if type(name) ~= "string" or name == "" then return nil end
+        local n = normName(name)
+        local key = idx[n] or idx[n .. "regular"]
+        return key and t[key] or nil
+    end
+    return byNorm(base) or byNorm(face)
 end
 
 -- Just the rating word ("HIGH") and the reason, split from the table text

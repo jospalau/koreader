@@ -216,7 +216,7 @@ function PageTextInfo:showFontInfo(face, label)
     local metrics_lines = {}
     local xi = self.getFontXHeightInfo and self:getFontXHeightInfo(face)
     table.insert(metrics_lines, xi
-        and string.format("x-height: %s%.2f mm (%d px) at %gpt; design %.1f%% of em",
+        and string.format("x-height: %s%.2fmm (%dpx) at %gpt; design %.1f%% of em",
             xi.estimated and "~" or "", xi.mm, xi.px, xi.pt, xi.ratio * 100)
         or "x-height: n/a")
 
@@ -512,7 +512,12 @@ function PageTextInfo:onShowFonts(page)
     }
     -- Swipe left/right: next / previous page (wraps around)
     function dialog:onSwipe(arg, ges)
-        if self:closeIfOutside(ges) then return true end
+        -- A swipe that starts outside the window does nothing (it does not close it)
+        -- and is consumed so it doesn't reach the reader underneath
+        -- (frame_rect is a local declared further down, so it is read from the dialog)
+        if not (ges and ges.pos and self.frame_rect and ges.pos:intersectWith(self.frame_rect)) then
+            return true
+        end
         if self.busy then return true end   -- a font is being applied
         -- Diagonal swipes ("northwest", "southeast"...) count too: only the
         -- horizontal part matters
