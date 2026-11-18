@@ -604,7 +604,21 @@ local function gatherData(ui)
     data.font_face = doc._document:getFontFace() or "?"
     data.font_face_clean = data.font_face:gsub("%s+", "") .. "-Regular"
     local pt = configurable.font_size
-    local px = ptToPx(pt, display_dpi)
+    local px = ptToPx(pt, display_dpi)   -- only a fallback: see the plugin just below
+
+    -- The x-height is NOT computed here any more: the pagetextinfo plugin has the
+    -- accurate one (rows of pixels as crengine draws them, with the hinting and the
+    -- weight in use, asked to the engine) and the size in px really drawn. The old
+    -- calculation took the design value of the font file and a px rounded in another
+    -- way than crengine does, so it was off by about a pixel.
+    local info
+    local pti = ui.pagetextinfo
+    if pti and pti.getFontXHeightInfo then
+        local okx, res = pcall(pti.getFontXHeightInfo, pti,
+            (ui.font and ui.font.font_face) or data.font_face)
+        if okx and res then info = res end
+    end
+    if info and info.px then px = info.px end   -- the size really drawn
 
     data.font_size_pt    = pt
     data.font_size_mm    = string.format("%.2f", pt * PT_TO_MM)
@@ -614,14 +628,22 @@ local function gatherData(ui)
     data.display_dpi     = display_dpi
 
     -- x-height
+    -- Only the ascender / descender still come from a face of the font (for Leading)
     local face_base = Font:getFace(data.font_face_clean, px, 0, true)
-    if face_base then
-        local xh = face_base.ftsize:getXHeight()
+    local xh_px, xh_estimated
+    if info then
+        xh_px, xh_estimated = info.rows, info.estimated
+    elseif face_base then
+        -- Without the plugin: the design value of the font file, as before.
         -- If xh < 1 it is a ratio, otherwise it is already in px.
-        -- Kept fractional: no intermediate rounding.
-        local xh_px = (xh < 1) and (xh * px) or xh
+        local xh = face_base.ftsize:getXHeight()
+        xh_px, xh_estimated = (xh < 1) and (xh * px) or xh, true
+    end
+    -- The px of the FONT section is the one really drawn too
+    data.font_size_px = px
+    if xh_px and xh_px > 0 then
         -- leading factor (line spacing relative to x-height)
-        if xh_px > 0 then
+        if face_base then
             local line_spacing_factor = (configurable.line_spacing or 100) / 100
             local ok, xh2, ascender, descender = pcall(function()
                 return face_base.ftsize:getAscDesc()
@@ -643,8 +665,11 @@ local function gatherData(ui)
         -- font for the current face (used by the ANGLE → SIZE table)
         if pt and pt > 0 then data.xh_mm_per_pt = xh_mm / pt end
 
-        data.x_height_px     = string.format("%.1fpx", xh_px)
-        data.x_height_mm     = string.format("%.2fmm", xh_mm)
+        -- "~" = not asked to the engine (FreeType or design value): an estimate
+        local mark = xh_estimated and "~" or ""
+        data.x_height_px     = mark .. ((xh_px == math.floor(xh_px)) and string.format("%dpx", xh_px)
+                                or string.format("%.1fpx", xh_px))
+        data.x_height_mm     = string.format("%s%.2fmm", mark, xh_mm)
         -- Evidence-based part: angle + band (Legge & Bigelow)
         data.x_height_arcmin = string.format("%.1f′  [%s]", angle, classifyAngle(angle))
         -- Continuous multiple of the critical print size (data, not a verdict)
