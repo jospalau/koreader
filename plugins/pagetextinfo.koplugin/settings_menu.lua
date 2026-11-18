@@ -289,7 +289,13 @@ end
 -- the lowercase title), so no id is hard-coded. Everything is wrapped in pcall:
 -- if the KOReader internals differ, a button just does nothing and logs why.
 local TWEAK_BUTTONS = {
-    { label = "Ignore font sizes",    needles = { "ignore", "font sizes" } },
+    -- Ignore font sizes / Reset main text size conflict in KOReader (conflicts_with):
+    -- turning one on turns the other off first (same mechanism as left / justify)
+    -- solo = true: the button gets a row of its own (full width)
+    { label = "Reset main text size", needles = { "reset main text" },
+      excludes = "Ignore font sizes", solo = true },
+    { label = "Ignore font sizes",    needles = { "ignore", "font sizes" },
+      excludes = "Reset main text size" },
     { label = "Ignore font families",  needles = { "ignore", "font families" } },
     { label = "Ignore page margins",   needles = { "ignore", "page margins" } },
     { label = "Indent first paragraph", needles = { "indent", "first" } },
@@ -457,8 +463,10 @@ local function buildRows(ui)
     -- exclusive in KOReader: turning one on turns the other off first.
     local tweak_row
     for i, def in ipairs(TWEAK_BUTTONS) do
-        if i % 2 == 1 then
-            tweak_row = {}
+        -- New row when there is none yet, the button is solo, the row above is solo
+        -- or the row above is full (two buttons)
+        if not tweak_row or def.solo or tweak_row.solo or #tweak_row >= 2 then
+            tweak_row = { solo = def.solo }
             table.insert(rows, tweak_row)
             if i == 1 then tweak_row.title = "Style tweaks" end
         end
