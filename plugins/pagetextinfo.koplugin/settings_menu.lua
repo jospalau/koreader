@@ -702,7 +702,7 @@ end
 -- estimated } or nil when it can't be read. `ratio` is the design x-height as a
 -- fraction of the em (from the font file); `mm` is the one drawn (rows of pixels).
 -- `estimated` is true when it did not come from the engine.
-local function xHeightInfo(ui, face)
+local function xHeightInfo(ui, face, scale)
     if not (ui and ui.document and face) then return nil end
     local ok, info = pcall(function()
         local path = resolveFace(face)
@@ -714,6 +714,8 @@ local function xHeightInfo(ui, face)
         local px
         local okp, n = pcall(function() return ui.document._document:getFontSize() end)
         if okp and n and n > 0 then px = n else px = math.floor(dpi * pt / 72 + 1e-6) end
+        -- Book text in rem: the pixel size really drawn is the chosen one times the factor
+        if scale then px = math.max(1, math.floor(px * scale + 0.5)) end
         local hint = getHinting(ui)
         local rows, estimated
         if face == currentFace(ui) then rows = engineRows(ui, px, hint) end
@@ -828,19 +830,35 @@ local function loadEpubContent(path)
     return htmls, csss
 end
 
+-- The factor comes first from the global calibre_data (loaded from calibre.lua, key =
+-- file name; "rem" is the field written by executeGenerateCollections). The estimate
+-- from the epub is only the fallback.
+local function calibreRem(path)
+    local data = _G.calibre_data
+    local entry = type(data) == "table" and data[path:match("([^/]+)$")]
+    local v = type(entry) == "table" and tonumber(entry.rem)
+    if v and v > 0 and v <= 1.5 then return v end
+    return nil
+end
+
 local _rem_cache = {}   -- [book path] = factor, or false when there is none
 local function bookRemFactor(path)
     if type(path) ~= "string" or not path:lower():match("%.epub$") then return nil end
     local c = _rem_cache[path]
     if c == nil then
         c = false
-        local ok, scale = pcall(function()
-            local htmls, csss = loadEpubContent(path)
-            return htmls and bodyRemFromContent(htmls, csss)
-        end)
-        if ok and scale then c = scale
-        elseif not ok then require("logger").warn("[PTI] book rem scale failed:", scale) end
-        dlog("bookRemFactor:", path, c)
+        local from_calibre = calibreRem(path)
+        if from_calibre then
+            c = (from_calibre ~= 1) and from_calibre or false   -- 1.0 = no rem factor
+        else
+            local ok, scale = pcall(function()
+                local htmls, csss = loadEpubContent(path)
+                return htmls and bodyRemFromContent(htmls, csss)
+            end)
+            if ok and scale then c = scale
+            elseif not ok then require("logger").warn("[PTI] book rem scale failed:", scale) end
+        end
+        dlog("bookRemFactor:", path, c, from_calibre and "(calibre)" or "(estimate)")
         _rem_cache[path] = c
     end
     return c or nil
@@ -862,30 +880,17 @@ local function bookRemScale(ui)
 end
 PageTextInfo.getBookRemScale = function(self) return bookRemScale(self.ui) end
 
--- Done when the book is opened, before its first page is shown (KOReader sends
--- ReadSettings first of all), so showing the x-height later never waits for it.
--- A handler that main.lua defined before loading this file is kept and called first.
-local prev_on_read_settings = PageTextInfo.onReadSettings
-function PageTextInfo:onReadSettings(...)
-    local result
-    if prev_on_read_settings then result = prev_on_read_settings(self, ...) end
-    local file = self.ui and self.ui.document and self.ui.document.file
-    dlog("onReadSettings: file=", file)
-    bookRemFactor(file)   -- fills the cache
-    return result
-end
-
 function PageTextInfo:getFontXHeightInfo(face)
     local xi = xHeightInfo(self.ui, face)
     local scale = xi and bookRemScale(self.ui)
     if scale then
-        local copy = {}
-        for k, v in pairs(xi) do copy[k] = v end
-        copy.rem = scale                     -- shown as "(rem)"
-        copy.mm_nominal = xi.mm              -- at the size chosen, without the book's scale
-        copy.mm = xi.mm * scale
-        copy.rows = xi.rows and xi.rows * scale
-        return copy
+        -- Asked again to the engine at the size really drawn (chosen size x factor)
+        local xs = xHeightInfo(self.ui, face, scale)
+        if xs then
+            xs.rem = scale                   -- shown as "(rem)"
+            xs.mm_nominal = xi.mm            -- at the size chosen, without the book's scale
+            return xs
+        end
     end
     return xi
 end
