@@ -22,6 +22,12 @@
 -- A wrapper around ReaderUI.onClose installed by another plugin (e.g. a closing
 -- cover) is part of the ReaderUI.onClose total.
 --
+-- The summary window has two buttons: "Close" (also tapping outside it) and
+-- "× Switch off", which switches the toggle off (setting "exittiming_enabled"), takes the
+-- wrappers out and calls the function given to ExitTiming.setOnClose (the menus that
+-- show the toggle are redrawn from there). Closing it any other way keeps measuring, so
+-- a book can be entered and left as many times as needed.
+--
 -- A wrapper that cannot be taken out (something else wrapped the same function
 -- afterwards) stays in place but only calls the original while the toggle is off.
 
@@ -31,8 +37,12 @@ local QUIET_MS = 1000       -- nothing measured for this long = finished
 local MAX_WAIT_MS = 10000   -- never wait longer than this after the close started
 local TOP_ITEMS = 14        -- items in the "slowest" list
 local TOP_PLUGINS = 8       -- plugins in the "plugins started" list
+local ENABLED_SETTING = "exittiming_enabled"
 
 local M = { enabled = false }
+local on_close_cb   -- optional, set with M.setOnClose()
+
+function M.setOnClose(fn) on_close_cb = fn end
 
 -- { obj, name, orig, wrapper, own } for every function wrapped
 local installed = {}
@@ -124,8 +134,36 @@ local function showSummary()
     local text = buildSummary()
     -- print("[exit-timing]\n" .. text)   -- also in the terminal, for reference
     local UIManager = require("ui/uimanager")
-    local InfoMessage = require("ui/widget/infomessage")
-    UIManager:show(InfoMessage:new{ text = text })
+    -- Tapping outside only closes the window (to measure again); the "×" button also
+    -- switches Exit timing off
+    local ButtonDialog = require("ui/widget/buttondialog")
+    local dialog
+    dialog = ButtonDialog:new{
+        title = text,
+        title_align = "left",
+        buttons = {
+            {
+                {
+                    text = "Close",
+                    callback = function() UIManager:close(dialog) end,
+                },
+                {
+                    text = "× Switch off",
+                    callback = function()
+                        UIManager:close(dialog)
+                        -- later, not in the middle of closing the window
+                        UIManager:nextTick(function()
+                            G_reader_settings:saveSetting(ENABLED_SETTING, false)
+                            G_reader_settings:flush()
+                            M.setEnabled(false)
+                            if on_close_cb then pcall(on_close_cb) end
+                        end)
+                    end,
+                },
+            },
+        },
+    }
+    UIManager:show(dialog)
 end
 
 local function scheduleSummary(id)

@@ -772,7 +772,8 @@ return function(PageTextInfo)
                 },
             }
             table.insert(row, cell_frame)
-            table.insert(cells, { frame = cell_frame, callback = action.callback })
+            table.insert(cells, { frame = cell_frame, callback = action.callback,
+                action = action, text = text_widget })
 
             if action.full_width then
                 table.insert(grid, row)
@@ -830,9 +831,32 @@ return function(PageTextInfo)
             return true
         end
 
+        -- Redraw the inverted state of the toggles from their current values (used when
+        -- something changes a flag while the menu is open, e.g. the "×" of an overlay)
+        function dialog:updateActive()
+            for _, cell in ipairs(cells) do
+                if cell.action and cell.action.active then
+                    local on = cell.action.active() and true or false
+                    cell.text.fgcolor = on and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
+                    cell.frame.color = on and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
+                    cell.frame.background = on and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE
+                end
+            end
+            UIManager:setDirty(self, "ui", self.frame_rect)
+        end
+
         dialog.plugin = self
         dialog.frame_rect = frame_rect
         self.actions_dialog = dialog
+
+        -- The overlays switch their own flag off with the "×": redraw this menu then
+        local function onOverlayClosed()
+            if self.actions_dialog == dialog then dialog:updateActive() end
+        end
+        for _, getMod in ipairs({ getCrashLog, getMemoryOverlay }) do
+            local mod = getMod()
+            if mod and mod.setOnClose then mod.setOnClose(onOverlayClosed) end
+        end
 
         UIManager:show(dialog, "ui", frame_rect)
         -- DEBUG: set to false once the font works

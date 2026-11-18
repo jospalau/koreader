@@ -1151,6 +1151,22 @@ function PageTextInfo:init()
     end
     CrashLog.setEnabled(G_reader_settings:isTrue("crashlog_enabled"))
     MemoryOverlay.setEnabled(G_reader_settings:isTrue("memoryoverlay_enabled"))
+    -- The "×" of an overlay switches its flag off by itself: close KOReader's top menu
+    -- if it is open (it would still show the old flag) and redraw the actions menu
+    local function onOverlayClosed()
+        pcall(function()
+            self.ui:handleEvent(Event:new("CloseReaderMenu"))       -- reader
+            self.ui:handleEvent(Event:new("CloseFileManagerMenu"))  -- file manager
+        end)
+        pcall(function()
+            if self.actions_dialog and self.actions_dialog.updateActive then
+                self.actions_dialog:updateActive()
+            end
+        end)
+    end
+    CrashLog.setOnClose(onOverlayClosed)
+    MemoryOverlay.setOnClose(onOverlayClosed)
+    ExitTiming.setOnClose(onOverlayClosed)
     ExitTiming.record("PageTextInfo.init", _time.to_ms(_time.since(_t_init)))
 end
 

@@ -20,7 +20,12 @@
 --   swipe up/down      scroll toward newer / older lines (by swipe length)
 --   swipe left         back to the live end (newest line)
 --   swipe right        jump to the oldest line kept
+--   tap on the "×" (right end of the top bar)   close the overlay
 -- Anything outside the box goes to the screen below as usual.
+--
+--   MemoryOverlay.setOnClose(function() ... end)
+--       optional, called after the "×" closed the overlay (the flag
+--       "memoryoverlay_enabled" is already switched off by the "×" itself)
 
 local Blitbuffer = require("ffi/blitbuffer")
 local Device = require("device")
@@ -101,6 +106,10 @@ local function swipeDelta(ges)
     return dx, dy
 end
 
+local closeSelf     -- defined with the module state below (closes the overlay)
+local on_close_cb  -- optional callback set with setOnClose()
+local ENABLED_SETTING = "memoryoverlay_enabled"   -- flag the "×" switches off
+
 -- ─── the widget ──────────────────────────────────────────────────────────────
 -- toast = true: never the top widget, so events keep reaching the screen below.
 
@@ -125,6 +134,9 @@ function Overlay:init()
     self.line_h = probe:getSize().h
     probe:free()
     self.bar_h = self.line_h + PADDING
+    self.close_w = self.bar_h * 2          -- touch area of the "×"
+    self.close_widget = TextWidget:new{ text = "×", face = self.face,
+        fgcolor = Blitbuffer.COLOR_BLACK }
     self:updateDimen()
     self:sample(true)
 end
@@ -216,6 +228,12 @@ function Overlay:paintTo(bb, x, y)
     end
     bb:paintRect(d.x + bt, d.y + bt + self.bar_h, d.w - 2 * bt, bt, Blitbuffer.COLOR_BLACK)
 
+    -- close button: "×" at the right end of the bar
+    local cs = self.close_widget:getSize()
+    self.close_widget:paintTo(bb,
+        d.x + d.w - bt - math.floor((self.close_w + cs.w) / 2),
+        d.y + bt + math.floor((self.bar_h - cs.h) / 2))
+
     -- text, bottom-aligned: the newest visible line is always the last one
     local px = d.x + bt + PADDING
     local top = d.y + bt + self.bar_h + bt + PADDING
@@ -248,6 +266,12 @@ end
 function Overlay:inHandle(pos)
     return self:contains(pos)
         and pos.y < self.dimen.y + Size.border.thin + self.bar_h
+end
+
+-- True when pos is on the close button (right end of the bar).
+function Overlay:inClose(pos)
+    return self:inHandle(pos)
+        and pos.x >= self.dimen.x + self.dimen.w - Size.border.thin - self.close_w
 end
 
 function Overlay:beginDrag(x, y)
@@ -335,6 +359,10 @@ function Overlay:onBoxGesture(ges)
     if not self:contains(pos) then return false end
 
     if kind == "tap" then
+        if self:inClose(pos) then
+            closeSelf()
+            return true
+        end
         self:sample(true)
         self:refresh()
         return true
@@ -357,6 +385,7 @@ end
 
 function Overlay:free()
     self:clearWidgets()
+    if self.close_widget then self.close_widget:free() end
 end
 
 -- ─── module state (singleton, shared by FM and reader) ──────────────────────
@@ -496,6 +525,24 @@ local function apply()
     end
 end
 
+-- Close button: same as setEnabled(false), at once, and the saved flag goes off too
+closeSelf = function()
+    desired = false
+    G_reader_settings:saveSetting(ENABLED_SETTING, false)
+    G_reader_settings:flush()
+    UIManager:nextTick(function()
+        local ok, err = pcall(apply)
+        if not ok then
+            logger.warn("memory overlay (close):", err)
+            overlay = nil
+        end
+        if on_close_cb then
+            local ok2, err2 = pcall(on_close_cb)
+            if not ok2 then logger.warn("memory overlay (on close):", err2) end
+        end
+    end)
+end
+
 local function setEnabled(enable)
     desired = enable and true or false
     -- deferred: never touch the UI while the plugin is still initialising
@@ -510,4 +557,5 @@ end
 
 return {
     setEnabled = setEnabled,
+    setOnClose = function(fn) on_close_cb = fn end,
 }
