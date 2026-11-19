@@ -822,6 +822,35 @@ function PageTextInfo:onSwipe(_, ges)
     return false
 end
 
+-- Same as the menu item "Enable / disable full-screen ruled lines" of the custombg plugin
+-- (its key is FS_KEYS.enabled = "fs_lines_enabled", local to that plugin)
+function PageTextInfo:toggleFullScreenRuledLines()
+    local util = require("util")
+    local is_pdf = self.document and util.getFileNameSuffix(self.document.file) == "pdf"
+    if is_pdf then return end
+    if self.view.footer_visible then return end
+    if self.view.topbar.settings:isTrue("show_top_bar")
+    or (self.ui.bookends and self.ui.bookends.enabled) then
+        self.view.topbar:quickToggleOnOff(true)
+        -- local footer = self.ui.view.footer
+        -- footer:applyFooterMode(footer.mode_list.off)
+        -- self.ui.bookends.stock_bar_disabled = true
+        -- self.ui.bookends.settings:saveSetting("stock_bar_disabled", true)
+        -- self.view.footer_visible = false
+        self.ui.bookends.enabled = not self.ui.bookends.enabled
+        self.ui.bookends.settings:saveSetting("enabled", self.ui.bookends.enabled)
+    else
+        local custombg = self.ui and self.ui.custombg
+        if not custombg then return false end
+        custombg.fs_enabled = not custombg.fs_enabled
+        custombg:saveDocSetting("fs_lines_enabled", custombg.fs_enabled)
+        -- Repaint the reader itself so custombg:paintTo() runs again with the new value.
+        -- setDirty(nil, ...) would only refresh the screen buffer as it is (the old state)
+        UIManager:setDirty(self.view.dialog, "ui")
+    end
+    return true
+end
+
 -- Handle multiswipes: only "north east" is used, everything else is ignored
 function PageTextInfo:onMultiSwipe(arg, ges)
     if ges and ges.multiswipe_directions == "north east" then
@@ -832,6 +861,11 @@ function PageTextInfo:onMultiSwipe(arg, ges)
     if ges and ges.multiswipe_directions == "south east" then
         -- Open the fonts menu (change this to whatever action you want)
         self:onShowSettingsMenu()
+        return true
+    end
+    if ges and ges.multiswipe_directions == "east south" then
+        -- Toggle the full-screen ruled lines of the custombg plugin
+        self:toggleFullScreenRuledLines()
         return true
     end
     -- Not our gesture: let other handlers deal with it
