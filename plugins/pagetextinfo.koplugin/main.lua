@@ -843,7 +843,7 @@ function PageTextInfo:toggleFullScreenRuledLines()
         -- setDirty(nil, ...) would only refresh the screen buffer as it is (the old state)
         UIManager:setDirty(self.view.dialog, "ui")
     end
-    return true
+    return UIManager:setDirty(self.view.dialog, "ui")
 end
 
 -- Handle multiswipes: only "north east" is used, everything else is ignored
