@@ -525,21 +525,87 @@ function ReaderView:paintTo(bb, x, y)
     if profiling and self._timing_text then
         local TextBoxWidget = require("ui/widget/textboxwidget")
         local FrameContainer = require("ui/widget/container/framecontainer")
+        local HorizontalGroup = require("ui/widget/horizontalgroup")
+        -- Touch area of the "×" (right end of the box), same idea as memory_overlay
+        local close_w = Screen:scaleBySize(48)
         local tw = TextBoxWidget:new{
             text = self._timing_text,
             face = Font:getFace("infofont", 14),
-            width = Screen:getWidth() - Screen:scaleBySize(20),
+            width = Screen:getWidth() - Screen:scaleBySize(20) - close_w,
         }
+        local close_tw = TextWidget:new{
+            text = "×",
+            face = Font:getFace("infofont", 20),
+            fgcolor = Blitbuffer.COLOR_BLACK,
+        }
+        -- The "×" is centered horizontally inside its touch area
+        local close_gap = math.max(0, math.floor((close_w - close_tw:getSize().w) / 2))
+        local HorizontalSpan = require("ui/widget/horizontalspan")
         local frame = FrameContainer:new{
             background = Blitbuffer.COLOR_WHITE,
             bordersize = Size.border.thin,
             padding = Size.padding.small,
             margin = 0,
-            tw,
+            HorizontalGroup:new{
+                align = "top",
+                tw,
+                HorizontalSpan:new{ width = close_gap },
+                close_tw,
+                HorizontalSpan:new{ width = close_w - close_gap - close_tw:getSize().w },
+            },
         }
-        frame:paintTo(bb, x + Screen:scaleBySize(10), y + Screen:scaleBySize(10))
+        local fx, fy = x + Screen:scaleBySize(10), y + Screen:scaleBySize(10)
+        frame:paintTo(bb, fx, fy)
+        local fsize = frame:getSize()
+        -- Remember where the box and its "×" are, so onGesture() can react to a tap
+        self._timing_box = Geom:new{ x = fx, y = fy, w = fsize.w, h = fsize.h }
+        self._timing_close = Geom:new{
+            x = fx + fsize.w - Size.border.thin - Size.padding.small - close_w,
+            y = fy,
+            w = close_w + Size.border.thin + Size.padding.small,
+            h = fsize.h,
+        }
         frame:free()
+    else
+        self._timing_box = nil
+        self._timing_close = nil
     end
+end
+
+-- Plain bounds check (no Geom methods)
+local function posInRect(pos, r)
+    return pos and r and pos.x and pos.y
+        and pos.x >= r.x and pos.x < r.x + r.w
+        and pos.y >= r.y and pos.y < r.y + r.h
+end
+
+-- Closes the page turn time box: same as switching "show_page_turn_time" off.
+-- The flag is saved, so it stays closed until it is enabled again.
+function ReaderView:closeTimingBox()
+    local box = self._timing_box
+    self._timing_text = nil
+    self._timing_box = nil
+    self._timing_close = nil
+    G_reader_settings:saveSetting("show_page_turn_time", false)
+    G_reader_settings:flush()
+    -- repaint what was under the box
+    if box then
+        UIManager:setDirty(self.dialog, "ui", Geom:new{ x = box.x, y = box.y, w = box.w, h = box.h })
+    else
+        UIManager:setDirty(self.dialog, "ui")
+    end
+end
+
+-- Tap on the "×" closes the page turn time box. A tap anywhere else in the box is
+-- swallowed (it does not turn the page). Anything outside the box goes on as usual.
+function ReaderView:onGesture(ges)
+    if not self._timing_box or not ges or ges.ges ~= "tap" then return false end
+    local pos = ges.pos
+    if not posInRect(pos, self._timing_box) then return false end
+    if posInRect(pos, self._timing_close) then
+        self:closeTimingBox()
+    end
+    return true
 end
 
 --[[
