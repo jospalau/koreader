@@ -3212,6 +3212,13 @@ function CustomBg:addToMainMenu(menu_items)
             }
         }
     }
+
+    -- File manager (no book open): hide "Ruled lines" and "Custom reading background",
+    -- they only make sense inside a book. Only the sleep icon menu is kept.
+    if not self.ui.document then
+        local sub = menu_items.custombg.sub_item_table
+        for i = #sub, 2, -1 do table.remove(sub, i) end
+    end
 end
 
 return CustomBg
