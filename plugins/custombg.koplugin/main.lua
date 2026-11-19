@@ -820,9 +820,11 @@ function CustomBg:getSleepIconMenu()
             end
             return size_items
         end)(),
+        -- The separator line is attached to this item: a standalone { separator = true } entry
+        -- would render as an empty row (the ugly gap) in the touch menu
+        separator = true,
     })
-    -- Separator + icon list (placed below; auto-paginates when there are many icons)
-    table.insert(items, { separator = true })
+    -- Icon list (placed below; auto-paginates when there are many icons)
     local icons = self:loadSleepIconList()
     if #icons > 0 then
         for _, name in ipairs(icons) do
