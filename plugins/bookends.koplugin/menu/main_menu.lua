@@ -281,9 +281,6 @@ function Bookends:buildBookendsSettingsMenu()
                         self.ui.view.topbar.status_bar = false
                     end
                 end
-                if self.view.doublebar then
-                    G_reader_settings:saveSetting("show_double_bar", false)
-                end
                 self.settings:saveSetting("stock_bar_disabled", true)
                 self.enabled = not self.enabled
                 self.settings:saveSetting("enabled", self.enabled)

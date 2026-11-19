@@ -27,7 +27,6 @@ local _ = require("gettext")
 local Screen = Device.screen
 local T = require("ffi/util").template
 local Topbar = require("apps/reader/modules/topbar")
-local Doublebar = require("apps/reader/modules/doublebar")
 local Notification = require("ui/widget/notification")
 local UIManager = require("ui/uimanager")
 local time = require("ui/time")
@@ -161,12 +160,7 @@ function ReaderView:addWidgets()
             view = self,
             ui = self.ui,
         }
-        self.doublebar = Doublebar:new{
-            view = self,
-            ui = self.ui,
-        }
         self[4] = self.topbar
-        self[5] = self.doublebar
     end
 end
 
@@ -430,9 +424,6 @@ function ReaderView:paintTo(bb, x, y)
             self.topbar:paintToDisabled(bb, x, y)
         end
         mark("topbar")
-        if G_reader_settings:isTrue("show_double_bar") then
-            self.doublebar:paintTo(bb, x, y)
-        end
     end
 
     -- paint dogear

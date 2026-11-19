@@ -499,7 +499,6 @@ function PageTextInfo:onDispatcherRegisterActions()
     Dispatcher:registerAction("increase_weight", {category="none", event="IncreaseWeightSize", title=_("Increase weight size"), rolling=true,})
     Dispatcher:registerAction("decrease_weight", {category="none", event="DecreaseWeightSize", title=_("Decrease weight size"), rolling=true,})
     Dispatcher:registerAction("toggle_sort_by_mode", {category="none", event="ToggleSortByMode", title=_("Toggle sort by mode"), general=true,})
-    Dispatcher:registerAction("toggle_double_bar", {category="none", event="ToggleDoubleBar", title=_("Toggle double bar"), reader=true, separator=true,})
     Dispatcher:registerAction("notebook_file_render", {category="none", event="ShowNotebookFileRender", title=_("Notebook file render"), general=true,})
     Dispatcher:registerAction("toggle_debug_verbose", {category="none", event="ToggleDebugVerbose", title=_("Toggle verbose logging"), general=true,})
     Dispatcher:registerAction("show_fonts_menu", {category="none", event="ShowFonts", title=_("Show fonts menu"), reader=true, separator=true,})
@@ -580,7 +579,6 @@ function PageTextInfo:toggleHighlightAllWordsVocabulary(toggle)
         self:updateNotes()
     end
     self.view.topbar:toggleBar()
-    self.view.doublebar:toggleBar()
     UIManager:setDirty(self.view.dialog, "ui")
     return true
 end
@@ -719,7 +717,6 @@ function PageTextInfo:onSwipe(_, ges)
             Device.input.disable_double_tap = false
             self.ui.gestures:onIgnoreHoldCorners(false)
             self.view.topbar:toggleBar()
-            self.view.doublebar:toggleBar()
             UIManager:setDirty(self.view.dialog, "ui")
             return self:toggleHighlightAllWordsVocabulary(not self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes"))
         elseif not self.ui.disable_double_tap then
@@ -728,7 +725,6 @@ function PageTextInfo:onSwipe(_, ges)
             Device.input.disable_double_tap = self.ui.disable_double_tap
             self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", false)
             self.view.topbar:toggleBar()
-            self.view.doublebar:toggleBar()
             UIManager:setDirty(self.view.dialog, "ui")
         elseif self.ui.disable_double_tap then
             self.ui.disable_double_tap = false
@@ -739,7 +735,6 @@ function PageTextInfo:onSwipe(_, ges)
             self.settings:saveSetting("highlight_all_words_vocabulary_builder_and_notes", false)
             self.ui.disable_double_tap = true
             self.view.topbar:toggleBar()
-            self.view.doublebar:toggleBar()
             UIManager:setDirty(self.view.dialog, "ui")
         end
     elseif direction == "north" then
@@ -3368,31 +3363,6 @@ function PageTextInfo:sendHighlightToServerForHeatmap()
             timeout = 10,
         })
     end)
-end
-
-function PageTextInfo:onToggleDoubleBar()
-    local util = require("util")
-    local is_pdf = self.document and util.getFileNameSuffix(self.document.file) == "pdf"
-    if is_pdf then return end
-    if self.view.footer_visible then return end
-    if self.view.topbar.settings:isTrue("show_top_bar")
-    or (self.ui.bookends and self.ui.bookends.enabled) then
-        self.view.topbar:quickToggleOnOff(true)
-        -- local footer = self.ui.view.footer
-        -- footer:applyFooterMode(footer.mode_list.off)
-        -- self.ui.bookends.stock_bar_disabled = true
-        -- self.ui.bookends.settings:saveSetting("stock_bar_disabled", true)
-        -- self.view.footer_visible = false
-        self.ui.bookends.enabled = not self.ui.bookends.enabled
-        self.ui.bookends.settings:saveSetting("enabled", self.ui.bookends.enabled)
-    else
-        if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
-        local show_double_bar = G_reader_settings:isTrue("show_double_bar")
-        G_reader_settings:saveSetting("show_double_bar", not show_double_bar)
-        require("apps/reader/modules/doublebar").is_enabled = not show_double_bar
-        self.view.doublebar:toggleBar()
-    end
-    return UIManager:setDirty(self.view.dialog, "ui")
 end
 
 function PageTextInfo:onShowNotebookFileRender()

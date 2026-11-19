@@ -1263,9 +1263,6 @@ function TopBar:changeAllWidgetFaces()
     }
 
     self:toggleBar()
-    self.view.doublebar.title_text.face = Font:getFace(font, font_size)
-    self.view.doublebar.chapter_text.face = Font:getFace(font, font_size)
-    self.view.doublebar:toggleBar()
 end
 function TopBar:onToggleShowTopBar()
     local show_top_bar = self.settings:isTrue("show_top_bar")
@@ -2665,17 +2662,6 @@ end
 -- We do it in the init() function using a registerPostReaderReadyCallback() function
 function TopBar:addToMainMenu(menu_items)
     local Event = require("ui/event")
-    -- menu_items.show_double_bar = {
-    --     text = _("Show double bar"),
-    --     checked_func = function() return G_reader_settings:isTrue("show_double_bar") end,
-    --     enabled_func = function()
-    --         local file_type = string.lower(string.match(self.ui.document.file, ".+%.([^.]+)") or "")
-    --         return file_type == "epub"
-    --     end,
-    --     callback = function()
-    --         UIManager:broadcastEvent(Event:new("ToggleShowDoubleBar"))
-    --     end
-    -- }
     local FontList = require("fontlist")
     local table_fonts = {}
     for _, font_path in ipairs(FontList:getFontList()) do
