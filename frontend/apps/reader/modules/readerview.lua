@@ -203,6 +203,52 @@ function ReaderView:resetLayout()
     end
 end
 
+-- ─── memory line of the page turn box ────────────────────────────────────────
+-- Third line of the box (only while "show_page_turn_time" is on), sampled after every page turn:
+--
+--   Memory: Lua 38.2M(+120K)  RSS 210M(+1.5M)  free 92M
+--
+--   Lua   heap of the Lua state (collectgarbage("count")) and what it changed since the previous turn
+--   RSS   resident memory of the whole process and what it changed since the previous turn
+--   free  MemAvailable of the system
+--
+-- Value in kB of a "Name:   123 kB" line of a /proc file
+local function memProcKB(path, name)
+    local f = io.open(path, "r")
+    if not f then return nil end
+    local v
+    for line in f:lines() do
+        local n, num = line:match("^(%S+):%s+(%d+)")
+        if n == name then v = tonumber(num); break end
+    end
+    f:close()
+    return v
+end
+
+local function memFmtKB(kb)
+    if kb >= 1024 then return string.format("%.1fM", kb / 1024) end
+    return string.format("%dK", math.floor(kb + 0.5))
+end
+
+-- "(+120K)" / "(-1.5M)" / "" when nothing changed
+local function memFmtDelta(kb)
+    if math.abs(kb) < 1 then return "" end
+    if math.abs(kb) >= 1024 then return string.format("(%+.1fM)", kb / 1024) end
+    return string.format("(%+dK)", math.floor(kb + (kb >= 0 and 0.5 or -0.5)))
+end
+
+function ReaderView:getMemoryLine()
+    local lua = collectgarbage("count")
+    local rss = memProcKB("/proc/self/status", "VmRSS")
+    local free = memProcKB("/proc/meminfo", "MemAvailable")
+    local prev = self._mem_prev
+    local lua_d = prev and memFmtDelta(lua - prev.lua) or ""
+    local rss_d = (prev and rss and prev.rss) and memFmtDelta(rss - prev.rss) or ""
+    self._mem_prev = { lua = lua, rss = rss }
+    return string.format("Memory: Lua %s%s  RSS %s%s  free %s",
+        memFmtKB(lua), lua_d, rss and memFmtKB(rss) or "?", rss_d, free and memFmtKB(free) or "?")
+end
+
 function ReaderView:paintTo(bb, x, y)
     local start = time.now()
     local prep = self._turn_start and time.to_ms(time.since(self._turn_start)) or 0
@@ -517,8 +563,9 @@ function ReaderView:paintTo(bb, x, y)
         --print("page update -> painted ms:", ms, "| paintTo:", time.to_ms(time.since(start)), "|", table.concat(marks, " "))
         self._turn_start = nil
         if profiling then
-            self._timing_text = string.format("Page turn: %dms | paintTo: %dms\n%s",
-                ms, time.to_ms(time.since(start)), table.concat(marks, " "))
+            self._timing_text = string.format("Page turn: %dms | paintTo: %dms\n%s\n%s",
+                ms, time.to_ms(time.since(start)), table.concat(marks, " "),
+                self:getMemoryLine())
         end
     end
 
