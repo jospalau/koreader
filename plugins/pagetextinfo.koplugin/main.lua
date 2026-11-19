@@ -25,6 +25,7 @@ local FrameContainer = require("ui/widget/container/framecontainer")
 local TextViewer = require("ui/widget/textviewer")
 local CrashLog = require("crashlog_overlay")
 local MemoryOverlay = require("memory_overlay")
+local WidgetTimeOverlay = require("widget_time_overlay")
 local ExitTiming = require("exit_timing")
 local Geom = require("ui/geometry")
 local Size = require("ui/size")
@@ -1151,6 +1152,7 @@ function PageTextInfo:init()
     end
     CrashLog.setEnabled(G_reader_settings:isTrue("crashlog_enabled"))
     MemoryOverlay.setEnabled(G_reader_settings:isTrue("memoryoverlay_enabled"))
+    WidgetTimeOverlay.setEnabled(G_reader_settings:isTrue("widgettimeoverlay_enabled"))
     -- The "×" of an overlay switches its flag off by itself: close KOReader's top menu
     -- if it is open (it would still show the old flag) and redraw the actions menu
     local function onOverlayClosed()
@@ -1166,6 +1168,7 @@ function PageTextInfo:init()
     end
     CrashLog.setOnClose(onOverlayClosed)
     MemoryOverlay.setOnClose(onOverlayClosed)
+    WidgetTimeOverlay.setOnClose(onOverlayClosed)
     ExitTiming.setOnClose(onOverlayClosed)
     ExitTiming.record("PageTextInfo.init", _time.to_ms(_time.since(_t_init)))
 end
@@ -1222,6 +1225,12 @@ function PageTextInfo:onReaderReady()
     -- end
     -- UIManager:unschedule(self.insertSession)
     -- UIManager:scheduleIn(600, self.insertSession)
+end
+
+-- Switch the widget time overlay on/off from the menu entry (same flag the "×" of the overlay switches off)
+function PageTextInfo:onWidgetTimeOverlayToggled(enable)
+    WidgetTimeOverlay.setEnabled(enable and true or false)
+    return true
 end
 
 function PageTextInfo:onPageUpdate(pageno)
@@ -1410,6 +1419,19 @@ function PageTextInfo:addToMainMenu(menu_items)
                         G_reader_settings:flush()
                         local Event = require("ui/event")
                         UIManager:broadcastEvent(Event:new("MemoryOverlayToggled", enable))
+                        return true
+                    end,
+                },
+                {
+                    text = _("Widget time overlay"),
+                    checked_func = function() return G_reader_settings:isTrue("widgettimeoverlay_enabled") end,
+                    help_text = _([[Show how long each widget takes to be created (name and ms), live, in a scrollable window on every screen. Nothing is measured while it is off.]]),
+                    callback = function()
+                        local enable = not G_reader_settings:isTrue("widgettimeoverlay_enabled")
+                        G_reader_settings:saveSetting("widgettimeoverlay_enabled", enable)
+                        G_reader_settings:flush()
+                        local Event = require("ui/event")
+                        UIManager:broadcastEvent(Event:new("WidgetTimeOverlayToggled", enable))
                         return true
                     end,
                 },
@@ -1849,6 +1871,19 @@ This is to be active only if the option flash buttons and menu items or the opti
                         G_reader_settings:flush()
                         local Event = require("ui/event")
                         UIManager:broadcastEvent(Event:new("MemoryOverlayToggled", enable))
+                        return true
+                    end,
+                },
+                {
+                    text = _("Widget time overlay"),
+                    checked_func = function() return G_reader_settings:isTrue("widgettimeoverlay_enabled") end,
+                    help_text = _([[Show how long each widget takes to be created (name and ms), live, in a scrollable window on every screen. Nothing is measured while it is off.]]),
+                    callback = function()
+                        local enable = not G_reader_settings:isTrue("widgettimeoverlay_enabled")
+                        G_reader_settings:saveSetting("widgettimeoverlay_enabled", enable)
+                        G_reader_settings:flush()
+                        local Event = require("ui/event")
+                        UIManager:broadcastEvent(Event:new("WidgetTimeOverlayToggled", enable))
                         return true
                     end,
                 },
