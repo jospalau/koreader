@@ -388,7 +388,7 @@ function CustomBg:getGlobalDefaultBg()
 end
 
 -- ===== Background loading: uses the native setBackgroundImage =====
-function CustomBg:loadBackgroundByName(name)
+function CustomBg:loadBackgroundByName(name, from_menu)
     if not self.ui or not self.ui.document then return end
     self:invalidateLineCache()
 
@@ -427,7 +427,11 @@ function CustomBg:loadBackgroundByName(name)
     self._bg_last_rot = (self.ui.document._is_rotated_by_plugin == true)
     self._bg_last_sw = Screen:getWidth()
     self._bg_last_sh = Screen:getHeight()
-    UIManager:setDirty("all", "full")
+    if from_menu then
+        self:repaintView()   -- picked in the menu: light repaint, the menu stays open
+    else
+        UIManager:setDirty("all", "full")
+    end
 end
 
 -- Apply background (save the document setting and load it)
@@ -437,7 +441,7 @@ function CustomBg:applyBackground(name)
     else
         self:saveDocBg(name)  -- save the name or "" (no background)
     end
-    self:loadBackgroundByName(name)
+    self:loadBackgroundByName(name, true)
     if name and name ~= "" then
         self:setLastUsed(name)
         self:markImageSeen(name)
@@ -879,6 +883,31 @@ end
 function CustomBg:saveLineSetting(key, value)
     self:invalidateLineCache()
     self:saveDocSetting(key, value)
+end
+
+-- What happens after a setting changed while the menu is open:
+--   "ui"      (default) the page is painted again and refreshed WITHOUT the full-screen flash
+--   "partial" same, a bit cleaner text, still no flash
+--   "full"    full-screen flashing refresh
+--   false     no repaint at all: only the menu is updated (check marks), the page changes when the menu is closed
+local REFRESH_ON_CHANGE = "ui"
+
+-- Repaints the page behind the open menu, so the change can be seen while the menu stays open.
+-- NOTE: UIManager:setDirty(nil, ...) only asks for a screen refresh, it does NOT repaint the widgets below the menu:
+-- the page (background, ruled lines) behind it would not change until the menu was closed.
+-- With "all" every window is marked dirty, so ReaderUI paints again and the menu is drawn on top of it.
+function CustomBg:repaintView()
+    if REFRESH_ON_CHANGE then
+        UIManager:setDirty("all", REFRESH_ON_CHANGE)
+    end
+end
+
+-- A setting changed: update the menu (check marks / texts) and repaint the page behind it
+function CustomBg:refreshView(touchmenu_instance)
+    if touchmenu_instance and touchmenu_instance.updateItems then
+        touchmenu_instance:updateItems()
+    end
+    self:repaintView()
 end
 
 -- ===== Underline (ruled line) global default =====
@@ -2469,9 +2498,10 @@ function CustomBg:addToMainMenu(menu_items)
                     {
                         text = _("Follow global default (underlines)"),
                         checked_func = function() return not self:hasLineDocSetting() end,
-                        callback = function()
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
                             self:clearLineDocSettings()
-                            UIManager:setDirty(nil, "full")
+                            self:refreshView(touchmenu_instance)
                         end,
                     },
                     {
@@ -2496,10 +2526,11 @@ function CustomBg:addToMainMenu(menu_items)
                     {
                         text = _("Enable / disable full-screen ruled lines"),
                         checked_func = function() return self.fs_enabled end,
-                        callback = function()
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
                             self.fs_enabled = not self.fs_enabled
                             self:saveDocSetting(FS_KEYS.enabled, self.fs_enabled)
-                            UIManager:setDirty(nil, "full")
+                            self:refreshView(touchmenu_instance)
                         end,
                     },
                     {
@@ -2526,7 +2557,8 @@ function CustomBg:addToMainMenu(menu_items)
                             {
                                 text = _("True vertical books (native vertical text: no rotation, draws column lines)"),
                                 checked_func = function() return self.fs_line_direction == 3 end,
-                                callback = function()
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
                                     local prev = self.fs_line_direction
                                     self.fs_line_direction = 3
                                     self:saveDocSetting(FS_KEYS.direction, 3)
@@ -2536,7 +2568,7 @@ function CustomBg:addToMainMenu(menu_items)
                                         self:showReloadConfirm()
                                     else
                                         -- Switching between true vertical / horizontal does not change the engine state, takes effect immediately
-                                        UIManager:setDirty(nil, "full")
+                                        self:refreshView(touchmenu_instance)
                                     end
                                 end,
                             },
@@ -2648,37 +2680,41 @@ function CustomBg:addToMainMenu(menu_items)
                             {
                                 text = _("Full-screen line mode"),
                                 checked_func = function() return self.fs_line_mode == 1 end,
-                                callback = function()
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
                                     self.fs_line_mode = 1
                                     self:saveDocSetting(FS_KEYS.mode, 1)
-                                    UIManager:setDirty(nil, "full")
+                                    self:refreshView(touchmenu_instance)
                                 end,
                             },
                             {
                                 text = _("Custom ratio mode (1000 = full screen)"),
                                 checked_func = function() return self.fs_line_mode == 2 end,
-                                callback = function()
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
                                     self.fs_line_mode = 2
                                     self:saveDocSetting(FS_KEYS.mode, 2)
-                                    UIManager:setDirty(nil, "full")
+                                    self:refreshView(touchmenu_instance)
                                 end,
                             },
                             {
                                 text = _("Smart text-aligned mode"),
                                 checked_func = function() return self.fs_line_mode == 3 end,
-                                callback = function()
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
                                     self.fs_line_mode = 3
                                     self:saveDocSetting(FS_KEYS.mode, 3)
-                                    UIManager:setDirty(nil, "full")
+                                    self:refreshView(touchmenu_instance)
                                 end,
                             },
                             {
                                 text = _("Underline below text only (no blank guide cells)"),
                                 checked_func = function() return self.fs_line_mode == 4 end,
-                                callback = function()
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
                                     self.fs_line_mode = 4
                                     self:saveDocSetting(FS_KEYS.mode, 4)
-                                    UIManager:setDirty(nil, "full")
+                                    self:refreshView(touchmenu_instance)
                                 end,
                             },
                         }
@@ -2687,7 +2723,7 @@ function CustomBg:addToMainMenu(menu_items)
                         text = _("Set line length ratio (1000 = full screen)"),
                         enabled_func = function() return self.fs_line_mode == 2 end,
                         keep_menu_open = true,
-                        callback = function()
+                        callback = function(touchmenu_instance)
                             UIManager:show(SpinWidget:new{
                                 value = self.fs_width_ratio,
                                 value_min = 50,
@@ -2697,7 +2733,7 @@ function CustomBg:addToMainMenu(menu_items)
                                 callback = function(spin)
                                     self.fs_width_ratio = spin.value
                                     self:saveDocSetting(FS_KEYS.width_ratio, self.fs_width_ratio)
-                                    UIManager:setDirty(nil, "full")
+                                    self:refreshView(touchmenu_instance)
                                 end,
                             })
                         end,
@@ -2706,7 +2742,7 @@ function CustomBg:addToMainMenu(menu_items)
                         text = _("Smart mode: extra pixels at both ends"),
                         enabled_func = function() return self.fs_line_mode == 3 or self.fs_line_mode == 4 end,
                         keep_menu_open = true,
-                        callback = function()
+                        callback = function(touchmenu_instance)
                             UIManager:show(SpinWidget:new{
                                 value = self.fs_extend_px,
                                 value_min = -200,
@@ -2716,7 +2752,7 @@ function CustomBg:addToMainMenu(menu_items)
                                 callback = function(spin)
                                     self.fs_extend_px = spin.value
                                     self:saveDocSetting(FS_KEYS.extend, self.fs_extend_px)
-                                    UIManager:setDirty(nil, "full")
+                                    self:refreshView(touchmenu_instance)
                                 end,
                             })
                         end,
@@ -2727,17 +2763,18 @@ function CustomBg:addToMainMenu(menu_items)
                             {
                                 text = _("No underline for large text / headings"),
                                 checked_func = function() return self.fs_skip_titles end,
-                                callback = function()
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
                                     self.fs_skip_titles = not self.fs_skip_titles
                                     self:saveDocSetting(FS_KEYS.skip_titles, self.fs_skip_titles)
-                                    UIManager:setDirty(nil, "full")
+                                    self:refreshView(touchmenu_instance)
                                 end,
                             },
                             {
                                 text = _("Heading detection threshold (10 = 1x)"),
                                 enabled_func = function() return self.fs_skip_titles end,
                                 keep_menu_open = true,
-                                callback = function()
+                                callback = function(touchmenu_instance)
                                     UIManager:show(SpinWidget:new{
                                         value = self.fs_title_threshold * 10,
                                         value_min = 10,
@@ -2747,7 +2784,7 @@ function CustomBg:addToMainMenu(menu_items)
                                         callback = function(spin)
                                             self.fs_title_threshold = spin.value / 10.0
                                             self:saveDocSetting(FS_KEYS.title_threshold, self.fs_title_threshold)
-                                            UIManager:setDirty(nil, "full")
+                                            self:refreshView(touchmenu_instance)
                                         end,
                                     })
                                 end,
@@ -2755,7 +2792,7 @@ function CustomBg:addToMainMenu(menu_items)
                             {
                                 text = _("Image / large-whitespace avoidance threshold"),
                                 keep_menu_open = true,
-                                callback = function()
+                                callback = function(touchmenu_instance)
                                     UIManager:show(SpinWidget:new{
                                         value = self.fs_gap_threshold * 10,
                                         value_min = 15,
@@ -2765,7 +2802,7 @@ function CustomBg:addToMainMenu(menu_items)
                                         callback = function(spin)
                                             self.fs_gap_threshold = spin.value / 10.0
                                             self:saveDocSetting(FS_KEYS.gap_threshold, self.fs_gap_threshold)
-                                            UIManager:setDirty(nil, "full")
+                                            self:refreshView(touchmenu_instance)
                                         end,
                                     })
                                 end,
@@ -2779,16 +2816,18 @@ function CustomBg:addToMainMenu(menu_items)
                                 text = _("Show outer border line (first row)"),
                                 checked_func = function() return self.fs_show_top_line end,
                                 enabled_func = function() return self.fs_line_mode ~= 4 end,
-                                callback = function()
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
                                     self.fs_show_top_line = not self.fs_show_top_line
                                     self:saveDocSetting(FS_KEYS.show_top, self.fs_show_top_line)
-                                    UIManager:setDirty(nil, "full")
+                                    self:refreshView(touchmenu_instance)
                                 end,
                             },
                             {
                                 text = _("Dashed line mode"),
                                 checked_func = function() return self.fs_is_dashed end,
-                                callback = function()
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
                                     self.fs_is_dashed = not self.fs_is_dashed
                                     self:saveDocSetting(FS_KEYS.dashed, self.fs_is_dashed)
                                     if self.fs_is_dashed then
@@ -2803,7 +2842,7 @@ function CustomBg:addToMainMenu(menu_items)
                                         self:saveDocSetting(FS_KEYS.style_double_solid, false)
                                         self:saveDocSetting(FS_KEYS.style_double_dash, false)
                                     end
-                                    UIManager:setDirty(nil, "full")
+                                    self:refreshView(touchmenu_instance)
                                 end,
                             },
                             {
@@ -2812,16 +2851,18 @@ function CustomBg:addToMainMenu(menu_items)
                                     {
                                         text = _("Off"),
                                         checked_func = function() return self.fs_wave_mode == 0 end,
-                                        callback = function()
+                                        keep_menu_open = true,
+                                        callback = function(touchmenu_instance)
                                             self.fs_wave_mode = 0
                                             self:saveDocSetting(FS_KEYS.wave_mode, 0)
-                                            UIManager:setDirty(nil, "full")
+                                            self:refreshView(touchmenu_instance)
                                         end,
                                     },
                                     {
                                         text = _("Small waves"),
                                         checked_func = function() return self.fs_wave_mode == 1 end,
-                                        callback = function()
+                                        keep_menu_open = true,
+                                        callback = function(touchmenu_instance)
                                             self.fs_wave_mode = 1
                                             self.fs_is_dashed = false
                                             self.fs_style_dash_dot = false
@@ -2834,13 +2875,14 @@ function CustomBg:addToMainMenu(menu_items)
                                             self:saveDocSetting(FS_KEYS.style_heart_dash, false)
                                             self:saveDocSetting(FS_KEYS.style_double_solid, false)
                                             self:saveDocSetting(FS_KEYS.style_double_dash, false)
-                                            UIManager:setDirty(nil, "full")
+                                            self:refreshView(touchmenu_instance)
                                         end,
                                     },
                                     {
                                         text = _("Double waves"),
                                         checked_func = function() return self.fs_wave_mode == 2 end,
-                                        callback = function()
+                                        keep_menu_open = true,
+                                        callback = function(touchmenu_instance)
                                             self.fs_wave_mode = 2
                                             self.fs_is_dashed = false
                                             self.fs_style_dash_dot = false
@@ -2853,7 +2895,7 @@ function CustomBg:addToMainMenu(menu_items)
                                             self:saveDocSetting(FS_KEYS.style_heart_dash, false)
                                             self:saveDocSetting(FS_KEYS.style_double_solid, false)
                                             self:saveDocSetting(FS_KEYS.style_double_dash, false)
-                                            UIManager:setDirty(nil, "full")
+                                            self:refreshView(touchmenu_instance)
                                         end,
                                     },
                                 }
@@ -2861,7 +2903,8 @@ function CustomBg:addToMainMenu(menu_items)
                             {
                                 text = _("Long solid + long dashed mode"),
                                 checked_func = function() return self.fs_style_dash_dot end,
-                                callback = function()
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
                                     self.fs_style_dash_dot = not self.fs_style_dash_dot
                                     if self.fs_style_dash_dot then
                                         self.fs_is_dashed = false
@@ -2876,13 +2919,14 @@ function CustomBg:addToMainMenu(menu_items)
                                         self:saveDocSetting(FS_KEYS.style_double_dash, false)
                                     end
                                     self:saveDocSetting(FS_KEYS.style_dash_dot, self.fs_style_dash_dot)
-                                    UIManager:setDirty(nil, "full")
+                                    self:refreshView(touchmenu_instance)
                                 end,
                             },
                             {
                                 text = _("Heart dashed line mode"),
                                 checked_func = function() return self.fs_style_heart_dash end,
-                                callback = function()
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
                                     self.fs_style_heart_dash = not self.fs_style_heart_dash
                                     if self.fs_style_heart_dash then
                                         self.fs_is_dashed = false
@@ -2897,13 +2941,14 @@ function CustomBg:addToMainMenu(menu_items)
                                         self:saveDocSetting(FS_KEYS.style_double_dash, false)
                                     end
                                     self:saveDocSetting(FS_KEYS.style_heart_dash, self.fs_style_heart_dash)
-                                    UIManager:setDirty(nil, "full")
+                                    self:refreshView(touchmenu_instance)
                                 end,
                             },
                             {
                                 text = _("Double solid line mode (two parallel solid lines)"),
                                 checked_func = function() return self.fs_style_double_solid end,
-                                callback = function()
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
                                     self.fs_style_double_solid = not self.fs_style_double_solid
                                     if self.fs_style_double_solid then
                                         self.fs_is_dashed = false
@@ -2918,13 +2963,14 @@ function CustomBg:addToMainMenu(menu_items)
                                         self:saveDocSetting(FS_KEYS.style_double_dash, false)
                                     end
                                     self:saveDocSetting(FS_KEYS.style_double_solid, self.fs_style_double_solid)
-                                    UIManager:setDirty(nil, "full")
+                                    self:refreshView(touchmenu_instance)
                                 end,
                             },
                             {
                                 text = _("Double dashed line mode (two parallel dashed lines)"),
                                 checked_func = function() return self.fs_style_double_dash end,
-                                callback = function()
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
                                     self.fs_style_double_dash = not self.fs_style_double_dash
                                     if self.fs_style_double_dash then
                                         self.fs_is_dashed = false
@@ -2939,7 +2985,7 @@ function CustomBg:addToMainMenu(menu_items)
                                         self:saveDocSetting(FS_KEYS.style_double_solid, false)
                                     end
                                     self:saveDocSetting(FS_KEYS.style_double_dash, self.fs_style_double_dash)
-                                    UIManager:setDirty(nil, "full")
+                                    self:refreshView(touchmenu_instance)
                                 end,
                             },
                             {
@@ -2948,7 +2994,7 @@ function CustomBg:addToMainMenu(menu_items)
                                     return self.fs_style_double_solid or self.fs_style_double_dash
                                 end,
                                 keep_menu_open = true,
-                                callback = function()
+                                callback = function(touchmenu_instance)
                                     UIManager:show(SpinWidget:new{
                                         value = self.fs_double_gap,
                                         value_min = 0,
@@ -2957,7 +3003,7 @@ function CustomBg:addToMainMenu(menu_items)
                                         callback = function(spin)
                                             self.fs_double_gap = spin.value
                                             self:saveDocSetting(FS_KEYS.double_gap, self.fs_double_gap)
-                                            UIManager:setDirty(nil, "full")
+                                            self:refreshView(touchmenu_instance)
                                         end,
                                     })
                                 end,
@@ -2968,7 +3014,7 @@ function CustomBg:addToMainMenu(menu_items)
                                     return self.fs_is_dashed or self.fs_style_double_dash
                                 end,
                                 keep_menu_open = true,
-                                callback = function()
+                                callback = function(touchmenu_instance)
                                     UIManager:show(SpinWidget:new{
                                         value = self.fs_dash_len,
                                         value_min = 2,
@@ -2977,7 +3023,7 @@ function CustomBg:addToMainMenu(menu_items)
                                         callback = function(spin)
                                             self.fs_dash_len = spin.value
                                             self:saveDocSetting(FS_KEYS.dash_len, self.fs_dash_len)
-                                            UIManager:setDirty(nil, "full")
+                                            self:refreshView(touchmenu_instance)
                                         end,
                                     })
                                 end,
@@ -2985,7 +3031,7 @@ function CustomBg:addToMainMenu(menu_items)
                             {
                                 text = _("Line position offset fine-tuning"),
                                 keep_menu_open = true,
-                                callback = function()
+                                callback = function(touchmenu_instance)
                                     UIManager:show(SpinWidget:new{
                                         value = self.fs_offset_y,
                                         value_min = -100,
@@ -2994,7 +3040,7 @@ function CustomBg:addToMainMenu(menu_items)
                                         callback = function(spin)
                                             self.fs_offset_y = spin.value
                                             self:saveDocSetting(FS_KEYS.offset_y, self.fs_offset_y)
-                                            UIManager:setDirty(nil, "full")
+                                            self:refreshView(touchmenu_instance)
                                         end,
                                     })
                                 end,
@@ -3015,7 +3061,7 @@ function CustomBg:addToMainMenu(menu_items)
                                                 if self.fs_color_depth > 1 then
                                                     self.fs_color_depth = self.fs_color_depth - 1
                                                     self:saveDocSetting(FS_KEYS.color_depth, self.fs_color_depth)
-                                                    UIManager:setDirty(nil, "full")
+                                                    self:repaintView()
                                                     touchmenu_instance:updateItems()
                                                 end
                                             end,
@@ -3036,7 +3082,7 @@ function CustomBg:addToMainMenu(menu_items)
                                                 if self.fs_color_depth < 15 then
                                                     self.fs_color_depth = self.fs_color_depth + 1
                                                     self:saveDocSetting(FS_KEYS.color_depth, self.fs_color_depth)
-                                                    UIManager:setDirty(nil, "full")
+                                                    self:repaintView()
                                                     touchmenu_instance:updateItems()
                                                 end
                                             end,
@@ -3080,7 +3126,14 @@ function CustomBg:addToMainMenu(menu_items)
                             })
                         end,
                     })
-                    table.insert(sub, {text = _("Current background: ") .. current_bg_name, keep_menu_open = true, callback = function() end})
+                    table.insert(sub, {
+                        -- text_func: recomputed on every menu update, so it follows the background picked in this same menu
+                        text_func = function()
+                            return _("Current background: ") .. (self:getCurrentDocBg() or _("No background"))
+                        end,
+                        keep_menu_open = true,
+                        callback = function() end,
+                    })
 
                     -- No background
                     table.insert(sub, {
@@ -3090,8 +3143,10 @@ function CustomBg:addToMainMenu(menu_items)
                             local key = scene == SCENE_DAY and DOC_BG_DAY or DOC_BG_NIGHT
                             return self.ui.doc_settings:readSetting(key) == DOC_BG_NONE
                         end,
-                        callback = function()
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
                             self:applyBackground(DOC_BG_NONE)
+                            if touchmenu_instance then touchmenu_instance:updateItems() end
                         end
                     })
 
@@ -3103,8 +3158,10 @@ function CustomBg:addToMainMenu(menu_items)
                             local key = scene == SCENE_DAY and DOC_BG_DAY or DOC_BG_NIGHT
                             return self.ui.doc_settings:readSetting(key) == nil
                         end,
-                        callback = function()
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
                             self:applyBackground(nil)
+                            if touchmenu_instance then touchmenu_instance:updateItems() end
                         end
                     })
 
@@ -3128,16 +3185,19 @@ function CustomBg:addToMainMenu(menu_items)
                     for name in pairs(images) do table.insert(bg_names, name) end
                     self:sortBgNameList(bg_names, scene, used_time)
                     for _, name in ipairs(bg_names) do
-                        local menu_text = name
-                        if self:isNewImage(name) then menu_text = name .. " [New]" end
                         table.insert(sub, {
-                            text = menu_text,
+                            text_func = function()
+                                if self:isNewImage(name) then return name .. " [New]" end
+                                return name
+                            end,
                             checked_func = function()
                                 local doc_bg = self:getCurrentDocBg()
                                 return doc_bg == name
                             end,
-                            callback = function()
+                            keep_menu_open = true,
+                            callback = function(touchmenu_instance)
                                 self:applyBackground(name)
+                                if touchmenu_instance then touchmenu_instance:updateItems() end
                             end
                         })
                     end
