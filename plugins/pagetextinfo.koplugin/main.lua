@@ -837,8 +837,46 @@ function PageTextInfo:toggleFullScreenRuledLines()
     else
         local custombg = self.ui and self.ui.custombg
         if not custombg then return false end
-        custombg.fs_enabled = not custombg.fs_enabled
-        custombg:saveDocSetting("fs_lines_enabled", custombg.fs_enabled)
+        -- Cycle: lines only -> background only -> lines + background -> lines only ...
+        -- (from "nothing on" it goes to lines only)
+        -- Keys of the custombg plugin (local to it): "custombg_day" / "custombg_night"
+        local bg_key = custombg:getSceneMode() == "night" and "custombg_night" or "custombg_day"
+        local lines_on = custombg.fs_enabled and true or false
+        local bg_on = custombg:getCurrentDocBg() ~= nil
+        local want_lines, want_bg
+        if lines_on and not bg_on then
+            want_lines, want_bg = false, true      -- background only
+        elseif bg_on and not lines_on then
+            want_lines, want_bg = true, true       -- lines + background
+        elseif lines_on and bg_on then
+            want_lines, want_bg = false, false     -- nothing
+        else
+            want_lines, want_bg = true, false      -- lines only
+        end
+        if want_lines ~= lines_on then
+            custombg.fs_enabled = want_lines
+            custombg:saveDocSetting("fs_lines_enabled", want_lines)
+        end
+        if want_bg ~= bg_on then
+            if want_bg then
+                -- Follow the global default; if there is none, pick a random one (this book only)
+                if custombg:getGlobalDefaultBg() then
+                    custombg:applyBackground(nil)
+                else
+                    local names = {}
+                    for name in pairs(custombg:getCurrentImageCache()) do
+                        names[#names + 1] = name
+                    end
+                    if #names > 0 then
+                        custombg:applyBackground(names[math.random(#names)])
+                    else
+                        custombg:applyBackground(nil)
+                    end
+                end
+            else
+                custombg:applyBackground("")        -- No background
+            end
+        end
         -- Repaint the reader itself so custombg:paintTo() runs again with the new value.
         -- setDirty(nil, ...) would only refresh the screen buffer as it is (the old state)
         UIManager:setDirty(self.view.dialog, "ui")
