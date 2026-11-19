@@ -1520,8 +1520,30 @@ function CustomBg:_lineCacheKey(bb)
         page_id = self.ui.view and self.ui.view.state and self.ui.view.state.page
     end
     if not page_id then return nil end
+    -- Layout signature: the xpointer of the page start and the buffer size stay the same after a font /
+    -- size / spacing / margin change, so without this the cache replayed lines from the OLD layout
+    -- until the document was reloaded. Every field is read defensively (may be nil on some versions).
+    local font = self.ui.font
+    local cfg = doc.configurable or {}
+    local margins = cfg.h_page_margins
+    if type(margins) == "table" then margins = table.concat(margins, ",") end
+    local cur_page, page_count
+    if type(doc.getCurrentPage) == "function" then
+        local ok, v = pcall(doc.getCurrentPage, doc)
+        if ok then cur_page = v end
+    end
+    if type(doc.getPageCount) == "function" then
+        local ok, v = pcall(doc.getPageCount, doc)
+        if ok then page_count = v end
+    end
+    local layout_sig = table.concat({
+        tostring(font and font.font_face), tostring(cfg.font_size), tostring(cfg.line_spacing),
+        tostring(margins), tostring(cfg.t_page_margin), tostring(cfg.b_page_margin),
+        tostring(cfg.word_spacing), tostring(cfg.font_base_weight),
+        tostring(cur_page), tostring(page_count),
+    }, ":")
     return table.concat({
-        tostring(page_id), bb:getWidth(), bb:getHeight(),
+        tostring(page_id), layout_sig, bb:getWidth(), bb:getHeight(),
         tostring(doc._is_rotated_by_plugin), tostring(self.fs_line_direction),
         tostring(self.fs_line_mode), tostring(self.fs_color_depth), tostring(self.fs_is_dashed),
         tostring(self.fs_dash_len), tostring(self.fs_offset_y), tostring(self.fs_show_top_line),
@@ -1538,6 +1560,21 @@ function CustomBg:invalidateLineCache()
     self._line_cache_gen = (self._line_cache_gen or 0) + 1
     self._line_cache = nil
 end
+
+-- Any re-layout (font, size, line spacing, margins, embedded fonts, ...) must drop the line cache,
+-- otherwise the lines of the previous layout are replayed until the book is reloaded.
+-- KOReader emits UpdatePos after nearly all of them; the others are a safety net.
+-- These handlers return nothing, so the event keeps propagating to the other modules.
+function CustomBg:onUpdatePos() self:invalidateLineCache() end
+function CustomBg:onSetFont() self:invalidateLineCache() end
+function CustomBg:onSetFontSize() self:invalidateLineCache() end
+function CustomBg:onSetLineSpace() self:invalidateLineCache() end
+function CustomBg:onSetPageMargins() self:invalidateLineCache() end
+function CustomBg:onSetWordSpacing() self:invalidateLineCache() end
+function CustomBg:onSetFontBaseWeight() self:invalidateLineCache() end
+function CustomBg:onToggleEmbeddedFonts() self:invalidateLineCache() end
+function CustomBg:onToggleEmbeddedStyleSheet() self:invalidateLineCache() end
+function CustomBg:onRedrawCurrentView() self:invalidateLineCache() end
 
 function CustomBg:paintTo(bb, x, y)
     -- Self-heal on screen orientation (width/height) change: re-adapt the background automatically after portrait/landscape switching, no need to tap "Reading background" manually
