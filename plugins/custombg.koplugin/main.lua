@@ -36,6 +36,9 @@ local CustomBg = WidgetContainer:extend{
     fs_v_font_enable = true,
     fs_v_font_family = "FZKai-Z03",
     fs_offset_y = 2,
+    fs_auto_offset = true,    -- centre the line in the inter-line gap, computed from the current font/layout
+    fs_offset_adjust = 0,     -- manual fine-tune added on top of the automatic offset
+    fs_offset_bias = 0,       -- auto-centre: extra downward shift, in % of the line box height
     fs_show_top_line = true,
     fs_is_dashed = false,
     fs_color_depth = 5,
@@ -81,6 +84,9 @@ local FS_KEYS = {
     v_font_enable = "fs_lines_v_font_enable",
     v_font_family = "fs_lines_v_font_family",
     offset_y = "fs_lines_offset_y",
+    auto_offset = "fs_lines_auto_offset",
+    offset_adjust = "fs_lines_offset_adjust",
+    offset_bias = "fs_lines_offset_bias",
     show_top = "fs_lines_show_top",
     dashed = "fs_lines_dashed",
     color_depth = "fs_lines_color_depth",
@@ -864,6 +870,9 @@ function CustomBg:loadLineSettings()
     self.fs_v_font_enable = self:getDocSetting(FS_KEYS.v_font_enable, true)
     self.fs_v_font_family = self:getDocSetting(FS_KEYS.v_font_family, "FZKai-Z03")
     self.fs_offset_y = self:getDocSetting(FS_KEYS.offset_y, 2)
+    self.fs_auto_offset = self:getDocSetting(FS_KEYS.auto_offset, true)
+    self.fs_offset_adjust = self:getDocSetting(FS_KEYS.offset_adjust, 0)
+    self.fs_offset_bias = self:getDocSetting(FS_KEYS.offset_bias, 0)
     self.fs_show_top_line = self:getDocSetting(FS_KEYS.show_top, true)
     self.fs_is_dashed = self:getDocSetting(FS_KEYS.dashed, false)
     self.fs_color_depth = self:getDocSetting(FS_KEYS.color_depth, 5)
@@ -928,6 +937,9 @@ function CustomBg:saveAllLineSettingsAsGlobal()
     G_reader_settings:saveSetting(FS_KEYS.v_font_enable, self.fs_v_font_enable)
     G_reader_settings:saveSetting(FS_KEYS.v_font_family, self.fs_v_font_family)
     G_reader_settings:saveSetting(FS_KEYS.offset_y, self.fs_offset_y)
+    G_reader_settings:saveSetting(FS_KEYS.auto_offset, self.fs_auto_offset)
+    G_reader_settings:saveSetting(FS_KEYS.offset_adjust, self.fs_offset_adjust)
+    G_reader_settings:saveSetting(FS_KEYS.offset_bias, self.fs_offset_bias)
     G_reader_settings:saveSetting(FS_KEYS.show_top, self.fs_show_top_line)
     G_reader_settings:saveSetting(FS_KEYS.dashed, self.fs_is_dashed)
     G_reader_settings:saveSetting(FS_KEYS.color_depth, self.fs_color_depth)
@@ -1547,6 +1559,7 @@ function CustomBg:_lineCacheKey(bb)
         tostring(doc._is_rotated_by_plugin), tostring(self.fs_line_direction),
         tostring(self.fs_line_mode), tostring(self.fs_color_depth), tostring(self.fs_is_dashed),
         tostring(self.fs_dash_len), tostring(self.fs_offset_y), tostring(self.fs_show_top_line),
+        tostring(self.fs_auto_offset), tostring(self.fs_offset_adjust), tostring(self.fs_offset_bias),
         tostring(self.fs_width_ratio), tostring(self.fs_extend_px), tostring(self.fs_gap_threshold),
         tostring(self.fs_skip_titles), tostring(self.fs_title_threshold), tostring(self.fs_wave_mode),
         tostring(self.fs_style_dash_dot), tostring(self.fs_style_heart_dash),
@@ -1969,6 +1982,21 @@ function CustomBg:_paintLines(bb)
                     -- Fall back when the line height is abnormally large (suspected missed lines), to avoid misaligning the whole grid
                     if line_height > body_h * 2.2 then line_height = safe_line_height end
 
+                    -- Vertical position of the line below each text row.
+                    -- Auto: centre it in the gap between two consecutive line boxes (gap = pitch - box height),
+                    -- so it follows the font, its size and the line spacing. If the pitch could not be measured
+                    -- reliably (fallback was used), assume no extra leading. fs_offset_adjust fine-tunes on top.
+                    local off_y = self.fs_offset_y
+                    if self.fs_auto_offset then
+                        local pitch_ok = (most_common_gap >= body_h and most_common_gap <= body_h * 2.2)
+                        local pitch = pitch_ok and most_common_gap or body_h
+                        -- The line box has more air above the letters (ascent metric > cap height) than below
+                        -- (descent ~ descender ink), so the geometric centre sits too close to the descenders
+                        -- of this row. Push the line down by a small fraction of the box height.
+                        local bias = math.floor(body_h * self.fs_offset_bias / 100 + 0.5)
+                        off_y = math.max(0, math.floor((pitch - body_h) / 2 + 0.5)) + bias + self.fs_offset_adjust
+                    end
+
                     local function is_space_empty(pos)
                         for _, line in ipairs(text_lines) do
                             if pos > line.y + 4 and pos < line.bottom - 4 then return false end
@@ -2067,7 +2095,7 @@ function CustomBg:_paintLines(bb)
                             for _, line in ipairs(merged) do
                                 -- Per-line refinement: start shrinks to the first visible character, leading/trailing punctuation is added back
                                 refine_row_bounds(line)
-                                local dy = line.bottom + self.fs_offset_y
+                                local dy = line.bottom + off_y
                                 local sx = line.min_x - self.fs_extend_px
                                 local dw = (line.max_x - line.min_x) + self.fs_extend_px * 2
                                 if dw > 0 then
@@ -2076,7 +2104,7 @@ function CustomBg:_paintLines(bb)
                             end
                         else
                             local first_line = text_lines[first_normal_idx]
-                            local cur_y = first_line.bottom + self.fs_offset_y - line_height
+                            local cur_y = first_line.bottom + off_y - line_height
                             if self.fs_show_top_line then
                                 if is_space_empty(cur_y) then draw_at(cur_y, first_line) end
                                 cur_y = cur_y - line_height
@@ -2092,7 +2120,7 @@ function CustomBg:_paintLines(bb)
                             for i = first_normal_idx, last_normal_idx do
                                 local line = text_lines[i]
                                 if not line.is_title then
-                                    local dy = line.bottom + self.fs_offset_y
+                                    local dy = line.bottom + off_y
                                     draw_at(dy, line)
                                     local next_normal_line = nil
                                     local next_idx = i + 1
@@ -2142,7 +2170,7 @@ function CustomBg:_paintLines(bb)
                                     last_line.bottom + line_height * 1.5)
                             end
                             if allow_bottom_grid then
-                                local cur_y = last_line.bottom + self.fs_offset_y + line_height
+                                local cur_y = last_line.bottom + off_y + line_height
                                 if is_space_empty(cur_y) then draw_at(cur_y, last_line) end
                                 -- Only full-screen grid style modes keep filling downward; smart-align mode only adds the immediately adjacent row,
                                 -- to avoid the blank area at the end of a paragraph being filled with grid lines across the whole screen
@@ -2267,6 +2295,15 @@ function CustomBg:_paintLines(bb)
                     -- Fall back when the column width is abnormally large (suspected missed columns), to avoid misaligning the whole grid
                     if col_width > body_w * 2.2 then col_width = safe_col_width end
 
+                    -- Same idea as the horizontal branch: centre the column line in the gap between columns
+                    local off_x = self.fs_offset_y
+                    if self.fs_auto_offset then
+                        local pitch_ok = (most_common_gap >= body_w and most_common_gap <= body_w * 2.2)
+                        local pitch = pitch_ok and most_common_gap or body_w
+                        local bias = math.floor(body_w * self.fs_offset_bias / 100 + 0.5)
+                        off_x = math.max(0, math.floor((pitch - body_w) / 2 + 0.5)) + bias + self.fs_offset_adjust
+                    end
+
                     local function is_space_empty(pos)
                         for _, col in ipairs(text_cols) do
                             if pos > col.x + 4 and pos < col.right - 4 then return false end
@@ -2354,7 +2391,7 @@ function CustomBg:_paintLines(bb)
                         for _, c in ipairs(merged) do
                             -- Per-column refinement: start shrinks to the first visible character of the column, leading/trailing punctuation is added back
                             refine_col_bounds(c)
-                            local dx = c.x - self.fs_offset_y
+                            local dx = c.x - off_x
                             local sy = c.min_y - self.fs_extend_px
                             local dh = (c.max_y - c.min_y) + self.fs_extend_px * 2
                             if dh > 0 then
@@ -2363,7 +2400,7 @@ function CustomBg:_paintLines(bb)
                         end
                     elseif first_normal_idx then
                         local first_col = text_cols[first_normal_idx]
-                        local cur_x = (first_col.x - self.fs_offset_y) + col_width
+                        local cur_x = (first_col.x - off_x) + col_width
                         if is_space_empty(cur_x) then draw_at(cur_x, first_col) end
                         if self.fs_show_top_line then
                             cur_x = cur_x + col_width
@@ -2379,7 +2416,7 @@ function CustomBg:_paintLines(bb)
                         for i = first_normal_idx, last_normal_idx do
                             local col = text_cols[i]
                             if not col.is_title then
-                                local dx = col.x - self.fs_offset_y
+                                local dx = col.x - off_x
                                 draw_at(dx, col)
                                 local next_normal_col = nil
                                 local next_idx = i + 1
@@ -2402,7 +2439,7 @@ function CustomBg:_paintLines(bb)
                                         end
                                         if need_fill then
                                             local f_x = dx - col_width
-                                            while f_x > next_normal_col.x + self.fs_offset_y + 2 do
+                                            while f_x > next_normal_col.x + off_x + 2 do
                                                 if is_space_empty(f_x) then draw_at(f_x, nil) end
                                                 f_x = f_x - col_width
                                             end
@@ -2426,7 +2463,7 @@ function CustomBg:_paintLines(bb)
                                 last_col.min_y - 4, last_col.max_y + 4, true)
                         end
                         if allow_left_grid then
-                            local cur_x = (last_col.x - self.fs_offset_y) - col_width
+                            local cur_x = (last_col.x - off_x) - col_width
                             if is_space_empty(cur_x) then draw_at(cur_x, last_col) end
                             -- Only full-screen grid style modes keep filling leftward; smart-align mode only adds the immediately adjacent column
                             if self.fs_line_mode ~= 3 and left_gap < (col_width * self.fs_gap_threshold) then
@@ -3068,17 +3105,80 @@ function CustomBg:addToMainMenu(menu_items)
                                 end,
                             },
                             {
-                                text = _("Line position offset fine-tuning"),
+                                text = _("Auto-center line position (adapts to font, size and spacing)"),
+                                help_text = _(
+                                    "ON: the plugin computes where to draw each line from the current font, size and line spacing " ..
+                                    "(centered in the gap between two text rows).\n\n" ..
+                                    "OFF: lines use the fixed offset set in \"Line position offset fine-tuning\".\n\n" ..
+                                    "Related options:\n" ..
+                                    "- \"Auto-center: shift down (%)\": general correction, proportional to the line height (only with auto ON).\n" ..
+                                    "- \"Line position offset fine-tuning\": correction in fixed pixels, for one specific font or book."),
+                                checked_func = function() return self.fs_auto_offset end,
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
+                                    self.fs_auto_offset = not self.fs_auto_offset
+                                    self:saveDocSetting(FS_KEYS.auto_offset, self.fs_auto_offset)
+                                    self:refreshView(touchmenu_instance)
+                                end,
+                            },
+                            {
+                                text_func = function()
+                                    return _("Auto-center: shift down (% of line height)") .. ": " .. self.fs_offset_bias
+                                end,
+                                enabled_func = function() return self.fs_auto_offset end,
+                                help_text = _(
+                                    "Only used with \"Auto-center line position\" ON.\n\n" ..
+                                    "Moves every line down by a percentage of the text row height, so it scales with the font size. " ..
+                                    "The row box has more empty space above the letters than below, so the exact geometric centre " ..
+                                    "sits too close to the descenders; this compensates for it.\n\n" ..
+                                    "Raise it if descenders (g, j, p, q, y) touch the line. " ..
+                                    "Lower it if the line sits too far from the text. Default: 0."),
                                 keep_menu_open = true,
                                 callback = function(touchmenu_instance)
                                     UIManager:show(SpinWidget:new{
-                                        value = self.fs_offset_y,
+                                        value = self.fs_offset_bias,
+                                        value_min = 0,
+                                        value_max = 25,
+                                        value_step = 1,
+                                        title_text = _("Shift down (% of line height)"),
+                                        callback = function(spin)
+                                            self.fs_offset_bias = spin.value
+                                            self:saveDocSetting(FS_KEYS.offset_bias, self.fs_offset_bias)
+                                            self:refreshView(touchmenu_instance)
+                                        end,
+                                    })
+                                end,
+                            },
+                            {
+                                -- With auto-centre on this is a +/- adjustment on top of the automatic value;
+                                -- with it off it is the fixed offset used before.
+                                help_text = _(
+                                    "Correction in fixed pixels, the same for any font size.\n\n" ..
+                                    "Auto-center ON: added on top of the automatic position (shown as \"auto +N\"). " ..
+                                    "Use it to retouch one specific font or book.\n\n" ..
+                                    "Auto-center OFF: this is the fixed distance from the text row to the line; " ..
+                                    "no automatic calculation and no percentage are applied."),
+                                text_func = function()
+                                    if self.fs_auto_offset then
+                                        return _("Line position offset fine-tuning") .. " (auto " .. string.format("%+d", self.fs_offset_adjust) .. ")"
+                                    end
+                                    return _("Line position offset fine-tuning") .. ": " .. self.fs_offset_y
+                                end,
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
+                                    UIManager:show(SpinWidget:new{
+                                        value = self.fs_auto_offset and self.fs_offset_adjust or self.fs_offset_y,
                                         value_min = -100,
                                         value_max = 100,
                                         value_step = 1,
                                         callback = function(spin)
-                                            self.fs_offset_y = spin.value
-                                            self:saveDocSetting(FS_KEYS.offset_y, self.fs_offset_y)
+                                            if self.fs_auto_offset then
+                                                self.fs_offset_adjust = spin.value
+                                                self:saveDocSetting(FS_KEYS.offset_adjust, self.fs_offset_adjust)
+                                            else
+                                                self.fs_offset_y = spin.value
+                                                self:saveDocSetting(FS_KEYS.offset_y, self.fs_offset_y)
+                                            end
                                             self:refreshView(touchmenu_instance)
                                         end,
                                     })
