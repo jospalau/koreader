@@ -78,6 +78,7 @@ local GLOBAL_DEFAULT_BG_NIGHT_KEY = "custombg_global_default_bg_night"
 local GLOBAL_DEFAULT_BG_KEY = "custombg_global_default_bg"
 local DOC_BG_NONE = ""                                       -- means explicitly no background
 local DOC_BG_GLOBAL = "@global"                              -- this book explicitly uses the global default background
+local NOFLASH_KEY = "custombg_noflash"                       -- avoid full-screen flashing on page turns while a background is shown (default: on)
 
 local FS_KEYS = {
     enabled = "fs_lines_enabled",
@@ -286,11 +287,32 @@ local function loadImageList(folder, scene_mode)
     return images
 end
 
+-- Backgrounds are listed in the order of their numeric filename prefix (01_..., 02_..., 10_...),
+-- compared as NUMBERS (so 2 comes before 10 even without zero padding), and then alphabetically (case-insensitive).
+-- Names without a numeric prefix go after the numbered ones, also in alphabetical order.
+-- (The old "most recently used first" order is no longer applied; used_time is kept only for compatibility.)
 function CustomBg:sortBgNameList(names, scene, used_time)
-    table.sort(names, function(a,b)
-        local ta = used_time[self:getUsageKey(a)] or 0
-        local tb = used_time[self:getUsageKey(b)] or 0
-        return ta > tb
+    local function parse(name)
+        local digits, rest = name:match("^(%d+)[%s_%-%.]*(.*)$")
+        if digits then
+            return tonumber(digits), (rest or ""):lower(), name:lower()
+        end
+        return nil, name:lower(), name:lower()
+    end
+    table.sort(names, function(a, b)
+        local na, ra, la = parse(a)
+        local nb, rb, lb = parse(b)
+        if na and nb then
+            if na ~= nb then return na < nb end
+            if ra ~= rb then return ra < rb end
+            return la < lb
+        elseif na then
+            return true      -- numbered before non-numbered
+        elseif nb then
+            return false
+        end
+        if ra ~= rb then return ra < rb end
+        return la < lb
     end)
 end
 
@@ -467,6 +489,7 @@ function CustomBg:loadBackgroundByName(name, from_menu)
     self._bg_last_rot = (self.ui.document._is_rotated_by_plugin == true)
     self._bg_last_sw = Screen:getWidth()
     self._bg_last_sh = Screen:getHeight()
+    self:_syncNoFlash()
     if from_menu then
         self:repaintView()   -- picked in the menu: light repaint, the menu stays open
     else
@@ -600,6 +623,126 @@ function CustomBg:hookScreenRotation()
             local plugin = reader_view.ui and reader_view.ui.custombg
             if plugin then plugin:_onScreenOrientationChanged() end
         end)
+    end
+end
+
+-- ===== No-flash page turns =====
+-- With a background image two things make KOReader flash the whole screen when turning pages:
+--   1) ReaderView counts the drawn images of the page (document:getDrawnImagesStatistics()); a full-page background
+--      counts as "image content" (coverage >= 7.5%), which turns on dithering and the "flash on pages with images" logic.
+--   2) The page turn is requested as a "partial" refresh; a page that is no longer pure black and white
+--      is refreshed with a waveform that visibly flashes. A "ui" refresh does not flash.
+-- Both are handled here, only while a background is shown in the current book, and only if the option is enabled.
+-- The periodic full refresh configured in KOReader ("Full refresh rate") keeps working.
+-- Least intrusive by design: nothing is hooked unless it is needed. The hooks are installed when a background
+-- becomes active in the open book and removed again when the background is turned off, the option is switched off,
+-- or the book is closed (see _syncNoFlash / _releaseNoFlash).
+function CustomBg:isNoFlashEnabled()
+    return G_reader_settings:readSetting(NOFLASH_KEY) ~= false
+end
+
+function CustomBg:_wantsNoFlash()
+    return self:isNoFlashEnabled()
+       and self.ui and self.ui.document
+       and self._bg_last_name ~= nil and self._bg_last_name ~= ""
+end
+
+-- Wrap UIManager.setDirty / UIManager._refresh (class-wide, but only while a book with a background is open).
+-- KOReader counts only exact "partial" refreshes inside UIManager:_refresh and promotes every Nth one to a full refresh,
+-- so a plain partial -> ui conversion would hide them from the counter and the periodic refresh would never happen.
+-- Therefore: setDirty only marks that the request comes from the reader page; _refresh then replays the counter itself
+--   * not due yet -> advance the counter by hand, request "ui" (no flash)
+--   * due now     -> leave "partial", KOReader counts it and promotes it to the full refresh as usual
+function CustomBg:_installRefreshHook()
+    local h = CustomBg._refresh_hook
+    if h then
+        h.enabled = true
+        return
+    end
+    local orig_setDirty, orig_refresh = UIManager.setDirty, UIManager._refresh
+    if type(orig_setDirty) ~= "function" or type(orig_refresh) ~= "function" then
+        logger.warn("CustomBg: Cannot hook UIManager refresh, no-flash page turns unavailable")
+        return
+    end
+    h = { enabled = true, orig_setDirty = orig_setDirty, orig_refresh = orig_refresh }
+    h.setDirty = function(um, widget, refreshtype, ...)
+        local from_reader = false
+        local plugin = CustomBg.active_instance
+        if h.enabled and refreshtype == "partial" and widget ~= nil and plugin and plugin:_wantsNoFlash() then
+            local reader_ui = plugin.ui
+            from_reader = (widget == reader_ui) or (reader_ui.view ~= nil and widget == reader_ui.view.dialog)
+        end
+        if not from_reader then
+            return orig_setDirty(um, widget, refreshtype, ...)
+        end
+        CustomBg._reader_partial = true
+        local ok, err = pcall(orig_setDirty, um, widget, refreshtype, ...)
+        CustomBg._reader_partial = false
+        if not ok then error(err, 0) end
+    end
+    h.refresh = function(um, mode, region, dither)
+        if CustomBg._reader_partial and mode == "partial" then
+            local n = um.FULL_REFRESH_COUNT
+            if type(n) == "number" and type(um.refresh_count) == "number" then
+                if n <= 0 or um.refresh_counted then
+                    mode = "ui"   -- periodic refresh disabled, or this repaint was already counted
+                elseif (um.refresh_count + 1) % n == n - 1 then
+                    -- due now: keep "partial" so KOReader counts it and promotes it to the periodic full refresh
+                else
+                    um.refresh_count = (um.refresh_count + 1) % n
+                    um.refresh_counted = true
+                    mode = "ui"
+                end
+            else
+                mode = "ui"       -- counter not readable on this version: plain conversion
+            end
+        end
+        return orig_refresh(um, mode, region, dither)
+    end
+    UIManager.setDirty = h.setDirty
+    UIManager._refresh = h.refresh
+    CustomBg._refresh_hook = h
+end
+
+-- Put the original UIManager functions back. If another plugin wrapped them on top of ours in the meantime,
+-- they cannot be restored safely: our wrappers then stay in place but turn into plain pass-throughs.
+function CustomBg:_removeRefreshHook()
+    local h = CustomBg._refresh_hook
+    if not h then return end
+    if UIManager.setDirty == h.setDirty and UIManager._refresh == h.refresh then
+        UIManager.setDirty = h.orig_setDirty
+        UIManager._refresh = h.orig_refresh
+        CustomBg._refresh_hook = nil
+    else
+        h.enabled = false
+    end
+end
+
+-- Turn the whole feature on or off to match the current state (call after the background or the option changed)
+function CustomBg:_syncNoFlash()
+    if not self:_wantsNoFlash() then
+        self:_releaseNoFlash()
+        return
+    end
+    CustomBg.active_instance = self
+    self:_installRefreshHook()
+    -- Hide the background from the image statistics, so it never triggers dithering / flashing as "image content"
+    local doc = self.ui.document
+    if not doc._custombg_stats_hooked and type(doc.getDrawnImagesStatistics) == "function" then
+        doc._custombg_stats_hooked = true
+        doc.getDrawnImagesStatistics = function() return 0, 0 end
+    end
+end
+
+function CustomBg:_releaseNoFlash()
+    local doc = self.ui and self.ui.document
+    if doc and doc._custombg_stats_hooked then
+        doc.getDrawnImagesStatistics = nil    -- falls back to the original CreDocument method
+        doc._custombg_stats_hooked = nil
+    end
+    if CustomBg.active_instance == self then
+        CustomBg.active_instance = nil
+        self:_removeRefreshHook()
     end
 end
 
@@ -1144,6 +1287,7 @@ function CustomBg:_reapplyBackgroundImage(doc)
         doc:setBackgroundImage()
     end
     if doc.setBackgroundColor then doc:setBackgroundColor(0xFFFFFF) end
+    self:_syncNoFlash()
     return true   -- a re-apply was actually performed
 end
 
@@ -2588,6 +2732,7 @@ function CustomBg:_checkNightMode()
 end
 
 function CustomBg:onCloseDocument()
+    self:_releaseNoFlash()
     if self._night_check_timer then
         UIManager:unschedule(self._night_check_timer)
         self._night_check_timer = nil
@@ -3315,6 +3460,22 @@ function CustomBg:addToMainMenu(menu_items)
                         end,
                         keep_menu_open = true,
                         callback = function() end,
+                    })
+
+                    table.insert(sub, {
+                        text = _("No-flash page turns (avoid full-screen flashing with a background)"),
+                        help_text = _(
+                            "ON: while a background is shown, page turns use a non-flashing refresh and the background is not " ..
+                            "treated as image content.\n\n" ..
+                            "The periodic full refresh set in KOReader (Full refresh rate) still happens as configured.\n\n" ..
+                            "OFF: KOReader's own behaviour (may flash on every page)."),
+                        checked_func = function() return self:isNoFlashEnabled() end,
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
+                            G_reader_settings:saveSetting(NOFLASH_KEY, not self:isNoFlashEnabled())
+                            self:_syncNoFlash()
+                            if touchmenu_instance then touchmenu_instance:updateItems() end
+                        end,
                     })
 
                     -- Diagnostics: shows exactly what the plugin sees, to find why a background does not appear
