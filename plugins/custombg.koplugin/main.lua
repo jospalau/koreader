@@ -79,6 +79,8 @@ local GLOBAL_DEFAULT_BG_KEY = "custombg_global_default_bg"
 local DOC_BG_NONE = ""                                       -- means explicitly no background
 local DOC_BG_GLOBAL = "@global"                              -- this book explicitly uses the global default background
 local NOFLASH_KEY = "custombg_noflash"                       -- avoid full-screen flashing on page turns while a background is shown (default: on)
+local SKIP_BOOKENDS_KEY = "custombg_skip_bookends_refresh"   -- ignore the extra full-screen refresh the bookends plugin asks for right after opening (default: on)
+local OPEN_REFRESH_KEY = "custombg_open_refresh"             -- refresh used when the book is shown: "ui" (soft, default) / "partial" (light) / "full" (KOReader default)
 
 local FS_KEYS = {
     enabled = "fs_lines_enabled",
@@ -249,7 +251,6 @@ local function loadImageList(folder, scene_mode)
     local images = {}
     local attr_root = lfs.attributes(folder)
     if not attr_root or attr_root.mode ~= "directory" then
-        logger.warn("CustomBg: Background folder does not exist: " .. folder)
         return images
     end
     local ext_whitelist = {jpg=true, jpeg=true, png=true, webp=true, bmp=true, gif=true}
@@ -283,7 +284,6 @@ local function loadImageList(folder, scene_mode)
     end
     local count = 0
     for _ in pairs(images) do count = count + 1 end
-    logger.info(string.format("CustomBg: %s mode loaded %d images", scene_mode, count))
     return images
 end
 
@@ -450,6 +450,20 @@ function CustomBg:getGlobalDefaultBg()
 end
 
 -- ===== Background loading: uses the native setBackgroundImage =====
+-- Screen refresh after the background was (re)applied outside the menu: when opening a book, switching day/night,
+-- rotating the screen. This used to be a full-screen flashing refresh (twice when opening a book: once from init and once
+-- from onReadSettings). With "No-flash page turns" enabled (default) a non-flashing "ui" refresh is requested instead.
+function CustomBg:_backgroundRefresh()
+    -- While the book is being opened the reader is not on screen yet: KOReader paints it by itself when it shows it,
+    -- so a refresh requested now would only redraw the previous screen (an extra, useless refresh before the book appears).
+    local shown = false
+    for _, w in ipairs(UIManager._window_stack or {}) do
+        if w.widget == self.ui then shown = true; break end
+    end
+    if not shown and UIManager._window_stack ~= nil then return end
+    UIManager:setDirty("all", self:isNoFlashEnabled() and "ui" or "full")
+end
+
 function CustomBg:loadBackgroundByName(name, from_menu)
     if not self.ui or not self.ui.document then return end
     self:invalidateLineCache()
@@ -465,18 +479,14 @@ function CustomBg:loadBackgroundByName(name, from_menu)
             local scaled = self:getBgScaledPath(images[use_name])
             if scaled then
                 self.ui.document:setBackgroundImage(scaled)
-                logger.info("CustomBg: Set background -> " .. scaled)
             else
                 self.ui.document:setBackgroundImage()
-                logger.warn("CustomBg: Failed to set background, clearing background")
             end
         else
             self.ui.document:setBackgroundImage()
-            logger.info("CustomBg: Background does not exist, clearing background")
         end
     else
         self.ui.document:setBackgroundImage()
-        logger.info("CustomBg: No background, clearing background")
     end
     if self.ui.document.setBackgroundColor then
         self.ui.document:setBackgroundColor(0xFFFFFF)
@@ -493,7 +503,7 @@ function CustomBg:loadBackgroundByName(name, from_menu)
     if from_menu then
         self:repaintView()   -- picked in the menu: light repaint, the menu stays open
     else
-        UIManager:setDirty("all", "full")
+        self:_backgroundRefresh()
     end
 end
 
@@ -572,7 +582,7 @@ function CustomBg:_scheduleBgReapply(delay)
             -- to avoid "first apply + fallback re-apply" each causing a full-screen refresh (a double flash on every book open);
             -- only apply and refresh once when the state really changed (overridden by re-layout / rotation / day-night switch)
             if self:_reapplyBackgroundImage(self.ui.document) then
-                UIManager:setDirty("all", "full")
+                self:_backgroundRefresh()
             end
         end
     end)
@@ -588,6 +598,13 @@ end
 
 -- KOReader screen rotation (portrait/landscape) event: force re-apply the background after the rotation re-layout finishes
 function CustomBg:_onScreenOrientationChanged()
+    -- KOReader calls ReaderView:onSetRotationMode on EVERY book open (from onReadSettings), even when the rotation does not
+    -- change. Re-applying the background then (0.6 s later, with a screen refresh) caused a second "halo" refresh right after
+    -- the book appeared. Only act when the screen size really changed; a 180 degree turn keeps the same size and the cached
+    -- background image still fits. (_checkScreenGeom also catches real size changes before each page paint.)
+    if Screen:getWidth() == self._bg_last_sw and Screen:getHeight() == self._bg_last_sh then
+        return
+    end
     self:_invalidateBgDedup()
     self:_scheduleBgReapply(0.6)
 end
@@ -613,7 +630,6 @@ function CustomBg:hookScreenRotation()
     CustomBg.hooked_rotation = true
     local ok, ReaderView = pcall(require, "apps/reader/modules/readerview")
     if not ok or not ReaderView or not ReaderView.onSetRotationMode then
-        logger.warn("CustomBg: Cannot hook ReaderView.onSetRotationMode, falling back to paintTo geometry self-healing")
         return
     end
     local orig_onSetRotationMode = ReaderView.onSetRotationMode
@@ -641,6 +657,12 @@ function CustomBg:isNoFlashEnabled()
     return G_reader_settings:readSetting(NOFLASH_KEY) ~= false
 end
 
+function CustomBg:getOpenRefreshMode()
+    local v = G_reader_settings:readSetting(OPEN_REFRESH_KEY)
+    if v == "partial" or v == "full" then return v end
+    return "ui"
+end
+
 function CustomBg:_wantsNoFlash()
     return self:isNoFlashEnabled()
        and self.ui and self.ui.document
@@ -661,13 +683,38 @@ function CustomBg:_installRefreshHook()
     end
     local orig_setDirty, orig_refresh = UIManager.setDirty, UIManager._refresh
     if type(orig_setDirty) ~= "function" or type(orig_refresh) ~= "function" then
-        logger.warn("CustomBg: Cannot hook UIManager refresh, no-flash page turns unavailable")
         return
     end
     h = { enabled = true, orig_setDirty = orig_setDirty, orig_refresh = orig_refresh }
     h.setDirty = function(um, widget, refreshtype, ...)
         local from_reader = false
         local plugin = CustomBg.active_instance
+        -- The bookends plugin schedules a full-screen "ui" refresh of the reader right after a book is opened, even when it draws
+        -- nothing. It arrives late (alone, after the book is already shown), so it shows up as one more visible refresh.
+        -- Skipped only inside the opening window, only with a background shown, and only if the option is on.
+        if h.enabled and refreshtype == "ui" and widget ~= nil and widget ~= "all" and plugin and plugin._open_window
+           and plugin:_wantsNoFlash() and G_reader_settings:readSetting(SKIP_BOOKENDS_KEY) ~= false then
+            local reader_ui = plugin.ui
+            if widget == reader_ui or (reader_ui.view ~= nil and widget == reader_ui.view.dialog) then
+                local tb = debug.traceback("", 2)
+                if type(tb) == "string" and tb:find("bookends%.koplugin") then
+                    return
+                end
+            end
+        end
+        -- Opening a book: ReaderUI:doShowReader calls UIManager:show(reader, "full"), which is a flashing full refresh
+        -- (this is KOReader's own, not the plugin's). Turn that single request into a "ui" refresh.
+        if h.enabled and refreshtype == "full" and widget ~= nil and plugin and plugin._open_pending and plugin:_wantsNoFlash() then
+            local reader_ui = plugin.ui
+            -- "all" is included: on some devices (seen on Kobo) a second full refresh is requested for every window
+            -- shortly after the book is shown; the diagnostic log showed it as "setDirty all full"
+            if widget == "all" or widget == reader_ui or (reader_ui.view ~= nil and widget == reader_ui.view.dialog) then
+                plugin._open_pending = nil
+                -- "ui": no flash, but the previous screen may fade out slowly; "partial": light flash, cleaner;
+                -- "full": KOReader's own refresh (cleanest, full flash)
+                return orig_setDirty(um, widget, plugin:getOpenRefreshMode(), ...)
+            end
+        end
         if h.enabled and refreshtype == "partial" and widget ~= nil and plugin and plugin:_wantsNoFlash() then
             local reader_ui = plugin.ui
             from_reader = (widget == reader_ui) or (reader_ui.view ~= nil and widget == reader_ui.view.dialog)
@@ -875,7 +922,6 @@ function CustomBg:composeSleepScreen(icon_path)
         return written and cache_path or nil
     end)
     if ok and result then return result end
-    logger.warn("CustomBg: Failed to generate sleep icon -> " .. tostring(icon_path))
     return nil
 end
 
@@ -887,7 +933,6 @@ function CustomBg:hookSleepScreen()
     CustomBg.hooked_sleepscreen = true
     local ok, Screensaver = pcall(require, "ui/screensaver")
     if not ok or type(Screensaver) ~= "table" or type(Screensaver.setup) ~= "function" then
-        logger.warn("CustomBg: Cannot hook Screensaver.setup, sleep icon feature unavailable")
         return
     end
     local orig_setup = Screensaver.setup
@@ -1819,7 +1864,6 @@ function CustomBg:paintTo(bb, x, y)
     if saved_h ~= CustomBg.drawALine then self.drawALine = saved_h end
     if saved_v ~= CustomBg.drawAVerticalLine then self.drawAVerticalLine = saved_v end
     if not draw_ok then
-        logger.warn("CustomBg: Error while drawing lines, skipped this draw -> " .. tostring(draw_err))
         self._line_cache = nil
     elseif key then
         self._line_cache = { key = key, ops = ops }
@@ -2670,8 +2714,13 @@ end
 
 -- ==================== Initialization ====================
 function CustomBg:init()
-    logger.info("CustomBg init (native background, global default supported)")
     self.ui.custombg = self
+    -- Only the first "full" refresh requested for this book (the one done by KOReader when it shows the book) is softened;
+    -- the flag also expires by itself so a later, explicit full refresh is never touched.
+    self._open_pending = true
+    UIManager:scheduleIn(5, function() self._open_pending = nil end)
+    self._open_window = true   -- stays on for a few seconds (unlike _open_pending, which is used up by the first full refresh)
+    UIManager:scheduleIn(8, function() self._open_window = nil end)
     local folder = getBackgroundsFolder()
     self.cache_day = loadImageList(folder, SCENE_DAY)
     self.cache_night = loadImageList(folder, SCENE_NIGHT)
@@ -2694,7 +2743,6 @@ function CustomBg:init()
     else
         self:loadBackgroundByName(nil)
     end
-    logger.info("CustomBg init finished")
 end
 
 function CustomBg:startNightModeChecker()
@@ -3478,6 +3526,51 @@ function CustomBg:addToMainMenu(menu_items)
                         end,
                     })
 
+                    table.insert(sub, {
+                        text_func = function()
+                            local labels = { ui = _("Soft"), partial = _("Light"), full = _("Full") }
+                            return _("Refresh when opening the book") .. ": " .. labels[self:getOpenRefreshMode()]
+                        end,
+                        help_text = _(
+                            "Refresh KOReader does when it shows the book (only with a background and No-flash page turns ON).\n\n" ..
+                            "Soft: no flash, but the previous screen can fade out slowly (faint remains).\n" ..
+                            "Light: a mild flash, cleaner than Soft.\n" ..
+                            "Full: KOReader's own refresh, full flash, cleanest."),
+                        sub_item_table = (function()
+                            local items = {}
+                            local opts = {
+                                { text = _("Soft (no flash, may leave a faint fade of the previous screen)"), mode = "ui" },
+                                { text = _("Light (mild flash, cleaner)"), mode = "partial" },
+                                { text = _("Full (KOReader default: full flash, cleanest)"), mode = "full" },
+                            }
+                            for _, opt in ipairs(opts) do
+                                table.insert(items, {
+                                    text = opt.text,
+                                    checked_func = function() return self:getOpenRefreshMode() == opt.mode end,
+                                    keep_menu_open = true,
+                                    callback = function(touchmenu_instance)
+                                        G_reader_settings:saveSetting(OPEN_REFRESH_KEY, opt.mode)
+                                        if touchmenu_instance then touchmenu_instance:updateItems() end
+                                    end,
+                                })
+                            end
+                            return items
+                        end)(),
+                    })
+
+                    table.insert(sub, {
+                        text = _("Skip the extra refresh of the bookends plugin when opening a book"),
+                        help_text = _(
+                            "ON: while a background is shown, the full-screen refresh that the bookends plugin schedules right after " ..
+                            "a book is opened is ignored (it showed up as one more visible refresh). Only the first seconds after opening are affected.\n\n" ..
+                            "Turn it OFF if bookends bars do not appear until you turn the page."),
+                        checked_func = function() return G_reader_settings:readSetting(SKIP_BOOKENDS_KEY) ~= false end,
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
+                            G_reader_settings:saveSetting(SKIP_BOOKENDS_KEY, G_reader_settings:readSetting(SKIP_BOOKENDS_KEY) == false)
+                            if touchmenu_instance then touchmenu_instance:updateItems() end
+                        end,
+                    })
                     -- Diagnostics: shows exactly what the plugin sees, to find why a background does not appear
                     table.insert(sub, {
                         text = _("Diagnostics (why is there no background?)"),
