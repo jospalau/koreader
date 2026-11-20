@@ -1,0 +1,132 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 1080 1440" width="1080" height="1440">
+  <defs>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="1"/>
+      <stop offset="0.3" stop-color="#d9f2ff" stop-opacity="0.85"/>
+      <stop offset="0.55" stop-color="#ecd5ff" stop-opacity="0.55"/>
+      <stop offset="0.78" stop-color="#ffe3c2" stop-opacity="0.3"/>
+      <stop offset="1" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="orb" cx="38%" cy="34%" r="70%">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.5" stop-color="#e6f6ff"/>
+      <stop offset="0.8" stop-color="#f1e0ff"/>
+      <stop offset="1" stop-color="#ffe9d2"/>
+    </radialGradient>
+    <path id="leaf" d="M0 0 C 6 -9 17 -9 24 0 C 17 9 6 9 0 0 Z M2 0 H 22" />
+    <g id="corner" fill="none" stroke="#6b6b6b" stroke-width="2" stroke-linecap="round">
+      <path d="M84 170 V104 Q84 84 104 84 H170"/>
+      <path d="M97 158 V108 Q97 97 108 97 H158"/>
+      <circle cx="105" cy="105" r="8"/>
+      <circle cx="105" cy="105" r="2.5" fill="#6b6b6b"/>
+      <path d="M170 84 q 15 -11 24 2 q 7 13 -8 15 q -9 1 -9 -7"/>
+      <path d="M84 170 q -11 15 2 24 q 13 7 15 -8 q 1 -9 -7 -9"/>
+      <path d="M120 120 l 22 22 M142 142 m -4 0 a4 4 0 1 0 8 0 a4 4 0 1 0 -8 0"/>
+    </g>
+  </defs>
+
+  <!-- papel -->
+  <rect width="1080" height="1440" fill="#f8f4ea"/>
+
+  <!-- marcos -->
+  <rect x="24" y="24" width="1032" height="1392" fill="none" stroke="#7a7a7a" stroke-width="2"/>
+  <rect x="48" y="48" width="984" height="1344" fill="none" stroke="#3a3a3a" stroke-width="3.5"/>
+  <rect x="64" y="64" width="952" height="1312" fill="none" stroke="#8d8d8d" stroke-width="1.6" stroke-dasharray="7 6"/>
+
+  <!-- esquinas góticas -->
+  <use xlink:href="#corner"/>
+  <use xlink:href="#corner" transform="translate(1080 1440) rotate(180)"/>
+
+  <!-- viento de los Territorios (arriba izquierda) -->
+  <g fill="none" stroke="#8a8a8a" stroke-width="1.8" stroke-linecap="round">
+    <path d="M215 150 C 260 140 300 158 345 150 C 372 145 378 172 356 174 C 340 175 338 158 352 158"/>
+    <path d="M240 178 C 280 170 310 188 340 182"/>
+    <path d="M200 205 C 240 198 262 214 300 208 C 322 204 326 226 308 228 C 296 229 294 216 304 216"/>
+  </g>
+  <!-- viento (derecha centro) -->
+  <g fill="none" stroke="#8a8a8a" stroke-width="1.8" stroke-linecap="round">
+    <path d="M1060 410 C 1030 404 1010 420 985 412 C 965 406 962 430 980 432 C 992 433 994 420 984 420"/>
+    <path d="M1048 445 C 1020 440 1000 458 972 452 C 950 448 946 474 966 475 C 980 476 981 462 970 462"/>
+  </g>
+  <!-- viento (izquierda abajo) -->
+  <g fill="none" stroke="#8a8a8a" stroke-width="1.8" stroke-linecap="round">
+    <path d="M18 1060 C 50 1054 70 1070 100 1064 C 122 1060 126 1084 108 1086 C 96 1087 94 1074 104 1074"/>
+    <path d="M30 1096 C 60 1092 80 1104 118 1098"/>
+  </g>
+
+  <!-- rama seca arriba derecha -->
+  <g fill="none" stroke="#1f1f1f" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M1090 160 C 1010 142 940 120 882 90 C 842 70 802 48 762 28" stroke-width="9"/>
+    <path d="M960 128 C 932 150 900 170 858 176" stroke-width="4.5"/>
+    <path d="M880 90 C 862 62 850 32 828 6" stroke-width="3.5"/>
+    <path d="M822 62 C 792 72 762 94 728 90" stroke-width="3"/>
+    <path d="M1010 146 C 1030 112 1042 82 1064 40" stroke-width="4.5"/>
+    <path d="M1042 152 C 1042 192 1030 222 1000 252" stroke-width="3.5"/>
+    <path d="M1026 126 C 1000 112 986 96 984 70" stroke-width="2.5"/>
+    <!-- ramitas y espinas -->
+    <path d="M858 176 C 840 180 826 196 812 214" stroke-width="2.5"/>
+    <path d="M900 160 C 892 184 876 198 866 220" stroke-width="2"/>
+    <path d="M766 82 C 752 66 744 50 742 34" stroke-width="2"/>
+    <path d="M728 90 C 712 94 698 106 690 120" stroke-width="2"/>
+    <path d="M1000 252 C 988 262 980 276 978 292" stroke-width="2"/>
+    <path d="M1064 40 C 1058 26 1056 14 1058 0" stroke-width="2.5"/>
+    <path d="M940 112 C 946 94 958 82 964 66" stroke-width="2"/>
+    <path d="M834 40 l -14 -10 M846 22 l 12 -10 M792 54 l -4 -16 M760 28 l -16 -4" stroke-width="1.8"/>
+  </g>
+  <!-- hojas marchitas -->
+  <g fill="#555" stroke="#2d2d2d" stroke-width="0.8" opacity="0.85">
+    <use xlink:href="#leaf" transform="translate(858 176) rotate(160) scale(0.9)"/>
+    <use xlink:href="#leaf" transform="translate(812 214) rotate(120) scale(0.8)"/>
+    <use xlink:href="#leaf" transform="translate(866 220) rotate(100) scale(0.7)"/>
+    <use xlink:href="#leaf" transform="translate(742 34) rotate(-110) scale(0.8)"/>
+    <use xlink:href="#leaf" transform="translate(690 120) rotate(150) scale(0.8)"/>
+    <use xlink:href="#leaf" transform="translate(978 292) rotate(95) scale(0.8)"/>
+    <use xlink:href="#leaf" transform="translate(964 66) rotate(-70) scale(0.8)"/>
+    <use xlink:href="#leaf" transform="translate(984 70) rotate(-95) scale(0.7)"/>
+    <use xlink:href="#leaf" transform="translate(828 8) rotate(-60) scale(0.7)"/>
+    <use xlink:href="#leaf" transform="translate(1058 4) rotate(-80) scale(0.7)"/>
+  </g>
+  <!-- cuervo -->
+  <g transform="translate(902 74) rotate(-4)" fill="#1c1c1c">
+    <ellipse cx="0" cy="0" rx="27" ry="11" transform="rotate(-10)"/>
+    <circle cx="-27" cy="-9" r="8.5"/>
+    <path d="M-34 -11 L-50 -6 L-34 -4 Z"/>
+    <path d="M20 -3 L56 9 L24 8 Z"/>
+    <path d="M-6 9 L-6 19 M6 9 L6 19" stroke="#1c1c1c" stroke-width="2.2" stroke-linecap="round"/>
+    <circle cx="-30" cy="-10" r="1.6" fill="#f8f4ea"/>
+  </g>
+
+  <!-- luna creciente + hierbas secas (abajo izquierda) -->
+  <path d="M170 1084 A 38 38 0 1 0 208 1140 A 31 31 0 1 1 170 1084 Z" fill="#3a3a3a" opacity="0.85"/>
+  <g fill="none" stroke="#1f1f1f" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M88 1372 C 90 1330 78 1298 58 1274" stroke-width="3"/>
+    <path d="M112 1372 C 120 1326 112 1292 130 1252" stroke-width="3.5"/>
+    <path d="M140 1372 C 140 1336 156 1310 150 1276" stroke-width="2.5"/>
+    <path d="M168 1372 C 180 1340 200 1322 214 1304" stroke-width="3"/>
+    <path d="M206 1372 C 210 1336 236 1312 262 1296" stroke-width="3.5"/>
+    <path d="M250 1372 C 250 1346 272 1330 296 1326" stroke-width="2.5"/>
+    <path d="M130 1252 l -10 -14 M130 1252 l 8 -16 M130 1252 l 14 -10 M262 1296 l 6 -16 M262 1296 l 16 -8 M58 1274 l -10 -10 M58 1274 l 8 -14" stroke-width="1.8"/>
+    <!-- espina -->
+    <path d="M300 1372 C 316 1340 344 1322 372 1318" stroke-width="2.5"/>
+    <path d="M318 1346 l -6 -12 M334 1332 l -2 -13 M352 1324 l 2 -12" stroke-width="1.8"/>
+  </g>
+
+  <!-- el Talismán (abajo derecha) -->
+  <g>
+    <circle cx="858" cy="1236" r="84" fill="url(#glow)"/>
+    <g stroke="#9a9a9a" stroke-width="1.4" stroke-linecap="round">
+      <path d="M858 1176 V1160 M858 1296 V1312 M798 1236 H782 M918 1236 H934"/>
+      <path d="M815 1193 l -11 -11 M901 1279 l 11 11 M815 1279 l -11 11 M901 1193 l 11 -11"/>
+      <path d="M829 1182 l -5 -9 M887 1290 l 5 9 M829 1290 l -5 9 M887 1182 l 5 -9" stroke-width="1"/>
+    </g>
+    <circle cx="858" cy="1236" r="34" fill="url(#orb)" stroke="#4a4a4a" stroke-width="2.2"/>
+    <g fill="none" stroke="#7d7d9a" stroke-width="1.3" stroke-linecap="round">
+      <path d="M836 1238 C 842 1216 872 1216 880 1236 C 872 1256 842 1256 836 1238"/>
+      <path d="M846 1226 C 856 1236 868 1236 874 1228"/>
+      <path d="M846 1248 C 856 1240 866 1240 872 1246"/>
+    </g>
+    <path d="M840 1218 C 846 1210 856 1207 864 1208" fill="none" stroke="#ffffff" stroke-width="3" stroke-linecap="round"/>
+    <path d="M920 1190 l 0 -14 M913 1183 h 14" stroke="#8a8a8a" stroke-width="1.5" stroke-linecap="round"/>
+    <path d="M797 1282 l 0 -10 M792 1277 h 10" stroke="#8a8a8a" stroke-width="1.3" stroke-linecap="round"/>
+  </g>
+</svg>
