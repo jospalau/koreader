@@ -80,6 +80,7 @@ local DOC_BG_NONE = ""                                       -- means explicitly
 local DOC_BG_GLOBAL = "@global"                              -- this book explicitly uses the global default background
 local NOFLASH_KEY = "custombg_noflash"                       -- avoid full-screen flashing on page turns while a background is shown (default: on)
 local SKIP_BOOKENDS_KEY = "custombg_skip_bookends_refresh"   -- ignore the extra full-screen refresh the bookends plugin asks for right after opening (default: on)
+local SWIPE_ANIM_KEY = "custombg_swipe_anim"                -- Kindle page-turn animation while a background is shown: "keep" (default) / "off"
 local OPEN_REFRESH_KEY = "custombg_open_refresh"             -- refresh used when the book is shown: "ui" (soft, default) / "partial" (light) / "full" (KOReader default)
 
 local FS_KEYS = {
@@ -746,6 +747,21 @@ function CustomBg:_installRefreshHook()
         end
         return orig_refresh(um, mode, region, dither)
     end
+    -- Kindle (MTK) page-turn animation: KOReader asks for it on every page change, and it is applied to the next non-flashing
+    -- refresh. With a background shown it can look wrong, so it can be switched off here (only while a background is shown).
+    if type(Screen.setSwipeAnimations) == "function" then
+        h.swipe_own = rawget(Screen, "setSwipeAnimations")
+        local orig_swipe = Screen.setSwipeAnimations
+        h.swipe = function(scr, enabled, ...)
+            local plugin = CustomBg.active_instance
+            if enabled and h.enabled and plugin and plugin:_wantsNoFlash()
+               and G_reader_settings:readSetting(SWIPE_ANIM_KEY) == "off" then
+                return
+            end
+            return orig_swipe(scr, enabled, ...)
+        end
+        Screen.setSwipeAnimations = h.swipe
+    end
     UIManager.setDirty = h.setDirty
     UIManager._refresh = h.refresh
     CustomBg._refresh_hook = h
@@ -757,6 +773,9 @@ function CustomBg:_removeRefreshHook()
     local h = CustomBg._refresh_hook
     if not h then return end
     if UIManager.setDirty == h.setDirty and UIManager._refresh == h.refresh then
+        if h.swipe and Screen.setSwipeAnimations == h.swipe then
+            Screen.setSwipeAnimations = h.swipe_own   -- nil falls back to the normal method lookup
+        end
         UIManager.setDirty = h.orig_setDirty
         UIManager._refresh = h.orig_refresh
         CustomBg._refresh_hook = nil
@@ -3556,6 +3575,38 @@ function CustomBg:addToMainMenu(menu_items)
                             end
                             return items
                         end)(),
+                    })
+
+                    table.insert(sub, {
+                        text_func = function()
+                            local off = G_reader_settings:readSetting(SWIPE_ANIM_KEY) == "off"
+                            return _("Kindle page-turn animation with a background") .. ": " .. (off and _("Off") or _("Keep"))
+                        end,
+                        help_text = _(
+                            "Only for Kindles that have the page-turn animation (turned on in KOReader's own settings).\n\n" ..
+                            "Keep: KOReader's animation, as it is.\n" ..
+                            "Off: no animation while a background is shown (the page changes with a plain refresh). " ..
+                            "Use it if the animation looks wrong with a background."),
+                        sub_item_table = {
+                            {
+                                text = _("Keep"),
+                                checked_func = function() return G_reader_settings:readSetting(SWIPE_ANIM_KEY) ~= "off" end,
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
+                                    G_reader_settings:saveSetting(SWIPE_ANIM_KEY, "keep")
+                                    if touchmenu_instance then touchmenu_instance:updateItems() end
+                                end,
+                            },
+                            {
+                                text = _("Off while a background is shown"),
+                                checked_func = function() return G_reader_settings:readSetting(SWIPE_ANIM_KEY) == "off" end,
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
+                                    G_reader_settings:saveSetting(SWIPE_ANIM_KEY, "off")
+                                    if touchmenu_instance then touchmenu_instance:updateItems() end
+                                end,
+                            },
+                        },
                     })
 
                     table.insert(sub, {
