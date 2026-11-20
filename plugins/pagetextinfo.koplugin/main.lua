@@ -1294,6 +1294,80 @@ function PageTextInfo:onReaderReady()
     -- UIManager:scheduleIn(600, self.insertSession)
 end
 
+-- Margin adjustment (moved here from ReaderUI:onAdjustMarginsTopbar and TopBar:onAdjustMarginsTopbar)
+-- Devuelve { izq, sup, der, inf } en las unidades de configurable (sin escalar),
+-- o nil si no hay que tocar nada (PDF u otro documento sin crengine).
+function PageTextInfo:getTargetMargins()
+    local ui = self.ui
+    -- Guarda unica: solo documentos crengine (epub, fb2, html...). Evita el error en PDF.
+    if not ui.rolling then return nil end
+
+    -- 1. bookends activo: margenes fijos (proporcion ~ sqrt(2))
+    if ui.bookends and ui.bookends.enabled then
+        return { 35, 50, 35, 50 }
+    end
+
+    local topbar = ui.view and ui.view.topbar
+    local topbar_on = topbar and topbar.settings:isTrue("show_top_bar")
+
+    -- 2. top bar propio sin footer (antes: TopBar:onAdjustMarginsTopbar)
+    if topbar_on and not topbar.status_bar then
+        local side = Device:isAndroid() and 20 or 15
+        return {
+            side,
+            Screen:unscaleBySize(topbar:getHeight()),
+            side,
+            Screen:unscaleBySize(topbar:getBottomHeight()),
+        }
+    end
+
+    -- Antes, ReaderUI solo actuaba en epub en las ramas siguientes
+    if util.getFileNameSuffix(ui.document.file) ~= "epub" then return nil end
+
+    -- 3. footer visible (antes: ReaderUI, rama footer_visible)
+    if ui.view.footer_visible then
+        local fs = ui.view.footer.settings
+        -- Pixeles fisicos, como en el codigo original
+        local footer_height = fs.container_height + fs.progress_style_thick_height
+        local top, bottom = 12, 0
+        if fs.bar_top == true then
+            top = footer_height + fs.top_padding
+        else
+            bottom = footer_height + fs.container_bottom_padding
+        end
+        return { 15, Screen:unscaleBySize(top), 15, Screen:unscaleBySize(bottom) }
+    end
+
+    -- 4. sin barras: margenes fijos
+    return { 35, 50, 35, 50 }
+end
+
+-- Mismo nombre de evento que antes, asi los gestos/dispatcher siguen funcionando.
+function PageTextInfo:onAdjustMarginsTopbar()
+    local t = self:getTargetMargins()
+    if not t then return end
+
+    local cfg = self.ui.document.configurable
+    local left, top, right, bottom = t[1], t[2], t[3], t[4]
+
+    if cfg.t_page_margin ~= top
+        or cfg.b_page_margin ~= bottom
+        or cfg.h_page_margins[1] ~= left
+        or cfg.h_page_margins[2] ~= right then
+        local side_margins = { left, right }
+        cfg.t_page_margin = top
+        cfg.b_page_margin = bottom
+        cfg.h_page_margins = side_margins
+        UIManager:sendEvent(Event:new("SetPageHorizMargins", side_margins))
+        UIManager:sendEvent(Event:new("SetPageTopMargin", top))
+        UIManager:sendEvent(Event:new("SetPageBottomMargin", bottom))
+    else
+        -- Ya estaba ajustado: mismo comportamiento que antes
+        self.ui:showBookStatus()
+    end
+    return true
+end
+
 -- Switch the widget time overlay on/off from the menu entry (same flag the "×" of the overlay switches off)
 function PageTextInfo:onWidgetTimeOverlayToggled(enable)
     WidgetTimeOverlay.setEnabled(enable and true or false)
