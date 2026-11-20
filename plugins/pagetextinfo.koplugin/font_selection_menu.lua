@@ -806,7 +806,7 @@ function PageTextInfo:onShowFonts(page)
     -- movement comes as a swipe or a hold, and used to be swallowed)
     function dialog:closeIfOutside(ges)
         if not (ges and ges.pos) or ges.pos:intersectWith(frame_rect) then return false end
-        self.plugin:closeFontsMenu()
+        self:requestClose()
         return true
     end
 
@@ -885,11 +885,17 @@ function PageTextInfo:onShowFonts(page)
                             -- again from here.
                             purgeFontFacesLater(plugin)
                             dlg.busy = nil
+                            -- A tap outside came meanwhile: close now that the refreshes are done
+                            if dlg.close_after then plugin:closeFontsMenu() end
                         end)
                     else
                         require("logger").warn("[PTI] applyFont failed:", err)
                         self.busy = nil
-                        plugin:onShowFonts(plugin.fonts_page)   -- draw the real state again
+                        if self.close_after then
+                            plugin:closeFontsMenu()
+                        else
+                            plugin:onShowFonts(plugin.fonts_page)   -- draw the real state again
+                        end
                     end
                     end)
                 end
@@ -913,8 +919,19 @@ function PageTextInfo:onShowFonts(page)
         end
 
         -- Tap outside the window: close
-        self.plugin:closeFontsMenu()
+        self:requestClose()
         return true
+    end
+
+    -- Close the menu. While a font is being applied the close waits for the end of
+    -- the change (see the timer in onTap): closing in the middle of the page refresh
+    -- and of the menu's own final refresh makes the two collide and leaves glitches.
+    function dialog:requestClose()
+        if self.busy then
+            self.close_after = true
+        else
+            self.plugin:closeFontsMenu()
+        end
     end
 
     function dialog:onClose()

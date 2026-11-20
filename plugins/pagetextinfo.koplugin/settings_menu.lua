@@ -140,6 +140,18 @@ local function close(self)
     if d then UIManager:close(d, "ui", (d.frame and d.frame.dimen) or d.frame_rect) end
 end
 
+-- A change has finished: the menu accepts taps again, and a tap outside that came
+-- meanwhile closes it now. Closing in the middle of the page refresh and of the
+-- menu's own refresh makes the two collide and leaves glitches, so the close waits.
+local function releaseBusy(plugin)
+    plugin.settings_busy = nil
+    plugin.settings_rotating = nil
+    if plugin.settings_close_pending then
+        plugin.settings_close_pending = nil
+        close(plugin)
+    end
+end
+
 -- The screen changed size (rotation): rebuild the window for the new size, once.
 -- Called from the window's own resize event (so it is replaced BEFORE the first
 -- paint at the new size) and, as a fallback, right after the rotation call.
@@ -1415,8 +1427,7 @@ function PageTextInfo:onShowSettingsMenu()
                         -- Normally the window already rebuilt itself from the resize
                         -- event; this only catches the case where that event didn't come
                         rebuildIfResized(plugin, plugin.settings_dialog)
-                        plugin.settings_busy = nil
-                        plugin.settings_rotating = nil
+                        releaseBusy(plugin)
                     end)
                     return true
                 end
@@ -1452,7 +1463,7 @@ function PageTextInfo:onShowSettingsMenu()
                         end
                         UIManager:scheduleIn(SETTLE_DELAY, function()
                             rebuild()
-                            plugin.settings_busy = nil
+                            releaseBusy(plugin)
                         end)
                     else
                         -- The change is synchronous: the book has already been laid out,
@@ -1462,7 +1473,7 @@ function PageTextInfo:onShowSettingsMenu()
                         -- blocked are dropped.
                         rebuild()
                         UIManager:scheduleIn(SETTLE_DELAY, function()
-                            plugin.settings_busy = nil
+                            releaseBusy(plugin)
                         end)
                     end
                 end)
@@ -1471,7 +1482,11 @@ function PageTextInfo:onShowSettingsMenu()
         end
         -- Tap outside the window (it may have been moved: use where it is painted)
         if not ges.pos:intersectWith(frame.dimen or frame_rect) then
-            close(self.plugin)
+            if self.plugin.settings_busy then
+                self.plugin.settings_close_pending = true   -- closed when the change ends
+            else
+                close(self.plugin)
+            end
         end
         return true
     end
