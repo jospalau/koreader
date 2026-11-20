@@ -10,10 +10,12 @@
 -- keeps working: isXHeightMode, applyDefaultXHeight, hasRemStyles,
 -- reapplyFontCompensation, warmUpOnReady, warmUpCaches)
 --
--- SIMPLE VERSION: sizes are set in pt only, exactly as chosen. The only
--- measurement left is the x-height of a font: ONE read of the value stored in the
--- font file (per face, cached), and x-height (mm) = that ratio * pt. Nothing is
--- measured on the page, nothing is asked to crengine, and there are no tables.
+-- Sizes are set in pt only, exactly as chosen. The x-height shown in the title is
+-- measured as the eye sees it (rows of pixels): asked to the engine when the patched
+-- koreader-base is there (doc:getGlyphTops), else read through FreeType with the same
+-- load flags crengine uses (shown with a "~"), else the design value stored in the
+-- font file. The rem factor of the book's text is read from calibre_data or, as a
+-- fallback, estimated from the epub (once per book, cached).
 
 local Device = require("device")
 local Font = require("ui/font")
@@ -135,6 +137,8 @@ local function close(self)
     local d = self.settings_dialog
     self.settings_dialog = nil
     self.settings_offset = nil   -- the next time it opens it is at its place again
+    -- No menu on screen any more: the input hook must not look at this plugin
+    if active_plugin == self then active_plugin = nil end
     dlog("settings menu closed")
     -- The window may have been moved: refresh where it is now
     if d then UIManager:close(d, "ui", (d.frame and d.frame.dimen) or d.frame_rect) end
@@ -234,6 +238,11 @@ local function setWeight(ui, w)
     ui.font:onSetFontBaseWeight(w)
 end
 
+-- Fine step of the weight (a missing value counts as 0, like everywhere else)
+local function stepWeight(ui, dir)
+    setWeight(ui, (ui.document.configurable.font_base_weight or 0) + dir * WEIGHT_STEP)
+end
+
 -- `apply` is the change itself (it sends its own UpdatePos). It is batched, as KOReader
 -- does for several changes, so the page is laid out ONCE and the input is inhibited
 -- once, not twice (the change alone, then an extra UpdatePos of our own).
@@ -296,14 +305,18 @@ local function saveCurrentFontAsDefault(ui)
     return face
 end
 
+-- Five changes, ONE re-layout: everything goes inside a single batch (each setter
+-- sends its own UpdatePos, which the batch holds until it is closed).
 local function resetDefaults(ui)
     dlog("resetDefaults")
-    -- Use the face saved with the long press; fall back to DEFAULTS.font_face
-    setFontFace(ui, G_reader_settings:readSetting("cre_font") or DEFAULTS.font_face)
-    setFontSize(ui, defaultFontSize())
-    setLineSpacing(ui, DEFAULTS.line_spacing)
-    setMargins(ui, DEFAULTS.margins)
-    setWeight(ui, DEFAULTS.font_base_weight)
+    rerenderOnce(ui, function()
+        -- Use the face saved with the long press; fall back to DEFAULTS.font_face
+        setFontFace(ui, G_reader_settings:readSetting("cre_font") or DEFAULTS.font_face)
+        setFontSize(ui, defaultFontSize())
+        setLineSpacing(ui, DEFAULTS.line_spacing)
+        setMargins(ui, DEFAULTS.margins)
+        setWeight(ui, DEFAULTS.font_base_weight)
+    end)
 end
 
 
@@ -350,12 +363,16 @@ local TWEAK_BUTTONS = {
 }
 local _tweak_ids = {}   -- [label] = id, or false when not found
 
+-- Looks the id up by title. Several tweaks can match the needles; the walk over the
+-- table (pairs) has no fixed order, so the choice must not depend on it: the match with
+-- the SHORTEST title wins (the plain tweak, not a variant with extra words), ties go to
+-- the smallest id. Every ambiguity is logged.
 local function tweakId(def)
     if _tweak_ids[def.label] ~= nil then return _tweak_ids[def.label] or nil end
-    local found = false
+    local best_id, best_title
     local ok, tweaks = pcall(require, "ui/data/css_tweaks")
     if ok and type(tweaks) == "table" then
-        local seen = {}
+        local seen, matches = {}, {}
         local function walk(t)
             if seen[t] then return end
             seen[t] = true
@@ -367,28 +384,41 @@ local function tweakId(def)
                         for _, n in ipairs(def.needles) do
                             if not title:find(n, 1, true) then all = false break end
                         end
-                        if all then found = v.id return end
+                        if all then matches[#matches + 1] = { id = v.id, title = title } end
                     end
                     walk(v)
-                    if found then return end
                 end
             end
         end
         walk(tweaks)
+        for __, m in ipairs(matches) do
+            if not best_id
+                    or #m.title < #best_title
+                    or (#m.title == #best_title and tostring(m.id) < tostring(best_id)) then
+                best_id, best_title = m.id, m.title
+            end
+        end
+        if #matches > 1 then
+            dlog("tweakId:", def.label, "is ambiguous,", #matches, "matches; chose", best_id)
+        end
     end
-    _tweak_ids[def.label] = found
-    dlog("tweakId:", def.label, "->", found)
-    return found or nil
+    _tweak_ids[def.label] = best_id or false
+    dlog("tweakId:", def.label, "->", best_id or false)
+    return best_id
 end
 
-local function tweakActive(ui, def)
-    local id = tweakId(def)
-    local st = ui.styletweak
-    if not (id and st) then return false end
+-- State of a tweak by its id: the book's own choice wins over the global one. The ONE
+-- way this file reads the state of a tweak.
+local function tweakIdOn(st, id)
+    if not (st and id) then return false end
     local t = st.doc_tweaks
     if t and t[id] ~= nil then return t[id] and true or false end
     t = st.global_tweaks
     return (t and t[id]) and true or false
+end
+
+local function tweakActive(ui, def)
+    return tweakIdOn(ui.styletweak, tweakId(def))
 end
 
 local function setTweak(ui, id, want)
@@ -445,8 +475,8 @@ local function buildRows(ui)
         { text = "▲", callback = function(u) stepLineSpacing(u,  1) end },
     }
     local weight_row = {
-        { text = "▼", callback = function(u) setWeight(u, u.document.configurable.font_base_weight - WEIGHT_STEP) end },
-        { text = "▲", callback = function(u) setWeight(u, u.document.configurable.font_base_weight + WEIGHT_STEP) end },
+        { text = "▼", callback = function(u) stepWeight(u, -1) end },
+        { text = "▲", callback = function(u) stepWeight(u,  1) end },
     }
     -- batched = true: laid out by rerenderOnce a tick after the callback
     local contrast_row = {
@@ -461,7 +491,8 @@ local function buildRows(ui)
     }
     local rows = {
         { title = "General",
-            { text = "Reset defaults",      callback = resetDefaults },
+            -- batched: the five changes are laid out once, a tick after the callback
+            { text = "Reset defaults",      callback = resetDefaults, batched = true },
             -- rotate = true: handled in the dialog's onTap (close first, rotate,
             -- reopen once), so the menu is never drawn at the old size
             { text = "Toggle screen layout", rotate = true, callback = toggleLayout },
@@ -628,7 +659,7 @@ end
 --   1) asked to the engine itself (patched koreader-base: doc:getGlyphTops, only for
 --      the face now in the book);
 --   2) else FreeType, opened directly with the load flags crengine uses for the
---      hinting mode (shown with a "~");
+--      hinting mode (shown with a "~"; it does not apply the base weight);
 --   3) else the design value ratio * px (also "~").
 
 -- Letters whose top is at the x-height, with their frequency in English text (%)
@@ -926,12 +957,12 @@ local function bookRemScale(ui)
     local scale = bookRemFactor(ui and ui.document and ui.document.file)
     dlog("bookRemScale: factor=", scale, "styletweak=", ui and ui.styletweak ~= nil)
     if not scale then return nil end
-    -- Tweaks that put the main text at the chosen size: the factor no longer applies
+    -- Tweaks that put the main text at the chosen size: the factor no longer applies.
+    -- Read the same way as the tweak buttons (tweakIdOn), not through another API.
     local st = ui.styletweak
-    if st and st.isTweakEnabled and st.enabled ~= false then
+    if st then
         for __, id in ipairs({ "font_size_most_reset", "font_size_all_inherit" }) do
-            local ok, on = pcall(st.isTweakEnabled, st, id)
-            if ok and on then dlog("bookRemScale: off,", id, "is on"); return nil end
+            if tweakIdOn(st, id) then dlog("bookRemScale: off,", id, "is on"); return nil end
         end
     end
     return scale
@@ -1448,15 +1479,17 @@ function PageTextInfo:onShowSettingsMenu()
                     local function rebuild()
                         if plugin.settings_dialog == dlg then
                             plugin:onShowSettingsMenu()
+                            -- NOTE: toggleBar() must act as a REFRESH of the top bar here.
+                            -- If it is a real on/off switch, it flips on every change.
                             if plugin.view and plugin.view.topbar then
                                 plugin.view.topbar:toggleBar()
                             end
                         end
                     end
                     if b.batched then
-                        -- Batched changes (hinting, contrast): the book is laid out a tick
-                        -- from now, so the title can only be measured after that. Mark the
-                        -- active buttons now, in place, and rebuild from the timer.
+                        -- Batched changes (hinting, contrast, reset): the book is laid out a
+                        -- tick from now, so the title can only be measured after that. Mark
+                        -- the active buttons now, in place, and rebuild from the timer.
                         if plugin.settings_dialog == dlg then
                             local ok2, err2 = pcall(dlg.syncButtonStates, dlg, plugin.ui)
                             if not ok2 then require("logger").warn("[PTI] syncButtonStates failed:", err2) end
@@ -1542,7 +1575,15 @@ function PageTextInfo:onShowSettingsMenu()
         if region then UIManager:setDirty(self, "ui", region) end
     end
 
-    function dialog:onClose() close(self.plugin) return true end
+    -- Back key: like a tap outside, it waits for a change in progress to finish
+    function dialog:onClose()
+        if self.plugin.settings_busy then
+            self.plugin.settings_close_pending = true
+        else
+            close(self.plugin)
+        end
+        return true
+    end
 
     -- Screen rotated: replace this window before anything is painted at the new size
     function dialog:onScreenResize() rebuildIfResized(self.plugin, self) end

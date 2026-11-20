@@ -58,10 +58,16 @@ local function buildFacePathMap()
         if info then
             for __, f in ipairs(info) do
                 if f.name then
+                    -- Ties go to the smallest path (the same rule as resolveFace in
+                    -- settings_menu.lua), so the result never depends on list order
                     if not f.bold and not f.italic then
-                        regular[f.name] = regular[f.name] or path
+                        if not regular[f.name] or path < regular[f.name] then
+                            regular[f.name] = path
+                        end
                     end
-                    any[f.name] = any[f.name] or path
+                    if not any[f.name] or path < any[f.name] then
+                        any[f.name] = path
+                    end
                 end
             end
         end
@@ -120,7 +126,8 @@ local function purgeFontFaces(self)
     pcall(function()
         local ffi = require("ffi")
         if not malloc_trim_declared then
-            ffi.cdef("int malloc_trim(size_t pad);")
+            -- It may already be declared elsewhere: that error must not skip the trim
+            pcall(ffi.cdef, "int malloc_trim(size_t pad);")
             malloc_trim_declared = true
         end
         ffi.C.malloc_trim(0)
@@ -149,6 +156,10 @@ local function purgeFontFacesLater(self)
         purge_fn = nil
         -- The menu was opened again in the meantime: wait for it to be closed
         if self.fonts_dialog then return end
+        -- The settings menu is on screen (the fonts menu was opened from it): the
+        -- collection would swallow its taps. Ask again, which checks every 2 s until
+        -- that menu is gone.
+        if self.settings_dialog then purgeFontFacesLater(self); return end
         -- A failure here must never take KOReader down: log it and go on
         local ok, err = pcall(purgeFontFaces, self)
         if not ok then require("logger").warn("[PTI] purgeFontFaces failed:", err) end
@@ -173,6 +184,8 @@ function PageTextInfo:closeFontsMenu()
         if self.onShowSettingsMenu then
             UIManager:nextTick(function()
                 self:onShowSettingsMenu()
+                -- NOTE: toggleBar() must act as a REFRESH of the top bar here.
+                -- If it is a real on/off switch, it flips every time.
                 if self.view and self.view.topbar then
                     self.view.topbar:toggleBar()
                 end
@@ -402,7 +415,7 @@ local function getFontStats()
             stmt:close()
         end)
         conn:close()
-        if not ok then require("logger").warn("getFontStats failed:", err) end
+        if not ok then require("logger").warn("[PTI] getFontStats failed:", err) end
     end)
     return stats
 end
@@ -934,8 +947,9 @@ function PageTextInfo:onShowFonts(page)
         end
     end
 
+    -- Back key: like a tap outside, it waits for a font being applied to finish
     function dialog:onClose()
-        self.plugin:closeFontsMenu()
+        self:requestClose()
         return true
     end
     dialog.plugin = self
