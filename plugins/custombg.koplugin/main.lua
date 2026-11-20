@@ -77,6 +77,7 @@ local GLOBAL_DEFAULT_BG_NIGHT_KEY = "custombg_global_default_bg_night"
 -- Compatibility with the legacy single default key
 local GLOBAL_DEFAULT_BG_KEY = "custombg_global_default_bg"
 local DOC_BG_NONE = ""                                       -- means explicitly no background
+local DOC_BG_GLOBAL = "@global"                              -- this book explicitly uses the global default background
 
 local FS_KEYS = {
     enabled = "fs_lines_enabled",
@@ -152,8 +153,11 @@ local function getScaledPath(source_path)
     -- Now the full path is hashed, so each source file gets a unique cache entry (also distinguished by screen resolution).
     local cache_name = hashString(source_path)
     local cache_path = getCacheDir() .. string.format("%dx%d_%s.png", screen_w, screen_h, cache_name)
-    if lfs.attributes(cache_path, "mode") == "file" then
-        return cache_path
+    do
+        local cattr = lfs.attributes(cache_path)
+        if cattr and cattr.mode == "file" and (cattr.size or 0) > 1024 then
+            return cache_path
+        end
     end
     local success, result = pcall(function()
         local RenderImage = require("ui/renderimage")
@@ -195,8 +199,11 @@ local function getRotatedScaledPath(source_path)
     local screen_h = Device.screen:getHeight()
     local cache_path = getCacheDir() .. string.format("rot90_%dx%d_%s.png",
         screen_w, screen_h, hashString(source_path))
-    if lfs.attributes(cache_path, "mode") == "file" then
-        return cache_path
+    do
+        local cattr = lfs.attributes(cache_path)
+        if cattr and cattr.mode == "file" and (cattr.size or 0) > 1024 then
+            return cache_path
+        end
     end
     local success, result = pcall(function()
         local RenderImage = require("ui/renderimage")
@@ -325,13 +332,39 @@ function CustomBg:getCurrentDocBg()
     local key = scene == SCENE_DAY and DOC_BG_DAY or DOC_BG_NIGHT
     local val = self.ui.doc_settings:readSetting(key)
     if val == nil then
-        -- Document not set: return the global default for the current scene (may be nil or a specific name)
-        return self:getGlobalDefaultBg()
+        -- Book without its own choice: background OFF (it is only shown after the toggle is turned on)
+        return nil
+    elseif val == DOC_BG_GLOBAL then
+        -- Book follows the global background: the selected global image, otherwise a random one
+        local g = self:getGlobalDefaultBg()
+        if g and g ~= "" and self:getCurrentImageCache()[g] then return g end
+        return self:getRandomBg()
     elseif val == DOC_BG_NONE then
         return nil  -- explicitly no background
     else
         return val
     end
+end
+
+-- Random background (used when the book follows the global background but no global image is selected).
+-- Chosen once per session and per day/night mode, so it does not change on every repaint.
+function CustomBg:getRandomBg()
+    local imgs = self:getCurrentImageCache()
+    local scene = self:getSceneMode()
+    if self._rand_bg and self._rand_bg_scene == scene and imgs[self._rand_bg] then
+        return self._rand_bg
+    end
+    local names = {}
+    for n in pairs(imgs) do names[#names + 1] = n end
+    if #names == 0 then return nil end
+    table.sort(names)
+    if not self._rand_seeded then
+        math.randomseed(os.time())
+        self._rand_seeded = true
+    end
+    self._rand_bg = names[math.random(#names)]
+    self._rand_bg_scene = scene
+    return self._rand_bg
 end
 
 -- Save the document background setting; name=nil clears it (follow global), name="" means no background
@@ -380,6 +413,7 @@ function CustomBg:setGlobalDefaultBg(name)
     local scene = self:getSceneMode()
     local key = scene == SCENE_NIGHT and GLOBAL_DEFAULT_BG_NIGHT_KEY or GLOBAL_DEFAULT_BG_DAY_KEY
     G_reader_settings:saveSetting(key, name)
+    pcall(function() G_reader_settings:flush() end)   -- do not wait for a clean exit to persist it
 end
 
 function CustomBg:getGlobalDefaultBg()
@@ -442,15 +476,21 @@ end
 
 -- Apply background (save the document setting and load it)
 function CustomBg:applyBackground(name)
-    if name == nil then
-        self:saveDocBg(nil)   -- clear document setting, follow global
-    else
-        self:saveDocBg(name)  -- save the name or "" (no background)
+    -- name: an image name, DOC_BG_NONE ("") for no background, or DOC_BG_GLOBAL to use the global default.
+    -- nil also means "follow the global default" (other code, e.g. a gesture toggle, calls applyBackground(nil) for that).
+    if name == nil then name = DOC_BG_GLOBAL end
+    if name ~= nil and name ~= DOC_BG_NONE and name ~= DOC_BG_GLOBAL then
+        -- An image was picked: it becomes THE global background image (for the current day/night mode),
+        -- and the background is turned ON in this book (always following the global one).
+        self:setGlobalDefaultBg(name)
+        name = DOC_BG_GLOBAL
     end
-    self:loadBackgroundByName(name, true)
-    if name and name ~= "" then
-        self:setLastUsed(name)
-        self:markImageSeen(name)
+    self:saveDocBg(name)
+    self:loadBackgroundByName(nil, true)   -- resolves the saved choice (including the global default)
+    local shown = self:getCurrentDocBg()
+    if shown and shown ~= "" then
+        self:setLastUsed(shown)
+        self:markImageSeen(shown)
     end
 end
 
@@ -963,7 +1003,7 @@ end
 function CustomBg:hasLineDocSetting()
     if not self.ui or not self.ui.doc_settings then return false end
     for _, key in pairs(FS_KEYS) do
-        if self.ui.doc_settings:readSetting(key) ~= nil then return true end
+        if key ~= FS_KEYS.enabled and self.ui.doc_settings:readSetting(key) ~= nil then return true end
     end
     return false
 end
@@ -980,7 +1020,9 @@ end
 function CustomBg:clearLineDocSettings()
     if not self.ui or not self.ui.doc_settings then return end
     for _, key in pairs(FS_KEYS) do
-        self.ui.doc_settings:saveSetting(key, nil)
+        if key ~= FS_KEYS.enabled then   -- keep this book's on/off switch
+            self.ui.doc_settings:saveSetting(key, nil)
+        end
     end
     self:loadLineSettings()
 end
@@ -3275,13 +3317,66 @@ function CustomBg:addToMainMenu(menu_items)
                         callback = function() end,
                     })
 
+                    -- Diagnostics: shows exactly what the plugin sees, to find why a background does not appear
+                    table.insert(sub, {
+                        text = _("Diagnostics (why is there no background?)"),
+                        keep_menu_open = true,
+                        callback = function()
+                            local sc = self:getSceneMode()
+                            local k = sc == SCENE_DAY and DOC_BG_DAY or DOC_BG_NIGHT
+                            local book_val = self.ui.doc_settings and self.ui.doc_settings:readSetting(k)
+                            local glob = self:getGlobalDefaultBg()
+                            local resolved = self:getCurrentDocBg()
+                            local imgs = self:getCurrentImageCache()
+                            local count = 0
+                            for kk in pairs(imgs) do count = count + 1 end
+                            local function show(v)
+                                if v == nil then return "[nothing]" end
+                                if v == "" then return "[empty = no background]" end
+                                return tostring(v)
+                            end
+                            UIManager:show(InfoMessage:new{
+                                text = table.concat({
+                                    "Mode: " .. sc,
+                                    "This book: " .. show(book_val),
+                                    "Global default: " .. show(glob),
+                                    "Applied now: " .. show(resolved),
+                                    "Image file found: " .. show(resolved and imgs[resolved] or nil),
+                                    "Images in list: " .. count,
+                                    "Folder: " .. getBackgroundsFolder(),
+                                    (function()
+                                        local d = self.ui.document
+                                        local out = { "setBackgroundImage: " .. type(d and d.setBackgroundImage) }
+                                        out[#out + 1] = "Rotated by plugin: " .. tostring(d and d._is_rotated_by_plugin)
+                                        local src = resolved and imgs[resolved] or nil
+                                        if src then
+                                            local ok, scaled = pcall(self.getBgScaledPath, self, src)
+                                            out[#out + 1] = "Source: " .. tostring(src)
+                                            out[#out + 1] = "Scaled: " .. (ok and tostring(scaled) or ("ERROR " .. tostring(scaled)))
+                                            if ok and scaled then
+                                                local a = lfs.attributes(scaled)
+                                                out[#out + 1] = "Scaled size: " .. tostring(a and a.size)
+                                            end
+                                            local ok2, err = pcall(function()
+                                                d:setBackgroundImage(ok and scaled or src)
+                                            end)
+                                            out[#out + 1] = "Apply: " .. (ok2 and "ok" or ("ERROR " .. tostring(err)))
+                                        end
+                                        return table.concat(out, "\n")
+                                    end)(),
+                                }, "\n"),
+                            })
+                        end,
+                    })
+
                     -- No background
                     table.insert(sub, {
                         text = _("No background"),
                         checked_func = function()
                             local scene = self:getSceneMode()
                             local key = scene == SCENE_DAY and DOC_BG_DAY or DOC_BG_NIGHT
-                            return self.ui.doc_settings:readSetting(key) == DOC_BG_NONE
+                            local v = self.ui.doc_settings:readSetting(key)
+                            return v == nil or v == DOC_BG_NONE
                         end,
                         keep_menu_open = true,
                         callback = function(touchmenu_instance)
@@ -3292,32 +3387,55 @@ function CustomBg:addToMainMenu(menu_items)
 
                     -- Follow global default
                     table.insert(sub, {
-                        text = _("Follow global default background"),
+                        text_func = function()
+                            return _("Follow global default background") .. ": " .. (self:getGlobalDefaultBg() or _("random"))
+                        end,
                         checked_func = function()
                             local scene = self:getSceneMode()
                             local key = scene == SCENE_DAY and DOC_BG_DAY or DOC_BG_NIGHT
-                            return self.ui.doc_settings:readSetting(key) == nil
+                            return self.ui.doc_settings:readSetting(key) == DOC_BG_GLOBAL
                         end,
                         keep_menu_open = true,
                         callback = function(touchmenu_instance)
-                            self:applyBackground(nil)
+                            -- Toggle: ON = this book shows the global background, OFF = no background in this book
+                            local key = self:getSceneMode() == SCENE_DAY and DOC_BG_DAY or DOC_BG_NIGHT
+                            local turned_on
+                            if self.ui.doc_settings:readSetting(key) == DOC_BG_GLOBAL then
+                                self:applyBackground(DOC_BG_NONE)
+                                turned_on = false
+                            else
+                                -- Turn ON exactly like picking an image from the list does (that path is known to draw):
+                                -- use the global image, or a random one when none is selected.
+                                local g = self:getGlobalDefaultBg()
+                                local imgs = self:getCurrentImageCache()
+                                if not (g and g ~= "" and imgs[g]) then g = self:getRandomBg() end
+                                if g then
+                                    self:applyBackground(g)
+                                else
+                                    self:applyBackground(DOC_BG_GLOBAL)
+                                end
+                                turned_on = true
+                            end
                             if touchmenu_instance then touchmenu_instance:updateItems() end
+                            -- Visible feedback so it is clear the toggle was received (and what it resolved to)
+                            local shown = self:getCurrentDocBg()
+                            local found = shown and self:getCurrentImageCache()[shown]
+                            local random_note = (self:getGlobalDefaultBg() == nil) and " (random)" or ""
+                            local msg
+                            local saved_val = self.ui.doc_settings:readSetting(key)
+                            if turned_on and saved_val ~= DOC_BG_GLOBAL then
+                                msg = "Background ON but NOT saved in this book (value: " .. tostring(saved_val) .. ")"
+                            elseif not turned_on then
+                                msg = "Background OFF in this book"
+                            elseif found then
+                                msg = "Background ON: " .. shown .. random_note
+                            else
+                                msg = "Background ON but there are no images to show (mode: " .. self:getSceneMode() .. ")"
+                            end
+                            UIManager:show(InfoMessage:new{ text = msg, timeout = 2 })
                         end
                     })
 
-                    -- Set the current background as the global default (saved separately per current scene)
-                    table.insert(sub, {
-                        text = _("Set current background as global default (" .. scene_text .. ")"),
-                        callback = function()
-                            local current = self:getCurrentDocBg()
-                            if current and current ~= "" then
-                                self:setGlobalDefaultBg(current)
-                                UIManager:show(InfoMessage:new{text = _("Set " .. scene_text .. " global default background: ") .. current})
-                            else
-                                UIManager:show(InfoMessage:new{text = _("No background currently set (or following the global default); cannot set as default")})
-                            end
-                        end
-                    })
 
                     local images = self:getCurrentImageCache()
                     local used_time = self:getAllLastUsed()
@@ -3331,8 +3449,7 @@ function CustomBg:addToMainMenu(menu_items)
                                 return name
                             end,
                             checked_func = function()
-                                local doc_bg = self:getCurrentDocBg()
-                                return doc_bg == name
+                                return self:getGlobalDefaultBg() == name
                             end,
                             keep_menu_open = true,
                             callback = function(touchmenu_instance)
