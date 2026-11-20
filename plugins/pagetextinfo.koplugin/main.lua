@@ -1295,22 +1295,151 @@ function PageTextInfo:onReaderReady()
 end
 
 -- Margin adjustment (moved here from ReaderUI:onAdjustMarginsTopbar and TopBar:onAdjustMarginsTopbar)
--- Devuelve { izq, sup, der, inf } en las unidades de configurable (sin escalar),
--- o nil si no hay que tocar nada (PDF u otro documento sin crengine).
+
+-- Presets cycled through when no bar dictates the margins (bookends enabled, or no bars at all).
+-- Format: { left, top, right, bottom, xheight_mm = target font x-height } in configurable units (unscaled).
+--   1 = current margins (35/50), font x-height 1.80 mm
+--   2 = a little bit wider margins, keeping the ~sqrt(2) proportion (60/42 = 1.43, same as 50/35),
+--       font x-height 1.80 mm
+--   3 = bigger side margins to get a narrow text column, with a smaller font (x-height 1.50 mm)
+PageTextInfo.margin_presets = {
+    { 35, 50, 35, 50, xheight_mm = 1.80 },
+    { 42, 60, 42, 60, xheight_mm = 1.80 },
+    { 80, 50, 80, 50, xheight_mm = 1.50 },
+}
+
+-- Sends an event while hiding any notification toast it (or the handlers it triggers) may show,
+-- e.g. the "font size set" message. Notifications are blocked until two UI ticks after the
+-- event so that toasts queued with nextTick() are covered too.
+local notifications_silenced = false
+local function sendEventSilently(event)
+    if notifications_silenced then
+        UIManager:sendEvent(event)
+        return
+    end
+    notifications_silenced = true
+    local orig_notify = Notification.notify
+    local orig_show = UIManager.show
+    Notification.notify = function() end
+    UIManager.show = function(self_, widget, ...)
+        local mt = widget and getmetatable(widget)
+        if mt and mt.__index == Notification then return end
+        return orig_show(self_, widget, ...)
+    end
+    local ok, err = pcall(UIManager.sendEvent, UIManager, event)
+    UIManager:nextTick(function()
+        UIManager:nextTick(function()
+            Notification.notify = orig_notify
+            UIManager.show = orig_show
+            notifications_silenced = false
+        end)
+    end)
+    if not ok then logger.warn("pagetextinfo: sendEventSilently failed:", err) end
+end
+
+-- True when the event must cycle through the presets instead of following a bar.
+-- If "pagetextinfo disabled" was meant as self.is_enabled (the word count overlay), add here:
+--     if not self.is_enabled then return true end
+function PageTextInfo:shouldCyclePresets()
+    local ui = self.ui
+    if not ui.rolling then return false end
+    if ui.bookends and ui.bookends.enabled then return true end
+    local topbar = ui.view and ui.view.topbar
+    local topbar_on = topbar and topbar.settings:isTrue("show_top_bar")
+    if topbar_on and not topbar.status_bar then return false end -- the top bar rules
+    if util.getFileNameSuffix(ui.document.file) ~= "epub" then return false end
+    return not ui.view.footer_visible -- no footer and no top bar
+end
+
+-- Index of the preset matching the current margins, or nil if none does.
+function PageTextInfo:getCurrentPresetIndex()
+    local cfg = self.ui.document.configurable
+    local h = cfg.h_page_margins
+    if not h then return nil end
+    for i, p in ipairs(PageTextInfo.margin_presets) do
+        if h[1] == p[1] and cfg.t_page_margin == p[2]
+            and h[2] == p[3] and cfg.b_page_margin == p[4] then
+            return i
+        end
+    end
+end
+
+-- Applies { left, top, right, bottom }. Returns true if anything changed.
+function PageTextInfo:applyMargins(t)
+    local cfg = self.ui.document.configurable
+    local left, top, right, bottom = t[1], t[2], t[3], t[4]
+    local h = cfg.h_page_margins
+    if cfg.t_page_margin == top and cfg.b_page_margin == bottom
+        and h and h[1] == left and h[2] == right then
+        return false
+    end
+    local side_margins = { left, right }
+    cfg.t_page_margin = top
+    cfg.b_page_margin = bottom
+    cfg.h_page_margins = side_margins
+    UIManager:sendEvent(Event:new("SetPageHorizMargins", side_margins))
+    UIManager:sendEvent(Event:new("SetPageTopMargin", top))
+    UIManager:sendEvent(Event:new("SetPageBottomMargin", bottom))
+    return true
+end
+
+-- Current effective x-height of the book font, in mm (nil if it cannot be measured).
+-- Uses the plugin's own getXHeightMm() when available (the one shown in the top bar and
+-- the settings menu); otherwise it measures the font face the same way the top bar does.
+function PageTextInfo:getCurrentXHeightMm()
+    if self.getXHeightMm then
+        local mm = self:getXHeightMm()
+        if mm and mm > 0 then return mm end
+    end
+    local ui = self.ui
+    local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+    local size_pt = ui.document.configurable.font_size
+    local size_px = math.floor(dpi * size_pt / 72 + 0.5)
+    local face_name = (self.getFaceName and self:getFaceName())
+        or (ui.document._document:getFontFace():gsub("%s+", "") .. "-Regular")
+    local face = Font:getFace(face_name, size_px, 0, true)
+    if not face then return nil end
+    local xh = face.ftsize:getXHeight()
+    local xh_px = (xh < 1) and (xh * size_px) or xh
+    return xh_px * 25.4 / dpi
+end
+
+-- Sets the font size so that the x-height gets target_mm. The x-height is linear in the
+-- font size, so a single rule of three is enough (rounded to 0.1 pt). Nothing is done if the
+-- x-height is already within 0.02 mm of the target. No message is shown.
+function PageTextInfo:setXHeightFont(target_mm)
+    if not target_mm then return end
+    local cfg = self.ui.document.configurable
+    local current_mm = self:getCurrentXHeightMm()
+    if not current_mm or current_mm <= 0 then return end
+    if math.abs(current_mm - target_mm) < 0.02 then return end
+    local new_size = math.floor(cfg.font_size * target_mm / current_mm * 10 + 0.5) / 10
+    if new_size == cfg.font_size then return end
+    sendEventSilently(Event:new("SetFontSize", new_size))
+end
+
+-- Applies a preset: its margins and its font x-height.
+function PageTextInfo:applyPreset(p)
+    self:applyMargins(p)
+    self:setXHeightFont(p.xheight_mm)
+end
+
+-- Returns the target { left, top, right, bottom }, or nil if nothing must be touched (PDF, etc.).
 function PageTextInfo:getTargetMargins()
     local ui = self.ui
-    -- Guarda unica: solo documentos crengine (epub, fb2, html...). Evita el error en PDF.
+    -- Single guard: crengine documents only (epub, fb2, html...). Avoids the PDF error.
     if not ui.rolling then return nil end
 
-    -- 1. bookends activo: margenes fijos (proporcion ~ sqrt(2))
-    if ui.bookends and ui.bookends.enabled then
-        return { 35, 50, 35, 50 }
+    -- No bar dictating margins: the target is the current preset (or the first one)
+    if self:shouldCyclePresets() then
+        local p = PageTextInfo.margin_presets[self:getCurrentPresetIndex() or 1]
+        return { p[1], p[2], p[3], p[4] }
     end
 
     local topbar = ui.view and ui.view.topbar
     local topbar_on = topbar and topbar.settings:isTrue("show_top_bar")
 
-    -- 2. top bar propio sin footer (antes: TopBar:onAdjustMarginsTopbar)
+    -- Own top bar without footer (formerly TopBar:onAdjustMarginsTopbar)
     if topbar_on and not topbar.status_bar then
         local side = Device:isAndroid() and 20 or 15
         return {
@@ -1321,13 +1450,13 @@ function PageTextInfo:getTargetMargins()
         }
     end
 
-    -- Antes, ReaderUI solo actuaba en epub en las ramas siguientes
+    -- Formerly, ReaderUI only acted on epub in the following branches
     if util.getFileNameSuffix(ui.document.file) ~= "epub" then return nil end
 
-    -- 3. footer visible (antes: ReaderUI, rama footer_visible)
+    -- Footer visible (formerly ReaderUI, footer_visible branch)
     if ui.view.footer_visible then
         local fs = ui.view.footer.settings
-        -- Pixeles fisicos, como en el codigo original
+        -- Physical pixels, as in the original code
         local footer_height = fs.container_height + fs.progress_style_thick_height
         local top, bottom = 12, 0
         if fs.bar_top == true then
@@ -1337,32 +1466,25 @@ function PageTextInfo:getTargetMargins()
         end
         return { 15, Screen:unscaleBySize(top), 15, Screen:unscaleBySize(bottom) }
     end
-
-    -- 4. sin barras: margenes fijos
-    return { 35, 50, 35, 50 }
+    return nil
 end
 
--- Mismo nombre de evento que antes, asi los gestos/dispatcher siguen funcionando.
+-- Same event name as before, so gestures/dispatcher actions keep working.
 function PageTextInfo:onAdjustMarginsTopbar()
+    if not self.ui.rolling then return end
+
+    -- bookends or no bars: cycle normal -> wider -> narrow text -> normal...
+    if self:shouldCyclePresets() then
+        local presets = PageTextInfo.margin_presets
+        local idx = self:getCurrentPresetIndex()
+        self:applyPreset(presets[idx and (idx % #presets) + 1 or 1])
+        return true
+    end
+
+    -- Top bar or footer: fit the margins to the bar; if already fitted, show the book status
     local t = self:getTargetMargins()
     if not t then return end
-
-    local cfg = self.ui.document.configurable
-    local left, top, right, bottom = t[1], t[2], t[3], t[4]
-
-    if cfg.t_page_margin ~= top
-        or cfg.b_page_margin ~= bottom
-        or cfg.h_page_margins[1] ~= left
-        or cfg.h_page_margins[2] ~= right then
-        local side_margins = { left, right }
-        cfg.t_page_margin = top
-        cfg.b_page_margin = bottom
-        cfg.h_page_margins = side_margins
-        UIManager:sendEvent(Event:new("SetPageHorizMargins", side_margins))
-        UIManager:sendEvent(Event:new("SetPageTopMargin", top))
-        UIManager:sendEvent(Event:new("SetPageBottomMargin", bottom))
-    else
-        -- Ya estaba ajustado: mismo comportamiento que antes
+    if not self:applyMargins(t) then
         self.ui:showBookStatus()
     end
     return true
