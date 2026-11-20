@@ -858,27 +858,44 @@ function PageTextInfo:toggleFullScreenRuledLines()
             custombg:saveDocSetting("fs_lines_enabled", want_lines)
         end
         if want_bg ~= bg_on then
-            if want_bg then
-                -- Follow the global default; if there is none, pick a random one (this book only)
-                if custombg:getGlobalDefaultBg() then
-                    custombg:applyBackground(nil)
-                else
-                    local names = {}
-                    for name in pairs(custombg:getCurrentImageCache()) do
-                        names[#names + 1] = name
-                    end
-                    if #names > 0 then
-                        custombg:applyBackground(names[math.random(#names)])
-                    else
+            local function applyBg()
+                if want_bg then
+                    -- Follow the global default; if there is none, pick a random one (this book only)
+                    if custombg:getGlobalDefaultBg() then
                         custombg:applyBackground(nil)
+                    else
+                        local names = {}
+                        for name in pairs(custombg:getCurrentImageCache()) do
+                            names[#names + 1] = name
+                        end
+                        if #names > 0 then
+                            custombg:applyBackground(names[math.random(#names)])
+                        else
+                            custombg:applyBackground(nil)
+                        end
                     end
+                else
+                    custombg:applyBackground("")        -- No background
                 end
-            else
-                custombg:applyBackground("")        -- No background
             end
+            -- applyBackground() repaints by itself (loadBackgroundByName -> toggleRepaint("all"), a full-screen "partial")
+            -- and the repaint of the reader below follows right after it: two repaints of the whole screen for ONE
+            -- toggle, the first one with the background half applied. Toggling only the lines does just the one below
+            -- and does not blink, so the inner one is muted here and the one below does the job for both.
+            -- The override is an instance field that hides the class method; putting back what rawget returned
+            -- (nil if there was none) restores the original lookup.
+            local own_repaint = rawget(custombg, "toggleRepaint")
+            custombg.toggleRepaint = function() end
+            local ok, err = pcall(applyBg)
+            custombg.toggleRepaint = own_repaint
+            if not ok then error(err, 0) end
         end
         -- Repaint the reader itself so custombg:paintTo() runs again with the new value.
         -- setDirty(nil, ...) would only refresh the screen buffer as it is (the old state)
+        if custombg.toggleRepaint then
+            custombg:toggleRepaint(self.view.dialog)
+            return
+        end
         UIManager:setDirty(self.view.dialog, "ui")
     end
     return UIManager:setDirty(self.view.dialog, "ui")

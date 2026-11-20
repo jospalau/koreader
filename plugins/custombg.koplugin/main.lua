@@ -502,7 +502,7 @@ function CustomBg:loadBackgroundByName(name, from_menu)
     self._bg_last_sh = Screen:getHeight()
     self:_syncNoFlash()
     if from_menu then
-        self:repaintView()   -- picked in the menu: light repaint, the menu stays open
+        self:toggleRepaint("all")   -- picked in the menu: light repaint, the menu stays open
     else
         self:_backgroundRefresh()
     end
@@ -716,7 +716,8 @@ function CustomBg:_installRefreshHook()
                 return orig_setDirty(um, widget, plugin:getOpenRefreshMode(), ...)
             end
         end
-        if h.enabled and refreshtype == "partial" and widget ~= nil and plugin and plugin:_wantsNoFlash() then
+        if h.enabled and refreshtype == "partial" and widget ~= nil and plugin and plugin:_wantsNoFlash()
+           and not CustomBg._toggle_refresh then
             local reader_ui = plugin.ui
             from_reader = (widget == reader_ui) or (reader_ui.view ~= nil and widget == reader_ui.view.dialog)
         end
@@ -1160,6 +1161,21 @@ function CustomBg:repaintView()
     if REFRESH_ON_CHANGE then
         UIManager:setDirty("all", REFRESH_ON_CHANGE)
     end
+end
+
+-- Refresh used when the background is switched on/off or changed (menu, gesture or another plugin's toggle).
+-- "ui" everywhere. A "partial" special case for Kindle was tried and it flashes the same on that panel, so it was removed.
+function CustomBg:getToggleRefreshMode()
+    return "ui"
+end
+
+-- Repaint after the background was switched on/off or changed. Public: other plugins can call it instead of
+-- UIManager:setDirty(widget, "ui"). The request is marked so the no-flash hook leaves it as it is.
+function CustomBg:toggleRepaint(widget)
+    CustomBg._toggle_refresh = true
+    local ok, err = pcall(UIManager.setDirty, UIManager, widget or "all", self:getToggleRefreshMode())
+    CustomBg._toggle_refresh = false
+    if not ok then error(err, 0) end
 end
 
 -- A setting changed: update the menu (check marks / texts) and repaint the page behind it
