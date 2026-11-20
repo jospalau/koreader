@@ -19,6 +19,38 @@ local Device = require("device")
 local Font = require("ui/font")
 local Screen = Device.screen
 
+-- Input inhibition while a change is being applied.
+-- ReaderRolling:onUpdatePos calls Input:inhibitInput(true) before the re-layout and
+-- Input:inhibitInputUntil(0.2) after it, which drops all input for the whole
+-- re-layout. On slow devices (Paperwhite) a tap outside the menu made in that window
+-- never reaches it. The menu already protects itself with `settings_busy`, so while a
+-- change is being applied those requests are ignored (not for the screen rotation,
+-- where the input is better dropped). Set to false to go back to KOReader's behaviour.
+local ALLOW_INPUT_DURING_CHANGE = true
+-- Seconds after a change before the menu is refreshed for the last time (the page
+-- refresh that comes first can leave it grey) and starts accepting taps again (the ones
+-- made while the book was being laid out are delivered right before and dropped).
+-- Lower = the menu settles sooner; too low and the two refreshes collide (flashes on
+-- the Paperwhite) or a queued tap starts a second change.
+local SETTLE_DELAY = 0.2
+local active_plugin   -- the plugin whose settings menu is on screen
+if ALLOW_INPUT_DURING_CHANGE then
+    pcall(function()
+        local input = Device.input
+        if input and not input._pti_settings_inhibit_wrapped then
+            local orig = input.inhibitInput
+            input.inhibitInput = function(self_, toggle, ...)
+                if toggle and active_plugin and active_plugin.settings_busy
+                        and not active_plugin.settings_rotating then
+                    return
+                end
+                return orig(self_, toggle, ...)
+            end
+            input._pti_settings_inhibit_wrapped = true
+        end
+    end)
+end
+
 -- Debug logging: every message of this file starts with the same tag, so a
 -- single grep shows the whole flow:
 --     ./kodev run | grep -F "[PTI]"
@@ -404,15 +436,16 @@ local function buildRows(ui)
         { text = "▼", callback = function(u) setWeight(u, u.document.configurable.font_base_weight - WEIGHT_STEP) end },
         { text = "▲", callback = function(u) setWeight(u, u.document.configurable.font_base_weight + WEIGHT_STEP) end },
     }
+    -- batched = true: laid out by rerenderOnce a tick after the callback
     local contrast_row = {
-        { text = "▼", callback = function(u) stepContrast(u, -1) end },
-        { text = "▲", callback = function(u) stepContrast(u, 1) end },
+        { text = "▼", callback = function(u) stepContrast(u, -1) end, batched = true },
+        { text = "▲", callback = function(u) stepContrast(u, 1) end, batched = true },
     }
     local hinting_now = getHinting(ui)
     local hinting_row = {
-        { text = "Off",    callback = function(u) setHinting(u, 0) end, active = hinting_now == 0 },
-        { text = "Native", callback = function(u) setHinting(u, 1) end, active = hinting_now == 1 },
-        { text = "Auto",   callback = function(u) setHinting(u, 2) end, active = hinting_now == 2 },
+        { text = "Off",    callback = function(u) setHinting(u, 0) end, active = hinting_now == 0, batched = true },
+        { text = "Native", callback = function(u) setHinting(u, 1) end, active = hinting_now == 1, batched = true },
+        { text = "Auto",   callback = function(u) setHinting(u, 2) end, active = hinting_now == 2, batched = true },
     }
     local rows = {
         { title = "General",
@@ -1223,6 +1256,13 @@ function PageTextInfo:onShowSettingsMenu()
                     end
                     if size ~= btn_size then this_face = Font:getFace("cfont", size) end
                 end
+                local text_w = TextWidget:new{
+                    text = b.text,
+                    face = this_face,
+                    fgcolor = b.active and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK,
+                    bold = b.active and true or false,
+                    max_width = cell_w - 2 * Size.padding.small,
+                }
                 local frame = FrameContainer:new{
                     bordersize = thin,
                     color = b.active and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY,
@@ -1232,18 +1272,13 @@ function PageTextInfo:onShowSettingsMenu()
                     padding = 0,
                     CenterContainer:new{
                         dimen = Geom:new{ w = cell_w - 2 * thin, h = cell_h - 2 * thin },
-                        TextWidget:new{
-                            text = b.text,
-                            face = this_face,
-                            fgcolor = b.active and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK,
-                            bold = b.active and true or false,
-                            max_width = cell_w - 2 * Size.padding.small,
-                        },
+                        text_w,
                     },
                 }
                 table.insert(row, frame)
                 table.insert(buttons, { frame = frame, callback = b.callback, text = b.text,
-                    open_fonts = b.open_fonts, rotate = b.rotate })
+                    open_fonts = b.open_fonts, rotate = b.rotate, batched = b.batched,
+                    text_w = text_w, active = b.active and true or false })
             end
             table.insert(grid, row)
             table.insert(grid, VerticalSpan:new{ width = gap })
@@ -1373,6 +1408,7 @@ function PageTextInfo:onShowSettingsMenu()
                     local plugin = self.plugin
                     if plugin.settings_busy then return true end
                     plugin.settings_busy = true
+                    plugin.settings_rotating = true   -- the input stays inhibited for this one
                     UIManager:tickAfterNext(function()
                         local ok, err = pcall(b.callback, plugin.ui)
                         dlog("settings menu rotate:", ok and "OK" or err)
@@ -1380,6 +1416,7 @@ function PageTextInfo:onShowSettingsMenu()
                         -- event; this only catches the case where that event didn't come
                         rebuildIfResized(plugin, plugin.settings_dialog)
                         plugin.settings_busy = nil
+                        plugin.settings_rotating = nil
                     end)
                     return true
                 end
@@ -1395,20 +1432,39 @@ function PageTextInfo:onShowSettingsMenu()
                 UIManager:tickAfterNext(function()
                     local ok, err = pcall(b.callback, plugin.ui)
                     dlog("settings menu tap:", b.text, ok and "OK" or err)
-                    -- The book is laid out again a couple of ticks from now, and the title
-                    -- of this menu shows the x-height, which can only be measured once that
-                    -- is done. So the menu is rebuilt from the timer, which is due after the
-                    -- layout (it blocks the loop), not right here.
-                    UIManager:scheduleIn(0.35, function()
-                        -- closed meanwhile (tap outside): don't bring it back
+                    -- Rebuild the menu (active buttons, title with the x-height). Not if it
+                    -- was closed meanwhile (tap outside): don't bring it back
+                    local function rebuild()
                         if plugin.settings_dialog == dlg then
                             plugin:onShowSettingsMenu()
                             if plugin.view and plugin.view.topbar then
                                 plugin.view.topbar:toggleBar()
                             end
                         end
-                        plugin.settings_busy = nil
-                    end)
+                    end
+                    if b.batched then
+                        -- Batched changes (hinting, contrast): the book is laid out a tick
+                        -- from now, so the title can only be measured after that. Mark the
+                        -- active buttons now, in place, and rebuild from the timer.
+                        if plugin.settings_dialog == dlg then
+                            local ok2, err2 = pcall(dlg.syncButtonStates, dlg, plugin.ui)
+                            if not ok2 then require("logger").warn("[PTI] syncButtonStates failed:", err2) end
+                        end
+                        UIManager:scheduleIn(SETTLE_DELAY, function()
+                            rebuild()
+                            plugin.settings_busy = nil
+                        end)
+                    else
+                        -- The change is synchronous: the book has already been laid out,
+                        -- so the x-height of the title is right. Rebuild in this same pass:
+                        -- the new menu is painted together with the new page. The menu
+                        -- stays locked a little longer so the taps made while the loop was
+                        -- blocked are dropped.
+                        rebuild()
+                        UIManager:scheduleIn(SETTLE_DELAY, function()
+                            plugin.settings_busy = nil
+                        end)
+                    end
                 end)
                 return true
             end
@@ -1448,6 +1504,29 @@ function PageTextInfo:onShowSettingsMenu()
         return true
     end
 
+    -- Invert the buttons that are active now and restore the ones that are not (same
+    -- look as when the menu is built), without rebuilding it. The bold of the active
+    -- button and the title are refreshed by the rebuild that follows.
+    function dialog:syncButtonStates(book_ui)
+        local region
+        local i = 0
+        for __, row_def in ipairs(buildRows(book_ui)) do
+            for __, b in ipairs(row_def) do
+                i = i + 1
+                local btn = buttons[i]
+                local on = b.active and true or false
+                if btn and btn.active ~= on and btn.frame.dimen then
+                    btn.active = on
+                    btn.frame.background = on and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE
+                    btn.frame.color = on and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY
+                    btn.text_w.fgcolor = on and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
+                    region = region and region:combine(btn.frame.dimen) or btn.frame.dimen:copy()
+                end
+            end
+        end
+        if region then UIManager:setDirty(self, "ui", region) end
+    end
+
     function dialog:onClose() close(self.plugin) return true end
 
     -- Screen rotated: replace this window before anything is painted at the new size
@@ -1458,6 +1537,7 @@ function PageTextInfo:onShowSettingsMenu()
     dialog.plugin = self
     dialog.frame_rect = frame_rect
     self.settings_dialog = dialog
+    active_plugin = self
 
     local region = frame_rect
     if old_region then region = region:combine(old_region) end

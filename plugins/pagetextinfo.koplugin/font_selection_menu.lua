@@ -16,6 +16,37 @@ local Size = require("ui/size")
 local UIManager = require("ui/uimanager")
 local Screen = Device.screen
 
+-- Input inhibition while a font is being applied.
+-- ReaderRolling:onUpdatePos (run by SetFont) calls Input:inhibitInput(true) before the
+-- re-layout and Input:inhibitInputUntil(0.2) after it, which drops all input for the
+-- whole re-layout. On slow devices (Paperwhite) a tap outside the menu made in that
+-- window never reaches it. The menu already protects itself with `busy`, so while it
+-- is applying a font those requests are ignored. Set to false to go back to
+-- KOReader's behaviour.
+local ALLOW_INPUT_DURING_FONT_CHANGE = true
+-- Seconds after a change before the menu is refreshed for the last time (the page
+-- refresh that comes first can leave it grey) and starts accepting taps again (the ones
+-- made while the book was being laid out are delivered right before and dropped).
+-- Lower = the menu settles sooner; too low and the two refreshes collide (flashes on
+-- the Paperwhite) or a queued tap starts a second change.
+local SETTLE_DELAY = 0.2
+local active_dialog   -- the fonts dialog on screen, if any
+if ALLOW_INPUT_DURING_FONT_CHANGE then
+    pcall(function()
+        local input = Device.input
+        if input and not input._pti_inhibit_wrapped then
+            local orig = input.inhibitInput
+            input.inhibitInput = function(self_, toggle, ...)
+                if toggle and active_dialog and active_dialog.busy then
+                    return
+                end
+                return orig(self_, toggle, ...)
+            end
+            input._pti_inhibit_wrapped = true
+        end
+    end)
+end
+
 return function(PageTextInfo)
 
 -- Build a map: face name -> font file path (prefers the regular style)
@@ -94,8 +125,11 @@ local function purgeFontFaces(self)
         end
         ffi.C.malloc_trim(0)
     end)
-    require("logger").dbg("[PTI] purgeFontFaces: dropped", #drop, "faces; RSS MB:",
-        rss_before, "-> after GC", rss_gc, "-> after malloc_trim", residentMb())
+    pcall(function()
+        require("logger").dbg("[PTI] purgeFontFaces: dropped", #drop, "faces; RSS MB:",
+            tostring(rss_before), "-> after GC", tostring(rss_gc),
+            "-> after malloc_trim", tostring(residentMb()))
+    end)
 end
 
 -- Freeing the faces forces a full garbage collection and a malloc_trim, which can
@@ -106,10 +140,18 @@ end
 -- does not get in the way of the next thing the user does.
 local purge_fn
 local function purgeFontFacesLater(self)
-    if purge_fn then UIManager:unschedule(purge_fn) end
+    if purge_fn then UIManager:unschedule(purge_fn); purge_fn = nil end
+    -- Not while the menu is open: on slower devices (Paperwhite) the collection
+    -- blocks the loop for long enough to swallow the taps the user makes to close
+    -- the menu. closeFontsMenu asks for it again once the menu is gone.
+    if self.fonts_dialog then return end
     purge_fn = function()
         purge_fn = nil
-        purgeFontFaces(self)
+        -- The menu was opened again in the meantime: wait for it to be closed
+        if self.fonts_dialog then return end
+        -- A failure here must never take KOReader down: log it and go on
+        local ok, err = pcall(purgeFontFaces, self)
+        if not ok then require("logger").warn("[PTI] purgeFontFaces failed:", err) end
     end
     UIManager:scheduleIn(2, purge_fn)
 end
@@ -118,6 +160,7 @@ end
 function PageTextInfo:closeFontsMenu()
     local d = self.fonts_dialog
     self.fonts_dialog = nil
+    if d == active_dialog then active_dialog = nil end
     self.fonts_stats = nil
     if d then
         UIManager:close(d, "ui", d.frame_rect)
@@ -772,8 +815,8 @@ function PageTextInfo:onShowFonts(page)
         cap_widgets[1]:setText(buildCaption(face))
     end
 
-    -- Invert the chosen cell (and restore the one that was active): done only after
-    -- the font has really been applied. Returns the area to refresh.
+    -- Invert the chosen cell (and restore the one that was active): done right after
+    -- the font has been applied. Returns the area to refresh.
     local function markCurrent(cell)
         local region
         for __, c in ipairs(cells) do
@@ -815,28 +858,33 @@ function PageTextInfo:onShowFonts(page)
                     local ok, err = pcall(plugin.applyFont, plugin, face)
                     if ok then
                         current = face
-                        -- The caption (x-height, rating) is NOT updated here: the book has
-                        -- not been laid out again yet and the engine would still measure
-                        -- the previous state. It is done in the timer below.
+                        -- SetFont is synchronous: the book has been laid out again by
+                        -- now (ReaderRolling:onUpdatePos), so mark the cell right away.
+                        -- It is painted in the same pass as the new page, instead of
+                        -- waiting for the timer below.
+                        UIManager:setDirty(self, "ui", markCurrent(cell))
+                        -- The caption (x-height, rating) can be measured now: SetFont has
+                        -- already laid the book out (see above), so the engine reports the
+                        -- new font. It is refreshed together with the cell and the page.
+                        pcall(self.updateCaptions, self, face)
+                        UIManager:setDirty(self, "ui", self.frame_rect)
                         -- The book is laid out again a couple of ticks from now and the
                         -- whole page is refreshed with the "partial" mode, which can
                         -- leave the menu on top of it grey or ghosted. Once that is done
                         -- (the timer is due after the layout, which blocks the loop) the
                         -- menu is refreshed once more on its own, with the "ui" mode.
                         local dlg = self
-                        UIManager:scheduleIn(0.35, function()
+                        UIManager:scheduleIn(SETTLE_DELAY, function()
                             if plugin.fonts_dialog ~= dlg then dlg.busy = nil; return end
-                            markCurrent(cell)   -- the font is applied now: show it
-                            -- The layout is done: now the x-height can be measured
-                            dlg:updateCaptions(face)
+                            -- The caption is already up to date: this is only the clean
+                            -- "ui" refresh after the page refresh
                             UIManager:setDirty(dlg, "ui", dlg.frame_rect)
                             -- Everything is done in this step (layout, correction, caches).
-                            -- Taps made while the loop was blocked are still queued and
-                            -- reach the dialog after this function returns, so the menu
-                            -- stays locked a little longer and they are dropped; only then
-                            -- is it selectable again.
+                            -- Taps made while the loop was blocked have already reached the
+                            -- dialog and were dropped while it was locked: it is selectable
+                            -- again from here.
                             purgeFontFacesLater(plugin)
-                            UIManager:scheduleIn(0.5, function() dlg.busy = nil end)
+                            dlg.busy = nil
                         end)
                     else
                         require("logger").warn("[PTI] applyFont failed:", err)
@@ -877,6 +925,7 @@ function PageTextInfo:onShowFonts(page)
     dialog.frame_ref = frame
     dialog.frame_rect = frame_rect
     self.fonts_dialog = dialog
+    active_dialog = dialog
 
     local region = frame_rect
     if old_region then region = region:combine(old_region) end
