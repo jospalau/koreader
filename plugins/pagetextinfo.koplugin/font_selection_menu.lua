@@ -31,6 +31,46 @@ local ALLOW_INPUT_DURING_FONT_CHANGE = true
 -- the Paperwhite) or a queued tap starts a second change.
 local SETTLE_DELAY = 0.2
 local active_dialog   -- the fonts dialog on screen, if any
+
+-- While a font is applied, Bookends' overlay is switched off (its paintTo returns at
+-- once when _format_hidden is set) and brought back once the change has settled.
+-- Why: the book is laid out again with the page on screen, and every repaint of the
+-- reader in that window (the re-render icon, the page refresh) makes Bookends rebuild
+-- and paint all its text on a page that is half re-flowed, then refresh it in a
+-- different mode from the menu. Hidden, none of that happens; only the top and
+-- bottom bands are refreshed once at the end. Set to false to leave Bookends alone.
+local HIDE_BOOKENDS_DURING_FONT_CHANGE = true
+local hidden_bookends   -- the Bookends instance we hid, if any
+
+local function hideBookends(ui)
+    if not HIDE_BOOKENDS_DURING_FONT_CHANGE or hidden_bookends then return end
+    local bk = ui and ui.bookends
+    if not bk or not bk.enabled or bk._format_hidden then return end
+    bk._format_hidden = true
+    hidden_bookends = bk
+end
+
+-- quiet = true: only switch it back on, no refresh of its own. Used right after the
+-- layout, before the loop paints: the page repaint that follows already includes the
+-- overlay, so the screen never shows the page without it (no blink).
+local function restoreBookends(quiet)
+    local bk = hidden_bookends
+    if not bk then return end
+    hidden_bookends = nil
+    bk._format_hidden = false
+    bk.dirty = true
+    bk._tick_cache = nil
+    if quiet then return end
+    -- Repaint the reader (so the overlay is in the framebuffer) but refresh only the
+    -- bands it occupies; a nil region would flash the whole screen
+    local top, bottom = bk._top_paint_rect, bk._bottom_paint_rect
+    if top or bottom then
+        if top then UIManager:setDirty(bk.ui, "ui", top) end
+        if bottom then UIManager:setDirty(bk.ui, "ui", bottom) end
+    else
+        UIManager:setDirty(bk.ui, "ui")
+    end
+end
 if ALLOW_INPUT_DURING_FONT_CHANGE then
     pcall(function()
         local input = Device.input
@@ -172,9 +212,23 @@ function PageTextInfo:closeFontsMenu()
     local d = self.fonts_dialog
     self.fonts_dialog = nil
     if d == active_dialog then active_dialog = nil end
+    restoreBookends()   -- never leave the overlay hidden when the menu goes away
     self.fonts_stats = nil
+    local changed = self.fonts_changed
+    self.fonts_changed = nil
     if d then
-        UIManager:close(d, "ui", d.frame_rect)
+        if changed then
+            -- A font was applied: the whole page was laid out again while the menu
+            -- covered part of it, so the text around and under the menu has been
+            -- refreshed in different modes at different moments (ghosting, bits of
+            -- the old layout). Closing with only the menu's rectangle in "ui" mode
+            -- left those behind. One non-flashing "partial" refresh of the whole
+            -- page leaves it consistent.
+            local s = Screen:getSize()
+            UIManager:close(d, "partial", Geom:new{ x = 0, y = 0, w = s.w, h = s.h })
+        else
+            UIManager:close(d, "ui", d.frame_rect)
+        end
     end
     purgeFontFacesLater(self)
 
@@ -863,9 +917,14 @@ function PageTextInfo:onShowFonts(page)
         -- blocks and inhibits the input
         UIManager:tickAfterNext(function()
             if plugin.fonts_dialog ~= self then self.busy = nil; return end
+            hideBookends(plugin.ui)
             local ok, err = pcall(plugin.applyFont, plugin, face)
+            -- Layout done, nothing painted yet: the overlay is back before the first
+            -- repaint, so only the half re-flowed intermediate paints skip it
+            restoreBookends(true)
             if ok then
                 current = face
+                plugin.fonts_changed = true   -- closeFontsMenu cleans the page up
                 -- SetFont is synchronous: the book has been laid out again by
                 -- now (ReaderRolling:onUpdatePos), so mark the cell right away.
                 -- It is painted in the same pass as the new page, instead of
@@ -882,8 +941,13 @@ function PageTextInfo:onShowFonts(page)
                 -- (the timer is due after the layout, which blocks the loop) the
                 -- menu is refreshed once more on its own, with the "ui" mode.
                 local dlg = self
-                UIManager:scheduleIn(SETTLE_DELAY, function()
+                local function settle()
                     if plugin.fonts_dialog ~= dlg then dlg.busy = nil; return end
+                    -- The overlay comes back now, unless another font was tapped
+                    -- meanwhile (it is applied next and the overlay returns after it)
+                    if not (dlg.pending and dlg.pending.cell and not dlg.close_after) then
+                        restoreBookends()
+                    end
                     -- The caption is already up to date: this is only the clean
                     -- "ui" refresh after the page refresh
                     UIManager:setDirty(dlg, "ui", dlg.frame_rect)
@@ -900,9 +964,18 @@ function PageTextInfo:onShowFonts(page)
                         -- Otherwise do what was tapped last meanwhile, if anything
                         dlg:runPending()
                     end
+                end
+                -- SETTLE_DELAY is counted from AFTER the first repaint of the change
+                -- (two ticks on), not from now. With Bookends active that repaint is
+                -- slow (the overlay is rebuilt and painted), so a timer started here
+                -- fell due right behind it and the menu's final refresh collided
+                -- with the page refresh still in flight.
+                UIManager:tickAfterNext(function()
+                    UIManager:scheduleIn(SETTLE_DELAY, settle)
                 end)
             else
                 require("logger").warn("[PTI] applyFont failed:", err)
+                restoreBookends()
                 self.busy = nil
                 if self.close_after then
                     plugin:closeFontsMenu()
@@ -1000,6 +1073,23 @@ function PageTextInfo:onShowFonts(page)
     dialog.plugin = self
     dialog.frame_ref = frame
     dialog.frame_rect = frame_rect
+
+    -- Report the area the menu really covers as its dimen, not the whole screen.
+    -- The dialog needs a full-screen dimen to be built, but Bookends' flipping halo
+    -- (the page-coloured circle it draws behind KOReader's top-left "re-rendering"
+    -- icon) skips itself when the topmost widget's dimen covers that corner. With
+    -- a full-screen dimen it was always skipped, so on every font change the
+    -- re-render icon was drawn straight over Bookends' top-left text, and its
+    -- "fast" refresh left that corner glitchy. The menu is centred and never
+    -- reaches the corner, so the halo must be allowed to paint.
+    -- WidgetContainer:paintTo rewrites dimen.x / dimen.y on every paint, so the
+    -- real rectangle is put back after each one (the halo toast paints later in
+    -- the same pass, so it always sees the right value).
+    function dialog:paintTo(bb, x, y)
+        InputContainer.paintTo(self, bb, x, y)
+        self.dimen = frame_rect:copy()
+    end
+
     self.fonts_dialog = dialog
     active_dialog = dialog
 
