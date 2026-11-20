@@ -865,7 +865,9 @@ end
 -- ===== Line settings loading =====
 function CustomBg:loadLineSettings()
     self:invalidateLineCache()
-    self.fs_enabled = self:getDocSetting(FS_KEYS.enabled, false)
+    -- Lines are ON only if THIS book explicitly enabled them (never inherited from the global default)
+    self.fs_enabled = (self.ui and self.ui.doc_settings
+        and self.ui.doc_settings:readSetting(FS_KEYS.enabled)) == true
     self.fs_line_direction = self:getDocSetting(FS_KEYS.direction, 1)
     self.fs_v_font_enable = self:getDocSetting(FS_KEYS.v_font_enable, true)
     self.fs_v_font_family = self:getDocSetting(FS_KEYS.v_font_family, "FZKai-Z03")
@@ -932,7 +934,6 @@ end
 
 -- Write the whole current set of underline settings to the global default
 function CustomBg:saveAllLineSettingsAsGlobal()
-    G_reader_settings:saveSetting(FS_KEYS.enabled, self.fs_enabled)
     G_reader_settings:saveSetting(FS_KEYS.direction, self.fs_line_direction)
     G_reader_settings:saveSetting(FS_KEYS.v_font_enable, self.fs_v_font_enable)
     G_reader_settings:saveSetting(FS_KEYS.v_font_family, self.fs_v_font_family)
