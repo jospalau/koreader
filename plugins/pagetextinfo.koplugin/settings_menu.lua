@@ -67,6 +67,9 @@ return function(PageTextInfo)
 
 local WEIGHT_STEP = 0.5
 local FONT_STEP_PT = 0.5          -- one tap of the fine size buttons
+-- Buttons tapped while a change is being applied are remembered (see applyButtons);
+-- this is the most that are kept
+local MAX_QUEUED_TAPS = 6
 
 -- Width of a text in the "cfont" face at a given size (needed to find the biggest
 -- font that fits a button). Widths never change during a session: measured once.
@@ -137,6 +140,7 @@ local function close(self)
     local d = self.settings_dialog
     self.settings_dialog = nil
     self.settings_offset = nil   -- the next time it opens it is at its place again
+    self.settings_queue = nil    -- taps remembered for a change that will not come now
     -- No menu on screen any more: the input hook must not look at this plugin
     if active_plugin == self then active_plugin = nil end
     dlog("settings menu closed")
@@ -330,6 +334,92 @@ local function toggleLayout(ui)
     rerenderOnce(ui, function() ui:handleEvent(Event:new("SwapRotation")) end)
 end
 
+-- Applying buttons ----------------------------------------------------------
+-- The menu is locked while a change is applied (settings_busy). Taps made meanwhile
+-- reach it only AFTER the book has been laid out and the screen refreshed, which on a
+-- slow device (Kindle) takes a second or two, and used to be lost. Now every button
+-- tapped meanwhile (the step arrows, the size / spacing / margin presets, the hinting
+-- and the style tweaks) is remembered, in order, and once the change in progress is done
+-- they are all applied TOGETHER in a single layout (the last preset wins, the arrows add
+-- up). Not remembered: "Reset defaults" (it wipes settings: a stray tap must not repeat
+-- it), the screen rotation and the Face button, which have their own handling.
+local applyButtons   -- forward: finishChange and applyButtons call each other
+
+-- A change is done: release the menu and apply what was remembered meanwhile
+local function finishChange(plugin)
+    releaseBusy(plugin)   -- (also closes the menu if a tap outside came meanwhile)
+    local queue = plugin.settings_queue
+    plugin.settings_queue = nil
+    if queue and #queue > 0 and plugin.settings_dialog then
+        dlog("settings menu: applying", #queue, "remembered tap(s) in one layout")
+        applyButtons(plugin, queue)
+    end
+end
+
+-- Applies the callbacks of `list` (one button, or the remembered step buttons)
+applyButtons = function(plugin, list)
+    local UIManager = require("ui/uimanager")
+    local dlg = plugin.settings_dialog
+    if not dlg then return end
+    plugin.settings_busy = true
+    -- Like KOReader's own config panel (ConfigDialog:onConfigChoose): the change is
+    -- applied two ticks after the tap, not inside the tap handler, so the gesture is
+    -- completely handled before the re-layout blocks and inhibits the input. The menu
+    -- is rebuilt right after it (active state refreshed).
+    UIManager:tickAfterNext(function()
+        local ui = plugin.ui
+        local batched
+        if #list == 1 then
+            local ok, err = pcall(list[1].callback, ui)
+            dlog("settings menu tap:", list[1].text, ok and "OK" or err)
+            batched = list[1].batched
+        else
+            -- Several taps: ONE layout for all of them
+            rerenderOnce(ui, function()
+                for __, qb in ipairs(list) do
+                    local ok, err = pcall(qb.callback, ui)
+                    if not ok then require("logger").warn("[PTI] remembered tap failed:", qb.text, err) end
+                end
+            end)
+            batched = true   -- laid out a tick from now, like contrast / hinting
+        end
+        -- Rebuild the menu (active buttons, title with the x-height). Not if it was
+        -- closed meanwhile (tap outside): don't bring it back
+        local function rebuild()
+            if plugin.settings_dialog == dlg then
+                plugin:onShowSettingsMenu()
+                -- NOTE: toggleBar() must act as a REFRESH of the top bar here.
+                -- If it is a real on/off switch, it flips on every change.
+                if plugin.view and plugin.view.topbar then
+                    plugin.view.topbar:toggleBar()
+                end
+            end
+        end
+        if batched then
+            -- Batched changes (hinting, contrast, reset, several taps): the book is laid
+            -- out a tick from now, so the title can only be measured after that. Mark the
+            -- active buttons now, in place, and rebuild from the timer.
+            if plugin.settings_dialog == dlg then
+                local ok2, err2 = pcall(dlg.syncButtonStates, dlg, ui)
+                if not ok2 then require("logger").warn("[PTI] syncButtonStates failed:", err2) end
+            end
+            UIManager:scheduleIn(SETTLE_DELAY, function()
+                rebuild()
+                finishChange(plugin)
+            end)
+        else
+            -- The change is synchronous: the book has already been laid out, so the
+            -- x-height of the title is right. Rebuild in this same pass: the new menu is
+            -- painted together with the new page. The menu stays locked a little longer
+            -- so the taps made while the loop was blocked are dealt with.
+            rebuild()
+            UIManager:scheduleIn(SETTLE_DELAY, function()
+                finishChange(plugin)
+            end)
+        end
+    end)
+end
+
 -- Menu definition -------------------------------------------------------
 -- Each button: text, callback(ui), active(ui) (optional, inverted when true)
 
@@ -466,22 +556,22 @@ local function buildRows(ui)
         })
     end
     local font_step_row = {
-        { text = "▼", callback = function(u) stepFontSize(u, -1) end },
-        { text = "▲", callback = function(u) stepFontSize(u,  1) end },
+        { text = "▼", callback = function(u) stepFontSize(u, -1) end, repeatable = true },
+        { text = "▲", callback = function(u) stepFontSize(u,  1) end, repeatable = true },
     }
     local spacing_row, margins_row = {}, {}
     local spacing_step_row = {
-        { text = "▼", callback = function(u) stepLineSpacing(u, -1) end },
-        { text = "▲", callback = function(u) stepLineSpacing(u,  1) end },
+        { text = "▼", callback = function(u) stepLineSpacing(u, -1) end, repeatable = true },
+        { text = "▲", callback = function(u) stepLineSpacing(u,  1) end, repeatable = true },
     }
     local weight_row = {
-        { text = "▼", callback = function(u) stepWeight(u, -1) end },
-        { text = "▲", callback = function(u) stepWeight(u,  1) end },
+        { text = "▼", callback = function(u) stepWeight(u, -1) end, repeatable = true },
+        { text = "▲", callback = function(u) stepWeight(u,  1) end, repeatable = true },
     }
     -- batched = true: laid out by rerenderOnce a tick after the callback
     local contrast_row = {
-        { text = "▼", callback = function(u) stepContrast(u, -1) end, batched = true },
-        { text = "▲", callback = function(u) stepContrast(u, 1) end, batched = true },
+        { text = "▼", callback = function(u) stepContrast(u, -1) end, batched = true, repeatable = true },
+        { text = "▲", callback = function(u) stepContrast(u, 1) end, batched = true, repeatable = true },
     }
     local hinting_now = getHinting(ui)
     local hinting_row = {
@@ -492,7 +582,7 @@ local function buildRows(ui)
     local rows = {
         { title = "General",
             -- batched: the five changes are laid out once, a tick after the callback
-            { text = "Reset defaults",      callback = resetDefaults, batched = true },
+            { text = "Reset defaults",      callback = resetDefaults, batched = true, no_remember = true },
             -- rotate = true: handled in the dialog's onTap (close first, rotate,
             -- reopen once), so the menu is never drawn at the old size
             { text = "Toggle screen layout", rotate = true, callback = toggleLayout },
@@ -1321,6 +1411,7 @@ function PageTextInfo:onShowSettingsMenu()
                 table.insert(row, frame)
                 table.insert(buttons, { frame = frame, callback = b.callback, text = b.text,
                     open_fonts = b.open_fonts, rotate = b.rotate, batched = b.batched,
+                    repeatable = b.repeatable, no_remember = b.no_remember,
                     text_w = text_w, active = b.active and true or false })
             end
             table.insert(grid, row)
@@ -1462,54 +1553,21 @@ function PageTextInfo:onShowSettingsMenu()
                     end)
                     return true
                 end
-                -- A change is being applied: ignore the taps that come meanwhile. Kept in
-                -- the plugin, because the dialog is replaced by a new one after every change.
-                if self.plugin.settings_busy then return true end
-                self.plugin.settings_busy = true
-                -- Like KOReader's own config panel (ConfigDialog:onConfigChoose): the change
-                -- is applied two ticks after the tap, not inside the tap handler, so the
-                -- gesture is completely handled before the re-layout blocks and inhibits
-                -- the input. The menu is rebuilt right after it (active state refreshed).
-                local plugin, dlg = self.plugin, self
-                UIManager:tickAfterNext(function()
-                    local ok, err = pcall(b.callback, plugin.ui)
-                    dlog("settings menu tap:", b.text, ok and "OK" or err)
-                    -- Rebuild the menu (active buttons, title with the x-height). Not if it
-                    -- was closed meanwhile (tap outside): don't bring it back
-                    local function rebuild()
-                        if plugin.settings_dialog == dlg then
-                            plugin:onShowSettingsMenu()
-                            -- NOTE: toggleBar() must act as a REFRESH of the top bar here.
-                            -- If it is a real on/off switch, it flips on every change.
-                            if plugin.view and plugin.view.topbar then
-                                plugin.view.topbar:toggleBar()
-                            end
-                        end
+                -- A change is being applied: the taps that come meanwhile are remembered
+                -- and applied together afterwards (see applyButtons), except "Reset
+                -- defaults". Kept in the plugin, because the dialog is replaced by a new
+                -- one after every change.
+                local plugin = self.plugin
+                if plugin.settings_busy then
+                    if not b.no_remember and not plugin.settings_close_pending then
+                        local q = plugin.settings_queue or {}
+                        if #q < MAX_QUEUED_TAPS then q[#q + 1] = b end
+                        plugin.settings_queue = q
+                        dlog("settings menu tap remembered:", b.text, "remembered=", #q)
                     end
-                    if b.batched then
-                        -- Batched changes (hinting, contrast, reset): the book is laid out a
-                        -- tick from now, so the title can only be measured after that. Mark
-                        -- the active buttons now, in place, and rebuild from the timer.
-                        if plugin.settings_dialog == dlg then
-                            local ok2, err2 = pcall(dlg.syncButtonStates, dlg, plugin.ui)
-                            if not ok2 then require("logger").warn("[PTI] syncButtonStates failed:", err2) end
-                        end
-                        UIManager:scheduleIn(SETTLE_DELAY, function()
-                            rebuild()
-                            releaseBusy(plugin)
-                        end)
-                    else
-                        -- The change is synchronous: the book has already been laid out,
-                        -- so the x-height of the title is right. Rebuild in this same pass:
-                        -- the new menu is painted together with the new page. The menu
-                        -- stays locked a little longer so the taps made while the loop was
-                        -- blocked are dropped.
-                        rebuild()
-                        UIManager:scheduleIn(SETTLE_DELAY, function()
-                            releaseBusy(plugin)
-                        end)
-                    end
-                end)
+                    return true
+                end
+                applyButtons(plugin, { b })
                 return true
             end
         end

@@ -847,86 +847,131 @@ function PageTextInfo:onShowFonts(page)
         return region
     end
 
+    -- Applies a font cell: lays the book out again with the new face, marks the cell and
+    -- refreshes the menu. Used by a tap and by a tap that was remembered (see below).
+    function dialog:applyCell(cell)
+        -- Same face already applied: skip the extra SetFont and reflow
+        if cell.face == current then return end
+        local plugin, face = self.plugin, cell.face
+        -- The cell is NOT highlighted yet: it is only marked as the current
+        -- font once the font has been applied and the book laid out again
+        -- (see markCurrent, called from the timer below)
+        self.busy = true
+        -- Like KOReader's own config panel (ConfigDialog:onConfigChoose): the
+        -- change is applied two ticks after the tap, not inside the tap
+        -- handler, so the gesture is completely handled before the re-layout
+        -- blocks and inhibits the input
+        UIManager:tickAfterNext(function()
+            if plugin.fonts_dialog ~= self then self.busy = nil; return end
+            local ok, err = pcall(plugin.applyFont, plugin, face)
+            if ok then
+                current = face
+                -- SetFont is synchronous: the book has been laid out again by
+                -- now (ReaderRolling:onUpdatePos), so mark the cell right away.
+                -- It is painted in the same pass as the new page, instead of
+                -- waiting for the timer below.
+                UIManager:setDirty(self, "ui", markCurrent(cell))
+                -- The caption (x-height, rating) can be measured now: SetFont has
+                -- already laid the book out (see above), so the engine reports the
+                -- new font. It is refreshed together with the cell and the page.
+                pcall(self.updateCaptions, self, face)
+                UIManager:setDirty(self, "ui", self.frame_rect)
+                -- The book is laid out again a couple of ticks from now and the
+                -- whole page is refreshed with the "partial" mode, which can
+                -- leave the menu on top of it grey or ghosted. Once that is done
+                -- (the timer is due after the layout, which blocks the loop) the
+                -- menu is refreshed once more on its own, with the "ui" mode.
+                local dlg = self
+                UIManager:scheduleIn(SETTLE_DELAY, function()
+                    if plugin.fonts_dialog ~= dlg then dlg.busy = nil; return end
+                    -- The caption is already up to date: this is only the clean
+                    -- "ui" refresh after the page refresh
+                    UIManager:setDirty(dlg, "ui", dlg.frame_rect)
+                    -- Everything is done in this step (layout, correction, caches).
+                    -- Taps made while the loop was blocked have already reached the
+                    -- dialog and were dealt with while it was locked: it is selectable
+                    -- again from here.
+                    purgeFontFacesLater(plugin)
+                    dlg.busy = nil
+                    if dlg.close_after then
+                        -- A tap outside came meanwhile: close now that the refreshes are done
+                        plugin:closeFontsMenu()
+                    else
+                        -- Otherwise do what was tapped last meanwhile, if anything
+                        dlg:runPending()
+                    end
+                end)
+            else
+                require("logger").warn("[PTI] applyFont failed:", err)
+                self.busy = nil
+                if self.close_after then
+                    plugin:closeFontsMenu()
+                else
+                    plugin:onShowFonts(plugin.fonts_page)   -- draw the real state again
+                end
+            end
+        end)
+    end
+
+    -- On a slow device (Kindle) the book is laid out and the screen refreshed for a second
+    -- or two after a tap, and the taps made meanwhile reach the menu only afterwards, while
+    -- it is still locked: they used to be lost. Now the LAST font cell or page arrow tapped
+    -- meanwhile is remembered (self.pending) and done as soon as the menu is free.
+    function dialog:runPending()
+        local pending = self.pending
+        self.pending = nil
+        if not pending or self.busy or self.plugin.fonts_dialog ~= self then return end
+        require("logger").dbg("[PTI] fonts menu: doing the tap remembered meanwhile")
+        if pending.cell then
+            self:applyCell(pending.cell)
+        elseif pending.page then
+            local plugin, target = self.plugin, pending.page
+            UIManager:nextTick(function() plugin:onShowFonts(target) end)
+        end
+    end
+
     -- Tap handling
     function dialog:onTap(arg, ges)
         -- Font cells
         for __, cell in ipairs(cells) do
             if cell.frame.dimen and ges.pos:intersectWith(cell.frame.dimen) then
                 -- A font is being applied: no second selection until the book has been
-                -- laid out again and the menu refreshed (a tap outside still closes it)
-                if self.busy then return true end
-                -- Same face already applied: skip the extra SetFont and reflow
-                if cell.face ~= current then
-                    local plugin, face = self.plugin, cell.face
-                    -- The cell is NOT highlighted yet: it is only marked as the current
-                    -- font once the font has been applied and the book laid out again
-                    -- (see markCurrent, called from the timer below)
-                    self.busy = true
-                    -- Like KOReader's own config panel (ConfigDialog:onConfigChoose): the
-                    -- change is applied two ticks after the tap, not inside the tap
-                    -- handler, so the gesture is completely handled before the re-layout
-                    -- blocks and inhibits the input
-                    UIManager:tickAfterNext(function()
-                    if plugin.fonts_dialog ~= self then self.busy = nil; return end
-                    local ok, err = pcall(plugin.applyFont, plugin, face)
-                    if ok then
-                        current = face
-                        -- SetFont is synchronous: the book has been laid out again by
-                        -- now (ReaderRolling:onUpdatePos), so mark the cell right away.
-                        -- It is painted in the same pass as the new page, instead of
-                        -- waiting for the timer below.
-                        UIManager:setDirty(self, "ui", markCurrent(cell))
-                        -- The caption (x-height, rating) can be measured now: SetFont has
-                        -- already laid the book out (see above), so the engine reports the
-                        -- new font. It is refreshed together with the cell and the page.
-                        pcall(self.updateCaptions, self, face)
-                        UIManager:setDirty(self, "ui", self.frame_rect)
-                        -- The book is laid out again a couple of ticks from now and the
-                        -- whole page is refreshed with the "partial" mode, which can
-                        -- leave the menu on top of it grey or ghosted. Once that is done
-                        -- (the timer is due after the layout, which blocks the loop) the
-                        -- menu is refreshed once more on its own, with the "ui" mode.
-                        local dlg = self
-                        UIManager:scheduleIn(SETTLE_DELAY, function()
-                            if plugin.fonts_dialog ~= dlg then dlg.busy = nil; return end
-                            -- The caption is already up to date: this is only the clean
-                            -- "ui" refresh after the page refresh
-                            UIManager:setDirty(dlg, "ui", dlg.frame_rect)
-                            -- Everything is done in this step (layout, correction, caches).
-                            -- Taps made while the loop was blocked have already reached the
-                            -- dialog and were dropped while it was locked: it is selectable
-                            -- again from here.
-                            purgeFontFacesLater(plugin)
-                            dlg.busy = nil
-                            -- A tap outside came meanwhile: close now that the refreshes are done
-                            if dlg.close_after then plugin:closeFontsMenu() end
-                        end)
-                    else
-                        require("logger").warn("[PTI] applyFont failed:", err)
-                        self.busy = nil
-                        if self.close_after then
-                            plugin:closeFontsMenu()
-                        else
-                            plugin:onShowFonts(plugin.fonts_page)   -- draw the real state again
-                        end
+                -- laid out again and the menu refreshed. The last one tapped meanwhile is
+                -- remembered and applied then (a tap outside still closes the menu)
+                if self.busy then
+                    if not self.close_after then
+                        self.pending = { cell = cell }
+                        require("logger").dbg("[PTI] fonts menu: tap remembered:", cell.face)
                     end
-                    end)
+                    return true
                 end
+                self:applyCell(cell)
                 return true
             end
         end
 
         if ges.pos:intersectWith(frame_rect) then
-            if self.busy then return true end   -- a font is being applied
             -- Navigation buttons: use the real on-screen area of each one
+            local dir
             if btn_prev.dimen and ges.pos:intersectWith(btn_prev.dimen) then
-                if has_prev then
-                    UIManager:nextTick(function() self.plugin:onShowFonts(page - 1) end)
-                end
+                dir = -1
             elseif btn_next.dimen and ges.pos:intersectWith(btn_next.dimen) then
-                if has_next then
-                    UIManager:nextTick(function() self.plugin:onShowFonts(page + 1) end)
+                dir = 1
+            end
+            if self.busy then   -- a font is being applied: remember the page, go there after
+                if dir and not self.close_after then
+                    local target = ((self.pending and self.pending.page) or page) + dir
+                    if target >= 1 and target <= total_pages then
+                        self.pending = { page = target }
+                        require("logger").dbg("[PTI] fonts menu: page tap remembered:", target)
+                    end
                 end
+                return true
+            end
+            if dir == -1 and has_prev then
+                UIManager:nextTick(function() self.plugin:onShowFonts(page - 1) end)
+            elseif dir == 1 and has_next then
+                UIManager:nextTick(function() self.plugin:onShowFonts(page + 1) end)
             end
             return true
         end
