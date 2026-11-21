@@ -818,8 +818,9 @@ function PageTextInfo:onSwipe(_, ges)
     return false
 end
 
--- Same as the menu item "Enable / disable full-screen ruled lines" of the custombg plugin
--- (its key is FS_KEYS.enabled = "fs_lines_enabled", local to that plugin)
+-- Same as the menu item "Enable / disable full-screen ruled lines" of the custombg plugin.
+-- custombg keeps ALL its settings (lines and background) in its own file, settings/custombg.lua. They are global,
+-- not per book: this toggle affects every book and nothing is written to the book sidecar.
 function PageTextInfo:toggleFullScreenRuledLines()
     local util = require("util")
     local is_pdf = self.document and util.getFileNameSuffix(self.document.file) == "pdf"
@@ -858,13 +859,18 @@ function PageTextInfo:toggleFullScreenRuledLines()
             want_lines, want_bg = true, false      -- lines only
         end
         if want_lines ~= lines_on then
-            custombg.fs_enabled = want_lines
-            custombg:saveDocSetting("fs_lines_enabled", want_lines)
+            if custombg.setLinesEnabled then
+                custombg:setLinesEnabled(want_lines)
+            else
+                -- older custombg without setLinesEnabled()
+                custombg.fs_enabled = want_lines
+                custombg:saveDocSetting("fs_lines_enabled", want_lines)
+            end
         end
         if want_bg ~= bg_on then
             local function applyBg()
                 if want_bg then
-                    -- Follow the global default; if there is none, pick a random one (this book only)
+                    -- Follow the global default; if there is none, pick a random one (it then becomes the global default)
                     if custombg:getGlobalDefaultBg() then
                         custombg:applyBackground(nil)
                     else

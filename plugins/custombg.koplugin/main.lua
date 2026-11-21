@@ -19,6 +19,48 @@ local bit = require("bit")
 local T = require("ffi/util").template
 
 -- ======================================================================
+-- Own settings file: <koreader>/settings/custombg.lua
+-- Every setting of this plugin lives here, NOT in settings.reader.lua and NOT in the book sidecar.
+-- ======================================================================
+local LuaSettings = require("luasettings")
+local DataStorage = require("datastorage")
+local _cfg_store = LuaSettings:open(DataStorage:getSettingsDir() .. "/custombg.lua")
+local CFG = {
+    readSetting = function(_, key) return _cfg_store:readSetting(key) end,
+    saveSetting = function(_, key, value)
+        _cfg_store:saveSetting(key, value)
+        pcall(function() _cfg_store:flush() end)
+    end,
+    flush = function() pcall(function() _cfg_store:flush() end) end,
+}
+
+-- One-time migration: move keys that older versions wrote into the global KOReader settings into the own file
+-- (the value is copied only if the own file does not have it yet, then removed from the global settings).
+do
+    local function is_ours(k)
+        return type(k) == "string" and (k:sub(1, 9) == "custombg_" or k:sub(1, 13) == "custom_bg_see"
+            or k:sub(1, 9) == "fs_lines_" or k:sub(1, 9) == "fs_style_" or k == "fs_double_gap")
+    end
+    local gs = rawget(_G, "G_reader_settings")
+    if gs and type(gs.data) == "table" then
+        local moved = {}
+        for k in pairs(gs.data) do
+            if is_ours(k) then moved[#moved + 1] = k end
+        end
+        if #moved > 0 then
+            for _, k in ipairs(moved) do
+                if _cfg_store:readSetting(k) == nil then
+                    _cfg_store:saveSetting(k, gs:readSetting(k))
+                end
+                gs:saveSetting(k, nil)
+            end
+            pcall(function() _cfg_store:flush() end)
+            pcall(function() gs:flush() end)
+        end
+    end
+end
+
+-- ======================================================================
 -- Custom background + ruled (stationery) horizontal/vertical lines (native background edition + global default)
 -- ======================================================================
 local CustomBg = WidgetContainer:extend{
@@ -51,7 +93,7 @@ local CustomBg = WidgetContainer:extend{
     fs_title_threshold = 1.05,
     _fs_patched = false,
     fs_wave_mode = 0,
-    fs_style_dash_dot = false,
+    fs_style_dash_dot = true,    -- default line style: long solid + dashed
     fs_style_heart_dash = false,
     fs_style_double_solid = false,
     fs_style_double_dash = false,
@@ -329,7 +371,7 @@ function CustomBg:getUsageKey(name)
 end
 
 function CustomBg:getAllSeenFlag()
-    local ok, data = pcall(function() return G_reader_settings:readSetting(BG_SEEN_FLAG_KEY) or {} end)
+    local ok, data = pcall(function() return CFG:readSetting(BG_SEEN_FLAG_KEY) or {} end)
     return ok and data or {}
 end
 
@@ -337,7 +379,7 @@ function CustomBg:markImageSeen(name)
     if not name then return end
     local flag_data = self:getAllSeenFlag()
     flag_data[self:getUsageKey(name)] = true
-    G_reader_settings:saveSetting(BG_SEEN_FLAG_KEY, flag_data)
+    CFG:saveSetting(BG_SEEN_FLAG_KEY, flag_data)
 end
 
 function CustomBg:isNewImage(name)
@@ -345,18 +387,15 @@ function CustomBg:isNewImage(name)
 end
 
 function CustomBg:getSceneMode()
-    local saved = G_reader_settings:readSetting(BG_SCENE_KEY)
+    local saved = CFG:readSetting(BG_SCENE_KEY)
     return (saved == SCENE_DAY or saved == SCENE_NIGHT) and saved or SCENE_DAY
 end
 
 -- Get the background used by the current document (document setting first; if unset, the global default; if there is no global default, nil)
 function CustomBg:getCurrentDocBg()
-    if not self.ui or not self.ui.doc_settings then return nil end
-    local scene = self:getSceneMode()
-    local key = scene == SCENE_DAY and DOC_BG_DAY or DOC_BG_NIGHT
-    local val = self.ui.doc_settings:readSetting(key)
+    local val = self:readBgChoice()
     if val == nil then
-        -- Book without its own choice: background OFF (it is only shown after the toggle is turned on)
+        -- No choice stored yet: background OFF (it is only shown after the toggle is turned on)
         return nil
     elseif val == DOC_BG_GLOBAL then
         -- Book follows the global background: the selected global image, otherwise a random one
@@ -393,18 +432,13 @@ end
 
 -- Save the document background setting; name=nil clears it (follow global), name="" means no background
 function CustomBg:saveDocBg(name)
-    if not self.ui or not self.ui.doc_settings then return end
-    local scene = self:getSceneMode()
-    local key = scene == SCENE_DAY and DOC_BG_DAY or DOC_BG_NIGHT
-    if name == nil then
-        self.ui.doc_settings:saveSetting(key, nil)
-    else
-        self.ui.doc_settings:saveSetting(key, name)
-    end
+    local key = self:getSceneMode() == SCENE_DAY and DOC_BG_DAY or DOC_BG_NIGHT
+    CFG:saveSetting(key, name)   -- nil clears it
+    pcall(function() CFG:flush() end)
 end
 
 function CustomBg:getAllLastUsed()
-    local ok, data = pcall(function() return G_reader_settings:readSetting(BG_LAST_USED_KEY) or {} end)
+    local ok, data = pcall(function() return CFG:readSetting(BG_LAST_USED_KEY) or {} end)
     return ok and data or {}
 end
 
@@ -412,41 +446,66 @@ function CustomBg:setLastUsed(name)
     if not name then return end
     local used_data = self:getAllLastUsed()
     used_data[self:getUsageKey(name)] = os.time()
-    G_reader_settings:saveSetting(BG_LAST_USED_KEY, used_data)
+    CFG:saveSetting(BG_LAST_USED_KEY, used_data)
 end
 
--- ===== Document settings read/write functions (lines) =====
+-- ===== Settings read/write (lines) =====
+-- EVERYTHING is stored in the plugin's own settings file (CFG, settings/custombg.lua). Nothing goes to the book sidecar
+-- or to settings.reader.lua.
+-- (The names getDocSetting/saveDocSetting are kept so the rest of the plugin does not change.)
 function CustomBg:getDocSetting(key, default)
-    if self.ui and self.ui.doc_settings then
-        local val = self.ui.doc_settings:readSetting(key)
-        if val ~= nil then return val end
-    end
-    local global_val = G_reader_settings:readSetting(key)
-    if global_val ~= nil then return global_val end
+    local val = CFG:readSetting(key)
+    if val ~= nil then return val end
     return default
 end
 
 function CustomBg:saveDocSetting(key, value)
-    if self.ui and self.ui.doc_settings then
-        self.ui.doc_settings:saveSetting(key, value)
+    CFG:saveSetting(key, value)
+end
+
+-- Current background choice (day or night): nil = off, "" = explicitly none, "@global" = global image, or an image name
+function CustomBg:readBgChoice()
+    local key = self:getSceneMode() == SCENE_DAY and DOC_BG_DAY or DOC_BG_NIGHT
+    return CFG:readSetting(key)
+end
+
+-- One-time migration of OLD per-book values found in the sidecar:
+-- each value is copied to the global settings only if there is no global value yet, then removed from the sidecar,
+-- so the book sidecar ends up clean. (The first old book that is opened provides the initial global values.)
+function CustomBg:migrateSidecarSettings()
+    local ds = self.ui and self.ui.doc_settings
+    if not ds then return end
+    local keys = { DOC_BG_DAY, DOC_BG_NIGHT }
+    for _, key in pairs(FS_KEYS) do keys[#keys + 1] = key end
+    local moved = false
+    for _, key in ipairs(keys) do
+        local v = ds:readSetting(key)
+        if v ~= nil then
+            if CFG:readSetting(key) == nil then
+                CFG:saveSetting(key, v)
+            end
+            ds:saveSetting(key, nil)
+            moved = true
+        end
     end
+    if moved then pcall(function() CFG:flush() end) end
 end
 
 -- ===== Global default background operations (stored separately per scene) =====
 function CustomBg:setGlobalDefaultBg(name)
     local scene = self:getSceneMode()
     local key = scene == SCENE_NIGHT and GLOBAL_DEFAULT_BG_NIGHT_KEY or GLOBAL_DEFAULT_BG_DAY_KEY
-    G_reader_settings:saveSetting(key, name)
-    pcall(function() G_reader_settings:flush() end)   -- do not wait for a clean exit to persist it
+    CFG:saveSetting(key, name)
+    pcall(function() CFG:flush() end)   -- do not wait for a clean exit to persist it
 end
 
 function CustomBg:getGlobalDefaultBg()
     local scene = self:getSceneMode()
     local key = scene == SCENE_NIGHT and GLOBAL_DEFAULT_BG_NIGHT_KEY or GLOBAL_DEFAULT_BG_DAY_KEY
-    local val = G_reader_settings:readSetting(key)
+    local val = CFG:readSetting(key)
     if val == nil then
         -- Legacy single global-default key compatibility (migration): old settings still apply after upgrading
-        val = G_reader_settings:readSetting(GLOBAL_DEFAULT_BG_KEY)
+        val = CFG:readSetting(GLOBAL_DEFAULT_BG_KEY)
     end
     return val
 end
@@ -531,7 +590,7 @@ end
 
 function CustomBg:switchScene(new_scene)
     if new_scene == self:getSceneMode() then return end
-    G_reader_settings:saveSetting(BG_SCENE_KEY, new_scene)
+    CFG:saveSetting(BG_SCENE_KEY, new_scene)
     local folder = getBackgroundsFolder()
     if new_scene == SCENE_DAY then
         self.cache_day = loadImageList(folder, SCENE_DAY)
@@ -656,17 +715,17 @@ end
 -- becomes active in the open book and removed again when the background is turned off, the option is switched off,
 -- or the book is closed (see _syncNoFlash / _releaseNoFlash).
 function CustomBg:isNoFlashEnabled()
-    return G_reader_settings:readSetting(NOFLASH_KEY) ~= false
+    return CFG:readSetting(NOFLASH_KEY) ~= false
 end
 
 -- Used by the pagetextinfo gesture: true = it cycles lines / background / lines + background (default),
 -- false = it only toggles the ruled lines.
 function CustomBg:isToggleWithBackground()
-    return G_reader_settings:readSetting(TOGGLE_WITH_BG_KEY) ~= false
+    return CFG:readSetting(TOGGLE_WITH_BG_KEY) ~= false
 end
 
 function CustomBg:getOpenRefreshMode()
-    local v = G_reader_settings:readSetting(OPEN_REFRESH_KEY)
+    local v = CFG:readSetting(OPEN_REFRESH_KEY)
     if v == "partial" or v == "full" then return v end
     return "ui"
 end
@@ -701,7 +760,7 @@ function CustomBg:_installRefreshHook()
         -- nothing. It arrives late (alone, after the book is already shown), so it shows up as one more visible refresh.
         -- Skipped only inside the opening window, only with a background shown, and only if the option is on.
         if h.enabled and refreshtype == "ui" and widget ~= nil and widget ~= "all" and plugin and plugin._open_window
-           and plugin:_wantsNoFlash() and G_reader_settings:readSetting(SKIP_BOOKENDS_KEY) ~= false then
+           and plugin:_wantsNoFlash() and CFG:readSetting(SKIP_BOOKENDS_KEY) ~= false then
             local reader_ui = plugin.ui
             if widget == reader_ui or (reader_ui.view ~= nil and widget == reader_ui.view.dialog) then
                 local tb = debug.traceback("", 2)
@@ -763,7 +822,7 @@ function CustomBg:_installRefreshHook()
         h.swipe = function(scr, enabled, ...)
             local plugin = CustomBg.active_instance
             if enabled and h.enabled and plugin and plugin:_wantsNoFlash()
-               and G_reader_settings:readSetting(SWIPE_ANIM_KEY) == "off" then
+               and CFG:readSetting(SWIPE_ANIM_KEY) == "off" then
                 return
             end
             return orig_swipe(scr, enabled, ...)
@@ -852,7 +911,7 @@ function CustomBg:loadSleepIconList()
 end
 
 function CustomBg:getSleepIconSizePct()
-    local v = G_reader_settings:readSetting(SLEEP_ICON_SIZE_KEY)
+    local v = CFG:readSetting(SLEEP_ICON_SIZE_KEY)
     if v == 0 then return 0 end   -- 0 = fill the whole screen (proportional cover, edges cropped)
     return math.min(100, math.max(10, v or 45))
 end
@@ -861,7 +920,7 @@ function CustomBg:getSleepIconBg()
     -- Transparent by default: uses KOReader's native "no fill" transparent wallpaper approach,
     -- with screensaver_background = "none" no base color is laid down,
     -- and areas of the composite image with alpha=0 fully show the picture from before screen-off; only the icon is visible
-    return G_reader_settings:readSetting(SLEEP_ICON_BG_KEY) or "transparent"
+    return CFG:readSetting(SLEEP_ICON_BG_KEY) or "transparent"
 end
 
 -- Clear the sleep composite image cache (call after the icon size changes)
@@ -966,7 +1025,7 @@ function CustomBg:hookSleepScreen()
     Screensaver.setup = function(ss, ...)
         orig_setup(ss, ...)
         pcall(function()
-            local mode = G_reader_settings:readSetting(SLEEP_ICON_MODE_KEY) or "off"
+            local mode = CFG:readSetting(SLEEP_ICON_MODE_KEY) or "off"
             if mode == "off" or not ss.ui then return end
             local folder = CustomBg:getSleepIconsFolder()
             local icon_file
@@ -976,7 +1035,7 @@ function CustomBg:hookSleepScreen()
                     icon_file = folder .. icons[math.random(#icons)]
                 end
             elseif mode == "fixed" then
-                local name = G_reader_settings:readSetting(SLEEP_ICON_NAME_KEY)
+                local name = CFG:readSetting(SLEEP_ICON_NAME_KEY)
                 if name and name ~= "" then icon_file = folder .. name end
             end
             if not icon_file or lfs.attributes(icon_file, "mode") ~= "file" then return end
@@ -1002,20 +1061,20 @@ end
 function CustomBg:getSleepIconMenu()
     local items = {}
     local function current_mode()
-        return G_reader_settings:readSetting(SLEEP_ICON_MODE_KEY) or "off"
+        return CFG:readSetting(SLEEP_ICON_MODE_KEY) or "off"
     end
     table.insert(items, {
         text = _("Off (use the system default screen-off picture)"),
         checked_func = function() return current_mode() == "off" end,
         callback = function()
-            G_reader_settings:saveSetting(SLEEP_ICON_MODE_KEY, "off")
+            CFG:saveSetting(SLEEP_ICON_MODE_KEY, "off")
         end,
     })
     table.insert(items, {
         text = _("Show a random one on each screen-off"),
         checked_func = function() return current_mode() == "random" end,
         callback = function()
-            G_reader_settings:saveSetting(SLEEP_ICON_MODE_KEY, "random")
+            CFG:saveSetting(SLEEP_ICON_MODE_KEY, "random")
         end,
     })
     -- Screen-off background and icon size go on the first page (right below "Show a random one on each screen-off")
@@ -1035,10 +1094,10 @@ function CustomBg:getSleepIconMenu()
                         return self:getSleepIconBg() == opt.bg
                     end,
                     callback = function()
-                        G_reader_settings:saveSetting(SLEEP_ICON_BG_KEY, opt.bg)
+                        CFG:saveSetting(SLEEP_ICON_BG_KEY, opt.bg)
                         self:clearSleepScreenCache()
                         if current_mode() == "fixed" then
-                            local name = G_reader_settings:readSetting(SLEEP_ICON_NAME_KEY)
+                            local name = CFG:readSetting(SLEEP_ICON_NAME_KEY)
                             if name and name ~= "" then
                                 self:composeSleepScreen(self:getSleepIconsFolder() .. name)
                             end
@@ -1067,11 +1126,11 @@ function CustomBg:getSleepIconMenu()
                         return self:getSleepIconSizePct() == opt.pct
                     end,
                     callback = function()
-                        G_reader_settings:saveSetting(SLEEP_ICON_SIZE_KEY, opt.pct)
+                        CFG:saveSetting(SLEEP_ICON_SIZE_KEY, opt.pct)
                         self:clearSleepScreenCache()
                         -- If a fixed icon is currently selected, pre-generate it immediately at the new size
                         if current_mode() == "fixed" then
-                            local name = G_reader_settings:readSetting(SLEEP_ICON_NAME_KEY)
+                            local name = CFG:readSetting(SLEEP_ICON_NAME_KEY)
                             if name and name ~= "" then
                                 self:composeSleepScreen(self:getSleepIconsFolder() .. name)
                             end
@@ -1093,11 +1152,11 @@ function CustomBg:getSleepIconMenu()
                 text = name,
                 checked_func = function()
                     return current_mode() == "fixed"
-                       and G_reader_settings:readSetting(SLEEP_ICON_NAME_KEY) == name
+                       and CFG:readSetting(SLEEP_ICON_NAME_KEY) == name
                 end,
                 callback = function()
-                    G_reader_settings:saveSetting(SLEEP_ICON_MODE_KEY, "fixed")
-                    G_reader_settings:saveSetting(SLEEP_ICON_NAME_KEY, name)
+                    CFG:saveSetting(SLEEP_ICON_MODE_KEY, "fixed")
+                    CFG:saveSetting(SLEEP_ICON_NAME_KEY, name)
                     -- Pre-generate the composite image so it shows instantly on screen-off
                     self:composeSleepScreen(self:getSleepIconsFolder() .. name)
                 end,
@@ -1120,9 +1179,8 @@ end
 -- ===== Line settings loading =====
 function CustomBg:loadLineSettings()
     self:invalidateLineCache()
-    -- Lines are ON only if THIS book explicitly enabled them (never inherited from the global default)
-    self.fs_enabled = (self.ui and self.ui.doc_settings
-        and self.ui.doc_settings:readSetting(FS_KEYS.enabled)) == true
+    self:migrateSidecarSettings()
+    self.fs_enabled = CFG:readSetting(FS_KEYS.enabled) == true
     self.fs_line_direction = self:getDocSetting(FS_KEYS.direction, 1)
     self.fs_v_font_enable = self:getDocSetting(FS_KEYS.v_font_enable, true)
     self.fs_v_font_family = self:getDocSetting(FS_KEYS.v_font_family, "FZKai-Z03")
@@ -1141,7 +1199,7 @@ function CustomBg:loadLineSettings()
     self.fs_skip_titles = self:getDocSetting(FS_KEYS.skip_titles, false)
     self.fs_title_threshold = self:getDocSetting(FS_KEYS.title_threshold, 1.05)
     self.fs_wave_mode = self:getDocSetting(FS_KEYS.wave_mode, 0)
-    self.fs_style_dash_dot = self:getDocSetting(FS_KEYS.style_dash_dot, false)
+    self.fs_style_dash_dot = self:getDocSetting(FS_KEYS.style_dash_dot, true)
     self.fs_style_heart_dash = self:getDocSetting(FS_KEYS.style_heart_dash, false)
     self.fs_style_double_solid = self:getDocSetting(FS_KEYS.style_double_solid, false)
     self.fs_style_double_dash = self:getDocSetting(FS_KEYS.style_double_dash, false)
@@ -1151,6 +1209,14 @@ end
 function CustomBg:saveLineSetting(key, value)
     self:invalidateLineCache()
     self:saveDocSetting(key, value)
+end
+
+-- Public: switch the ruled lines on/off (used by the pagetextinfo gesture and available to any other plugin).
+-- Stored in the plugin's own settings file, so it applies to every book.
+function CustomBg:setLinesEnabled(on)
+    self.fs_enabled = on and true or false
+    CFG:saveSetting(FS_KEYS.enabled, self.fs_enabled)
+    self:invalidateLineCache()
 end
 
 -- What happens after a setting changed while the menu is open:
@@ -1193,75 +1259,24 @@ function CustomBg:refreshView(touchmenu_instance)
     self:repaintView()
 end
 
--- ===== Underline (ruled line) global default =====
--- getDocSetting already falls back to G_reader_settings (global); here we add the matching methods for "write to global default" and
--- "does this book follow global / clear global", so underlines get a global default just like backgrounds.
-
--- Write a single underline setting to the global default
-function CustomBg:saveLineSettingGlobal(key, value)
-    G_reader_settings:saveSetting(key, value)
-end
-
--- Write the whole current set of underline settings to the global default
-function CustomBg:saveAllLineSettingsAsGlobal()
-    G_reader_settings:saveSetting(FS_KEYS.direction, self.fs_line_direction)
-    G_reader_settings:saveSetting(FS_KEYS.v_font_enable, self.fs_v_font_enable)
-    G_reader_settings:saveSetting(FS_KEYS.v_font_family, self.fs_v_font_family)
-    G_reader_settings:saveSetting(FS_KEYS.offset_y, self.fs_offset_y)
-    G_reader_settings:saveSetting(FS_KEYS.auto_offset, self.fs_auto_offset)
-    G_reader_settings:saveSetting(FS_KEYS.offset_adjust, self.fs_offset_adjust)
-    G_reader_settings:saveSetting(FS_KEYS.offset_bias, self.fs_offset_bias)
-    G_reader_settings:saveSetting(FS_KEYS.show_top, self.fs_show_top_line)
-    G_reader_settings:saveSetting(FS_KEYS.dashed, self.fs_is_dashed)
-    G_reader_settings:saveSetting(FS_KEYS.color_depth, self.fs_color_depth)
-    G_reader_settings:saveSetting(FS_KEYS.dash_len, math.max(2, self.fs_dash_len))
-    G_reader_settings:saveSetting(FS_KEYS.mode, self.fs_line_mode)
-    G_reader_settings:saveSetting(FS_KEYS.width_ratio, self.fs_width_ratio)
-    G_reader_settings:saveSetting(FS_KEYS.extend, self.fs_extend_px)
-    G_reader_settings:saveSetting(FS_KEYS.gap_threshold, self.fs_gap_threshold)
-    G_reader_settings:saveSetting(FS_KEYS.skip_titles, self.fs_skip_titles)
-    G_reader_settings:saveSetting(FS_KEYS.title_threshold, self.fs_title_threshold)
-    G_reader_settings:saveSetting(FS_KEYS.wave_mode, self.fs_wave_mode)
-    G_reader_settings:saveSetting(FS_KEYS.style_dash_dot, self.fs_style_dash_dot)
-    G_reader_settings:saveSetting(FS_KEYS.style_heart_dash, self.fs_style_heart_dash)
-    G_reader_settings:saveSetting(FS_KEYS.style_double_solid, self.fs_style_double_solid)
-    G_reader_settings:saveSetting(FS_KEYS.style_double_dash, self.fs_style_double_dash)
-    G_reader_settings:saveSetting(FS_KEYS.double_gap, math.max(0, self.fs_double_gap))
-end
-
--- Whether the current book has its own saved underline settings (i.e. is not following the global default)
-function CustomBg:hasLineDocSetting()
-    if not self.ui or not self.ui.doc_settings then return false end
+-- ===== Underline settings reset =====
+-- All underline settings are global (one set for every book). This restores the built-in defaults
+-- (the on/off switch is kept).
+function CustomBg:hasLineSettings()
     for _, key in pairs(FS_KEYS) do
-        if key ~= FS_KEYS.enabled and self.ui.doc_settings:readSetting(key) ~= nil then return true end
+        if key ~= FS_KEYS.enabled and CFG:readSetting(key) ~= nil then return true end
     end
     return false
 end
 
--- Whether any underline setting exists in the global default
-function CustomBg:hasLineGlobalDefault()
+function CustomBg:resetLineSettings()
     for _, key in pairs(FS_KEYS) do
-        if G_reader_settings:readSetting(key) ~= nil then return true end
-    end
-    return false
-end
-
--- Clear all underline settings of this book so they fall back to the global default (or the built-in default if there is none)
-function CustomBg:clearLineDocSettings()
-    if not self.ui or not self.ui.doc_settings then return end
-    for _, key in pairs(FS_KEYS) do
-        if key ~= FS_KEYS.enabled then   -- keep this book's on/off switch
-            self.ui.doc_settings:saveSetting(key, nil)
+        if key ~= FS_KEYS.enabled then
+            CFG:saveSetting(key, nil)
         end
     end
+    pcall(function() CFG:flush() end)
     self:loadLineSettings()
-end
-
--- Clear all underline global defaults and restore the built-in defaults
-function CustomBg:clearLineGlobalDefaults()
-    for _, key in pairs(FS_KEYS) do
-        G_reader_settings:saveSetting(key, nil)
-    end
 end
 
 -- ===== Vertical layout patch =====
@@ -2850,31 +2865,14 @@ function CustomBg:addToMainMenu(menu_items)
                 text = _("Ruled lines (horizontal/vertical)"),
                 sub_item_table = {
                     {
-                        text = _("Follow global default (underlines)"),
-                        checked_func = function() return not self:hasLineDocSetting() end,
+                        text = _("Reset underline settings to built-in defaults"),
+                        enabled_func = function() return self:hasLineSettings() end,
                         keep_menu_open = true,
                         callback = function(touchmenu_instance)
-                            self:clearLineDocSettings()
+                            local prev_dir = self.fs_line_direction
+                            self:resetLineSettings()
                             self:refreshView(touchmenu_instance)
-                        end,
-                    },
-                    {
-                        text = _("Save current underline settings as global default"),
-                        callback = function()
-                            self:saveAllLineSettingsAsGlobal()
-                            UIManager:show(InfoMessage:new{
-                                text = _("Current underline settings saved as the global default: books opened later will use them automatically (books with their own settings are not affected)."),
-                            })
-                        end,
-                    },
-                    {
-                        text = _("Clear underline global default (restore built-in defaults)"),
-                        enabled_func = function() return self:hasLineGlobalDefault() end,
-                        callback = function()
-                            self:clearLineGlobalDefaults()
-                            UIManager:show(InfoMessage:new{
-                                text = _("Underline global default cleared; new books will use the built-in defaults."),
-                            })
+                            if prev_dir ~= self.fs_line_direction then self:showReloadConfirm() end
                         end,
                     },
                     {
@@ -2896,7 +2894,7 @@ function CustomBg:addToMainMenu(menu_items)
                         checked_func = function() return self:isToggleWithBackground() end,
                         keep_menu_open = true,
                         callback = function(touchmenu_instance)
-                            G_reader_settings:saveSetting(TOGGLE_WITH_BG_KEY, not self:isToggleWithBackground())
+                            CFG:saveSetting(TOGGLE_WITH_BG_KEY, not self:isToggleWithBackground())
                             if touchmenu_instance then touchmenu_instance:updateItems() end
                         end,
                     },
@@ -3575,7 +3573,7 @@ function CustomBg:addToMainMenu(menu_items)
                         checked_func = function() return self:isNoFlashEnabled() end,
                         keep_menu_open = true,
                         callback = function(touchmenu_instance)
-                            G_reader_settings:saveSetting(NOFLASH_KEY, not self:isNoFlashEnabled())
+                            CFG:saveSetting(NOFLASH_KEY, not self:isNoFlashEnabled())
                             self:_syncNoFlash()
                             if touchmenu_instance then touchmenu_instance:updateItems() end
                         end,
@@ -3604,7 +3602,7 @@ function CustomBg:addToMainMenu(menu_items)
                                     checked_func = function() return self:getOpenRefreshMode() == opt.mode end,
                                     keep_menu_open = true,
                                     callback = function(touchmenu_instance)
-                                        G_reader_settings:saveSetting(OPEN_REFRESH_KEY, opt.mode)
+                                        CFG:saveSetting(OPEN_REFRESH_KEY, opt.mode)
                                         if touchmenu_instance then touchmenu_instance:updateItems() end
                                     end,
                                 })
@@ -3615,7 +3613,7 @@ function CustomBg:addToMainMenu(menu_items)
 
                     table.insert(sub, {
                         text_func = function()
-                            local off = G_reader_settings:readSetting(SWIPE_ANIM_KEY) == "off"
+                            local off = CFG:readSetting(SWIPE_ANIM_KEY) == "off"
                             return _("Kindle page-turn animation with a background") .. ": " .. (off and _("Off") or _("Keep"))
                         end,
                         help_text = _(
@@ -3626,19 +3624,19 @@ function CustomBg:addToMainMenu(menu_items)
                         sub_item_table = {
                             {
                                 text = _("Keep"),
-                                checked_func = function() return G_reader_settings:readSetting(SWIPE_ANIM_KEY) ~= "off" end,
+                                checked_func = function() return CFG:readSetting(SWIPE_ANIM_KEY) ~= "off" end,
                                 keep_menu_open = true,
                                 callback = function(touchmenu_instance)
-                                    G_reader_settings:saveSetting(SWIPE_ANIM_KEY, "keep")
+                                    CFG:saveSetting(SWIPE_ANIM_KEY, "keep")
                                     if touchmenu_instance then touchmenu_instance:updateItems() end
                                 end,
                             },
                             {
                                 text = _("Off while a background is shown"),
-                                checked_func = function() return G_reader_settings:readSetting(SWIPE_ANIM_KEY) == "off" end,
+                                checked_func = function() return CFG:readSetting(SWIPE_ANIM_KEY) == "off" end,
                                 keep_menu_open = true,
                                 callback = function(touchmenu_instance)
-                                    G_reader_settings:saveSetting(SWIPE_ANIM_KEY, "off")
+                                    CFG:saveSetting(SWIPE_ANIM_KEY, "off")
                                     if touchmenu_instance then touchmenu_instance:updateItems() end
                                 end,
                             },
@@ -3651,10 +3649,10 @@ function CustomBg:addToMainMenu(menu_items)
                             "ON: while a background is shown, the full-screen refresh that the bookends plugin schedules right after " ..
                             "a book is opened is ignored (it showed up as one more visible refresh). Only the first seconds after opening are affected.\n\n" ..
                             "Turn it OFF if bookends bars do not appear until you turn the page."),
-                        checked_func = function() return G_reader_settings:readSetting(SKIP_BOOKENDS_KEY) ~= false end,
+                        checked_func = function() return CFG:readSetting(SKIP_BOOKENDS_KEY) ~= false end,
                         keep_menu_open = true,
                         callback = function(touchmenu_instance)
-                            G_reader_settings:saveSetting(SKIP_BOOKENDS_KEY, G_reader_settings:readSetting(SKIP_BOOKENDS_KEY) == false)
+                            CFG:saveSetting(SKIP_BOOKENDS_KEY, CFG:readSetting(SKIP_BOOKENDS_KEY) == false)
                             if touchmenu_instance then touchmenu_instance:updateItems() end
                         end,
                     })
@@ -3664,8 +3662,7 @@ function CustomBg:addToMainMenu(menu_items)
                         keep_menu_open = true,
                         callback = function()
                             local sc = self:getSceneMode()
-                            local k = sc == SCENE_DAY and DOC_BG_DAY or DOC_BG_NIGHT
-                            local book_val = self.ui.doc_settings and self.ui.doc_settings:readSetting(k)
+                            local book_val = self:readBgChoice()
                             local glob = self:getGlobalDefaultBg()
                             local resolved = self:getCurrentDocBg()
                             local imgs = self:getCurrentImageCache()
@@ -3679,7 +3676,7 @@ function CustomBg:addToMainMenu(menu_items)
                             UIManager:show(InfoMessage:new{
                                 text = table.concat({
                                     "Mode: " .. sc,
-                                    "This book: " .. show(book_val),
+                                    "Background setting (global): " .. show(book_val),
                                     "Global default: " .. show(glob),
                                     "Applied now: " .. show(resolved),
                                     "Image file found: " .. show(resolved and imgs[resolved] or nil),
@@ -3714,9 +3711,7 @@ function CustomBg:addToMainMenu(menu_items)
                     table.insert(sub, {
                         text = _("No background"),
                         checked_func = function()
-                            local scene = self:getSceneMode()
-                            local key = scene == SCENE_DAY and DOC_BG_DAY or DOC_BG_NIGHT
-                            local v = self.ui.doc_settings:readSetting(key)
+                            local v = self:readBgChoice()
                             return v == nil or v == DOC_BG_NONE
                         end,
                         keep_menu_open = true,
@@ -3732,16 +3727,13 @@ function CustomBg:addToMainMenu(menu_items)
                             return _("Follow global default background") .. ": " .. (self:getGlobalDefaultBg() or _("random"))
                         end,
                         checked_func = function()
-                            local scene = self:getSceneMode()
-                            local key = scene == SCENE_DAY and DOC_BG_DAY or DOC_BG_NIGHT
-                            return self.ui.doc_settings:readSetting(key) == DOC_BG_GLOBAL
+                            return self:readBgChoice() == DOC_BG_GLOBAL
                         end,
                         keep_menu_open = true,
                         callback = function(touchmenu_instance)
-                            -- Toggle: ON = this book shows the global background, OFF = no background in this book
-                            local key = self:getSceneMode() == SCENE_DAY and DOC_BG_DAY or DOC_BG_NIGHT
+                            -- Toggle: ON = the global background is shown (in every book), OFF = no background
                             local turned_on
-                            if self.ui.doc_settings:readSetting(key) == DOC_BG_GLOBAL then
+                            if self:readBgChoice() == DOC_BG_GLOBAL then
                                 self:applyBackground(DOC_BG_NONE)
                                 turned_on = false
                             else
@@ -3763,11 +3755,11 @@ function CustomBg:addToMainMenu(menu_items)
                             local found = shown and self:getCurrentImageCache()[shown]
                             local random_note = (self:getGlobalDefaultBg() == nil) and " (random)" or ""
                             local msg
-                            local saved_val = self.ui.doc_settings:readSetting(key)
+                            local saved_val = self:readBgChoice()
                             if turned_on and saved_val ~= DOC_BG_GLOBAL then
-                                msg = "Background ON but NOT saved in this book (value: " .. tostring(saved_val) .. ")"
+                                msg = "Background ON but NOT saved (value: " .. tostring(saved_val) .. ")"
                             elseif not turned_on then
-                                msg = "Background OFF in this book"
+                                msg = "Background OFF"
                             elseif found then
                                 msg = "Background ON: " .. shown .. random_note
                             else
