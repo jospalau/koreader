@@ -25,15 +25,23 @@ local SETTLE_DELAY = 0.2
 
 return function(PageTextInfo)
 
--- Build a map: face name -> font file path (prefers the regular style)
-local function buildFacePathMap()
-    local regular, any = {}, {}
+-- One pass over the font list. Returns two maps:
+--   face name -> font file path (prefers the regular style)
+--   face name -> set of styles available ("Regular", "Bold", ...)
+local function buildFaceMaps()
+    local regular, any, styles = {}, {}, {}
     local list = FontList:getFontList() or {}
     for __, path in ipairs(list) do
         local info = FontList.fontinfo and FontList.fontinfo[path]
         if info then
             for __, f in ipairs(info) do
                 if f.name then
+                    local st = (f.bold and f.italic) and "Bold Italic"
+                        or f.bold and "Bold"
+                        or f.italic and "Italic"
+                        or "Regular"
+                    styles[f.name] = styles[f.name] or {}
+                    styles[f.name][st] = true
                     -- Ties go to the smallest path (the same rule as resolveFace in
                     -- settings_menu.lua), so the result never depends on list order
                     if not f.bold and not f.italic then
@@ -51,7 +59,7 @@ local function buildFacePathMap()
     for name, path in pairs(any) do
         regular[name] = regular[name] or path
     end
-    return regular
+    return regular, styles
 end
 
 -- Font:getFace keeps every face it loads in Font.faces for good, and a face is a
@@ -223,21 +231,8 @@ function PageTextInfo:showFontInfo(face, label)
 
     local path = self.font_paths and self.font_paths[face]
 
-    -- Styles available for this family
-    local has = {}
-    if FontList.fontinfo then
-        for __, info in pairs(FontList.fontinfo) do
-            for __, f in ipairs(info) do
-                if f.name == face then
-                    local s = (f.bold and f.italic) and "Bold Italic"
-                        or f.bold and "Bold"
-                        or f.italic and "Italic"
-                        or "Regular"
-                    has[s] = true
-                end
-            end
-        end
-    end
+    -- Styles available for this family (computed once, with the path map)
+    local has = self.font_styles and self.font_styles[face] or {}
     local styles = {}
     for __, s in ipairs({ "Regular", "Bold", "Italic", "Bold Italic" }) do
         if has[s] then table.insert(styles, s) end
@@ -364,11 +359,6 @@ function PageTextInfo:showFontInfo(face, label)
     return true
 end
 
--- Fonts shown first in the fonts menu, in this order.
--- Matching ignores case and spaces ("Chare Ink 7SP" == "chareink7sp").
-local PINNED_FONTS = {
-}
-
 -- Reading time per font, most-read first (same query as "Time per Font").
 -- Returns { order = {names...}, secs = {normalized_name = seconds} }.
 -- Empty if the DB or the table/column doesn't exist.
@@ -442,17 +432,12 @@ local function pinFonts(fonts, names, stats)
         new_names[#new_names + 1] = pinned and (PIN_MARK .. label) or label
     end
 
-    -- 1) Fixed pinned list, in the configured order (skip those not installed)
-    for __, pinned in ipairs(PINNED_FONTS) do
-        local i = index[norm(pinned)]
-        if i and not used[i] then add(i, true) end
-    end
-    -- 2) Fonts from the database, most-read first
+    -- 1) Fonts from the database, most-read first
     for __, pinned in ipairs(stats.order) do
         local i = index[norm(pinned)]
         if i and not used[i] then add(i, true) end
     end
-    -- 3) Everything else, keeping the original (alphabetical) order
+    -- 2) Everything else, keeping the original (alphabetical) order
     for i = 1, #fonts do
         if not used[i] then add(i, false) end
     end
@@ -493,7 +478,9 @@ function PageTextInfo:onShowFonts(page)
     self.fonts_stats = self.fonts_stats or getFontStats()
     fonts, names = pinFonts(fonts, names, self.fonts_stats)
     local current = ui.font.font_face
-    self.font_paths = self.font_paths or buildFacePathMap()
+    if not self.font_paths then
+        self.font_paths, self.font_styles = buildFaceMaps()
+    end
 
     -- Page to show: if none requested, jump to the page of the current font
     local total_pages = math.max(1, math.ceil(#fonts / PER_PAGE))
@@ -634,25 +621,21 @@ function PageTextInfo:onShowFonts(page)
 
     local grid = VerticalGroup:new{ align = "center" }
 
-    -- Small caption (one or two rows) with a thin separator below it (same look as
-    -- the settings menu)
-    local cap_widgets = {}   -- the caption rows, to change their text in place
-    for __, text in ipairs({ caption }) do
-        local text_w = TextWidget:new{
-            text = text,
-            face = Font:getFace("cfont", 11),
-            fgcolor = Blitbuffer.COLOR_DARK_GRAY,
-            max_width = dialog_w - 2 * gap,
-        }
-        cap_widgets[#cap_widgets + 1] = text_w
-        table.insert(grid, LeftContainer:new{
-            dimen = Geom:new{ w = dialog_w, h = label_h },
-            HorizontalGroup:new{
-                HorizontalSpan:new{ width = gap },
-                text_w,
-            },
-        })
-    end
+    -- Small caption with a thin separator below it (same look as the settings
+    -- menu). Kept in cap_widget to change its text in place.
+    local cap_widget = TextWidget:new{
+        text = caption,
+        face = Font:getFace("cfont", 11),
+        fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+        max_width = dialog_w - 2 * gap,
+    }
+    table.insert(grid, LeftContainer:new{
+        dimen = Geom:new{ w = dialog_w, h = label_h },
+        HorizontalGroup:new{
+            HorizontalSpan:new{ width = gap },
+            cap_widget,
+        },
+    })
     table.insert(grid, LineWidget:new{
         dimen = Geom:new{ w = dialog_w, h = thin },
         background = Blitbuffer.COLOR_DARK_GRAY,
@@ -813,7 +796,7 @@ function PageTextInfo:onShowFonts(page)
 
     -- The font changed: update the caption in place
     function dialog:updateCaptions(face)
-        cap_widgets[1]:setText(buildCaption(face))
+        cap_widget:setText(buildCaption(face))
     end
 
     -- Invert the chosen cell (and restore the one that was active): done right after
@@ -859,7 +842,8 @@ function PageTextInfo:onShowFonts(page)
                 -- now (ReaderRolling:onUpdatePos), so mark the cell right away.
                 -- It is painted in the same pass as the new page, instead of
                 -- waiting for the timer below.
-                UIManager:setDirty(self, "ui", markCurrent(cell))
+                local okm, region = pcall(markCurrent, cell)
+                UIManager:setDirty(self, "ui", okm and region or nil)
                 -- The caption (x-height, rating) can be measured now: SetFont has
                 -- already laid the book out (see above), so the engine reports the
                 -- new font. It is refreshed together with the cell and the page.
@@ -994,7 +978,6 @@ function PageTextInfo:onShowFonts(page)
         return true
     end
     dialog.plugin = self
-    dialog.frame_ref = frame
     dialog.frame_rect = frame_rect
 
     -- Report the area the menu really covers as its dimen, not the whole screen.
