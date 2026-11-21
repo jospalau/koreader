@@ -33,8 +33,9 @@
 --
 -- Gestures inside the box:
 --   drag the top bar   move the box (applied on release, position is saved)
---   tap                clear the list
---   swipe up/down      scroll toward newer / older lines (by swipe length)
+--   drag in the text   scroll, the lines follow the finger
+--   tap on "clear" (left end of the top bar)   clear the list (a tap in the text does nothing)
+--   swipe up/down      scroll toward newer / older lines (by swipe length, at most one page)
 --   swipe left         back to the live end (newest line)
 --   swipe right        jump to the oldest line kept
 --   tap on the "×" (right end of the top bar)   close the overlay
@@ -306,6 +307,9 @@ function Overlay:init()
     probe:free()
     self.bar_h = self.line_h + PADDING
     self.close_w = self.bar_h * 2          -- touch area of the "×"
+    self.clear_widget = TextWidget:new{ text = "clear", face = self.face,
+        fgcolor = Blitbuffer.COLOR_BLACK }
+    self.clear_w = self.clear_widget:getSize().w + 2 * PADDING   -- touch area of "clear"
     self.close_widget = TextWidget:new{ text = "×", face = self.face,
         fgcolor = Blitbuffer.COLOR_BLACK }
     self:updateDimen()
@@ -375,13 +379,21 @@ function Overlay:refresh()
     UIManager:setDirty(self, REFRESH_MODE, self.dimen)
 end
 
--- delta > 0 goes toward older lines.
-function Overlay:scrollBy(delta)
+-- delta > 0 goes toward older lines. lazy = called while the finger is moving: the
+-- text is rebuilt at once but the e-ink refresh is sent at most every 150 ms (the
+-- last one is sent when the finger is lifted).
+function Overlay:scrollBy(delta, lazy)
     local new = math.max(0, math.min(self.offset + delta, self:maxOffset()))
     if new == self.offset then return end
     self.offset = new
     self:rebuild()
-    self:refresh()
+    if lazy and self.pan_refresh_t and elapsedUs(self.pan_refresh_t) < 150000 then
+        self.pan_dirty = true
+    else
+        self.pan_refresh_t = nowT()
+        self.pan_dirty = nil
+        self:refresh()
+    end
 end
 
 function Overlay:paintTo(bb, x, y)
@@ -402,6 +414,9 @@ function Overlay:paintTo(bb, x, y)
     bb:paintRect(d.x + bt, d.y + bt + self.bar_h, d.w - 2 * bt, bt, Blitbuffer.COLOR_BLACK)
 
     -- close button: "×" at the right end of the bar
+    -- "clear" at the left end of the bar
+    self.clear_widget:paintTo(bb, d.x + bt + PADDING,
+        d.y + bt + math.floor((self.bar_h - self.clear_widget:getSize().h) / 2))
     local cs = self.close_widget:getSize()
     self.close_widget:paintTo(bb,
         d.x + d.w - bt - math.floor((self.close_w + cs.w) / 2),
@@ -445,6 +460,11 @@ end
 function Overlay:inClose(pos)
     return self:inHandle(pos)
         and pos.x >= self.dimen.x + self.dimen.w - Size.border.thin - self.close_w
+end
+
+-- True when pos is on "clear" (left end of the bar).
+function Overlay:inClear(pos)
+    return self:inHandle(pos) and pos.x < self.dimen.x + Size.border.thin + self.clear_w
 end
 
 function Overlay:beginDrag(x, y)
@@ -541,6 +561,33 @@ function Overlay:onBoxGesture(ges)
         return true
     end
 
+    -- scroll by dragging in the text: the lines follow the finger
+    if kind == "pan" then
+        local sx = pos.x - ((ges.relative and ges.relative.x) or 0)
+        local sy = pos.y - ((ges.relative and ges.relative.y) or 0)
+        if self.pan_lines or (self:contains({ x = sx, y = sy }) and not self:inHandle({ x = sx, y = sy })) then
+            local rel = (ges.relative and ges.relative.y) or (pos.y - sy)
+            local target = math.floor(rel / self.line_h)   -- finger down = older lines
+            self.pan_lines = self.pan_lines or 0
+            if target ~= self.pan_lines then
+                local step = target - self.pan_lines
+                self.pan_lines = target
+                self:scrollBy(step, true)
+            end
+            self.panned_t = nowT()
+            return true
+        end
+    elseif kind == "pan_release" and self.pan_lines then
+        self.pan_lines = nil
+        self.panned_t = nowT()
+        if self.pan_dirty then
+            self.pan_dirty = nil
+            self.pan_refresh_t = nowT()
+            self:refresh()
+        end
+        return true
+    end
+
     if not self:contains(pos) then return false end
 
     if kind == "tap" then
@@ -548,12 +595,19 @@ function Overlay:onBoxGesture(ges)
             closeSelf()
             return true
         end
-        self:clearLines()
-        return true
+        if self:inClear(pos) then
+            self:clearLines()
+        end
+        return true     -- a tap in the text does nothing (it used to clear the list)
     elseif kind == "swipe" then
+        -- a pan has just scrolled: the swipe that may follow it is not a second scroll
+        if self.panned_t and elapsedUs(self.panned_t) < 600000 then
+            self.panned_t = nil
+            return true
+        end
         local dir = ges.direction
         if dir == "north" or dir == "south" then
-            local n = math.max(1, math.floor((ges.distance or 0) / self.line_h))
+            local n = math.max(1, math.min(N_LINES - 1, math.floor((ges.distance or 0) / self.line_h)))
             self:scrollBy(dir == "south" and n or -n)
         elseif dir == "west" then
             self:scrollBy(-self.offset)       -- back to live
@@ -570,6 +624,7 @@ end
 function Overlay:free()
     self:clearWidgets()
     if self.close_widget then self.close_widget:free() end
+    if self.clear_widget then self.clear_widget:free() end
 end
 
 -- Throttled redraw: lines are added as widgets are created, the box is rebuilt

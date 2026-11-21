@@ -1514,10 +1514,6 @@ function PageTextInfo:onAdjustMarginsTopbar()
 end
 
 -- Switch the widget time overlay on/off from the menu entry (same flag the "×" of the overlay switches off)
-function PageTextInfo:onWidgetTimeOverlayToggled(enable)
-    WidgetTimeOverlay.setEnabled(enable and true or false)
-    return true
-end
 
 function PageTextInfo:onPageUpdate(pageno)
     -- Avoid double execution when loading document
