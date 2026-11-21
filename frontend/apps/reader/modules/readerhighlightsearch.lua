@@ -60,6 +60,64 @@ local function buildContext(r, text)
     return table.concat(parts)
 end
 
+-- Returns the font file (and face index) used by the book, or nil to keep the UI font.
+-- The face name -> file lookup lives in the cre library, not in the document object.
+local function getBookFontFile(ui)
+    local document = ui.document
+    local face_name = ui.font and ui.font.font_face
+    if not face_name and type(document.getFontFace) == "function" then
+        local okn, n = pcall(document.getFontFace, document)
+        if okn then face_name = n end
+    end
+    if not face_name then
+        logger.info("highlight search: book font name not found")
+        return nil
+    end
+    local okc, cre = pcall(require, "libs/libkoreader-cre")
+    if not okc or type(cre) ~= "table" or type(cre.getFontFaceFilenameAndFaceIndex) ~= "function" then
+        logger.info("highlight search: cre.getFontFaceFilenameAndFaceIndex not available")
+        return nil
+    end
+    local ok, filename, faceindex = pcall(cre.getFontFaceFilenameAndFaceIndex, face_name)
+    if not ok or type(filename) ~= "string" or filename == "" then
+        logger.info("highlight search: no font file for", face_name)
+        return nil
+    end
+    logger.info("highlight search: using book font", face_name, filename, faceindex)
+    return filename, faceindex
+end
+
+-- TextViewer has no font parameter: its face is built in init() from Font.fontmap
+-- ("x_smallinfofont"). Remap that entry while the viewer is being built, then restore it.
+local function newTextViewerWithFont(font_file, args)
+    local Font = require("ui/font")
+    local key = "x_smallinfofont"
+    local old = Font.fontmap[key]
+    if font_file and old then Font.fontmap[key] = font_file end
+    local ok, res = pcall(TextViewer.new, TextViewer, args)
+    Font.fontmap[key] = old
+    if not ok then error(res, 0) end
+    return res
+end
+
+-- Menu does not pass a font to its rows: every MenuItem builds its face from
+-- Font.fontmap["smallinfofont"] each time the page is (re)drawn. Subclass Menu so that
+-- entry points to the book font while updateItems() runs.
+local function newBookMenuClass(Menu, font_file)
+    local BookMenu = Menu:extend{}
+    function BookMenu:updateItems(...)
+        local Font = require("ui/font")
+        local key = "smallinfofont"
+        local old = Font.fontmap[key]
+        if font_file and old then Font.fontmap[key] = font_file end
+        local ok, res = pcall(Menu.updateItems, self, ...)
+        Font.fontmap[key] = old
+        if not ok then error(res, 0) end
+        return res
+    end
+    return BookMenu
+end
+
 ---------------------------------------------------------------------------
 -- Short long-press trigger (used from ReaderHighlight:onHold/onHoldRelease)
 ---------------------------------------------------------------------------
@@ -126,11 +184,12 @@ function ReaderHighlightSearch:search(hl)
     -- Full-context view of a single occurrence.
     showPreview = function(result, n, data)
         local viewer
+        local book_font = getBookFontFile(ui)
         local title = string.format("%s — %d/%d", text, n, #data)
         if result.page then
             title = title .. string.format(" · p. %s", tostring(result.page))
         end
-        viewer = TextViewer:new{
+        viewer = newTextViewerWithFont(book_font, {
             title = title,
             text = buildContext(result, text),
             text_type = "lookup",
@@ -163,12 +222,13 @@ function ReaderHighlightSearch:search(hl)
             close_callback = function()
                 UIManager:nextTick(function() showResults(data) end)
             end,
-        }
+        })
         UIManager:show(viewer)
     end
 
     -- List of occurrences, one compact passage per row.
     showResults = function(data)
+        local book_font = getBookFontFile(ui)
         local items = {}
         for i, r in ipairs(data) do
             -- Shorter excerpts in the list; the preview keeps the full context.
@@ -188,7 +248,7 @@ function ReaderHighlightSearch:search(hl)
             })
         end
         local count = #data .. (#data >= MAX_HITS and "+" or "")
-        local menu = Menu:new{
+        local menu = newBookMenuClass(Menu, book_font):new{
             title = text,
             subtitle = string.format("%s occurrences before this point · tap a passage to read more", count),
             item_table = items,
