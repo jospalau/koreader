@@ -1202,8 +1202,32 @@ end
 
 -- Title ------------------------------------------------------------------
 
+-- Leading factor, calculated exactly as the top bar does (toggleBar in topbar.lua):
+-- 1.2em (the line-height of the converted books) times the size in px and the line
+-- spacing, divided by the x-height in px. The word that follows ("balanced"...) is
+-- the one of the top bar's own classifyLeading, so both always agree.
+local function leadingText(ui, face, info)
+    if not (info and info.mm and info.mm > 0) then return "n/a" end
+    local conf = ui.document.configurable
+    local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+    local size_px = math.floor(dpi * conf.font_size / 72 + 0.5)
+    local x_height = info.mm * dpi / 25.4
+    local lf = (1.2 * size_px * ((conf.line_spacing or 100) / 100)) / x_height
+    local text = string.format("%.2f", lf)
+    local topbar = ui.view and ui.view.topbar
+    if topbar and topbar.classifyLeading then
+        local ok, label = pcall(function()
+            local face_base = Font:getFace(resolveFace(face), size_px, 0, true)
+            local x_height2, ascender, descender = face_base.ftsize:getAscDesc()
+            return topbar:classifyLeading(lf, x_height2, ascender, descender)
+        end)
+        if ok and label then text = text .. " (" .. label .. ")" end
+    end
+    return text
+end
+
 -- Returns two lines, each a list of segments:
---   face, size and x-height  /  spacing, weight, contrast, hinting
+--   face, size, x-height and leading  /  spacing, weight, contrast, hinting
 local function buildTitleSegments(ui)
     local configurable = ui.document.configurable
     local pt = ui.font.configurable.font_size
@@ -1223,6 +1247,9 @@ local function buildTitleSegments(ui)
     local info = PageTextInfo.getFontXHeightInfo({ ui = ui }, font_name)
     table.insert(line1, { text = info and string.format("%s%.2fmm%s", info.estimated and "~" or "", info.mm,
         info.rem and " (rem)" or "") or "n/a", bold = true })
+    -- Leading, next to the x-height (same value as the top bar's "lF")
+    table.insert(line1, { text = "  |  leading " })
+    table.insert(line1, { text = leadingText(ui, font_name, info), bold = true })
 
     local line2 = {}
     local weight = configurable.font_base_weight or 0
