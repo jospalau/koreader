@@ -50,6 +50,9 @@ local UIManager = {
 
     _repaint_watchdog_func = nil,
 
+    -- Tells refresh_overlay.lua that the refresh_logger hook below exists
+    _has_refresh_logger = 2,   -- 2 = also passes the call stack
+
     event_hook = require("ui/hook_container"):new()
 }
 
@@ -691,6 +694,18 @@ function UIManager:setDirty(widget, refreshtype, refreshregion, refreshdither)
            print(debug.traceback("", 2))
            print("----")
         end
+    end
+
+    -- Optional hook (refresh_overlay.lua): same information as the debug_refresh print above,
+    -- but with the caller (file:line) instead of the whole traceback. Nil when no overlay is on.
+    if self.refresh_logger and refreshtype ~= nil then
+        local stack = {}
+        for lvl = 2, 8 do
+            local fi = debug.getinfo(lvl, "Sl")
+            if not fi then break end
+            stack[#stack + 1] = fi
+        end
+        pcall(self.refresh_logger, "set", refreshtype, widget, refreshregion, stack, refreshdither)
     end
 
     local widget_name
@@ -1447,6 +1462,11 @@ function UIManager:_repaint()
             refresh.region.w, refresh.region.h))
             print(debug.traceback("", 2))
             print("----")
+        end
+        -- Optional hook (refresh_overlay.lua), same as the debug_refresh print above
+        if self.refresh_logger then
+            pcall(self.refresh_logger, "ref", refresh.mode, nil, refresh.region, nil, refresh.dither,
+                self.refresh_count, self.FULL_REFRESH_COUNT)
         end
         --[[
         -- Remember the refresh region

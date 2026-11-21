@@ -26,6 +26,7 @@ local TextViewer = require("ui/widget/textviewer")
 local CrashLog = require("crashlog_overlay")
 local MemoryOverlay = require("memory_overlay")
 local WidgetTimeOverlay = require("widget_time_overlay")
+local RefreshOverlay = require("refresh_overlay")
 local ExitTiming = require("exit_timing")
 local Geom = require("ui/geometry")
 local Size = require("ui/size")
@@ -1240,6 +1241,7 @@ function PageTextInfo:init()
     CrashLog.setEnabled(G_reader_settings:isTrue("crashlog_enabled"))
     MemoryOverlay.setEnabled(G_reader_settings:isTrue("memoryoverlay_enabled"))
     WidgetTimeOverlay.setEnabled(G_reader_settings:isTrue("widgettimeoverlay_enabled"))
+    RefreshOverlay.setEnabled(G_reader_settings:isTrue("refreshoverlay_enabled"))
     -- The "×" of an overlay switches its flag off by itself: close KOReader's top menu
     -- if it is open (it would still show the old flag) and redraw the actions menu
     local function onOverlayClosed()
@@ -1256,6 +1258,7 @@ function PageTextInfo:init()
     CrashLog.setOnClose(onOverlayClosed)
     MemoryOverlay.setOnClose(onOverlayClosed)
     WidgetTimeOverlay.setOnClose(onOverlayClosed)
+    RefreshOverlay.setOnClose(onOverlayClosed)
     ExitTiming.setOnClose(onOverlayClosed)
     ExitTiming.record("PageTextInfo.init", _time.to_ms(_time.since(_t_init)))
 end
@@ -1719,6 +1722,19 @@ function PageTextInfo:addToMainMenu(menu_items)
                     end,
                 },
                 {
+                    text = _("Refresh overlay"),
+                    checked_func = function() return G_reader_settings:isTrue("refreshoverlay_enabled") end,
+                    help_text = _([[Show the screen refreshes of UIManager (setDirty calls and the refreshes really sent, with mode, region and caller), live, in a scrollable window on every screen. Needs the refresh_logger hook in uimanager.lua. Nothing is hooked while it is off.]]),
+                    callback = function()
+                        local enable = not G_reader_settings:isTrue("refreshoverlay_enabled")
+                        G_reader_settings:saveSetting("refreshoverlay_enabled", enable)
+                        G_reader_settings:flush()
+                        local Event = require("ui/event")
+                        UIManager:broadcastEvent(Event:new("RefreshOverlayToggled", enable))
+                        return true
+                    end,
+                },
+                {
                     text = _("Exit timing"),
                     checked_func = function() return G_reader_settings:isTrue("exittiming_enabled") end,
                     help_text = _([[Print (stdout) where the time goes when a book is opened or closed and the file manager is built again: plugin init, reader close and file manager creation. Nothing is hooked while it is off.]]),
@@ -2167,6 +2183,19 @@ This is to be active only if the option flash buttons and menu items or the opti
                         G_reader_settings:flush()
                         local Event = require("ui/event")
                         UIManager:broadcastEvent(Event:new("WidgetTimeOverlayToggled", enable))
+                        return true
+                    end,
+                },
+                {
+                    text = _("Refresh overlay"),
+                    checked_func = function() return G_reader_settings:isTrue("refreshoverlay_enabled") end,
+                    help_text = _([[Show the screen refreshes of UIManager (setDirty calls and the refreshes really sent, with mode, region and caller), live, in a scrollable window on every screen. Needs the refresh_logger hook in uimanager.lua. Nothing is hooked while it is off.]]),
+                    callback = function()
+                        local enable = not G_reader_settings:isTrue("refreshoverlay_enabled")
+                        G_reader_settings:saveSetting("refreshoverlay_enabled", enable)
+                        G_reader_settings:flush()
+                        local Event = require("ui/event")
+                        UIManager:broadcastEvent(Event:new("RefreshOverlayToggled", enable))
                         return true
                     end,
                 },

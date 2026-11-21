@@ -26,6 +26,12 @@ return function(PageTextInfo)
         return ok and mod or nil
     end
 
+    -- Same for the refresh overlay (refresh_overlay.lua, next to this file)
+    local function getRefreshOverlay()
+        local ok, mod = pcall(require, "refresh_overlay")
+        return ok and mod or nil
+    end
+
     -- Per-platform paths (defined once, shared by both functions)
     local function getPlatformPaths()
         if Device:isKobo() then
@@ -413,6 +419,20 @@ return function(PageTextInfo)
         return true
     end
 
+    function PageTextInfo:onRefreshOverlayToggled(enable)
+        if enable == nil then
+            -- no value given (e.g. from an action): flip the saved flag
+            enable = not G_reader_settings:isTrue("refreshoverlay_enabled")
+            G_reader_settings:saveSetting("refreshoverlay_enabled", enable)
+            G_reader_settings:flush()
+        end
+        local RefreshOverlay = getRefreshOverlay()
+        if RefreshOverlay then
+            RefreshOverlay.setEnabled(enable and true or false)
+        end
+        return true
+    end
+
     function PageTextInfo:onExitTimingToggled(enable)
         if enable == nil then
             -- no value given (e.g. from an action): flip the saved flag
@@ -520,6 +540,14 @@ return function(PageTextInfo)
             end,
         })
         table.insert(actions, {
+            label = "Refresh overlay",
+            -- Reflects the saved setting
+            active = function() return G_reader_settings:isTrue("refreshoverlay_enabled") end,
+            callback = function()
+                self.ui:handleEvent(Event:new("RefreshOverlayToggled"))
+            end,
+        })
+        table.insert(actions, {
             label = "Exit timing",
             -- Reflects the saved setting
             active = function() return G_reader_settings:isTrue("exittiming_enabled") end,
@@ -529,6 +557,7 @@ return function(PageTextInfo)
         })
         table.insert(actions, {
             label = "Verbose logging",
+            full_width = true,
             -- Reflects the saved setting (takes effect after a restart)
             active = function() return G_reader_settings:isTrue("debug_verbose") end,
             callback = function() self:onToggleDebugVerbose() end,
@@ -853,7 +882,7 @@ return function(PageTextInfo)
         local function onOverlayClosed()
             if self.actions_dialog == dialog then dialog:updateActive() end
         end
-        for _, getMod in ipairs({ getCrashLog, getMemoryOverlay }) do
+        for _, getMod in ipairs({ getCrashLog, getMemoryOverlay, getRefreshOverlay }) do
             local mod = getMod()
             if mod and mod.setOnClose then mod.setOnClose(onOverlayClosed) end
         end
