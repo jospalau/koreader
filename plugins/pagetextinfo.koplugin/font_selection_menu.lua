@@ -23,31 +23,6 @@ local Screen = Device.screen
 -- the Paperwhite) or a queued tap starts a second change.
 local SETTLE_DELAY = 0.2
 
--- Input inhibition while a font is being applied.
--- ReaderRolling:onUpdatePos (run by SetFont) calls Input:inhibitInput(true) before the
--- re-layout and Input:inhibitInputUntil(0.2) after it, which drops all input for the
--- whole re-layout, so a tap outside the menu made in that window never reaches it.
--- The menu already protects itself with `busy`, so while it is applying a font those
--- requests are ignored. It only acts while the menu is on screen and busy.
--- Set to false to go back to KOReader's behaviour.
-local ALLOW_INPUT_DURING_FONT_CHANGE = true
-local active_dialog   -- the fonts dialog on screen, if any
-if ALLOW_INPUT_DURING_FONT_CHANGE then
-    pcall(function()
-        local input = Device.input
-        if input and not input._pti_inhibit_wrapped then
-            local orig = input.inhibitInput
-            input.inhibitInput = function(self_, toggle, ...)
-                if toggle and active_dialog and active_dialog.busy then
-                    return
-                end
-                return orig(self_, toggle, ...)
-            end
-            input._pti_inhibit_wrapped = true
-        end
-    end)
-end
-
 return function(PageTextInfo)
 
 -- One pass over the font list. Returns two maps:
@@ -180,7 +155,6 @@ end
 function PageTextInfo:closeFontsMenu()
     local d = self.fonts_dialog
     self.fonts_dialog = nil
-    if d == active_dialog then active_dialog = nil end
     self.fonts_stats = nil
     local changed = self.fonts_changed
     self.fonts_changed = nil
@@ -861,6 +835,12 @@ function PageTextInfo:onShowFonts(page)
         UIManager:tickAfterNext(function()
             if plugin.fonts_dialog ~= self then self.busy = nil; return end
             local ok, err = pcall(plugin.applyFont, plugin, face)
+            -- ReaderRolling:onUpdatePos inhibited input for the whole re-layout and
+            -- keeps it inhibited for 0.2 s more. Taps made meanwhile are still queued
+            -- (the loop was blocked), and would be read and thrown away. Lift the
+            -- inhibition now, before the loop reads them, so they reach the menu
+            -- (it is `busy`, so they are remembered or close it afterwards).
+            pcall(function() Device.input:inhibitInputUntil() end)
             if ok then
                 current = face
                 plugin.fonts_changed = true   -- closeFontsMenu cleans the page up
@@ -1023,7 +1003,6 @@ function PageTextInfo:onShowFonts(page)
     end
 
     self.fonts_dialog = dialog
-    active_dialog = dialog
 
     local region = frame_rect
     if old_region then region = region:combine(old_region) end
