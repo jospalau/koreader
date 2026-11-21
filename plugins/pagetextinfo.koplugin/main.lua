@@ -1541,6 +1541,132 @@ end
 --         end,
 --     }
 -- end
+-- MONKEY PATCHES -----------------------------------------------------------------------------
+-- A function is "original" when it is defined in the file where KOReader defines it. If it is
+-- defined anywhere else (a plugin, a user patch, a wrapper made at run time...) somebody replaced
+-- it. The chain of wrappers is followed through the upvalues they keep to call the previous one
+-- (orig, orig_show, raw, old...). Patches made inside the original file itself cannot be seen.
+local function wrappedFunction(f)
+    local i = 1
+    while true do
+        local name, value = debug.getupvalue(f, i)
+        if not name then return nil end
+        if type(value) == "function" then
+            local n = name:lower()
+            if n:find("orig", 1, true) or n:find("^raw") or n:find("^old") or n:find("^prev") then
+                return value
+            end
+        end
+        i = i + 1
+    end
+end
+
+local function shortSource(info)
+    if info.what == "C" then return "C function" end
+    local src = info.short_src or "?"
+    src = src:match("([^/]+/[^/]+)$") or src
+    return src .. ":" .. (info.linedefined or 0)
+end
+
+local function isExpected(info, expected)
+    if expected == "C" then return info.what == "C" end
+    if info.what == "C" then return false end
+    local src = info.short_src or ""
+    if type(expected) == "string" then expected = { expected } end
+    for _, e in ipairs(expected) do
+        if src:find(e, 1, true) then return true end
+    end
+    return false
+end
+
+-- Returns the list of wrappers found over the original (empty = not patched) and
+-- whether the original was reached at the end of the chain
+local function inspectFunction(f, expected)
+    local chain, seen, cur = {}, {}, f
+    for _ = 1, 8 do
+        if type(cur) ~= "function" or seen[cur] then break end
+        seen[cur] = true
+        local info = debug.getinfo(cur, "S")
+        if not info then break end
+        if isExpected(info, expected) then return chain, true end
+        chain[#chain + 1] = shortSource(info)
+        if info.what == "C" then break end
+        cur = wrappedFunction(cur)
+    end
+    return chain, false
+end
+
+function PageTextInfo:showMonkeyPatches()
+    local targets = {}
+    local function add(label, getter, expected)
+        targets[#targets + 1] = { label = label, getter = getter, expected = expected }
+    end
+    local function loaded(modname, name)
+        return function()
+            local m = package.loaded[modname]
+            return type(m) == "table" and m[name] or nil
+        end
+    end
+
+    for _, name in ipairs({ "show", "close", "setDirty", "_repaint", "_refresh", "sendEvent",
+                            "broadcastEvent", "nextTick", "tickAfterNext", "scheduleIn", "unschedule",
+                            "getTopmostVisibleWidget", "_checkTasks", "handleInput" }) do
+        add("UIManager:" .. name, function() return UIManager[name] end, "ui/uimanager.lua")
+    end
+    add("Widget:new", loaded("ui/widget/widget", "new"), "ui/widget/")
+    add("Notification:notify", function() return Notification.notify end, "ui/widget/notification.lua")
+    add("FileManager:setupLayout", function() return FileManager.setupLayout end, "apps/filemanager/filemanager.lua")
+    add("FileManager:updateTitleBarPath", function() return FileManager.updateTitleBarPath end, "apps/filemanager/filemanager.lua")
+    add("FileChooser:init", function() return FileChooser.init end, "ui/widget/filechooser.lua")
+    add("Menu:init", loaded("ui/widget/menu", "init"), "ui/widget/menu.lua")
+    add("ReaderUI:init", loaded("apps/reader/readerui", "init"), "apps/reader/readerui.lua")
+    add("ReaderView:paintTo", loaded("apps/reader/modules/readerview", "paintTo"), "apps/reader/modules/readerview.lua")
+    for _, name in ipairs({ "refresh", "refreshFullImp", "refreshPartialImp", "refreshUIImp", "refreshFlashUIImp",
+                            "refreshFlashPartialImp", "refreshFastImp", "refreshA2Imp" }) do
+        add("Screen:" .. name, function() return Screen[name] end, { "framebuffer", "device/screen" })
+    end
+    add("require", function() return require end, "C")
+    add("dofile", function() return dofile end, "C")
+    add("io.popen", function() return io.popen end, "C")
+    add("os.execute", function() return os.execute end, "C")
+
+    local patched, clean, missing = {}, {}, 0
+    for __, t in ipairs(targets) do
+        local ok, f = pcall(t.getter)
+        if not ok or type(f) ~= "function" then
+            missing = missing + 1
+        else
+            local chain, reached = inspectFunction(f, t.expected)
+            if #chain == 0 then
+                clean[#clean + 1] = t.label
+            else
+                -- from the outermost wrapper down to the original (or "?" if the chain was lost)
+                patched[#patched + 1] = "• " .. t.label .. "\n    " .. table.concat(chain, "\n    → ")
+                    .. "\n    → " .. (reached and _("original") or "?")
+            end
+        end
+    end
+
+    local lines = {
+        T(_("%1 of %2 functions patched"), #patched, #patched + #clean),
+        "",
+    }
+    if #patched > 0 then
+        table.insert(lines, table.concat(patched, "\n"))
+        table.insert(lines, "")
+    end
+    table.insert(lines, T(_("Not patched (%1): %2"), #clean, table.concat(clean, ", ")))
+    if missing > 0 then
+        table.insert(lines, "")
+        table.insert(lines, T(_("Not found or not loaded: %1"), missing))
+    end
+    UIManager:show(TextViewer:new{
+        title = _("Monkey patches"),
+        text = table.concat(lines, "\n"),
+        justified = false,
+    })
+end
+
 local function getIfosInDir(path)
     -- Get all the .ifo under directory path.
     -- Don't walk into "res/" subdirectories, as per Stardict specs, they
@@ -1740,6 +1866,15 @@ function PageTextInfo:addToMainMenu(menu_items)
                         G_reader_settings:flush()
                         local Event = require("ui/event")
                         UIManager:broadcastEvent(Event:new("ExitTimingToggled", enable))
+                        return true
+                    end,
+                },
+                {
+                    text = _("Monkey patches"),
+                    help_text = _([[Check the most important functions (UIManager, Widget, FileManager, Screen refreshes, require...) and show which ones have been replaced by something other than the original KOReader source, with the file and line of every wrapper.]]),
+                    callback = function(touchmenu_instance)
+                        if touchmenu_instance and touchmenu_instance.closeMenu then touchmenu_instance:closeMenu() end
+                        self:showMonkeyPatches()
                         return true
                     end,
                 },
@@ -2205,6 +2340,15 @@ This is to be active only if the option flash buttons and menu items or the opti
                         G_reader_settings:flush()
                         local Event = require("ui/event")
                         UIManager:broadcastEvent(Event:new("ExitTimingToggled", enable))
+                        return true
+                    end,
+                },
+                {
+                    text = _("Monkey patches"),
+                    help_text = _([[Check the most important functions (UIManager, Widget, FileManager, Screen refreshes, require...) and show which ones have been replaced by something other than the original KOReader source, with the file and line of every wrapper.]]),
+                    callback = function(touchmenu_instance)
+                        if touchmenu_instance and touchmenu_instance.closeMenu then touchmenu_instance:closeMenu() end
+                        self:showMonkeyPatches()
                         return true
                     end,
                 },
@@ -4756,3 +4900,5 @@ function PageTextInfo:onShowTweaks(page)
 end
 
 return PageTextInfo
+
+
