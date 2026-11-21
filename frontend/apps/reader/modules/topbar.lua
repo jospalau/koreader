@@ -1,33 +1,45 @@
+-- ==========================================================================
+-- Requires
+-- ==========================================================================
+
+-- Core / device
+local Device = require("device")
+local Screen = require("device").screen
+local Size = require("ui/size")
+local Blitbuffer = require("ffi/blitbuffer")
+local Font = require("ui/font")
+local Geom = require("ui/geometry")
+local UIManager = require("ui/uimanager")
+
+-- Widgets
 local Widget = require("ui/widget/widget")
-local LineWidget = require("ui/widget/linewidget")
-local MultiInputDialog = require("ui/widget/multiinputdialog")
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 local HorizontalGroup = require("ui/widget/horizontalgroup")
-local UIManager = require("ui/uimanager")
-local InfoMessage = require("ui/widget/infomessage")
-local Geom = require("ui/geometry")
-local Screen = require("device").screen
-local T = require("ffi/util").template
-local _ = require("gettext")
-local LuaSettings = require("luasettings")
-local DataStorage = require("datastorage")
-local Blitbuffer = require("ffi/blitbuffer")
+local VerticalGroup = require("ui/widget/verticalgroup")
+local FrameContainer = require("ui/widget/container/framecontainer")
 local left_container = require("ui/widget/container/leftcontainer")
 local right_container = require("ui/widget/container/rightcontainer")
 local center_container = require("ui/widget/container/centercontainer")
 local bottom_container = require("ui/widget/container/bottomcontainer")
-local Font = require("ui/font")
+local LineWidget = require("ui/widget/linewidget")
 local TextWidget = require("ui/widget/textwidget")
-local datetime = require("datetime")
-local FrameContainer = require("ui/widget/container/framecontainer")
-local VerticalGroup = require("ui/widget/verticalgroup")
-local Math = require("optmath")
-local SQ3 = require("lua-ljsqlite3/init")
 local ProgressWidget = require("ui/widget/progresswidget")
-local Device = require("device")
-local Size = require("ui/size")
-local ffiUtil = require("ffi/util")
+local InfoMessage = require("ui/widget/infomessage")
+local MultiInputDialog = require("ui/widget/multiinputdialog")
 
+-- Utilities and data
+local _ = require("gettext")
+local T = require("ffi/util").template
+local ffiUtil = require("ffi/util")
+local datetime = require("datetime")
+local Math = require("optmath")
+local LuaSettings = require("luasettings")
+local DataStorage = require("datastorage")
+local SQ3 = require("lua-ljsqlite3/init")
+
+-- ==========================================================================
+-- CornerIcon
+-- ==========================================================================
 
 -- Corner mark: a small triangle in the right corner of the screen (a dog-ear
 -- look). setText() takes the mode:
@@ -87,6 +99,10 @@ end
 function CornerIcon:free()
 end
 
+-- ==========================================================================
+-- TopBar: class definition
+-- ==========================================================================
+
 -- self[4] = self.topbar in readerview.lua
 
 local TopBar = WidgetContainer:extend{
@@ -105,6 +121,34 @@ local TopBar = WidgetContainer:extend{
     MARGIN_BOTTOM = Screen:scaleBySize(9),
     -- show_bar_in_top_bar = true,
 }
+
+-- ==========================================================================
+-- Local helpers
+-- ==========================================================================
+
+local getMem = function()
+    -- local cmd = "cat /proc/$(pgrep luajit | head -1)/statm | awk '{ print $2 }'"
+    -- local std_out = io.popen(cmd, "r")
+    -- if std_out then
+    --     local output = std_out:read("*all")
+    --     std_out:close()
+    --     return true, output
+    -- end
+    local stat = io.open("/proc/self/stat", "r")
+    if stat == nil then return end
+
+    local util = require("util")
+    local t = util.splitToArray(stat:read("*line"), " ")
+    stat:close()
+
+    if #t == 0 then return 0 end
+
+    return Math.round(tonumber(t[24]) / 256)
+end
+
+-- ==========================================================================
+-- Statistics (statistics.sqlite3)
+-- ==========================================================================
 
 function TopBar:getReadingStreak()
     local DataStorage = require("datastorage")
@@ -420,15 +464,6 @@ function TopBar:getBooksOpened()
     return total_books
 end
 
-function TopBar:getDateAndVersion()
-    local date_and_version_file_path = "./dateandversion"
-    local date_and_version = io.open(date_and_version_file_path, "r")
-    if date_and_version == nil then return "No dateandversion file" end
-
-    local t = date_and_version:read("*line")
-    return t
-end
-
 function TopBar:getTodayBookStats()
     local now_t = os.date("*t")
     local start_today_time = os.time{year=now_t.year, month=now_t.month, day=now_t.day, hour=0, min=0, sec=0}
@@ -453,6 +488,19 @@ function TopBar:getTodayBookStats()
     today_pages = tonumber(today_pages)
 
     return today_duration, today_pages
+end
+
+-- ==========================================================================
+-- Book metadata
+-- ==========================================================================
+
+function TopBar:getDateAndVersion()
+    local date_and_version_file_path = "./dateandversion"
+    local date_and_version = io.open(date_and_version_file_path, "r")
+    if date_and_version == nil then return "No dateandversion file" end
+
+    local t = date_and_version:read("*line")
+    return t
 end
 
 function TopBar:getPublicationDateBook()
@@ -578,6 +626,45 @@ function TopBar:getOriginBook()
     end
 end
 
+-- ==========================================================================
+-- Typography helpers
+-- ==========================================================================
+
+function TopBar:classifyLeading(lf, x_height, ascender, descender)
+    if not x_height or x_height == 0 then return "invalid" end
+    local safe_min = (ascender + descender) / x_height
+    -- print("Ascender: " .. ascender)
+    -- print("Descender: " .. descender)
+    -- print("X-height: " .. x_height)
+    -- print("Safe min: " .. safe_min)
+    if lf < safe_min then return "collision"
+    elseif lf < safe_min + 0.15 then return "compact"
+    elseif lf < safe_min + 0.4 then return "balanced"
+    elseif lf < safe_min + 0.6 then return "airy"
+    else return "very airy"
+    end                     -- Excessive spacing, feels like children's books or UI
+end
+
+function TopBar:getXHeightRangeLabel(size_pt, xh_mm)
+    local perfect_min = 1.7     -- A partir de aquí empieza a ser cómodo
+    local perfect_max = 1.85    -- Más allá empieza a parecer visualmente grande
+    local label
+
+    if xh_mm < perfect_min then
+      label = "low"
+    elseif xh_mm <= perfect_max then
+      label = "perfect"
+    else
+      label = "too big"
+    end
+
+    return string.format("fS: %.2fpt, xH: %.2fmm (%.2f–%.2f) [%s]", size_pt, xh_mm, perfect_min, perfect_max, label)
+end
+
+-- ==========================================================================
+-- Lifecycle and session
+-- ==========================================================================
+
 function TopBar:init()
     if self.fm then return end
     if not self.settings then self.settings = LuaSettings:open(DataStorage:getSettingsDir() .. "/topbar.lua") end
@@ -632,8 +719,8 @@ function TopBar:init()
     if TopBar.preserved_alt_bar ~= nil then
         TopBar.show_bar_in_top_bar = TopBar.preserved_alt_bar
         TopBar.preserved_alt_bar = nil
-        else
-            TopBar.show_bar_in_top_bar = true
+    else
+        TopBar.show_bar_in_top_bar = true
     end
 
     if TopBar.preserved_show_alt_bar ~= nil then
@@ -706,26 +793,6 @@ function TopBar:init()
     self.daily_pages_goal = self.settings:readSetting("daily_pages_goal", 120)
 
     self.space_after_alt_bar = self.settings:readSetting("space_after_alt_bar", 12)
-end
-
-local getMem = function()
-    -- local cmd = "cat /proc/$(pgrep luajit | head -1)/statm | awk '{ print $2 }'"
-    -- local std_out = io.popen(cmd, "r")
-    -- if std_out then
-    --     local output = std_out:read("*all")
-    --     std_out:close()
-    --     return true, output
-    -- end
-    local stat = io.open("/proc/self/stat", "r")
-    if stat == nil then return end
-
-    local util = require("util")
-    local t = util.splitToArray(stat:read("*line"), " ")
-    stat:close()
-
-    if #t == 0 then return 0 end
-
-    return Math.round(tonumber(t[24]) / 256)
 end
 
 function TopBar:onReaderReady()
@@ -1129,6 +1196,191 @@ function TopBar:onReaderReady()
 
 end
 
+function TopBar:onSetDimensions()
+    self.width = Screen:getWidth()
+end
+
+function TopBar:onResume()
+    self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm, self.sessions_current_book, self.initial_read_last_month, self.initial_read_year = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
+    self.start_session_time = os.time()
+    self.init_page = nil
+    self.init_page_screens = nil
+    local powerd = Device:getPowerDevice()
+    self.initial_battery_lvl = powerd:getCapacity()
+    self:toggleBar()
+end
+
+function TopBar:onSuspend()
+    -- local powerd = Device:getPowerDevice()
+    -- if powerd:isFrontlightOn() then
+    --     self.frontlight = " ☼"
+    -- else
+    --     self.frontlight = ""
+    -- end
+    -- self.afterSuspend = true
+    self.last_frontlight = self.frontlight
+end
+
+function TopBar:onPreserveCurrentSession()
+    -- Can be called before ReaderUI:reloadDocument() to not reset the current session
+    TopBar.preserved_start_session_time = self.start_session_time
+    TopBar.preserved_initial_read_today = self.initial_read_today
+    TopBar.preserved_initial_read_month = self.initial_read_month
+    TopBar.preserved_initial_read_last_month = self.initial_read_last_month
+    TopBar.preserved_initial_read_year = self.initial_read_year
+    TopBar.preserved_initial_total_time_book = self.initial_total_time_book
+    TopBar.preserved_avg_wpm = self.avg_wpm
+    TopBar.preserved_sessions_current_book = self.sessions_current_book
+    TopBar.preserved_alt_bar = self.show_bar_in_top_bar
+    TopBar.preserved_show_alt_bar = self.alt_bar
+    TopBar.preserved_altbar_line_thickness = self.main_progress_bar.altbar_line_thickness
+    TopBar.preserved_altbar_ticks_height = self.main_progress_bar.altbar_ticks_height
+    TopBar.preserved_option = self.option
+    TopBar.preserved_init_page = self.init_page
+    TopBar.preserved_init_page_screens = self.init_page_screens
+    TopBar.preserved_initial_battery_lvl = self.initial_battery_lvl
+end
+
+function TopBar:resetSession()
+    self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm, self.sessions_current_book, self.initial_read_last_month, self.initial_read_year = self:getReadTodayThisMonth(self.title)
+    local now_ts = os.time()
+    self.start_session_time = now_ts
+    self.init_page = nil
+    self.init_page_screens = nil
+    self:toggleBar()
+end
+
+-- ==========================================================================
+-- Visibility and switching
+-- ==========================================================================
+
+function TopBar:onToggleShowTopBar()
+    local show_top_bar = self.settings:isTrue("show_top_bar")
+    self.settings:saveSetting("show_top_bar", not show_top_bar)
+    self.settings:flush()
+    TopBar.is_enabled = not show_top_bar
+    self:toggleBar()
+end
+
+function TopBar:showTopBar()
+    self.settings:saveSetting("show_top_bar", true)
+    self.settings:flush()
+    TopBar.is_enabled = true
+    self:toggleBar()
+end
+
+function TopBar:hideTopBar()
+    self.settings:saveSetting("show_top_bar", false)
+    self.settings:flush()
+    TopBar.is_enabled = false
+end
+
+function TopBar:quickToggleOnOff(put_off)
+    self.settings:saveSetting("show_top_bar", put_off)
+    self.settings:flush()
+    TopBar.is_enabled = put_off
+    self:toggleBar()
+    UIManager:setDirty(self.view.dialog, function()
+        return self.view.currently_scrolling and "fast" or "ui",
+        Geom:new{ w = Screen:getWidth(), h = self:getHeight(), y = 0}
+    end)
+    UIManager:setDirty(self.view.dialog, function()
+        return self.view.currently_scrolling and "fast" or "ui",
+        Geom:new{ w = Screen:getWidth(),
+        h = self:getBottomHeight(),
+        y = Screen:getHeight() - self:getBottomHeight()}
+    end)
+end
+
+function TopBar:onSwitchTopBar()
+    if not TopBar.is_enabled then
+        self.settings:saveSetting("show_top_bar", true)
+        self.settings:flush()
+        TopBar.is_enabled = true
+        TopBar.show_bar_in_top_bar = true
+        TopBar.alt_bar = true
+        self.main_progress_bar.altbar_ticks_height = 5
+        self.main_progress_bar.altbar_line_thickness = 9
+        TopBar.option = 1
+        self:toggleBar()
+
+        UIManager:setDirty(self.view.dialog, function()
+            return self.view.currently_scrolling and "fast" or "ui",
+            Geom:new{ w = Screen:getWidth(), h = self:getHeight(true), y = 0}
+        end)
+        UIManager:setDirty(self.view.dialog, function()
+            return self.view.currently_scrolling and "fast" or "ui",
+            Geom:new{ w = Screen:getWidth(),
+            h = self:getBottomHeight(),
+            y = Screen:getHeight(true) - self:getBottomHeight()}
+        end)
+        return
+    end
+    if self.settings:isTrue("show_top_bar") then
+        if TopBar.show_bar_in_top_bar then
+            if TopBar.option == 1 then
+                self.main_progress_bar.altbar_ticks_height = 16
+                self.main_progress_bar.altbar_line_thickness = 6
+                TopBar.option = 2
+                -- self.main_progress_bar.factor = 3
+            elseif TopBar.option == 2 then
+                self.main_progress_bar.altbar_ticks_height = -1
+                self.main_progress_bar.altbar_line_thickness = -1
+                -- self.main_progress_bar.factor = -1
+                TopBar.alt_bar = false
+                TopBar.option = 3
+            elseif TopBar.option == 3 then
+                self.main_progress_bar.altbar_ticks_height = 5
+                self.main_progress_bar.altbar_line_thickness = 9
+                -- self.main_progress_bar.factor = 1
+                TopBar.show_bar_in_top_bar = false
+                TopBar.option = 4
+            end
+        -- We don't want to cycle disabling/enabling the topbar
+        -- since there is a swipe gesture in the page text info plugin
+        -- to toggle it on and off
+        -- elseif TopBar.is_enabled then
+        --     TopBar.is_enabled = false
+        -- Although we do it here. First we disable it and then
+        -- we let it ready to start from the beginning
+        else
+            self.settings:saveSetting("show_top_bar", false)
+            self.settings:flush()
+            TopBar.is_enabled = false
+            TopBar.show_bar_in_top_bar = true
+            TopBar.alt_bar = true
+            self.main_progress_bar.altbar_ticks_height = 5
+            self.main_progress_bar.altbar_line_thickness = 9
+            TopBar.option = 1
+        end
+        self:toggleBar()
+
+        -- TopBar.is_enabled = not TopBar.is_enabled
+        -- self:toggleBar()
+        -- UIManager:setDirty("all", "partial")
+        UIManager:setDirty(self.view.dialog, function()
+            return self.view.currently_scrolling and "fast" or "ui",
+            Geom:new{ w = Screen:getWidth(), h = self:getHeight(true), y = 0}
+        end)
+        UIManager:setDirty(self.view.dialog, function()
+            return self.view.currently_scrolling and "fast" or "ui",
+            Geom:new{ w = Screen:getWidth(),
+            h = self:getBottomHeight(),
+            y = Screen:getHeight(true) - self:getBottomHeight()}
+        end)
+    end
+end
+
+function TopBar:resetLayout()
+    -- if self.wpm_text then
+    --     self:toggleBar()
+    -- end
+end
+
+-- ==========================================================================
+-- Fonts and layout
+-- ==========================================================================
+
 function TopBar:changeAllWidgetFaces()
     local font = "cfont"
     if self.settings:nilOrFalse("use_system_font") then
@@ -1264,43 +1516,24 @@ function TopBar:changeAllWidgetFaces()
 
     self:toggleBar()
 end
-function TopBar:onToggleShowTopBar()
-    local show_top_bar = self.settings:isTrue("show_top_bar")
-    self.settings:saveSetting("show_top_bar", not show_top_bar)
-    self.settings:flush()
-    TopBar.is_enabled = not show_top_bar
-    self:toggleBar()
+
+function TopBar:getHeight(max_height)
+   if TopBar.show_bar_in_top_bar or max_height then
+        return Screen:scaleBySize(self.space_after_alt_bar)
+        + self.progress_bar_widget_container:getSize().h
+        + self.title_and_series_widget_container[1][1]._height
+    else
+       return self.title_and_series_widget_container[1][1]._height
+    end
 end
 
-function TopBar:showTopBar()
-    self.settings:saveSetting("show_top_bar", true)
-    self.settings:flush()
-    TopBar.is_enabled = true
-    self:toggleBar()
+function TopBar:getBottomHeight()
+    return self.chapter_widget_container[1]:getSize().h
 end
 
-function TopBar:hideTopBar()
-    self.settings:saveSetting("show_top_bar", false)
-    self.settings:flush()
-    TopBar.is_enabled = false
-end
-
-function TopBar:resetLayout()
-    -- if self.wpm_text then
-    --     self:toggleBar()
-    -- end
-end
-
-function TopBar:onSuspend()
-    -- local powerd = Device:getPowerDevice()
-    -- if powerd:isFrontlightOn() then
-    --     self.frontlight = " ☼"
-    -- else
-    --     self.frontlight = ""
-    -- end
-    -- self.afterSuspend = true
-    self.last_frontlight = self.frontlight
-end
+-- ==========================================================================
+-- Refresh events
+-- ==========================================================================
 
 function TopBar:onFrontlightStateChanged()
     local top_widget_container = UIManager:getTopmostVisibleWidget() or {}
@@ -1323,192 +1556,19 @@ function TopBar:onFrontlightStateChanged()
     end
 end
 
-function TopBar:onSetDimensions()
-    self.width = Screen:getWidth()
-end
+-- Defined in the init() function using registerPostReaderReadyCallback() after nextTick()
+-- so it is not called several times when opening the document by other sources using registerPostReaderReadyCallback()
+-- function TopBar:onPageUpdate()
+--     self:toggleBar()
+-- end
 
-
-function TopBar:onResume()
-    self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm, self.sessions_current_book, self.initial_read_last_month, self.initial_read_year = self:getReadTodayThisMonth(self.ui.document._document:getDocumentProps().title)
-    self.start_session_time = os.time()
-    self.init_page = nil
-    self.init_page_screens = nil
-    local powerd = Device:getPowerDevice()
-    self.initial_battery_lvl = powerd:getCapacity()
+function TopBar:onPosUpdate(new_pos)
     self:toggleBar()
 end
 
-
-function TopBar:onPreserveCurrentSession()
-    -- Can be called before ReaderUI:reloadDocument() to not reset the current session
-    TopBar.preserved_start_session_time = self.start_session_time
-    TopBar.preserved_initial_read_today = self.initial_read_today
-    TopBar.preserved_initial_read_month = self.initial_read_month
-    TopBar.preserved_initial_read_last_month = self.initial_read_last_month
-    TopBar.preserved_initial_read_year = self.initial_read_year
-    TopBar.preserved_initial_total_time_book = self.initial_total_time_book
-    TopBar.preserved_avg_wpm = self.avg_wpm
-    TopBar.preserved_sessions_current_book = self.sessions_current_book
-    TopBar.preserved_alt_bar = self.show_bar_in_top_bar
-    TopBar.preserved_show_alt_bar = self.alt_bar
-    TopBar.preserved_altbar_line_thickness = self.main_progress_bar.altbar_line_thickness
-    TopBar.preserved_altbar_ticks_height = self.main_progress_bar.altbar_ticks_height
-    TopBar.preserved_option = self.option
-    TopBar.preserved_init_page = self.init_page
-    TopBar.preserved_init_page_screens = self.init_page_screens
-    TopBar.preserved_initial_battery_lvl = self.initial_battery_lvl
-end
-
-
-function TopBar:onSwitchTopBar()
-    if not TopBar.is_enabled then
-        self.settings:saveSetting("show_top_bar", true)
-        self.settings:flush()
-        TopBar.is_enabled = true
-        TopBar.show_bar_in_top_bar = true
-        TopBar.alt_bar = true
-        self.main_progress_bar.altbar_ticks_height = 5
-        self.main_progress_bar.altbar_line_thickness = 9
-        TopBar.option = 1
-        self:toggleBar()
-
-        UIManager:setDirty(self.view.dialog, function()
-            return self.view.currently_scrolling and "fast" or "ui",
-            Geom:new{ w = Screen:getWidth(), h = self:getHeight(true), y = 0}
-        end)
-        UIManager:setDirty(self.view.dialog, function()
-            return self.view.currently_scrolling and "fast" or "ui",
-            Geom:new{ w = Screen:getWidth(),
-            h = self:getBottomHeight(),
-            y = Screen:getHeight(true) - self:getBottomHeight()}
-        end)
-        return
-    end
-    if self.settings:isTrue("show_top_bar") then
-        if TopBar.show_bar_in_top_bar then
-            if TopBar.option == 1 then
-                self.main_progress_bar.altbar_ticks_height = 16
-                self.main_progress_bar.altbar_line_thickness = 6
-                TopBar.option = 2
-                -- self.main_progress_bar.factor = 3
-            elseif TopBar.option == 2 then
-                self.main_progress_bar.altbar_ticks_height = -1
-                self.main_progress_bar.altbar_line_thickness = -1
-                -- self.main_progress_bar.factor = -1
-                TopBar.alt_bar = false
-                TopBar.option = 3
-            elseif TopBar.option == 3 then
-                self.main_progress_bar.altbar_ticks_height = 5
-                self.main_progress_bar.altbar_line_thickness = 9
-                -- self.main_progress_bar.factor = 1
-                TopBar.show_bar_in_top_bar = false
-                TopBar.option = 4
-            end
-        -- We don't want to cycle disabling/enabling the topbar
-        -- since there is a swipe gesture in the page text info plugin
-        -- to toggle it on and off
-        -- elseif TopBar.is_enabled then
-        --     TopBar.is_enabled = false
-        -- Although we do it here. First we disable it and then
-        -- we let it ready to start from the beginning
-        else
-            self.settings:saveSetting("show_top_bar", false)
-            self.settings:flush()
-            TopBar.is_enabled = false
-            TopBar.show_bar_in_top_bar = true
-            TopBar.alt_bar = true
-            self.main_progress_bar.altbar_ticks_height = 5
-            self.main_progress_bar.altbar_line_thickness = 9
-            TopBar.option = 1
-        end
-        self:toggleBar()
-
-        -- TopBar.is_enabled = not TopBar.is_enabled
-        -- self:toggleBar()
-        -- UIManager:setDirty("all", "partial")
-        UIManager:setDirty(self.view.dialog, function()
-            return self.view.currently_scrolling and "fast" or "ui",
-            Geom:new{ w = Screen:getWidth(), h = self:getHeight(true), y = 0}
-        end)
-        UIManager:setDirty(self.view.dialog, function()
-            return self.view.currently_scrolling and "fast" or "ui",
-            Geom:new{ w = Screen:getWidth(),
-            h = self:getBottomHeight(),
-            y = Screen:getHeight(true) - self:getBottomHeight()}
-        end)
-    end
-end
-
-function TopBar:quickToggleOnOff(put_off)
-    self.settings:saveSetting("show_top_bar", put_off)
-    self.settings:flush()
-    TopBar.is_enabled = put_off
-    self:toggleBar()
-    UIManager:setDirty(self.view.dialog, function()
-        return self.view.currently_scrolling and "fast" or "ui",
-        Geom:new{ w = Screen:getWidth(), h = self:getHeight(), y = 0}
-    end)
-    UIManager:setDirty(self.view.dialog, function()
-        return self.view.currently_scrolling and "fast" or "ui",
-        Geom:new{ w = Screen:getWidth(),
-        h = self:getBottomHeight(),
-        y = Screen:getHeight() - self:getBottomHeight()}
-    end)
-end
-
-function TopBar:getHeight(max_height)
-   if TopBar.show_bar_in_top_bar or max_height then
-        return Screen:scaleBySize(self.space_after_alt_bar)
-        + self.progress_bar_widget_container:getSize().h
-        + self.title_and_series_widget_container[1][1]._height
-    else
-       return self.title_and_series_widget_container[1][1]._height
-    end
-end
-
-function TopBar:getBottomHeight()
-    return self.chapter_widget_container[1]:getSize().h
-end
-
-function TopBar:resetSession()
-    self.initial_read_today, self.initial_read_month, self.initial_total_time_book, self.avg_wpm, self.sessions_current_book, self.initial_read_last_month, self.initial_read_year = self:getReadTodayThisMonth(self.title)
-    local now_ts = os.time()
-    self.start_session_time = now_ts
-    self.init_page = nil
-    self.init_page_screens = nil
-    self:toggleBar()
-end
-
-function TopBar:classifyLeading(lf, x_height, ascender, descender)
-    if not x_height or x_height == 0 then return "invalid" end
-    local safe_min = (ascender + descender) / x_height
-    -- print("Ascender: " .. ascender)
-    -- print("Descender: " .. descender)
-    -- print("X-height: " .. x_height)
-    -- print("Safe min: " .. safe_min)
-    if lf < safe_min then return "collision"
-    elseif lf < safe_min + 0.15 then return "compact"
-    elseif lf < safe_min + 0.4 then return "balanced"
-    elseif lf < safe_min + 0.6 then return "airy"
-    else return "very airy"
-    end                     -- Excessive spacing, feels like children's books or UI
-end
-
-function TopBar:getXHeightRangeLabel(size_pt, xh_mm)
-    local perfect_min = 1.7     -- A partir de aquí empieza a ser cómodo
-    local perfect_max = 1.85    -- Más allá empieza a parecer visualmente grande
-    local label
-
-    if xh_mm < perfect_min then
-      label = "low"
-    elseif xh_mm <= perfect_max then
-      label = "perfect"
-    else
-      label = "too big"
-    end
-
-    return string.format("fS: %.2fpt, xH: %.2fmm (%.2f–%.2f) [%s]", size_pt, xh_mm, perfect_min, perfect_max, label)
-end
+-- ==========================================================================
+-- Rendering
+-- ==========================================================================
 
 function TopBar:toggleBar(light_on)
     if self.init_page == nil and self.ui.pagemap:wantsPageLabels() then
@@ -1622,7 +1682,7 @@ function TopBar:toggleBar(light_on)
         local x_height_with_range = "N/A"
         local line_height = 0
         local leading_factor_text = "N/A"
-          if face_base ~= nil then
+        if face_base ~= nil then
             -- If getXHeight() < 1 it is a ratio, otherwise it is already in px.
             -- Kept fractional: no intermediate rounding.
             local xh = face_base.ftsize:getXHeight()
@@ -1630,14 +1690,23 @@ function TopBar:toggleBar(light_on)
             -- Unrounded; getXHeightRangeLabel already formats with %.2f
             x_height_mm = x_height * 25.4 / display_dpi
 
-            -- Use the EFFECTIVE x-height (font x book font-size factor, e.g. rem)
-            -- from the settings menu, so the top bar and the menu title agree.
-            -- If it can't be measured, the plain value above is kept.
-            local eff_mm = plugin and plugin.getXHeightMm and plugin:getXHeightMm()
-            if eff_mm then
-                x_height_mm = eff_mm
-                x_height = eff_mm * display_dpi / 25.4  -- keep the leading factor consistent
+            -- Same x-height calculation as the fonts menu (font_selection_menu.lua:
+            -- getFontXHeightInfo for the font in use), so the top bar and that menu agree.
+            -- If it can't be obtained, the plain value above is kept.
+            local xi = plugin and plugin.getFontXHeightInfo and self.ui.font
+                and plugin:getFontXHeightInfo(self.ui.font.font_face)
+            if xi and xi.mm then
+                x_height_mm = xi.mm
+                x_height = xi.mm * display_dpi / 25.4  -- keep the leading factor consistent
             end
+
+            -- Previous version: EFFECTIVE x-height (font x book font-size factor, e.g. rem)
+            -- from the settings menu (plugin:getXHeightMm()).
+            -- local eff_mm = plugin and plugin.getXHeightMm and plugin:getXHeightMm()
+            -- if eff_mm then
+            --     x_height_mm = eff_mm
+            --     x_height = eff_mm * display_dpi / 25.4  -- keep the leading factor consistent
+            -- end
 
             x_height_with_range = self:getXHeightRangeLabel(size_pt, x_height_mm)
             -- (rest unchanged: line_spacing_factor, leading_factor, etc.)
@@ -1712,7 +1781,7 @@ function TopBar:toggleBar(light_on)
 
         self.progress_chapter = self.view.footer:getChapterProgress(false)
         self.progress_chapter_text:setText(self.progress_chapter) -- .. " " .. left_time)
-       local text_widget_container = TextWidget:new{
+        local text_widget_container = TextWidget:new{
             text = self.chapter_widget_container[1].text:gsub(" ", "\u{00A0}"), -- no-break-space
             max_width = Screen:getWidth() * 40 * (1/100),
             face = Font:getFace(self.settings:readSetting("font_title") and self.settings:readSetting("font_title") or "Consolas-Regular.ttf",
@@ -2009,16 +2078,6 @@ function TopBar:toggleBar(light_on)
     end
 end
 
--- Defined in the init() function using registerPostReaderReadyCallback() after nextTick()
--- so it is not called several times when opening the document by other sources using registerPostReaderReadyCallback()
--- function TopBar:onPageUpdate()
---     self:toggleBar()
--- end
-
-function TopBar:onPosUpdate(new_pos)
-    self:toggleBar()
-end
-
 function TopBar:paintTo(bb, x, y)
     -- if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
     if self.status_bar and self.status_bar == true then
@@ -2310,7 +2369,7 @@ function TopBar:paintTo(bb, x, y)
                 local collate_symbol = ""
                 if sort_by_mode == "strcoll" then
                     collate_symbol = "Name"
-               elseif sort_by_mode == "finished" then
+                elseif sort_by_mode == "finished" then
                     collate_symbol = "F"
                 elseif sort_by_mode == "publication_date" then
                     collate_symbol = "PD"
@@ -2328,17 +2387,17 @@ function TopBar:paintTo(bb, x, y)
                     collate_symbol = "Set manual sorting"
                 else
                     collate_symbol = "Sort"
-            end
-            collate_widget_container[1]:setText(collate_symbol)
-            collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w / 2 - TopBar.MARGIN_SIDES, Screen:getHeight())
-            local reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
-            if reverse_collate_mode == nil then
-                reverse_collate_widget_container[1]:setText("")
-            elseif not reverse_collate_mode then
-                reverse_collate_widget_container[1]:setText("↓")
-            else
-                reverse_collate_widget_container[1]:setText("↑")
-            end
+                end
+                collate_widget_container[1]:setText(collate_symbol)
+                collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w / 2 - TopBar.MARGIN_SIDES, Screen:getHeight())
+                local reverse_collate_mode = G_reader_settings:readSetting("reverse_collate")
+                if reverse_collate_mode == nil then
+                    reverse_collate_widget_container[1]:setText("")
+                elseif not reverse_collate_mode then
+                    reverse_collate_widget_container[1]:setText("↓")
+                else
+                    reverse_collate_widget_container[1]:setText("↑")
+                end
                 -- collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1][1]:getSize().w - TopBar.MARGIN_SIDES, y + Screen:scaleBySize(6))
                 reverse_collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w - reverse_collate_widget_container[1]:getSize().w / 2 - TopBar.MARGIN_SIDES, Screen:getHeight())
 
@@ -2387,7 +2446,7 @@ function TopBar:paintTo(bb, x, y)
             -- local _, files = self:getList("*.epub")
             -- books_information_widget_container[1]:setText("TF: " .. tostring(#files))
 
-           local stats_year = TopBar:getReadThisYearSoFar()
+            local stats_year = TopBar:getReadThisYearSoFar()
             if stats_year > 0 then
                 stats_year = "+" .. stats_year
             end
@@ -2498,7 +2557,7 @@ function TopBar:paintTo(bb, x, y)
                     collate_widget_container[1]:setText("?")
                     collate_widget_container:paintTo(bb, x + Screen:getWidth() - collate_widget_container[1]:getSize().w / 2- TopBar.MARGIN_SIDES, Screen:getHeight())
                 end
-               local ignore_double_tap_frame_widget_container = left_container:new{
+                local ignore_double_tap_frame_widget_container = left_container:new{
                     dimen = Geom:new(),
                     CornerIcon:new{},
                 }
@@ -2607,6 +2666,10 @@ function TopBar:paintToDisabled(bb, x, y)
     end
 end
 
+-- ==========================================================================
+-- Main menu
+-- ==========================================================================
+
 -- This is called after self.ui.menu:registerToMainMenu(self) in the init method
 -- But in this case registerToMainMenu() needs to be called in readerui.lua because the menu is still not available
 -- We do it in the init() function using a registerPostReaderReadyCallback() function
@@ -2666,8 +2729,8 @@ function TopBar:addToMainMenu(menu_items)
                     UIManager:setDirty("all", "ui")
                     return true
                 end,
-           },
-           {
+            },
+            {
                 text_func = function()
                     return T(_("Space after alternative bar: %1"), self.space_after_alt_bar)
                 end,
@@ -2718,7 +2781,7 @@ function TopBar:addToMainMenu(menu_items)
                 checked_func = function()
                     return self.settings:isTrue("show_topbar_separators")
                 end,
-                    help_text = _([[Show space_after_alt_bar and top bar height separator lines]]),
+                help_text = _([[Show space_after_alt_bar and top bar height separator lines]]),
                 callback = function()
                     local show_topbar_separators = not self.settings:isTrue("show_topbar_separators")
                     self.settings:saveSetting("show_topbar_separators", show_topbar_separators)
@@ -2732,7 +2795,7 @@ function TopBar:addToMainMenu(menu_items)
                 checked_func = function()
                     return self.settings:isTrue("use_system_font")
                 end,
-                    help_text = _([[Use the select UI System font for the top bar widgets]]),
+                help_text = _([[Use the select UI System font for the top bar widgets]]),
                 callback = function()
                     local use_system_font = not self.settings:isTrue("use_system_font")
                     self.settings:saveSetting("use_system_font", use_system_font)
@@ -2742,7 +2805,7 @@ function TopBar:addToMainMenu(menu_items)
                     return true
                 end,
             },
-           {
+            {
                 text = _("Show battery and memory info"),
                 checked_func = function() return self.settings:isTrue("show_battery_and_memory_info") end,
                 callback = function()
@@ -2870,40 +2933,40 @@ function TopBar:addToMainMenu(menu_items)
                 end,
                 text = _("Title and chapter font size"),
                 sub_item_table = {
-            {
-                text_func = function()
-                    return T(_("Item font size: %1"), self.settings:readSetting("font_size_title") and self.settings:readSetting("font_size_title") or 12)
-                end,
-                callback = function(touchmenu_instance)
-                    local SpinWidget = require("ui/widget/spinwidget")
-                    local items_font = SpinWidget:new{
-                        title_text = _("Item font size"),
-                        value = self.settings:readSetting("font_size_title")
-                        and self.settings:readSetting("font_size_title")
-                        or 12,
-                        value_min = 8,
-                        value_max = 36,
-                        default_value = 12,
-                        keep_shown_on_apply = true,
-                        callback = function(spin)
-                            local new_font_size = spin.value
-                            self.settings:saveSetting("font_size_title", new_font_size)
-                            local face = Font:getFace(self.settings:readSetting("font_title")
-                            and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", new_font_size)
-                            local face_series = Font:getFace(self.settings:readSetting("font_title")
-                            and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", new_font_size - 8)
-                            self:changeAllWidgetFaces()
-                            UIManager:setDirty("all", "ui")
-                            self.settings:flush()
-                            touchmenu_instance:updateItems()
-
+                    {
+                        text_func = function()
+                            return T(_("Item font size: %1"), self.settings:readSetting("font_size_title") and self.settings:readSetting("font_size_title") or 12)
                         end,
-                    }
-                    UIManager:show(items_font)
-                end,
-                keep_menu_open = true,
-            },
-            },
+                        callback = function(touchmenu_instance)
+                            local SpinWidget = require("ui/widget/spinwidget")
+                            local items_font = SpinWidget:new{
+                                title_text = _("Item font size"),
+                                value = self.settings:readSetting("font_size_title")
+                                and self.settings:readSetting("font_size_title")
+                                or 12,
+                                value_min = 8,
+                                value_max = 36,
+                                default_value = 12,
+                                keep_shown_on_apply = true,
+                                callback = function(spin)
+                                    local new_font_size = spin.value
+                                    self.settings:saveSetting("font_size_title", new_font_size)
+                                    local face = Font:getFace(self.settings:readSetting("font_title")
+                                    and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", new_font_size)
+                                    local face_series = Font:getFace(self.settings:readSetting("font_title")
+                                    and self.settings:readSetting("font_title") or "Consolas-Regular.ttf", new_font_size - 8)
+                                    self:changeAllWidgetFaces()
+                                    UIManager:setDirty("all", "ui")
+                                    self.settings:flush()
+                                    touchmenu_instance:updateItems()
+
+                                end,
+                            }
+                            UIManager:show(items_font)
+                        end,
+                        keep_menu_open = true,
+                    },
+                },
             },
             {
                 text_func = function()
@@ -2917,38 +2980,42 @@ function TopBar:addToMainMenu(menu_items)
                 end,
                 text = _("Times and progress font size"),
                 sub_item_table = {
-            {
-                text_func = function()
-                    return T(_("Item font size: %1"), self.settings:readSetting("font_size_times_progress") and self.settings:readSetting("font_size_times_progress") or 10)
-                end,
-                callback = function(touchmenu_instance)
-                    local SpinWidget = require("ui/widget/spinwidget")
-                    local items_font = SpinWidget:new{
-                        title_text = _("Item font size"),
-                        value = self.settings:readSetting("font_size_times_progress")
-                        and self.settings:readSetting("font_size_times_progress")
-                        or 10,
-                        value_min = 6,
-                        value_max = 18,
-                        default_value = 10,
-                        keep_shown_on_apply = true,
-                        callback = function(spin)
-                            self.settings:saveSetting("font_size_times_progress", spin.value)
-                            self:changeAllWidgetFaces()
-                            UIManager:setDirty("all", "ui")
-                            self.settings:flush()
-                            touchmenu_instance:updateItems()
+                    {
+                        text_func = function()
+                            return T(_("Item font size: %1"), self.settings:readSetting("font_size_times_progress") and self.settings:readSetting("font_size_times_progress") or 10)
                         end,
-                    }
-                    UIManager:show(items_font)
-                end,
-                keep_menu_open = true,
-            },
-            },
-        }
+                        callback = function(touchmenu_instance)
+                            local SpinWidget = require("ui/widget/spinwidget")
+                            local items_font = SpinWidget:new{
+                                title_text = _("Item font size"),
+                                value = self.settings:readSetting("font_size_times_progress")
+                                and self.settings:readSetting("font_size_times_progress")
+                                or 10,
+                                value_min = 6,
+                                value_max = 18,
+                                default_value = 10,
+                                keep_shown_on_apply = true,
+                                callback = function(spin)
+                                    self.settings:saveSetting("font_size_times_progress", spin.value)
+                                    self:changeAllWidgetFaces()
+                                    UIManager:setDirty("all", "ui")
+                                    self.settings:flush()
+                                    touchmenu_instance:updateItems()
+                                end,
+                            }
+                            UIManager:show(items_font)
+                        end,
+                        keep_menu_open = true,
+                    },
+                },
+            }
         },
-}
+    }
 end
+
+-- ==========================================================================
+-- File manager: collection collate
+-- ==========================================================================
 
 function TopBar:setCollectionCollate(collate)
     self.collection_collate = collate
