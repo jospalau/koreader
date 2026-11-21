@@ -1,10 +1,12 @@
--- Fonts menu: paged grid of font families, with long-press font info.
+-- Fonts menu: paged grid of font families, each name drawn in its own font.
+--   tap = apply the font, long press on a font = info window, swipe = change page,
+--   long press on an arrow = first / last page, tap outside = close.
 --
 -- Lives next to main.lua. Load it from main.lua, after PageTextInfo is defined:
 --     require("font_selection_menu")(PageTextInfo)
 --
 -- It adds these methods to PageTextInfo:
---     closeFontsMenu, applyFontAndReopen, showFontInfo, onShowFonts
+--     closeFontsMenu, applyFont, applyFontAndReopen, showFontInfo, onShowFonts
 --
 local Blitbuffer = require("ffi/blitbuffer")
 local Device = require("device")
@@ -62,12 +64,6 @@ local function buildFaceMaps()
     return regular, styles
 end
 
--- Font:getFace keeps every face it loads in Font.faces for good, and a face is a
--- whole font file mapped in memory. The menu draws each name in its own font (and
--- the info window loads one at 100 px), so browsing the list piled up hundreds of
--- them until the device crawled. This takes the fonts of the list out of that
--- cache: widgets still showing one keep it alive, the rest is freed by the
--- collection forced at the end (the Lua GC alone does not see that memory).
 -- Resident memory of the process in MB (nil where /proc is not available)
 local function residentMb()
     local fh = io.open("/proc/self/status", "r")
@@ -83,6 +79,12 @@ end
 
 local malloc_trim_declared   -- the C declaration is made once
 
+-- Font:getFace keeps every face it loads in Font.faces for good, and a face is a
+-- whole font file mapped in memory. The menu draws each name in its own font (and
+-- the info window loads one more), so browsing the list piled up hundreds of
+-- them until the device crawled. This removes the fonts of the list from that
+-- cache: widgets still showing one keep it alive, the rest is freed by the
+-- collection forced at the end (the Lua GC alone does not see that memory).
 local function purgeFontFaces(self)
     local faces = require("ui/font").faces
     if type(faces) ~= "table" or not self.font_paths then return end
@@ -124,17 +126,16 @@ local function purgeFontFaces(self)
 end
 
 -- Freeing the faces forces a full garbage collection and a malloc_trim, which can
--- take a good part of a second. It runs two ticks later, after the change of menu
--- has been painted, so the screen never waits for it.
--- Later still, and only once: every change of font (and closing the menu) asks for
--- it; they are joined into a single one that runs 2 s after the last request, so it
--- does not get in the way of the next thing the user does.
+-- take a good part of a second, so it never runs inside the action that needs it.
+-- Every change of font (and closing the menu) only requests it; the requests are
+-- merged into a single run 2 s after the last one, so it does not get in the way
+-- of the next thing the user does.
 local purge_fn
 local function purgeFontFacesLater(self)
     if purge_fn then UIManager:unschedule(purge_fn); purge_fn = nil end
-    -- Not while the menu is open: on slower devices (Paperwhite) the collection
-    -- blocks the loop for long enough to swallow the taps the user makes to close
-    -- the menu. closeFontsMenu asks for it again once the menu is gone.
+    -- Not while the menu is open: the collection blocks the loop, and the taps made
+    -- meanwhile (to close the menu, say) would be swallowed. closeFontsMenu asks for
+    -- it again once the menu is gone.
     if self.fonts_dialog then return end
     purge_fn = function()
         purge_fn = nil
@@ -195,7 +196,7 @@ end
 -- own behaviour). Returns the timing function `lap`.
 function PageTextInfo:applyFont(face)
     local Event = require("ui/event")
-    -- Timing of every phase (wall clock, ms), always logged: grep "[PTI] timing"
+    -- Timing of every phase (wall clock, ms), logged at debug level: grep "[PTI] timing"
     local time = require("ui/time")
     local t0 = time.now()
     local function lap(name)
@@ -207,7 +208,8 @@ function PageTextInfo:applyFont(face)
     return lap
 end
 
--- Apply the font, then show the menu again (kept for callers that need a new menu)
+-- Apply the font, then show the menu again. Not called from this file: kept for
+-- callers outside it that want a fresh menu after the change.
 function PageTextInfo:applyFontAndReopen(face)
     local page = self.fonts_page
     local lap = self:applyFont(face)
@@ -840,6 +842,13 @@ function PageTextInfo:onShowFonts(page)
             -- (the loop was blocked), and would be read and thrown away. Lift the
             -- inhibition now, before the loop reads them, so they reach the menu
             -- (it is `busy`, so they are remembered or close it afterwards).
+            -- A blocking sleep of 0.2 s here would also work, instead of the line below:
+            -- the inhibition has expired by the time the queued taps are read. The problem
+            -- is that some newer devices, like the Kindle Paperwhite 6, finish the font
+            -- change faster than the inhibition lasts (0.2 s after the re-layout), so a
+            -- quick tap lands inside it and is thrown away. It is not used because it
+            -- costs 0.2 s on every change.
+            -- require("ffi/util").usleep(200000)
             pcall(function() Device.input:inhibitInputUntil() end)
             if ok then
                 current = face
@@ -899,10 +908,12 @@ function PageTextInfo:onShowFonts(page)
         end)
     end
 
-    -- On a slow device (Kindle) the book is laid out and the screen refreshed for a second
-    -- or two after a tap, and the taps made meanwhile reach the menu only afterwards, while
-    -- it is still locked: they used to be lost. Now the LAST font cell or page arrow tapped
-    -- meanwhile is remembered (self.pending) and done as soon as the menu is free.
+    -- While a font is applied (book re-layout, then the menu's two refreshes) the loop is
+    -- blocked and the taps made in that time reach the menu only afterwards, while it is
+    -- still `busy`. The wait depends on the size of the book more than on the device, and
+    -- SETTLE_DELAY adds a fixed gap on every change. Rather than drop those taps, the LAST
+    -- font cell or page arrow tapped is kept in self.pending and done here, as soon as the
+    -- menu is free.
     function dialog:runPending()
         local pending = self.pending
         self.pending = nil
