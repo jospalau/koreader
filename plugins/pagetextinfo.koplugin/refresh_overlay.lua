@@ -482,7 +482,8 @@ local function installTopmostHook()
     if UIManager._pti_topmost_hooked then return end
     UIManager._pti_topmost_hooked = true
     local orig = UIManager.getTopmostVisibleWidget
-    UIManager.getTopmostVisibleWidget = function(self, ...)
+    local raw = rawget(UIManager, "getTopmostVisibleWidget")
+    local wrapper = function(self, ...)
         for i = #self._window_stack, 1, -1 do
             local w = self._window_stack[i].widget
             if not w.invisible and not w.skip_topmost then
@@ -491,8 +492,16 @@ local function installTopmostHook()
         end
         return orig(self, ...)
     end
+    UIManager.getTopmostVisibleWidget = wrapper
+    -- removed again when the last overlay stops (see apply)
+    UIManager._pti_unhook_topmost = function()
+        if UIManager.getTopmostVisibleWidget == wrapper then
+            UIManager.getTopmostVisibleWidget = raw
+            UIManager._pti_topmost_hooked = nil
+            UIManager._pti_unhook_topmost = nil
+        end
+    end
 end
-installTopmostHook()
 
 -- Code that moves windows around by hand (e.g. Bookshelf "park" re-orders
 -- UIManager._window_stack without going through UIManager:show) bypasses the show
@@ -526,10 +535,18 @@ local function installRepaintHook()
     if UIManager._pti_repaint_hooked then return end
     UIManager._pti_repaint_hooked = true
     local orig_repaint = UIManager._repaint
-    UIManager._repaint = function(self, ...)
+    local wrapper = function(self, ...)
         local ok, err = pcall(keepOverlaysOnTop, self)
         if not ok then logger.warn("overlay (keep on top):", err) end
         return orig_repaint(self, ...)
+    end
+    UIManager._repaint = wrapper
+    UIManager._pti_unhook_repaint = function()
+        if UIManager._repaint == wrapper then
+            UIManager._repaint = orig_repaint
+            UIManager._pti_repaint_hooked = nil
+            UIManager._pti_unhook_repaint = nil
+        end
     end
 end
 
@@ -680,6 +697,7 @@ local function apply()
         if overlay then return end
         installShowHook()
         overlay = Overlay:new{}
+        installTopmostHook()
         installRepaintHook()
         UIManager._pti_overlays[overlay] = true
         UIManager:show(overlay)
@@ -709,6 +727,13 @@ local function apply()
         -- take the hooks off again: nothing of this overlay stays in UIManager
         for _, undo in ipairs({ unhook_show or false, unhook_send or false }) do
             if undo then pcall(undo) end
+        end
+        -- the hooks shared by the overlays go when no overlay is left
+        if next(UIManager._pti_overlays) == nil then
+            for _, name in ipairs({ "_pti_unhook_repaint", "_pti_unhook_topmost" }) do
+                local undo = UIManager[name]
+                if undo then pcall(undo) end
+            end
         end
     end
 end
