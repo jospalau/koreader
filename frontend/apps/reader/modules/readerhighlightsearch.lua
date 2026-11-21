@@ -24,6 +24,8 @@ local MAX_HITS      = 1000
 local PREVIEW_WORDS = 150    -- context words kept for the full preview
 local LIST_WORDS    = 15     -- context words per side in the list rows; keep small so every row
                              -- fits the fixed row height and the bold match is never clipped
+local LIST_ROWS      = 6      -- rows per page in the results list
+local LIST_FONT_DELTA = 3      -- points to subtract from Menu's default row font size (2-4 is sensible)
 local SEARCH_FLAGS  = 0x10FF -- CRE default flags + MATCH_WHOLE_WORDS
 -- Only these fields cross back from the subprocess ("page" is computed there).
 local FIELDS = { "prev_text", "matched_word_prefix", "matched_text",
@@ -248,13 +250,17 @@ function ReaderHighlightSearch:search(hl)
             })
         end
         local count = #data .. (#data >= MAX_HITS and "+" or "")
+        -- Default row font size for this many rows per page, minus a few points.
+        local base_size = type(Menu.getItemFontSize) == "function"
+            and Menu.getItemFontSize(LIST_ROWS) or 20
         local menu = newBookMenuClass(Menu, book_font):new{
             title = text,
             subtitle = string.format("%s occurrences before this point · tap a passage to read more", count),
             item_table = items,
             -- Fixed number of rows per page => uniform row height. Do NOT set items_max_lines:
             -- it switches Menu to variable-height rows and variable-size pages.
-            items_per_page = 6,
+            items_per_page = LIST_ROWS,
+            items_font_size = math.max(10, base_size - LIST_FONT_DELTA),
             multilines_forced = true,
             covers_fullscreen = true,
             is_borderless = true,
