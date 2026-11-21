@@ -837,14 +837,17 @@ function PageTextInfo:toggleFullScreenRuledLines()
     else
         local custombg = self.ui and self.ui.custombg
         if not custombg then return false end
-        -- Cycle: lines only -> background only -> lines + background -> lines only ...
-        -- (from "nothing on" it goes to lines only)
-        -- Keys of the custombg plugin (local to it): "custombg_day" / "custombg_night"
-        local bg_key = custombg:getSceneMode() == "night" and "custombg_night" or "custombg_day"
+        -- With the custombg setting "Lines gesture also toggles the background" ON (default):
+        --   cycle: lines only -> background only -> lines + background -> nothing -> lines only ...
+        --   (from "nothing on" it goes to lines only)
+        -- With it OFF: only the ruled lines are toggled, the background is left as it is.
         local lines_on = custombg.fs_enabled and true or false
         local bg_on = custombg:getCurrentDocBg() ~= nil
+        local with_bg = (custombg.isToggleWithBackground == nil) or custombg:isToggleWithBackground()
         local want_lines, want_bg
-        if lines_on and not bg_on then
+        if not with_bg then
+            want_lines, want_bg = not lines_on, bg_on          -- lines only, background untouched
+        elseif lines_on and not bg_on then
             want_lines, want_bg = false, true      -- background only
         elseif bg_on and not lines_on then
             want_lines, want_bg = true, true       -- lines + background
@@ -878,10 +881,10 @@ function PageTextInfo:toggleFullScreenRuledLines()
                     custombg:applyBackground("")        -- No background
                 end
             end
-            -- applyBackground() repaints by itself (loadBackgroundByName -> toggleRepaint("all"), a full-screen "partial")
+            -- applyBackground() repaints by itself (loadBackgroundByName -> toggleRepaint("all"))
             -- and the repaint of the reader below follows right after it: two repaints of the whole screen for ONE
-            -- toggle, the first one with the background half applied. Toggling only the lines does just the one below
-            -- and does not blink, so the inner one is muted here and the one below does the job for both.
+            -- toggle, the first one with the background half applied. The inner one is muted here and the one below
+            -- does the job for both.
             -- The override is an instance field that hides the class method; putting back what rawget returned
             -- (nil if there was none) restores the original lookup.
             local own_repaint = rawget(custombg, "toggleRepaint")

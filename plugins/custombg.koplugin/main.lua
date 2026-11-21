@@ -82,6 +82,7 @@ local NOFLASH_KEY = "custombg_noflash"                       -- avoid full-scree
 local SKIP_BOOKENDS_KEY = "custombg_skip_bookends_refresh"   -- ignore the extra full-screen refresh the bookends plugin asks for right after opening (default: on)
 local SWIPE_ANIM_KEY = "custombg_swipe_anim"                -- Kindle page-turn animation while a background is shown: "keep" (default) / "off"
 local OPEN_REFRESH_KEY = "custombg_open_refresh"             -- refresh used when the book is shown: "ui" (soft, default) / "partial" (light) / "full" (KOReader default)
+local TOGGLE_WITH_BG_KEY = "custombg_toggle_with_background"   -- the lines gesture (pagetextinfo) also switches the background: true (default) / false = lines only
 
 local FS_KEYS = {
     enabled = "fs_lines_enabled",
@@ -656,6 +657,12 @@ end
 -- or the book is closed (see _syncNoFlash / _releaseNoFlash).
 function CustomBg:isNoFlashEnabled()
     return G_reader_settings:readSetting(NOFLASH_KEY) ~= false
+end
+
+-- Used by the pagetextinfo gesture: true = it cycles lines / background / lines + background (default),
+-- false = it only toggles the ruled lines.
+function CustomBg:isToggleWithBackground()
+    return G_reader_settings:readSetting(TOGGLE_WITH_BG_KEY) ~= false
 end
 
 function CustomBg:getOpenRefreshMode()
@@ -2878,6 +2885,19 @@ function CustomBg:addToMainMenu(menu_items)
                             self.fs_enabled = not self.fs_enabled
                             self:saveDocSetting(FS_KEYS.enabled, self.fs_enabled)
                             self:refreshView(touchmenu_instance)
+                        end,
+                    },
+                    {
+                        text = _("Lines gesture also toggles the background"),
+                        help_text = _(
+                            "ON: the gesture that toggles the ruled lines (pagetextinfo) cycles: lines only, background only, " ..
+                            "lines + background, nothing.\n\n" ..
+                            "OFF: the gesture only toggles the ruled lines; the background is not touched."),
+                        checked_func = function() return self:isToggleWithBackground() end,
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
+                            G_reader_settings:saveSetting(TOGGLE_WITH_BG_KEY, not self:isToggleWithBackground())
+                            if touchmenu_instance then touchmenu_instance:updateItems() end
                         end,
                     },
                     {
