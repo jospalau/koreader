@@ -586,8 +586,8 @@ local function rebuildTint()
     tint_r, tint_g, tint_b, tint_colors = nil, nil, nil, nil
     local found, rgb = false, nil
 
-    if not HAS_COLOR then return end -- grayscale screen: always the plain gray path    
-    
+    if not HAS_COLOR then return end -- grayscale screen: always the plain gray path
+
     if cfg.tint == "custom" then
         rgb = parseHexColor(cfg.custom_tint)
         found = rgb ~= nil
@@ -1510,12 +1510,22 @@ local in_refresh = false
 -- other way around for right-to-left books). Frames are plain C blits; the
 -- paper dots travel with the page, and the last frame is the normal refresh.
 local usleep = require("ffi/util").usleep
+local ui_time = require("ui/time")
+local PAGE_ANIM_DEBUG = false
+local PAGE_ANIM_WAIT_PANEL = false -- true: wait for the panel after every step (exact but slow)
+local PAGE_ANIM_STRIP_PAUSE_US = 40000 -- extra pause after each strip (e-ink) -- writes every step of a page change to the log (set false when done)
 local PAGE_ANIM_STYLES = {
     { id = "wipe", label = _("Wipe") },
     { id = "blinds", label = _("Blinds") },
 }
 
 local page_anim_pending = false
+local page_anim_pending_at = nil -- when the page change was seen
+local PAGE_ANIM_PENDING_MS = 1500 -- how long a pending animation waits for the whole-page refresh
+local function pageAnimPendingExpired()
+    return not page_anim_pending_at
+        or ui_time.to_ms(ui_time.since(page_anim_pending_at)) > PAGE_ANIM_PENDING_MS
+end
 local page_anim_dir = 1
 local page_anim_last_page, page_anim_last_doc = nil, nil
 local page_anim_old, page_anim_new -- helper buffers, same layout as the screen
@@ -1582,9 +1592,17 @@ local function pageAnimFrames(x, y, w, h)
     local old = page_anim_old
     -- C blits only (they work in software night mode too while both buffers share
     -- the same inversion; otherwise KOReader would fall back to a very slow path)
-    if not old or not (bb.canUseCbbTogether and bb:canUseCbbTogether(old)) then return false end
+    if not old then
+        logger.info("paperdots: page animation skipped: no previous screen")
+        return false
+    end
+    if not (bb.canUseCbbTogether and bb:canUseCbbTogether(old)) then
+        logger.info("paperdots: page animation skipped: buffers cannot be blitted together (type/inversion)")
+        return false
+    end
     if old.w ~= bb.w or old.h ~= bb.h or tonumber(old.stride) ~= tonumber(bb.stride)
         or old:getRotation() ~= bb:getRotation() then
+        logger.info("paperdots: page animation skipped: screen buffer changed (size, stride or rotation)")
         return false
     end
     local bw, bh = bb:getWidth(), bb:getHeight()
@@ -1592,7 +1610,12 @@ local function pageAnimFrames(x, y, w, h)
     local ry = math.max(0, math.floor(y or 0))
     local rw = math.min(bw - rx, math.floor(w or bw))
     local rh = math.min(bh - ry, math.floor(h or bh))
-    if rx ~= 0 or rw < bw or rh < 0.6 * bh then return false end -- whole-page refreshes only
+    if rx ~= 0 or rw < bw or rh < 0.6 * bh then
+        -- a small refresh (clock, footer, another plugin) came first: nil tells the caller to keep the
+        -- animation pending for the real page refresh instead of losing it
+        logger.info("paperdots: page animation waits: small refresh", rx, ry, rw, rh)
+        return nil
+    end
 
     -- the new page, with its dots, is the picture we end on
     if refreshHookActive() then applyDots(rx, ry, rw, rh) end
@@ -1622,8 +1645,14 @@ local function pageAnimFrames(x, y, w, h)
     local function refreshStrips(strips)
         if eink then
             for _i, st in ipairs(strips) do
+                if PAGE_ANIM_DEBUG then logger.info("paperdots: ANIM strip x", st[1], "w", st[2]) end
                 if st[2] > 0 then Screen:refreshUI(st[1], ry, st[2], rh) end
             end
+            -- Let the panel finish this step before the framebuffer changes again;
+            -- otherwise the controller reads the final page and the sweep is never
+            -- seen (a few big updates, as in wipe, never fill the driver queue).
+            if PAGE_ANIM_WAIT_PANEL and Screen.refreshWaitForLast then pcall(Screen.refreshWaitForLast, Screen) end
+            usleep(PAGE_ANIM_STRIP_PAUSE_US)
         else
             local x0, x1 = bw, 0
             for _i, st in ipairs(strips) do
@@ -1634,6 +1663,10 @@ local function pageAnimFrames(x, y, w, h)
     end
 
     local prev_s, prev_p, p = 0, 0, 0
+    local dbg_t0 = ui_time.now()
+    if PAGE_ANIM_DEBUG then
+        logger.info("paperdots: ANIM start style", style, "dir", dir, "steps", steps, "eink", eink, "rot", rot)
+    end
     local ok, err = pcall(function()
         -- Start from the previous page once. Each subsequent frame only copies
         -- the newly revealed strips; already revealed/hidden areas do not need
@@ -1698,6 +1731,9 @@ local function pageAnimFrames(x, y, w, h)
     end)
     setRot(rot) -- never leave the screen buffer unrotated, even after an error
     ffi.copy(bb.data, new.data, size) -- always leave the finished page behind
+    if PAGE_ANIM_DEBUG then
+        logger.info("paperdots: ANIM end ok", ok, "ms", ui_time.to_ms(ui_time.since(dbg_t0)))
+    end
     if not ok then
         logger.warn("paperdots: page animation error", err)
         return false
@@ -1740,16 +1776,27 @@ if not Screen._paper_dots_hooked then
             local orig = Screen[name]
             if type(orig) == "function" then
                 Screen[name] = function(self, x, y, w, h, ...)
+                    if PAGE_ANIM_DEBUG and cfg.page_anim and not in_refresh then
+                        logger.info("paperdots: refresh", name, x, y, w, h, "pending", page_anim_pending)
+                    end
                     if in_refresh then return orig(self, x, y, w, h, ...) end
                     in_refresh = true
                     local animated = false
                     if page_anim_pending then
-                        page_anim_pending = false
                         local ok_a, res_a = pcall(pageAnimFrames, x, y, w, h)
-                        if ok_a then
-                            animated = res_a
+                        if ok_a and res_a == nil then
+                            -- not a whole-page refresh: keep waiting, unless it has been too long
+                            if pageAnimPendingExpired() then
+                                logger.info("paperdots: page animation dropped: no whole-page refresh in time")
+                                page_anim_pending = false
+                            end
                         else
-                            logger.warn("paperdots: page animation error", res_a)
+                            page_anim_pending = false
+                            if ok_a then
+                                animated = res_a
+                            else
+                                logger.warn("paperdots: page animation error", res_a)
+                            end
                         end
                     end
                     if refreshHookActive() and not animated then
@@ -1759,7 +1806,7 @@ if not Screen._paper_dots_hooked then
                     if animated == "done" and not (name:find("Full") or name:find("Flash")) then
                         in_refresh = false
                         return -- the animation already drew the finished page
-                    end                    
+                    end
                     local target = orig
 if not animated
     and name == "refreshPartialImp"
@@ -1789,6 +1836,9 @@ if ok_rv and type(ReaderView) == "table" and not ReaderView._paper_dots_hooked t
     ReaderView.paintTo = function(self, bb, x, y)
         if cfg.page_anim and bb == Screen.bb then
             local ok_p, page = pcall(function() return self.ui:getCurrentPage() end)
+            if PAGE_ANIM_DEBUG then
+                logger.info("paperdots: paintTo page", page, "last", page_anim_last_page, "ok", ok_p)
+            end
             if self.ui and self.ui.document ~= page_anim_last_doc then
                 page_anim_last_doc = self.ui.document -- another book: no animation on its first page
                 page_anim_last_page = nil
@@ -1796,12 +1846,13 @@ if ok_rv and type(ReaderView) == "table" and not ReaderView._paper_dots_hooked t
             end
             local skip = (cfg.page_anim_skip_comics and pageAnimIsComic(self.ui and self.ui.document))
                 or self.page_scroll or self.view_mode == "scroll"
-            if ok_p and page and not skip then            
+            if ok_p and page and not skip then
                 if page_anim_last_page and page ~= page_anim_last_page then
                     local forward = page > page_anim_last_page
                     if self.inverse_reading_order then forward = not forward end
                     page_anim_dir = forward and 1 or -1
                     page_anim_pending = true
+                    page_anim_pending_at = ui_time.now()
                     pageAnimSnapshot(bb) -- the screen still shows the old page
                 end
                 page_anim_last_page = page
@@ -1847,13 +1898,13 @@ function PaperDots:onDispatcherRegisterActions()
         event = "PaperDotsTogglePageAnim",
         title = _("Toggle paper dots page animation"),
         general = true,
-    })   
+    })
     Dispatcher:registerAction("paperdots_margins", {
         category = "none",
         event = "PaperDotsToggleMargins",
         title = _("Toggle paper dots margins"),
         general = true,
-    }) 
+    })
 end
 
 function PaperDots:init()
@@ -2295,8 +2346,8 @@ function PaperDots:addToMainMenu(menu_items)
     if Margins and self.ui and self.ui.document then
         local items = menu_items.paper_dots.sub_item_table
         table.insert(items, #items - 1, Margins.menuItem())
-    end    
-    
+    end
+
     if not HAS_COLOR then
         local items = menu_items.paper_dots.sub_item_table
         for i = #items, 1, -1 do
