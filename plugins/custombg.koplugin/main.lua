@@ -1027,8 +1027,8 @@ function CustomBg:getPageRefreshMode()
 end
 
 function CustomBg:_wantsNoFlash()
+    -- NOTE: also active in pieces mode: the gray pieces would flicker with KOReader's own page-turn refresh
     return self:isNoFlashEnabled()
-       and not self._overlay_active      -- pieces mode: the page is a normal text page, KOReader's own refresh handling is fine
        and self.ui and self.ui.document
        and self._bg_last_name ~= nil and self._bg_last_name ~= ""
 end
@@ -3922,7 +3922,8 @@ function CustomBg:addToMainMenu(menu_items)
                         "a plain black-and-white page without images, so KOReader does not dither it and does not treat it as " ..
                         "\"a page with images\". The pieces are painted afterwards by the plugin, on top of the page, " ..
                         "without dithering. Result: no grain, no ghosting and no black flashes when menus and dialogs open or close. " ..
-                        "The dithering / no-flash options below are ignored in this mode.\n\n" ..
+                        "The dithering option below is ignored in this mode; \"No-flash page turns\" still applies, " ..
+                        "so the drawings do not flicker when you turn the page.\n\n" ..
                         "Size limit: the pieces may cover at most ") .. max_pct .. _(
                         " of the screen. If the centre of the image is not empty, or the pieces cover more than that " ..
                         "(a real full-page picture or texture), the image is drawn the classic way. " ..
