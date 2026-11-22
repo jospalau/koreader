@@ -325,6 +325,255 @@ function CustomBg:getBgScaledPath(source_path)
     return getScaledPath(source_path)
 end
 
+-- ======================================================================
+-- Overlay ("pieces") mode
+-- Instead of handing a full-screen image to crengine (which then treats the WHOLE page as "an image": dithering,
+-- ghosting, flashing refreshes), the image is analysed once and only the parts that really contain something are kept:
+--   * a picture at the bottom (or top / a corner)  -> ONE small piece
+--   * a frame / border                              -> up to 4 thin strips around an empty centre
+-- The pieces are 8-bit gray + alpha buffers (transparent where the image is just background), stored in a small cache file
+-- and blitted by paintTo() over the page, after the text. The page itself stays a normal black-and-white text page.
+-- If an image has too much content (a real full-page picture) the classic full-page background is used for it.
+-- ======================================================================
+local ffi = require("ffi")
+local OVERLAY_KEY = "custombg_overlay"       -- true = pieces mode, default OFF (classic full-page background)
+local OVERLAY_MAX_AREA = 0.45                -- more than this fraction of the screen covered by pieces -> classic background
+local OVERLAY_TOL = 12                       -- gray difference from the image background that still counts as "background"
+
+local function isOverlayMode()
+    return CFG:readSetting(OVERLAY_KEY) == true
+end
+
+local function overlayCachePath(source_path)
+    return getCacheDir() .. string.format("ovl2_%dx%d_%s.bin", Screen:getWidth(), Screen:getHeight(), hashString(source_path))
+end
+
+-- Returns a list of pieces { bb = BB8A, x, y, w, h }, an empty list (image is blank), or false (use the classic background)
+local function buildOverlayPieces(source_path)
+    local W, H = Screen:getWidth(), Screen:getHeight()
+    local scaled = getScaledPath(source_path)
+    if not scaled then return false, "no scaled image" end
+    local RenderImage = require("ui/renderimage")
+    local src = RenderImage:renderImageFile(scaled, false, nil, nil)
+    if not src then return false, "image could not be decoded" end
+    if src:getWidth() ~= W or src:getHeight() ~= H then
+        local sc = RenderImage:scaleBlitBuffer(src, W, H, true)
+        src:free()
+        src = sc
+        if not src then return false, "scaling failed" end
+    end
+    local gray = Blitbuffer.new(W, H, Blitbuffer.TYPE_BB8)
+    gray:fill(Blitbuffer.COLOR_WHITE)
+    gray:blitFrom(src, 0, 0, 0, 0, W, H)
+    src:free()
+
+    local gp = ffi.cast("uint8_t*", gray.data)
+    local stride = tonumber(gray.stride)
+
+    -- Background value of the image: median of the four corners
+    local corners = { gp[0], gp[W - 1], gp[(H - 1) * stride], gp[(H - 1) * stride + W - 1] }
+    table.sort(corners)
+    local bg = corners[2]
+
+    -- Tight bounding box of the content inside [x0,x1) x [y0,y1); returns nil when there is none. Max values are exclusive.
+    local function contentBBox(x0, y0, x1, y1)
+        if x1 <= x0 or y1 <= y0 then return nil end
+        local minx, miny, maxx, maxy = x1, y1, x0 - 1, y0 - 1
+        for y = y0, y1 - 1 do
+            local row = y * stride
+            for x = x0, x1 - 1 do
+                local d = gp[row + x] - bg
+                if d < 0 then d = -d end
+                if d > OVERLAY_TOL then
+                    if x < minx then minx = x end
+                    if x > maxx then maxx = x end
+                    if y < miny then miny = y end
+                    maxy = y
+                end
+            end
+        end
+        if maxx < minx or maxy < miny then return nil end
+        return minx, miny, maxx + 1, maxy + 1
+    end
+
+    local pieces_rects = {}
+    local bx0, by0, bx1, by1 = contentBBox(0, 0, W, H)
+    if not bx0 then
+        gray:free()
+        return {}
+    end
+    if (bx1 - bx0) * (by1 - by0) <= OVERLAY_MAX_AREA * W * H then
+        -- one compact picture (e.g. characters at the bottom of the page)
+        pieces_rects[1] = { bx0, by0, bx1, by1 }
+    else
+        -- spread over the page (frame / border): grow an empty rectangle from the centre, keep what is outside of it
+        local function isContent(x, y)
+            local d = gp[y * stride + x] - bg
+            if d < 0 then d = -d end
+            return d > OVERLAY_TOL
+        end
+        local function rowEmpty(y, x0, x1)
+            local row = y * stride
+            for x = x0, x1 - 1 do
+                local d = gp[row + x] - bg
+                if d < 0 then d = -d end
+                if d > OVERLAY_TOL then return false end
+            end
+            return true
+        end
+        local function colEmpty(x, y0, y1)
+            for y = y0, y1 - 1 do
+                local d = gp[y * stride + x] - bg
+                if d < 0 then d = -d end
+                if d > OVERLAY_TOL then return false end
+            end
+            return true
+        end
+        local cx, cy = math.floor(W / 2), math.floor(H / 2)
+        if isContent(cx, cy) then
+            gray:free()
+            return false, "centre of the image is not empty (full-page picture)"
+        end
+        local hx0, hy0, hx1, hy1 = cx, cy, cx + 1, cy + 1
+        local moved = true
+        while moved do
+            moved = false
+            if hy0 > 0 and rowEmpty(hy0 - 1, hx0, hx1) then hy0 = hy0 - 1; moved = true end
+            if hy1 < H and rowEmpty(hy1, hx0, hx1) then hy1 = hy1 + 1; moved = true end
+            if hx0 > 0 and colEmpty(hx0 - 1, hy0, hy1) then hx0 = hx0 - 1; moved = true end
+            if hx1 < W and colEmpty(hx1, hy0, hy1) then hx1 = hx1 + 1; moved = true end
+        end
+        local strips = {
+            { 0, 0, W, hy0 },        -- top
+            { 0, hy1, W, H },        -- bottom
+            { 0, hy0, hx0, hy1 },    -- left
+            { hx1, hy0, W, hy1 },    -- right
+        }
+        for _, s in ipairs(strips) do
+            local a, b, c, d = contentBBox(s[1], s[2], s[3], s[4])
+            if a then pieces_rects[#pieces_rects + 1] = { a, b, c, d } end
+        end
+    end
+
+    local area = 0
+    for _, r in ipairs(pieces_rects) do area = area + (r[3] - r[1]) * (r[4] - r[2]) end
+    if area > OVERLAY_MAX_AREA * W * H then
+        gray:free()
+        return false, string.format("pieces cover %d%% of the screen (limit %d%%)", math.floor(area * 100 / (W * H)), math.floor(OVERLAY_MAX_AREA * 100))
+    end
+
+    local pieces = {}
+    for _, r in ipairs(pieces_rects) do
+        local x0, y0, x1, y1 = r[1], r[2], r[3], r[4]
+        local w, h = x1 - x0, y1 - y0
+        local pb = Blitbuffer.new(w, h, Blitbuffer.TYPE_BB8A, nil, w * 2, w)
+        local pstride = tonumber(pb.stride)
+        ffi.fill(pb.data, pstride * h, 0)           -- everything transparent
+        -- NOTE: for a BB8A buffer `data` is an array of Color8A structs, not bytes: write through a byte pointer
+        local pp = ffi.cast("uint8_t*", pb.data)
+        for y = 0, h - 1 do
+            local srow = (y0 + y) * stride + x0
+            local drow = y * pstride
+            for x = 0, w - 1 do
+                local v = gp[srow + x]
+                local d = v - bg
+                if d < 0 then d = -d end
+                if d > OVERLAY_TOL then
+                    pp[drow + 2 * x] = v
+                    pp[drow + 2 * x + 1] = 255
+                end
+            end
+        end
+        pieces[#pieces + 1] = { bb = pb, x = x0, y = y0, w = w, h = h }
+    end
+    gray:free()
+    return pieces
+end
+
+local function saveOverlayCache(path, pieces, why)
+    local f = io.open(path, "wb")
+    if not f then return end
+    if pieces == false then
+        f:write("FALLBACK " .. tostring(why):gsub("\n", " ") .. "\n")
+    else
+        f:write(string.format("%d\n", #pieces))
+        for _, p in ipairs(pieces) do
+            f:write(string.format("%d %d %d %d\n", p.x, p.y, p.w, p.h))
+            f:write(ffi.string(p.bb.data, tonumber(p.bb.stride) * p.h))
+        end
+    end
+    f:close()
+end
+
+-- Returns pieces (list, maybe empty) or false (classic background)
+local function loadOverlayPieces(source_path)
+    local path = overlayCachePath(source_path)
+    local f = io.open(path, "rb")
+    if f then
+        local ok, res, err = pcall(function()
+            local head = f:read("*l")
+            if head and head:sub(1, 8) == "FALLBACK" then return false, "cached: " .. head:sub(10) end
+            local n = tonumber(head)
+            if not n then error("bad overlay cache") end
+            local pieces = {}
+            for i = 1, n do
+                local line = f:read("*l")
+                local x, y, w, h = line:match("^(%d+) (%d+) (%d+) (%d+)$")
+                x, y, w, h = tonumber(x), tonumber(y), tonumber(w), tonumber(h)
+                if not (x and y and w and h) then error("bad overlay cache entry") end
+                local bytes = f:read(w * 2 * h)
+                if not bytes or #bytes ~= w * 2 * h then error("short overlay cache") end
+                local pb = Blitbuffer.new(w, h, Blitbuffer.TYPE_BB8A, nil, w * 2, w)
+                ffi.copy(pb.data, bytes, #bytes)
+                pieces[i] = { bb = pb, x = x, y = y, w = w, h = h }
+            end
+            return pieces
+        end)
+        f:close()
+        if ok then return res, err end
+        pcall(os.remove, path)   -- damaged cache: rebuild
+    end
+    local ok, pieces, why = pcall(buildOverlayPieces, source_path)
+    if not ok then
+        logger.warn("CustomBg: overlay build failed: " .. tostring(pieces))
+        return false, "ERROR " .. tostring(pieces)
+    end
+    pcall(saveOverlayCache, path, pieces, why)
+    return pieces, why
+end
+
+function CustomBg:_freeOverlay()
+    if self._overlay then
+        for _, p in ipairs(self._overlay) do
+            pcall(function() p.bb:free() end)
+        end
+    end
+    self._overlay = nil
+end
+
+-- Returns true when the pieces took over (the crengine background must then stay empty)
+function CustomBg:_setOverlay(source_path)
+    self:_freeOverlay()
+    if not isOverlayMode() then self._overlay_info = "option is OFF"; return false end
+    if not source_path then self._overlay_info = "no image"; return false end
+    local ok, pieces, why = pcall(loadOverlayPieces, source_path)
+    if not ok then self._overlay_info = "ERROR " .. tostring(pieces); return false end
+    if pieces == false or pieces == nil then self._overlay_info = "classic background: " .. tostring(why); return false end
+    local parts = {}
+    for _, p in ipairs(pieces) do parts[#parts + 1] = string.format("%dx%d@%d,%d", p.w, p.h, p.x, p.y) end
+    self._overlay_info = "ON, " .. #pieces .. " piece(s): " .. table.concat(parts, " ")
+    self._overlay = pieces
+    return true
+end
+
+function CustomBg:_paintOverlay(bb, x, y)
+    local ov = self._overlay
+    if not ov then return end
+    for _, p in ipairs(ov) do
+        pcall(bb.alphablitFrom, bb, p.bb, (x or 0) + p.x, (y or 0) + p.y, 0, 0, p.w, p.h)
+    end
+end
+
 local function loadImageList(folder, scene_mode)
     local images = {}
     local attr_root = lfs.attributes(folder)
@@ -568,7 +817,19 @@ function CustomBg:loadBackgroundByName(name, from_menu)
         use_name = self:getCurrentDocBg()   -- may return nil
     end
 
-    if use_name and use_name ~= "" then
+    -- Pieces mode: the picture is painted by paintTo() and crengine gets NO background image
+    local overlay_active = false
+    do
+        local imgs = self:getCurrentImageCache()
+        if use_name and use_name ~= "" and imgs[use_name] then
+            overlay_active = self:_setOverlay(imgs[use_name])
+        else
+            self:_freeOverlay()
+        end
+    end
+    self._overlay_active = overlay_active
+
+    if use_name and use_name ~= "" and not overlay_active then
         local images = self:getCurrentImageCache()
         if images[use_name] then
             local scaled = self:getBgScaledPath(images[use_name])
@@ -767,6 +1028,7 @@ end
 
 function CustomBg:_wantsNoFlash()
     return self:isNoFlashEnabled()
+       and not self._overlay_active      -- pieces mode: the page is a normal text page, KOReader's own refresh handling is fine
        and self.ui and self.ui.document
        and self._bg_last_name ~= nil and self._bg_last_name ~= ""
 end
@@ -784,6 +1046,7 @@ end
 
 function CustomBg:_wantsNoDither()
     return CustomBg._noDitherOn()
+       and not self._overlay_active
        and self:isNoFlashEnabled()
        and self.ui and self.ui.document
        and self._bg_last_name ~= nil and self._bg_last_name ~= ""
@@ -854,6 +1117,24 @@ function CustomBg:_installRefreshHook()
         if not ok then error(err, 0) end
     end
     h.refresh = function(um, mode, region, dither)
+        -- With software dithering switched off by this plugin (see _syncDither), the black "flash" refreshes that menus and
+        -- dialogs request when they open / close ("flashui", "flashpartial") flash black over the background on some panels
+        -- (Kindle PW12). Turn them into their non-flashing equivalents. "full" is left alone (periodic / explicit full refresh).
+        if h.enabled and (mode == "flashui" or mode == "flashpartial" or mode == "partial") then
+            local plugin = CustomBg.active_instance
+            if plugin and plugin:_wantsNoDither() then
+                if mode == "flashui" then
+                    mode = "ui"
+                elseif mode == "flashpartial" then
+                    mode = "partial"
+                elseif region and not CustomBg._reader_partial then
+                    -- A regional "partial" (a dialog / menu closing) counts towards KOReader's "Full refresh rate" counter and,
+                    -- when it is due, UIManager:_refresh promotes it to "flashui" = black flash over the dialog area.
+                    -- (Same as KOReader's own "avoid_flashing_ui" setting does.) The reader's own page-turn partials keep counting.
+                    mode = "ui"
+                end
+            end
+        end
         if CustomBg._reader_partial and mode == "partial" then
             local n = um.FULL_REFRESH_COUNT
             if type(n) == "number" and type(um.refresh_count) == "number" then
@@ -1432,7 +1713,17 @@ function CustomBg:_reapplyBackgroundImage(doc)
     self._bg_last_rot = rot
     self._bg_last_sw = sw
     self._bg_last_sh = sh
-    if name and name ~= "" then
+    local overlay_active = false
+    do
+        local imgs = self:getCurrentImageCache()
+        if name and name ~= "" and imgs[name] then
+            overlay_active = self:_setOverlay(imgs[name])
+        else
+            self:_freeOverlay()
+        end
+    end
+    self._overlay_active = overlay_active
+    if name and name ~= "" and not overlay_active then
         local images = self:getCurrentImageCache()
         if images[name] then
             local scaled = self:getBgScaledPath(images[name])
@@ -1940,6 +2231,7 @@ function CustomBg:onRedrawCurrentView() self:invalidateLineCache() end
 function CustomBg:paintTo(bb, x, y)
     -- Self-heal on screen orientation (width/height) change: re-adapt the background automatically after portrait/landscape switching, no need to tap "Reading background" manually
     self:_checkScreenGeom()
+    self:_paintOverlay(bb, x, y)   -- pieces mode (no-op otherwise); the ruled lines below are drawn on top of it
     if not self.fs_enabled or not self.ui.document then return end
     if type(self.ui.document.getTextFromPositions) ~= "function" or
        type(self.ui.document.getScreenBoxesFromPositions) ~= "function" then
@@ -2894,6 +3186,7 @@ function CustomBg:_checkNightMode()
 end
 
 function CustomBg:onCloseDocument()
+    self:_freeOverlay()
     self:_releaseNoFlash()
     self:_releaseDither()
     if self._night_check_timer then
@@ -3622,6 +3915,28 @@ function CustomBg:addToMainMenu(menu_items)
                     })
 
                     table.insert(sub, {
+                        text = _("Draw as pieces (bottom picture / frame) instead of a full-page background"),
+                        help_text = _(
+                            "ON: the background image is analysed once and only the parts that contain something are kept: " ..
+                            "a picture at the bottom becomes one small piece, a frame becomes up to four thin strips. " ..
+                            "They are painted over the page, so the page itself stays a normal black-and-white text page: " ..
+                            "no dithering of the whole page, no ghosting and no black flashes on menus and dialogs, " ..
+                            "and the dithering / no-flash options below are not needed (they are ignored in this mode).\n\n" ..
+                            "The background colour of the image is detected automatically (its corners); that colour becomes transparent.\n\n" ..
+                            "An image that covers most of the page (a real full-page picture) is drawn the classic way.\n\n" ..
+                            "The pieces are gray; they are painted after the text, so keep the picture inside the page margin.\n\n" ..
+                            "OFF: classic full-page background."),
+                        checked_func = function() return isOverlayMode() end,
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
+                            CFG:saveSetting(OVERLAY_KEY, not isOverlayMode())
+                            self:_invalidateBgDedup()
+                            self:loadBackgroundByName(nil, true)
+                            if touchmenu_instance then touchmenu_instance:updateItems() end
+                        end,
+                    })
+
+                    table.insert(sub, {
                         text = _("No-flash page turns (avoid full-screen flashing with a background)"),
                         help_text = _(
                             "ON: while a background is shown, page turns use a non-flashing refresh and the background is not " ..
@@ -3644,6 +3959,7 @@ function CustomBg:addToMainMenu(menu_items)
                             "ON: while a background is shown, KOReader's software dithering is switched off, so the background is drawn " ..
                             "smooth instead of with a grainy pattern (typical of the Kindle Paperwhite 12). " ..
                             "With the \"ui\" page-turn refresh it can make page turns smear more; it works best with \"partial\". OFF by default.\n\n" ..
+                            "While it is active, the black flash that menus and dialogs cause when they open and close is also avoided.\n\n" ..
                             "Images inside the book are not dithered either while a background is shown. Dithering comes back " ..
                             "when the background is turned off or the book is closed.\n\n" ..
                             "OFF: KOReader's own behaviour."),
@@ -3758,6 +4074,8 @@ function CustomBg:addToMainMenu(menu_items)
                                     "Image file found: " .. show(resolved and imgs[resolved] or nil),
                                     "Images in list: " .. count,
                                     "Folder: " .. getBackgroundsFolder(),
+                                    "Pieces mode setting: " .. tostring(isOverlayMode()),
+                                    "Pieces mode now: " .. tostring(self._overlay_info or "(not evaluated)"),
                                     "Screen dithering (sw / hw): " .. tostring(Screen.sw_dithering) .. " / " .. tostring(Screen.hw_dithering)
                                         .. (self._dither_suspended and "  [sw switched off by the plugin]" or ""),
                                     (function()
