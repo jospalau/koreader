@@ -28,9 +28,17 @@
 --   * is_doc_only = false — plugin loads in both FileManager and Reader contexts,
 --     which is required so the close-document hook fires inside the Reader.
 
+-- Before the caches are read: a start that never settled (froze, crashed)
+-- has them cleared now (lib/bookshelf_start_guard, issue 621).
+pcall(function() require("lib/bookshelf_start_guard").arm() end)
 -- Before any module of ours: they load from compiled bytecode kept on the
 -- device (lib/bookshelf_bytecode), not parsed from source on every start.
-pcall(function() require("lib/bookshelf_bytecode").install() end)
+-- Unless that is switched off (Performance tweaks, or by the start guard).
+pcall(function()
+    if require("lib/bookshelf_start_guard").bytecodeOn() then
+        require("lib/bookshelf_bytecode").install()
+    end
+end)
 
 local WidgetContainer = require("ui/widget/container/widgetcontainer")
 -- First of all: a KOReader older than Bookshelf needs gets a stub plugin that
@@ -537,6 +545,8 @@ function Bookshelf:init()
     -- menu_items yet — but ReaderMenu:init populates them synchronously
     -- during registerModule, before plugins load, so it's safe here.
     self:_wireFastFileBrowserTab()
+    -- File browser context: the "previous book" opens (issue 617).
+    self:_wirePreviousBookOpen()
 
     -- Re-assert ownership of that callback AFTER the reader is shown.
     -- Another home-screen-replacement plugin can wrap the same
@@ -549,6 +559,11 @@ function Bookshelf:init()
     -- writer. With no competing plugin this is a harmless re-install of our
     -- own callback. Reader context only (self.ui.document set); a no-op in FM.
     if self.ui and self.ui.document then
+        -- Issue 610: this runs inside ReaderUI:init, with input off for the
+        -- load. Taps made meanwhile wait unread in the kernel's queue, and on
+        -- a slow device KOReader lifts the guard before reading them, so
+        -- they turned pages. Drop them when the guard lifts.
+        pcall(function() require("lib/bookshelf_input_guard").arm() end)
         UIManager:nextTick(function()
             self:_wireFastFileBrowserTab(true)
         end)
@@ -584,6 +599,24 @@ function Bookshelf:init()
         local ok, StaleSweep = pcall(require, "lib/bookshelf_stale_sweep")
         if ok and StaleSweep then
             pcall(function() StaleSweep:run() end)
+        end
+    end)
+
+    -- The start got through: well after the first paint, since the freeze
+    -- in issue 621 came once the shelf was on screen (lib/bookshelf_start_guard).
+    afterFirstPaint(20, function()
+        pcall(function() require("lib/bookshelf_start_guard").settle() end)
+    end)
+    -- Once, after the guard switched the compiled copies off: say why, and
+    -- where to turn them back on.
+    afterFirstPaint(1, function()
+        local ok, told = pcall(function() return require("lib/bookshelf_start_guard").takeNotice() end)
+        if ok and told then
+            UIManager:show(require("ui/widget/infomessage"):new{
+                text = _("Bookshelf had trouble starting twice in a short time, so it no longer keeps "
+                    .. "a compiled copy of its code. Starting may take a little longer. To turn it "
+                    .. "back on: Settings > Advanced > Performance tweaks > Compiled code cache."),
+            })
         end
     end)
 
@@ -1823,12 +1856,77 @@ end
 function Bookshelf:_wireFastFileBrowserTab(force)
     if not (self.ui and self.ui.document and self.ui.menu) then return end
     local menu_ref = self.ui.menu
+    local plugin = self
+    -- Newer KOReader (nightlies from October 2026) rebuilds the top-menu
+    -- buttons from getDefaultMenuButtons the first time the menu opens,
+    -- replacing the item wrapped below with a fresh one: the File browser tab
+    -- then went straight to the file browser (issue 617). Wrap each fresh
+    -- copy as it is made. Older KOReader has no such method; nothing to do.
+    if menu_ref.getDefaultMenuButtons and not rawget(menu_ref, "_bookshelf_defaults_hooked") then
+        menu_ref._bookshelf_defaults_hooked = true
+        local orig_defaults = menu_ref.getDefaultMenuButtons
+        menu_ref.getDefaultMenuButtons = function(m, ...)
+            local buttons = orig_defaults(m, ...)
+            if type(buttons) == "table" and type(buttons.filemanager) == "table" then
+                plugin:_wrapFileBrowserItem(menu_ref, buttons.filemanager)
+            end
+            return buttons
+        end
+    end
     if menu_ref._bookshelf_fm_tab_wrapped and not force then return end
     local items = menu_ref.menu_items
     if not (items and items.filemanager) then return end
+    self:_wrapFileBrowserItem(menu_ref, items.filemanager)
+    menu_ref._bookshelf_fm_tab_wrapped = true
+end
+
+-- KOReader's file browser opens the previous book from several places: the
+-- top menu's Reader icon (newer KOReader), the "Previous: ..." menu item and
+-- the "Open previous document" gesture. All of them call
+-- FileManager:onOpenLastDoc, which knows nothing of the shelf, so a book opened
+-- that way over the shelf closed back to the file browser instead (issue 617).
+-- When the shelf is what the user is looking at, open the book the shelf's
+-- way, so it is marked as opened from here (and a parked book is reused).
+-- Anywhere else, and for a missing file (KOReader's own message), KOReader's
+-- method runs unchanged.
+function Bookshelf:_wirePreviousBookOpen()
+    local fm = self.ui
+    if not fm or fm.document or type(fm.onOpenLastDoc) ~= "function" then return end
+    if rawget(fm, "_bookshelf_lastdoc_wrapped") then return end
+    fm._bookshelf_lastdoc_wrapped = true
+    local orig = fm.onOpenLastDoc
+    fm.onOpenLastDoc = function(fm_self, ...)
+        local w = _live_widget
+        local last = G_reader_settings:readSetting("lastfile")
+        if w and type(last) == "string" and Bookshelf._shelfIsFront(fm_self, w)
+                and require("libs/libkoreader-lfs").attributes(last, "mode") == "file" then
+            w:_openBook({ filepath = last }, nil, { no_effect = true })
+            return true
+        end
+        return orig(fm_self, ...)
+    end
+end
+
+-- True when the shelf is the full-screen layer on top: the topmost
+-- covers_fullscreen widget, not counting the file browser's own menu (its
+-- "Previous" item runs before the menu closes). False when the shelf is
+-- buried under another home screen or a reader.
+function Bookshelf._shelfIsFront(fm, shelf)
+    local stack = UIManager._window_stack
+    if not (stack and shelf) then return false end
+    local menu_container = fm and fm.menu and fm.menu.menu_container
+    for i = #stack, 1, -1 do
+        local w = stack[i].widget
+        if w == shelf then return true end
+        if w and w.covers_fullscreen and w ~= menu_container then return false end
+    end
+    return false
+end
+
+function Bookshelf:_wrapFileBrowserItem(menu_ref, item)
     local plugin = self
-    local prev_callback = items.filemanager.callback
-    items.filemanager.callback = function()
+    local prev_callback = item.callback
+    item.callback = function()
         if menu_ref.onTapCloseMenu then menu_ref:onTapCloseMenu() end
         -- Decoupled from "Start with" (issue #98): route back to Bookshelf
         -- whenever it is the live home — i.e. its widget is on the stack,
@@ -1880,7 +1978,6 @@ function Bookshelf:_wireFastFileBrowserTab(force)
             end)
         end
     end
-    menu_ref._bookshelf_fm_tab_wrapped = true
 end
 
 -- Close the live widget if showing, otherwise safe-show. Mirrors the
@@ -2390,6 +2487,8 @@ function Bookshelf:onExit()
     require("lib/bookshelf_reader_park").noteExit()
     -- A scan stopped by a clean exit did not crash on its book (issue 518).
     pcall(function() require("lib/bookshelf_render_guard").clear() end)
+    -- Nor did a start that ends in a clean exit (lib/bookshelf_start_guard).
+    pcall(function() require("lib/bookshelf_start_guard").settle() end)
 end
 Bookshelf.onRestart = Bookshelf.onExit
 
@@ -2708,6 +2807,7 @@ function Bookshelf:scanPageCounts(opts)
         calibre   = {},
         publisher = {},
         hardcover = {},
+        stable    = {},
         rendered  = {},
         failed    = {},
     }
@@ -2849,7 +2949,13 @@ function Bookshelf:scanPageCounts(opts)
         -- (bookshelf_pagemap_probe) -- the truest count there is, and
         -- milliseconds per book. Stop in the status line cancels.
         report.cancelled = false
-        if opts.publisher ~= false then
+        -- With KOReader's Characters per page default set to override
+        -- publisher page numbers, a book's own list is not the count it will
+        -- show: the render pass counts it the way KOReader will instead.
+        local ok_lay, Lay = pcall(require, "lib/bookshelf_reader_layout")
+        local cpp_overrides = ok_lay and Lay.charsPerPage and Lay.charsPerPage()
+                              and Lay.overridesPublisher() and opts.render ~= false
+        if opts.publisher ~= false and not cpp_overrides then
             -- In forked batches, like the render pass: the zip reads leave
             -- the main process, so the shelf keeps answering taps (device
             -- report: swipes queued until this pass finished), and the
@@ -3064,10 +3170,20 @@ function Bookshelf:scanPageCounts(opts)
                             if ok_l then pcall(Layout.afterLoad, doc) end
                             if doc.render then doc:render() end
                             local n = doc:getPageCount()
+                            -- KOReader's Characters per page default, when it
+                            -- applies to this book: the count it will show on
+                            -- the first open.
+                            local sp
+                            if ok_l and Layout.stablePages then
+                                local ok_s, v = pcall(Layout.stablePages, doc)
+                                if ok_s then sp = v end
+                            end
                             pcall(function() doc:close() end)
-                            return n
+                            return ok_l and Layout.countLine(n, sp) or n
                         end)
-                        if ok_pc and tonumber(pc) and tonumber(pc) > 0 then return tostring(pc) end
+                        if ok_pc and pc ~= nil and require("lib/bookshelf_reader_layout").readCountLine(tostring(pc)) then
+                            return tostring(pc)
+                        end
                         -- No count: why, for the log (not a number, so the
                         -- parent takes it as a failure).
                         return "!" .. G.failureNote(ok_pc and "no count" or pc, headroom, avail)
@@ -3086,8 +3202,14 @@ function Bookshelf:scanPageCounts(opts)
                 end
                 processed = i
                 logger.info(string.format("bookshelf: page count render %d/%d took %.1fs", i, #todo, elapsed))
-                local pages = tonumber(pages_s)
-                if pages and pages > 0 then
+                local pages, stable = require("lib/bookshelf_reader_layout").readCountLine(pages_s)
+                if pages and stable then
+                    -- Characters per page: layout-free like a publisher
+                    -- count, and the number the book will show once opened.
+                    persist(fp, pages, "print")
+                    report.stable[#report.stable + 1] =
+                        { name = nameFor(fp), pages = pages }
+                elseif pages and pages > 0 then
                     -- A render count is layout-derived, not publisher truth:
                     -- it stays out of sidecars (persist() only writes those
                     -- for publisher counts).
@@ -3101,7 +3223,7 @@ function Bookshelf:scanPageCounts(opts)
                 end
                 -- Flush every few books: a mid-scan crash or battery death
                 -- should not cost the finished work.
-                if #report.rendered % 10 == 0 then SpineShelf.flushPersist() end
+                if (#report.rendered + #report.stable) % 10 == 0 then SpineShelf.flushPersist() end
             end
         end
         Guard.clear()

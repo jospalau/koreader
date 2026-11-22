@@ -1200,11 +1200,7 @@ function StartMenu:_build()
     -- page count, so a clamp against the nominal max_rows would strand the menu
     -- on page 1 instead of the last page.
     local want_last_page = self._page > _pageCount()
-    -- While #items <= max_rows, _pageSlice returns every entry whatever the
-    -- page, so the slice built above is already the right one: rebuilding it
-    -- would re-render every module for nothing. Only the page number needs
-    -- clamping (which _clampPage() has just done).
-    if _clampPage() and #self._items > max_rows then _rebuildSlice() end
+    if _clampPage() then _rebuildSlice() end
     -- Reduce max_rows from the MEASURED row heights until the page fits.
     -- Iterated rather than one-shot: the rows have unequal heights, and
     -- _pageSlice declines to paginate at all while #items <= max_rows -- so a
@@ -1232,11 +1228,6 @@ function StartMenu:_build()
         if new_max > #self._items then new_max = #self._items end
         if new_max >= max_rows then new_max = max_rows - 1 end
         max_rows = math.max(2, new_max)
-        -- Same reasoning: at max_rows >= #items the slice would be identical to
-        -- the one that just overflowed. The next pass would re-measure the same
-        -- rows, get the same new_max, and only then step below #items. Take that
-        -- step now: same end state, one full rebuild fewer.
-        if max_rows >= #self._items then max_rows = math.max(2, #self._items - 1) end
         if want_last_page then self._page = _pageCount() else _clampPage() end
         _rebuildSlice()
     end
