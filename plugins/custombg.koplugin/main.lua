@@ -124,7 +124,6 @@ local NOFLASH_KEY = "custombg_noflash"                       -- avoid full-scree
 local PAGE_REFRESH_KEY = "custombg_page_refresh"             -- page turns with a background: "ui" (default, no flash) / "partial" (crisper text)
 local NODITHER_KEY = "custombg_no_dither"                     -- turn KOReader's software dithering off while a background is shown (default: OFF; only has an effect while a background is shown)
 local SWIPE_ANIM_KEY = "custombg_swipe_anim"                -- Kindle page-turn animation while a background is shown: "keep" (default) / "off"
-local OPEN_REFRESH_KEY = "custombg_open_refresh"             -- refresh used when the book is shown: "ui" (soft, default) / "partial" (light) / "full" (KOReader default)
 local TOGGLE_WITH_BG_KEY = "custombg_toggle_with_background"   -- the lines gesture (pagetextinfo) also switches the background: true (default) / false = lines only
 
 local FS_KEYS = {
@@ -766,12 +765,6 @@ function CustomBg:getPageRefreshMode()
     return CFG:readSetting(PAGE_REFRESH_KEY) == "partial" and "partial" or "ui"
 end
 
-function CustomBg:getOpenRefreshMode()
-    local v = CFG:readSetting(OPEN_REFRESH_KEY)
-    if v == "partial" or v == "full" then return v end
-    return "ui"
-end
-
 function CustomBg:_wantsNoFlash()
     return self:isNoFlashEnabled()
        and self.ui and self.ui.document
@@ -842,9 +835,8 @@ function CustomBg:_installRefreshHook()
             -- shortly after the book is shown; the diagnostic log showed it as "setDirty all full"
             if widget == "all" or widget == reader_ui or (reader_ui.view ~= nil and widget == reader_ui.view.dialog) then
                 plugin._open_pending = nil
-                -- "ui": no flash, but the previous screen may fade out slowly; "partial": light flash, cleaner;
-                -- "full": KOReader's own refresh (cleanest, full flash)
-                return orig_setDirty(um, widget, plugin:getOpenRefreshMode(), ...)
+                -- "ui": no flash (the previous screen may fade out slowly)
+                return orig_setDirty(um, widget, "ui", ...)
             end
         end
         if h.enabled and refreshtype == "partial" and widget ~= nil and plugin and plugin:_wantsNoFlash()
@@ -3668,40 +3660,6 @@ function CustomBg:addToMainMenu(menu_items)
                             self:repaintView()
                             if touchmenu_instance then touchmenu_instance:updateItems() end
                         end,
-                    })
-
-                    table.insert(sub, {
-                        text_func = function()
-                            local labels = { ui = _("\"ui\" mode"), partial = _("\"partial\" mode"), full = _("\"full\" mode") }
-                            return _("Refresh when opening the book") .. ": " .. labels[self:getOpenRefreshMode()]
-                        end,
-                        -- Same condition the hook uses (background shown + No-flash page turns ON): greyed out otherwise
-                        enabled_func = function() return self:_wantsNoFlash() and true or false end,
-                        help_text = _(
-                            "Refresh KOReader does when it shows the book (only with a background and No-flash page turns ON).\n\n" ..
-                            "\"ui\" mode: no flash, but the previous screen can fade out slowly (faint remains).\n" ..
-                            "\"partial\" mode: a mild flash, cleaner than \"ui\".\n" ..
-                            "\"full\" mode: KOReader's own refresh, full flash, cleanest."),
-                        sub_item_table = (function()
-                            local items = {}
-                            local opts = {
-                                { text = _("\"ui\" mode: no flash, may leave a faint fade of the previous screen"), mode = "ui" },
-                                { text = _("\"partial\" mode: mild flash, cleaner"), mode = "partial" },
-                                { text = _("\"full\" mode: KOReader default, full flash, cleanest"), mode = "full" },
-                            }
-                            for _, opt in ipairs(opts) do
-                                table.insert(items, {
-                                    text = opt.text,
-                                    checked_func = function() return self:getOpenRefreshMode() == opt.mode end,
-                                    keep_menu_open = true,
-                                    callback = function(touchmenu_instance)
-                                        CFG:saveSetting(OPEN_REFRESH_KEY, opt.mode)
-                                        if touchmenu_instance then touchmenu_instance:updateItems() end
-                                    end,
-                                })
-                            end
-                            return items
-                        end)(),
                     })
 
                     table.insert(sub, {
