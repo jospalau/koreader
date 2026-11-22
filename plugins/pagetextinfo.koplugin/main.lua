@@ -1701,6 +1701,69 @@ local function getIfosInDir(path)
     return ifos
 end
 
+-- ===== Dogear icon picker =====
+-- Returns the sub menu with every dogear-*.png / dogear-*.svg found in <koreader>/resources/icons and
+-- <koreader>/icons. Picking one stores its file name in G_reader_settings "custom_dogear_icon" and rebuilds the live dogear
+-- (the custom dogear patch, 2-custom-dogear.lua, provides ReaderDogear:reloadCustomIcon()).
+function PageTextInfo:getDogearIconMenu()
+    local lfs = require("libs/libkoreader-lfs")
+    local base = DataStorage:getDataDir()
+    local found, seen = {}, {}
+    for __, dir in ipairs({ base .. "/resources/icons", base .. "/icons" }) do
+        local ok, iter, dir_obj = pcall(lfs.dir, dir)
+        if ok and iter then
+            for entry in iter, dir_obj do
+                local lower = entry:lower()
+                if not seen[entry] and (lower:match("^dogear%-.*%.png$") or lower:match("^dogear%-.*%.svg$")) then
+                    seen[entry] = true
+                    table.insert(found, entry)
+                end
+            end
+        end
+    end
+    table.sort(found, function(a, b) return a:lower() < b:lower() end)
+
+    local function current()
+        return G_reader_settings:readSetting("custom_dogear_icon")
+    end
+    local function choose(value, touchmenu_instance)
+        G_reader_settings:saveSetting("custom_dogear_icon", value)
+        G_reader_settings:flush()
+        local dogear = self.ui and self.ui.view and self.ui.view.dogear
+        if dogear and dogear.reloadCustomIcon then
+            pcall(dogear.reloadCustomIcon, dogear)
+        end
+        if touchmenu_instance then touchmenu_instance:updateItems() end
+        UIManager:setDirty("all", "ui")
+    end
+
+    local items = {}
+    for __, name in ipairs(found) do
+        table.insert(items, {
+            text = name,
+            checked_func = function()
+                local sel = current()
+                return sel == name or (sel == nil and name == "dogear-custom.png")
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance) choose(name, touchmenu_instance) end,
+        })
+    end
+    if #items == 0 then
+        table.insert(items, {
+            text = _("No dogear-*.png found in koreader/resources/icons"),
+            enabled = false,
+        })
+    end
+    table.insert(items, {
+        text = _("KOReader default dogear"),
+        checked_func = function() return current() == "@stock" end,
+        keep_menu_open = true,
+        callback = function(touchmenu_instance) choose("@stock", touchmenu_instance) end,
+    })
+    return items
+end
+
 function PageTextInfo:addToMainMenu(menu_items)
     -- If we don't want this being called for the filemanager, better to call self.ui.menu:registerToMainMenu(self) in the onReaderReady() event handler function
     -- Although we can set in the init() function and skip it like this:
@@ -2141,6 +2204,47 @@ This is to be active only if the option flash buttons and menu items or the opti
                         self.settings:flush()
                         UIManager:setDirty("all", "ui")
                         return true
+                    end,
+                },
+                {
+                    -- Lists every dogear-*.png / .svg found in resources/icons and icons (rescanned each time the menu opens).
+                    -- The choice is stored in G_reader_settings "custom_dogear_icon" and read by the custom dogear patch.
+                    text_func = function()
+                        local sel = G_reader_settings:readSetting("custom_dogear_icon")
+                        if sel == "@stock" then return _("Dogear icon") .. ": " .. _("KOReader default") end
+                        return _("Dogear icon") .. ": " .. (sel or "dogear-custom.png")
+                    end,
+                    sub_item_table_func = function() return self:getDogearIconMenu() end,
+                },
+                {
+                    -- 100 % = the size the custom dogear patch uses by default (4x the stock dogear).
+                    -- Stored in G_reader_settings "custom_dogear_size_pct", read by the custom dogear patch.
+                    text_func = function()
+                        return _("Dogear size") .. ": " .. (G_reader_settings:readSetting("custom_dogear_size_pct") or 100) .. "%"
+                    end,
+                    keep_menu_open = true,
+                    callback = function(touchmenu_instance)
+                        local SpinWidget = require("ui/widget/spinwidget")
+                        UIManager:show(SpinWidget:new{
+                            title_text = _("Dogear size (% of the default size)"),
+                            value = G_reader_settings:readSetting("custom_dogear_size_pct") or 100,
+                            value_min = 20,
+                            value_max = 300,
+                            value_step = 5,
+                            value_hold_step = 25,
+                            default_value = 100,
+                            unit = "%",
+                            callback = function(spin)
+                                G_reader_settings:saveSetting("custom_dogear_size_pct", spin.value)
+                                G_reader_settings:flush()
+                                local dogear = self.ui and self.ui.view and self.ui.view.dogear
+                                if dogear and dogear.reloadCustomIcon then
+                                    pcall(dogear.reloadCustomIcon, dogear)
+                                end
+                                if touchmenu_instance then touchmenu_instance:updateItems() end
+                                UIManager:setDirty("all", "ui")
+                            end,
+                        })
                     end,
                 },
                 {
@@ -4906,5 +5010,3 @@ function PageTextInfo:onShowTweaks(page)
 end
 
 return PageTextInfo
-
-
