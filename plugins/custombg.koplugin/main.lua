@@ -336,6 +336,7 @@ end
 -- If an image has too much content (a real full-page picture) the classic full-page background is used for it.
 -- ======================================================================
 local ffi = require("ffi")
+local OVERLAY_BLEND_KEY = "custombg_overlay_blend"   -- "multiply" (default: the text stays visible over the pieces) or "cover" (as before: the pieces cover the text)
 local OVERLAY_KEY = "custombg_overlay"       -- true = pieces mode, default OFF (classic full-page background)
 local OVERLAY_MAX_AREA = 0.45                -- more than this fraction of the screen covered by pieces -> classic background
 local OVERLAY_TOL = 12                       -- gray difference from the image background that still counts as "background"
@@ -562,6 +563,26 @@ function CustomBg:_setOverlay(source_path)
     local parts = {}
     for _, p in ipairs(pieces) do parts[#parts + 1] = string.format("%dx%d@%d,%d", p.w, p.h, p.x, p.y) end
     self._overlay_info = "ON, " .. #pieces .. " piece(s): " .. table.concat(parts, " ")
+    -- The pieces are painted AFTER the page, so they must not cover the text. Turn each one into a "multiply" layer:
+    -- colour 0 with alpha = 255 - gray, painted with a premultiplied-alpha blit: result = page * gray / 255.
+    -- White paper takes the gray of the picture, black text stays black (anti-aliased text only gets slightly darker).
+    local multiply = CFG:readSetting(OVERLAY_BLEND_KEY) ~= "cover"
+    self._overlay_multiply = multiply
+    for _, pc in ipairs(multiply and pieces or {}) do
+        local pb = pc.bb
+        local pstride = tonumber(pb.stride)
+        local pp = ffi.cast("uint8_t*", pb.data)
+        for y = 0, pc.h - 1 do
+            local drow = y * pstride
+            for x = 0, pc.w - 1 do
+                local i = drow + 2 * x
+                if pp[i + 1] ~= 0 then
+                    pp[i + 1] = 255 - pp[i]
+                    pp[i] = 0
+                end
+            end
+        end
+    end
     self._overlay = pieces
     return true
 end
@@ -570,7 +591,7 @@ function CustomBg:_paintOverlay(bb, x, y)
     local ov = self._overlay
     if not ov then return end
     for _, p in ipairs(ov) do
-        pcall(bb.alphablitFrom, bb, p.bb, (x or 0) + p.x, (y or 0) + p.y, 0, 0, p.w, p.h)
+        pcall(self._overlay_multiply and bb.pmulalphablitFrom or bb.alphablitFrom, bb, p.bb, (x or 0) + p.x, (y or 0) + p.y, 0, 0, p.w, p.h)
     end
 end
 
@@ -3929,8 +3950,8 @@ function CustomBg:addToMainMenu(menu_items)
                         "(a real full-page picture or texture), the image is drawn the classic way. " ..
                         "Diagnostics shows the reason (\"Pieces mode now\").\n\n" ..
                         "The background colour of the image is read from its corners and becomes transparent. " ..
-                        "The pieces are gray and are painted after the text, so keep the picture inside the page margin, " ..
-                        "not over the text.\n\n" ..
+                        "The pieces are painted after the text. See \"Pieces over the text\" below: by default the text stays " ..
+                        "visible over them; the old way covers it, so the picture has to stay inside the page margin.\n\n" ..
                         "The first time an image is used it is analysed and cached; afterwards it loads at once.\n\n" ..
                         "OFF: classic full-page background. On the Kindle it flickers and dithering has to be disabled " ..
                         "(see the no-dithering option below).")
@@ -3958,6 +3979,28 @@ function CustomBg:addToMainMenu(menu_items)
                     })
 
                     table.insert(sub, {
+                        text_func = function()
+                            return _("Pieces over the text") .. ": " ..
+                                (CFG:readSetting(OVERLAY_BLEND_KEY) == "cover" and _("cover it (as before)") or _("text stays visible (now)"))
+                        end,
+                        help_text = _(
+                            "Only for \"Draw as pieces\".\n\n" ..
+                            "Text stays visible (now, default): the pieces are blended with the page like a transparent layer " ..
+                            "(multiply). White paper takes the gray of the picture and the text stays black on top of it, so the " ..
+                            "picture may overlap the text.\n\n" ..
+                            "Cover it (as before): the pieces are opaque and are painted over the text. Only white parts of the " ..
+                            "image let the text through, so the picture has to stay inside the page margin."),
+                        enabled_func = function() return isOverlayMode() end,
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
+                            CFG:saveSetting(OVERLAY_BLEND_KEY, CFG:readSetting(OVERLAY_BLEND_KEY) == "cover" and "multiply" or "cover")
+                            self:_invalidateBgDedup()
+                            self:loadBackgroundByName(nil, true)
+                            if touchmenu_instance then touchmenu_instance:updateItems() end
+                        end,
+                    })
+
+                    table.insert(sub, {
                         text = _("No-flash page turns (avoid full-screen flashing with a background)"),
                         help_text = _(
                             "ON: while a background is shown, page turns use a non-flashing refresh and the background is not " ..
@@ -3976,6 +4019,9 @@ function CustomBg:addToMainMenu(menu_items)
                     table.insert(sub, {
                         text = _("No dithering of the background (removes the grain on devices with software dithering)"),
                         help_text = _(
+                            "Not needed if \"Draw as pieces\" works for the image (the page is then plain text, nothing is dithered). " ..
+                            "It is only needed when the image follows the classic path through crengine (full-page background, or an " ..
+                            "image rejected by pieces mode) and, in principle, only on the Kindle.\n\n" ..
                             "Only available while a background image is shown and No-flash page turns is ON.\n\n" ..
                             "ON: while a background is shown, KOReader's software dithering is switched off, so the background is drawn " ..
                             "smooth instead of with a grainy pattern (typical of the Kindle Paperwhite 12). " ..
