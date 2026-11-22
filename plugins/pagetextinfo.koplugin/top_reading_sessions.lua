@@ -1915,8 +1915,8 @@ end
 -- in it), split in segments per book; above it the total, when you started
 -- and stopped, the longest session and the best hour; below, the books of the
 -- day with their rank number, which is also drawn in the chart's segments.
--- The sessions come from the statistics database (wpm_stat_data); the session
--- in progress is already in it (see onShowLongestSessions).
+-- The sessions come from the statistics database (wpm_stat_data), plus the
+-- session in progress (see getLiveSessionRow), which may not be saved yet.
 
 local TODAY_MAX_BOOKS = 5       -- books listed under the chart
 local TODAY_SESSION_GAP = 120   -- seconds: readings closer than this are one session
@@ -1936,6 +1936,50 @@ local function todayRankStyle(rank)
         return Blitbuffer.COLOR_WHITE, gray(48), Size.border.thin
     end
     return Blitbuffer.COLOR_BLACK, Blitbuffer.COLOR_WHITE, Screen:scaleBySize(2)
+end
+
+-- The reading session in progress as a row like the ones of wpm_stat_data
+-- ({ book, title, start, duration }), or nil outside the reader or when nothing
+-- is left to add. The part of it that is already in the database (the rows of
+-- this book that start or end inside the session) is not counted twice: only
+-- the time after the last saved moment is added.
+local function getLiveSessionRow(rows, now)
+    local ui = getReaderUI()
+    if not ui then return nil end
+    local topbar = ui.view and ui.view.topbar
+    local stats = ui.statistics
+    -- start of the session: topbar if it has it, else the statistics plugin
+    local live_start = (topbar and topbar.start_session_time)
+        or (stats and tonumber(stats.start_current_period))
+    if not live_start or live_start <= 0 then return nil end
+    -- book: the one of the statistics plugin, else the one of the rows with
+    -- the same title, else a placeholder so the time is still counted
+    local book = stats and tonumber(stats.id_curr_book)
+    local cur_title = (stats and stats.data and stats.data.title)
+        or (topbar and cleanTopBarText(topbar.title))
+        or (ui.doc_settings and ui.doc_settings.data and ui.doc_settings.data.doc_props
+            and ui.doc_settings.data.doc_props.title)
+    if not book or book <= 0 then
+        for _i, r in ipairs(rows) do
+            if cur_title and r.title == cur_title then book = r.book break end
+        end
+        book = book or -1
+    end
+
+    local covered_until = live_start
+    local title
+    for _i, r in ipairs(rows) do
+        if r.book == book then
+            title = title or r.title
+            if r.start + r.duration > live_start then
+                covered_until = math.max(covered_until, r.start + r.duration)
+            end
+        end
+    end
+    local duration = now - covered_until
+    if duration < 5 then return nil end
+    title = title or cur_title or _("Unknown")
+    return { book = book, title = title, start = covered_until, duration = duration }
 end
 
 -- Reads today's sessions. Returns a table
@@ -1961,6 +2005,12 @@ local function loadTodayData()
         }
     end)
     if not rows then return nil, err end
+
+    local live = getLiveSessionRow(rows, now)
+    if live then
+        rows[#rows + 1] = live
+        table.sort(rows, function(x, y) return x.start < y.start end)
+    end
 
     -- sessions clipped to today, and the time of each book
     local periods, by_book = {}, {}
@@ -2217,6 +2267,24 @@ local function buildTodayView(w_width)
         { secondsToShortHM(data.best_secs),          _("Best hour") .. string.format(" %02d", data.best_hour) },
     }, false)
 
+    -- time of the session in progress (nil outside the reader)
+    local session_line
+    local session = getSessionInfo()
+    if not session then
+        local ui = getReaderUI()
+        local st = ui and ui.statistics and tonumber(ui.statistics.start_current_period)
+        if st and st > 0 then session = math.max(0, os.time() - st) end
+    end
+    if session then
+        session_line = CenterContainer:new{
+            dimen = Geom:new{ w = w_width, h = Screen:scaleBySize(26) },
+            TextWidget:new{
+                text = _("Current session") .. "  " .. secondsToShortHM(session),
+                face = getFace(FONT_SUBTITLE), bold = true, fgcolor = COLOR_MUTED,
+            },
+        }
+    end
+
     local ranks = {}
     for i = 1, #data.books do ranks[i] = i end
     local chart = TodayChart:new{
@@ -2229,12 +2297,15 @@ local function buildTodayView(w_width)
 
     local widgets = {
         CenterContainer:new{ dimen = Geom:new{ w = w_width, h = hero:getSize().h }, hero },
+    }
+    if session_line then widgets[#widgets + 1] = session_line end
+    for _i, w in ipairs{
         makeVerticalSpacing(SPACE.l),
         stats,
         makeVerticalSpacing(SPACE.xl),
         chart,
         makeVerticalSpacing(SPACE.xl),
-    }
+    } do widgets[#widgets + 1] = w end
     local longest = data.books[1].seconds
     for i = 1, math.min(#data.books, TODAY_MAX_BOOKS) do
         if i > 1 then widgets[#widgets + 1] = makeSeparator(w_width) end
