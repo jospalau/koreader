@@ -1910,6 +1910,344 @@ local function getFinishedBooksFilter()
     return "(" .. table.concat(conditions, " OR ") .. ")"
 end
 
+-- ── Today (hourly chart) ─────────────────────────────────────────────────────
+-- When you read today: a stacked bar chart with one bar per hour (minutes read
+-- in it), split in segments per book; above it the total, when you started
+-- and stopped, the longest session and the best hour; below, the books of the
+-- day with their rank number, which is also drawn in the chart's segments.
+-- The sessions come from the statistics database (wpm_stat_data); the session
+-- in progress is already in it (see onShowLongestSessions).
+
+local TODAY_MAX_BOOKS = 5       -- books listed under the chart
+local TODAY_SESSION_GAP = 120   -- seconds: readings closer than this are one session
+
+local TODAY_COLORS = { "red", "orange", "yellow", "green", "olive", "cyan", "blue", "purple" }
+
+-- Look of the book with the given rank. Colour screens: one colour per rank.
+-- Black and white: solid dark with white text, or white with a thick black
+-- outline, alternating. The rank number is always drawn, so books can be told
+-- apart without colour. Returns text colour, fill colour and border width.
+local function todayRankStyle(rank)
+    if Screen.isColorEnabled and Screen:isColorEnabled() then
+        local ok, c = pcall(Blitbuffer.colorFromName, TODAY_COLORS[(rank - 1) % #TODAY_COLORS + 1])
+        if ok and c then return Blitbuffer.COLOR_BLACK, c, Size.border.thin end
+    end
+    if rank % 2 == 1 then
+        return Blitbuffer.COLOR_WHITE, gray(48), Size.border.thin
+    end
+    return Blitbuffer.COLOR_BLACK, Blitbuffer.COLOR_WHITE, Screen:scaleBySize(2)
+end
+
+-- Reads today's sessions. Returns a table
+--   { total, first, last, books = { {rank, title, seconds}... }, hours = { [1..24] = { [rank] = seconds } },
+--     best_hour, best_secs, longest, longest_start }
+-- (times in seconds from midnight), or nil and a message.
+local function loadTodayData()
+    local now = os.time()
+    local t = os.date("*t", now)
+    local day_start = os.time{ year = t.year, month = t.month, day = t.day, hour = 0, min = 0, sec = 0 }
+    local day_end = os.time{ year = t.year, month = t.month, day = t.day + 1, hour = 0, min = 0, sec = 0 }
+
+    local rows, err = queryAll(string.format([[
+        SELECT wpm_stat_data.id_book, book.title, wpm_stat_data.start_time, wpm_stat_data.duration
+        FROM wpm_stat_data
+        INNER JOIN book ON wpm_stat_data.id_book = book.id
+        WHERE wpm_stat_data.start_time + wpm_stat_data.duration > %d AND wpm_stat_data.start_time < %d
+        ORDER BY wpm_stat_data.start_time
+    ]], day_start, day_end), function(row)
+        return {
+            book = tonumber(row[1]), title = row[2] or _("Unknown"),
+            start = tonumber(row[3]) or 0, duration = tonumber(row[4]) or 0,
+        }
+    end)
+    if not rows then return nil, err end
+
+    -- sessions clipped to today, and the time of each book
+    local periods, by_book = {}, {}
+    for _i, r in ipairs(rows) do
+        local s = math.max(r.start, day_start) - day_start
+        local f = math.min(r.start + r.duration, day_end) - day_start
+        if f > s then
+            periods[#periods + 1] = { book = r.book, s = s, f = f }
+            local b = by_book[r.book]
+            if not b then
+                b = { id = r.book, title = r.title, seconds = 0 }
+                by_book[r.book] = b
+            end
+            b.seconds = b.seconds + (f - s)
+        end
+    end
+    if #periods == 0 then return nil, _("No reading today") end
+
+    -- books ranked by time (1 = the longest)
+    local books = {}
+    for _id, b in pairs(by_book) do books[#books + 1] = b end
+    table.sort(books, function(a, b)
+        if a.seconds ~= b.seconds then return a.seconds > b.seconds end
+        return a.id < b.id
+    end)
+    local rank_of, total = {}, 0
+    for i, b in ipairs(books) do
+        b.rank = i
+        rank_of[b.id] = i
+        total = total + b.seconds
+    end
+
+    -- minutes per hour and book, first and last moment, longest session
+    local out = { total = total, books = books, hours = {} }
+    for h = 1, 24 do out.hours[h] = {} end
+    local hour_total = {}
+    local cur_s, cur_f
+    out.longest, out.longest_start = 0, 0
+    for _i, p in ipairs(periods) do
+        if not out.first or p.s < out.first then out.first = p.s end
+        if not out.last or p.f > out.last then out.last = p.f end
+        local rank = rank_of[p.book]
+        for h = math.floor(p.s / 3600), math.floor((p.f - 1) / 3600) do
+            if h >= 0 and h < 24 then
+                local sec = math.min(p.f, (h + 1) * 3600) - math.max(p.s, h * 3600)
+                if sec > 0 then
+                    out.hours[h + 1][rank] = (out.hours[h + 1][rank] or 0) + sec
+                    hour_total[h] = (hour_total[h] or 0) + sec
+                end
+            end
+        end
+        -- readings less than TODAY_SESSION_GAP apart count as one session
+        if cur_f and p.s - cur_f <= TODAY_SESSION_GAP then
+            cur_f = math.max(cur_f, p.f)
+        else
+            cur_s, cur_f = p.s, p.f
+        end
+        if cur_f - cur_s > out.longest then
+            out.longest, out.longest_start = cur_f - cur_s, cur_s
+        end
+    end
+    out.best_hour, out.best_secs = 0, 0
+    for h, sec in pairs(hour_total) do
+        if sec > out.best_secs then out.best_hour, out.best_secs = h, sec end
+    end
+    out.day_start = day_start
+    out.current_hour = (os.date("*t", now)).hour + 1
+    return out
+end
+
+-- Stacked bar chart of the day: one bar per hour, as tall as the minutes read
+-- in it, split in a segment per book (bottom: book 1).
+local TodayChart = Widget:extend{
+    width = 0,
+    height = 0,
+    hours = nil,        -- hours[1..24] = { [rank] = seconds }
+    ranks = nil,        -- ranks to stack, in order
+    current = nil,      -- index (1..24) of the current hour
+    font_size = FONT_CAPTION,
+}
+
+function TodayChart:init()
+    self.dimen = Geom:new{ w = self.width, h = self.height }
+    local face = getFace(self.font_size)
+    self.totals = {}
+    local max_total = 0
+    for h = 1, 24 do
+        local t = 0
+        for _r, sec in pairs(self.hours[h]) do t = t + sec end
+        self.totals[h] = t
+        if t > max_total then max_total = t end
+    end
+    local max_min = max_total / 60
+    -- axis maximum in minutes: 15, 30, 60, or a multiple of 60
+    self.y_max = (max_min <= 15 and 15) or (max_min <= 30 and 30) or (math.ceil(max_min / 60) * 60)
+
+    self.value_widgets, self.hour_widgets, self.tick_widgets = {}, {}, {}
+    for h = 1, 24 do
+        if self.totals[h] >= 30 then
+            self.value_widgets[h] = TextWidget:new{
+                text = tostring(math.floor(self.totals[h] / 60 + 0.5)), face = face, fgcolor = COLOR_TEXT,
+            }
+        end
+        if (h - 1) % 3 == 0 or h == self.current then
+            self.hour_widgets[h] = TextWidget:new{
+                text = string.format("%02d", h - 1), face = face,
+                bold = (h == self.current),
+                fgcolor = (h == self.current) and COLOR_TEXT or COLOR_MUTED,
+            }
+        end
+    end
+    for i = 0, 2 do
+        self.tick_widgets[i + 1] = TextWidget:new{
+            text = string.format("%d", self.y_max * i / 2), face = face, fgcolor = COLOR_MUTED,
+        }
+    end
+    self.text_h = self.tick_widgets[1]:getSize().h
+    self.axis_w = self.tick_widgets[3]:getSize().w + SPACE.l
+end
+
+function TodayChart:getSize()
+    return self.dimen
+end
+
+function TodayChart:paintTo(bb, x, y)
+    self.dimen.x, self.dimen.y = x, y
+    local top_pad = self.text_h + SPACE.s                      -- room for the value labels
+    local plot_top = y + top_pad
+    local plot_h = self.height - top_pad - self.text_h - SPACE.l
+    local plot_x = x + self.axis_w
+    local plot_w = self.width - self.axis_w
+    local base = plot_top + plot_h
+    local slot = plot_w / 24
+    local bar_w = math.max(2, math.floor(slot * 0.74))
+
+    -- grid: 0, half and full scale, with their labels
+    for i = 0, 2 do
+        local gy = base - math.floor(plot_h * i / 2)
+        bb:paintRect(plot_x, gy, plot_w, Size.line.thin, i == 0 and COLOR_BAR or COLOR_TRACK)
+        local tw = self.tick_widgets[i + 1]
+        local ts = tw:getSize()
+        tw:paintTo(bb, plot_x - SPACE.l - ts.w, gy - math.floor(ts.h / 2))
+    end
+
+    for h = 1, 24 do
+        local cx = plot_x + math.floor((h - 0.5) * slot)
+        local bx = cx - math.floor(bar_w / 2)
+        if h == self.current then
+            -- soft column behind the current hour
+            bb:paintRect(plot_x + math.floor((h - 1) * slot), plot_top - SPACE.s,
+                math.ceil(slot), plot_h + SPACE.s, COLOR_SOFT)
+        end
+        local cursor = base
+        for _i, rank in ipairs(self.ranks) do
+            local sec = self.hours[h][rank]
+            if sec and sec > 0 then
+                local sh = math.max(2, math.floor(plot_h * (sec / 60) / self.y_max + 0.5))
+                local _fg, fill, border = todayRankStyle(rank)
+                local sy = cursor - sh
+                local b = math.min(border, math.floor(bar_w / 2), math.floor(sh / 2))
+                bb:paintRect(bx, sy, bar_w, sh, Blitbuffer.COLOR_BLACK)
+                if b > 0 and sh - 2 * b > 0 then
+                    bb:paintRect(bx + b, sy + b, bar_w - 2 * b, sh - 2 * b, fill)
+                end
+                cursor = sy
+            end
+        end
+        local vw = self.value_widgets[h]
+        if vw and cursor < base then
+            local vs = vw:getSize()
+            vw:paintTo(bb, cx - math.floor(vs.w / 2), cursor - vs.h - SPACE.xs)
+        end
+        local hw = self.hour_widgets[h]
+        if hw then
+            local hs = hw:getSize()
+            hw:paintTo(bb, cx - math.floor(hs.w / 2), base + SPACE.l)
+        end
+    end
+end
+
+function TodayChart:free()
+    for _i, list in ipairs({ self.value_widgets, self.hour_widgets, self.tick_widgets }) do
+        for _k, w in pairs(list) do w:free() end
+    end
+end
+
+-- A book of the list: its rank in a badge (same look as its chart segments),
+-- the title with a bar (share of the longest book), and its time on the right.
+local function buildTodayBookRow(w_width, book, longest)
+    local fg, fill, border = todayRankStyle(book.rank)
+    local face = getFace(FONT_TEXT)
+    local gap = SPACE.xl
+    local badge_size = TextWidget:new{ text = "0", face = face, bold = true }:getSize().h + SPACE.m
+    local time_w = Screen:scaleBySize(70)
+    local text_w = w_width - badge_size - time_w - 2 * gap
+    local badge = FrameContainer:new{
+        width = badge_size, height = badge_size,
+        margin = 0, padding = 0,
+        bordersize = border, radius = Screen:scaleBySize(6),
+        background = fill,
+        CenterContainer:new{
+            dimen = Geom:new{ w = badge_size - 2 * border, h = badge_size - 2 * border },
+            TextWidget:new{ text = tostring(book.rank), face = face, bold = true, fgcolor = fg },
+        },
+    }
+    local left = VerticalGroup:new{
+        align = "left",
+        TextWidget:new{ text = cleanTopBarText and cleanTopBarText(book.title) or book.title,
+            face = face, max_width = text_w, ellipsis = true },
+        VerticalSpan:new{ width = SPACE.s },
+        ProgressTrack:new{
+            width = text_w, height = SPACE.m,
+            ratio = longest > 0 and book.seconds / longest or 0,
+            color = COLOR_ACCENT,
+        },
+    }
+    local row_h = left:getSize().h + SPACE.m
+    return HorizontalGroup:new{
+        align = "center",
+        CenterContainer:new{ dimen = Geom:new{ w = badge_size, h = row_h }, badge },
+        HorizontalSpan:new{ width = gap },
+        LeftContainer:new{ dimen = Geom:new{ w = text_w, h = row_h }, left },
+        HorizontalSpan:new{ width = gap },
+        RightContainer:new{
+            dimen = Geom:new{ w = time_w, h = row_h },
+            TextWidget:new{ text = secondsToShortHM(book.seconds), face = face, bold = true },
+        },
+    }
+end
+
+local function buildTodayView(w_width)
+    local data, err = loadTodayData()
+    if not data then return nil, err end
+
+    local function clock(secs) return os.date("%H:%M", data.day_start + secs) end
+
+    -- total of the day, big, and how many books
+    local hero = HorizontalGroup:new{
+        align = "bottom",
+        TextWidget:new{
+            text = secondsToHM(data.total), face = getFace(FONT_HERO), bold = true, fgcolor = COLOR_TEXT,
+        },
+        HorizontalSpan:new{ width = SPACE.xl },
+        TextWidget:new{
+            text = string.format("%d %s", #data.books, #data.books == 1 and _("book") or _("books")),
+            face = getFace(FONT_SUBTITLE), bold = true, fgcolor = COLOR_MUTED,
+        },
+    }
+
+    local stats = buildColumns(w_width, {
+        { clock(data.first),                         _("Started") },
+        { clock(data.last),                          _("Last read") },
+        { secondsToShortHM(data.longest),            _("Longest") .. " " .. clock(data.longest_start) },
+        { secondsToShortHM(data.best_secs),          _("Best hour") .. string.format(" %02d", data.best_hour) },
+    }, false)
+
+    local ranks = {}
+    for i = 1, #data.books do ranks[i] = i end
+    local chart = TodayChart:new{
+        width = w_width,
+        height = math.min(Screen:scaleBySize(240), math.floor(Screen:getHeight() * 0.3)),
+        hours = data.hours,
+        ranks = ranks,
+        current = data.current_hour,
+    }
+
+    local widgets = {
+        CenterContainer:new{ dimen = Geom:new{ w = w_width, h = hero:getSize().h }, hero },
+        makeVerticalSpacing(SPACE.l),
+        stats,
+        makeVerticalSpacing(SPACE.xl),
+        chart,
+        makeVerticalSpacing(SPACE.xl),
+    }
+    local longest = data.books[1].seconds
+    for i = 1, math.min(#data.books, TODAY_MAX_BOOKS) do
+        if i > 1 then widgets[#widgets + 1] = makeSeparator(w_width) end
+        widgets[#widgets + 1] = buildTodayBookRow(w_width, data.books[i], longest)
+    end
+    if #data.books > TODAY_MAX_BOOKS then
+        widgets[#widgets + 1] = makeVerticalSpacing(SPACE.m)
+        widgets[#widgets + 1] = makeSummaryLine(w_width,
+            string.format("+ %d %s", #data.books - TODAY_MAX_BOOKS, _("more")))
+    end
+    return widgets
+end
+
 -- ── View definitions ─────────────────────────────────────────────────────────
 
 -- One line of text on the left: the item's `field`, cut with "…" if too long.
@@ -1939,6 +2277,11 @@ local VIEWS = {
         title = _("Reading Summary"),
         build = buildSummaryView,
         width_factor = 0.65,  -- narrower than the other views (they use WINDOW_WIDTH_FACTOR)
+    },
+    {
+        -- not a list: it builds its own widgets (hourly chart of today)
+        title = _("Today"),
+        build = buildTodayView,
     },
     {
         -- not a list: it builds its own widgets
