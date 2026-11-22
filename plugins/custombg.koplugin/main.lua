@@ -3914,18 +3914,38 @@ function CustomBg:addToMainMenu(menu_items)
                         callback = function() end,
                     })
 
+                    local max_pct = tostring(math.floor(OVERLAY_MAX_AREA * 100)) .. "%"
+                    local pieces_help = _(
+                        "ON: the background image is analysed once and only the parts that contain something are kept: " ..
+                        "a picture at the bottom becomes one small piece, a frame becomes up to four thin strips.\n\n" ..
+                        "The image is NOT sent to the rendering engine (crengine) any more. Crengine only draws the text: " ..
+                        "a plain black-and-white page without images, so KOReader does not dither it and does not treat it as " ..
+                        "\"a page with images\". The pieces are painted afterwards by the plugin, on top of the page, " ..
+                        "without dithering. Result: no grain, no ghosting and no black flashes when menus and dialogs open or close. " ..
+                        "The dithering / no-flash options below are ignored in this mode.\n\n" ..
+                        "Size limit: the pieces may cover at most ") .. max_pct .. _(
+                        " of the screen. If the centre of the image is not empty, or the pieces cover more than that " ..
+                        "(a real full-page picture or texture), the image is drawn the classic way. " ..
+                        "Diagnostics shows the reason (\"Pieces mode now\").\n\n" ..
+                        "The background colour of the image is read from its corners and becomes transparent. " ..
+                        "The pieces are gray and are painted after the text, so keep the picture inside the page margin, " ..
+                        "not over the text.\n\n" ..
+                        "The first time an image is used it is analysed and cached; afterwards it loads at once.\n\n" ..
+                        "OFF: classic full-page background. On the Kindle it flickers and dithering has to be disabled " ..
+                        "(see the no-dithering option below).")
                     table.insert(sub, {
                         text = _("Draw as pieces (bottom picture / frame) instead of a full-page background"),
-                        help_text = _(
-                            "ON: the background image is analysed once and only the parts that contain something are kept: " ..
-                            "a picture at the bottom becomes one small piece, a frame becomes up to four thin strips. " ..
-                            "They are painted over the page, so the page itself stays a normal black-and-white text page: " ..
-                            "no dithering of the whole page, no ghosting and no black flashes on menus and dialogs, " ..
-                            "and the dithering / no-flash options below are not needed (they are ignored in this mode).\n\n" ..
-                            "The background colour of the image is detected automatically (its corners); that colour becomes transparent.\n\n" ..
-                            "An image that covers most of the page (a real full-page picture) is drawn the classic way.\n\n" ..
-                            "The pieces are gray; they are painted after the text, so keep the picture inside the page margin.\n\n" ..
-                            "OFF: classic full-page background."),
+                        help_text = pieces_help,
+                        -- Long press: same text, smaller letters so that all of it fits on the screen
+                        hold_callback = function()
+                            local Font = require("ui/font")
+                            UIManager:show(InfoMessage:new{
+                                text = pieces_help,
+                                face = Font:getFace("infofont", 16),
+                                width = math.floor(Screen:getWidth() * 0.92),
+                                show_icon = false,
+                            })
+                        end,
                         checked_func = function() return isOverlayMode() end,
                         keep_menu_open = true,
                         callback = function(touchmenu_instance)
