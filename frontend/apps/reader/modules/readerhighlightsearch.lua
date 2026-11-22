@@ -27,6 +27,10 @@ local LIST_WORDS    = 15     -- context words per side in the list rows; keep sm
 local LIST_ROWS      = 6      -- rows per page in the results list
 local LIST_FONT_DELTA = 3      -- points to subtract from Menu's default row font size (2-4 is sensible)
 local SEARCH_FLAGS  = 0x10FF -- CRE default flags + MATCH_WHOLE_WORDS
+-- Font size is chosen so that the x-height of the book font is this many millimetres
+-- (same measurement as PageTextInfo:getCurrentXHeightMm in main.lua). nil = keep KOReader's own sizes.
+local LIST_XHEIGHT_MM    = 1.8   -- results list (the first screen)
+local PREVIEW_XHEIGHT_MM = 1.5   -- extended context of one occurrence (after tapping a row)
 -- Only these fields cross back from the subprocess ("page" is computed there).
 local FIELDS = { "prev_text", "matched_word_prefix", "matched_text",
                  "matched_word_suffix", "next_text", "start", "end" }
@@ -89,14 +93,54 @@ local function getBookFontFile(ui)
     return filename, faceindex
 end
 
+-- Font size (in the unscaled units Font:getFace and Menu/TextViewer use) at which the x-height of
+-- `font_file` is `target_mm`. The x-height is linear in the size, so one measurement at a probe
+-- size is enough (the ratio is cached per file). Returns nil if it cannot be measured.
+local xheight_ratio = {}   -- font file -> x-height / px size
+local function sizeForXHeight(font_file, target_mm)
+    if not font_file or not target_mm then return nil end
+    local Device = require("device")
+    local Font = require("ui/font")
+    local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+    if not dpi or dpi <= 0 then return nil end
+    local ratio = xheight_ratio[font_file]
+    if not ratio then
+        local probe = 40
+        local ok, face = pcall(Font.getFace, Font, font_file, probe)
+        if not ok or not face or not face.ftsize then return nil end
+        local okx, xh = pcall(face.ftsize.getXHeight, face.ftsize)
+        if not okx or type(xh) ~= "number" or xh <= 0 then return nil end
+        local px = Screen:scaleBySize(probe)
+        -- getXHeight returns either a ratio of the size (< 1) or pixels
+        local xh_px = (xh < 1) and (xh * px) or xh
+        ratio = xh_px / px
+        xheight_ratio[font_file] = ratio
+    end
+    -- pixels needed for the target, then back to unscaled units (Screen:scaleBySize is linear)
+    local want_px = target_mm * dpi / 25.4
+    local size = want_px / ratio * 100 / Screen:scaleBySize(100)
+    size = math.floor(size * 10 + 0.5) / 10
+    if size < 8 or size > 60 then return nil end   -- implausible: keep the default
+    return size
+end
+
 -- TextViewer has no font parameter: its face is built in init() from Font.fontmap
 -- ("x_smallinfofont"). Remap that entry while the viewer is being built, then restore it.
-local function newTextViewerWithFont(font_file, args)
+local function newTextViewerWithFont(font_file, args, font_size)
     local Font = require("ui/font")
     local key = "x_smallinfofont"
     local old = Font.fontmap[key]
     if font_file and old then Font.fontmap[key] = font_file end
-    local ok, res = pcall(TextViewer.new, TextViewer, args)
+    local ok, res = pcall(function()
+        local viewer = TextViewer:new(args)
+        if font_size then
+            -- TextViewer reads its size from the saved settings, not from the arguments: set it and lay out again
+            -- (init(true), not reinit(), which would also save the size as the user's own setting)
+            viewer.text_font_size = font_size
+            viewer:init(true)
+        end
+        return viewer
+    end)
     Font.fontmap[key] = old
     if not ok then error(res, 0) end
     return res
@@ -224,7 +268,7 @@ function ReaderHighlightSearch:search(hl)
             close_callback = function()
                 UIManager:nextTick(function() showResults(data) end)
             end,
-        })
+        }, sizeForXHeight(book_font, PREVIEW_XHEIGHT_MM))
         UIManager:show(viewer)
     end
 
@@ -260,7 +304,7 @@ function ReaderHighlightSearch:search(hl)
             -- Fixed number of rows per page => uniform row height. Do NOT set items_max_lines:
             -- it switches Menu to variable-height rows and variable-size pages.
             items_per_page = LIST_ROWS,
-            items_font_size = math.max(10, base_size - LIST_FONT_DELTA),
+            items_font_size = sizeForXHeight(book_font, LIST_XHEIGHT_MM) or math.max(10, base_size - LIST_FONT_DELTA),
             multilines_forced = true,
             covers_fullscreen = true,
             is_borderless = true,
