@@ -191,6 +191,38 @@ local function getCacheDir()
     return dir
 end
 
+-- Speed: on a grayscale e-ink screen (Kindle Paperwhite etc.) the background is stored as an 8-bit grayscale PNG.
+-- crengine decodes/blits this image on every page paint; an RGB image is ~3x more data to decode and convert for nothing.
+-- Only done when the screen is positively known to be grayscale; colour screens keep the old behaviour.
+local function isGrayscaleScreen()
+    local ok, is_color = pcall(function()
+        if type(Screen.isColorScreen) == "function" then return Screen:isColorScreen() end
+        if type(Device.hasColorScreen) == "function" then return Device:hasColorScreen() end
+        return nil
+    end)
+    return ok and is_color == false
+end
+
+-- Returns a new 8-bit grayscale copy of bb and frees bb. On any failure returns bb unchanged.
+local function toGrayscaleBB(bb)
+    local ok, gray = pcall(function()
+        local g = Blitbuffer.new(bb:getWidth(), bb:getHeight(), Blitbuffer.TYPE_BB8)
+        g:fill(Blitbuffer.COLOR_WHITE)   -- transparent areas of the source end up white, not black
+        g:blitFrom(bb, 0, 0, 0, 0, bb:getWidth(), bb:getHeight())
+        return g
+    end)
+    if ok and gray then
+        bb:free()
+        return gray
+    end
+    return bb
+end
+
+-- Cache file tag: grayscale caches get their own name, so old RGB caches are never reused (and vice versa)
+local function bgCacheTag()
+    return isGrayscaleScreen() and "g8_" or ""
+end
+
 local function getScaledPath(source_path)
     if not source_path or source_path == "" then return nil end
     local screen_w = Device.screen:getWidth()
@@ -199,7 +231,7 @@ local function getScaledPath(source_path)
     -- so images with different names got the same cache filename, hit the same cache and showed each other's picture.
     -- Now the full path is hashed, so each source file gets a unique cache entry (also distinguished by screen resolution).
     local cache_name = hashString(source_path)
-    local cache_path = getCacheDir() .. string.format("%dx%d_%s.png", screen_w, screen_h, cache_name)
+    local cache_path = getCacheDir() .. string.format("%s%dx%d_%s.png", bgCacheTag(), screen_w, screen_h, cache_name)
     do
         local cattr = lfs.attributes(cache_path)
         if cattr and cattr.mode == "file" and (cattr.size or 0) > 1024 then
@@ -218,6 +250,7 @@ local function getScaledPath(source_path)
         end
         src_bb:free()
         if not final_bb then return nil end
+        if isGrayscaleScreen() then final_bb = toGrayscaleBB(final_bb) end
         if final_bb:writeToFile(cache_path, "png", 75) then
             final_bb:free()
             return cache_path
@@ -244,8 +277,8 @@ local function getRotatedScaledPath(source_path)
     if not source_path or source_path == "" then return nil end
     local screen_w = Device.screen:getWidth()
     local screen_h = Device.screen:getHeight()
-    local cache_path = getCacheDir() .. string.format("rot90_%dx%d_%s.png",
-        screen_w, screen_h, hashString(source_path))
+    local cache_path = getCacheDir() .. string.format("rot90_%s%dx%d_%s.png",
+        bgCacheTag(), screen_w, screen_h, hashString(source_path))
     do
         local cattr = lfs.attributes(cache_path)
         if cattr and cattr.mode == "file" and (cattr.size or 0) > 1024 then
@@ -264,6 +297,7 @@ local function getRotatedScaledPath(source_path)
         end
         src_bb:free()
         if not base_bb then return nil end
+        if isGrayscaleScreen() then base_bb = toGrayscaleBB(base_bb) end
         local rot_bb = nil
         if type(base_bb.rotatedCopy) == "function" then
             rot_bb = base_bb:rotatedCopy(90)
