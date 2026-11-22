@@ -1291,18 +1291,78 @@ local function cardInnerWidth(card_w)
     return card_w - 2 * (CARD_PAD + Size.border.thin)
 end
 
-local function makeCard(card_w, content)
+-- Gap between two cards side by side (the columns of a row)
+local CARD_GAP = Screen:scaleBySize(12)
+
+-- Outlined card on the white window (no grey fill). `min_h` makes it at least
+-- that tall (the content is centered), so two cards of a row can match.
+local function makeCard(card_w, content, min_h)
+    local h = math.max(content:getSize().h, min_h or 0)
     return FrameContainer:new{
-        background = COLOR_SOFT,
+        background = Blitbuffer.COLOR_WHITE,
         color = COLOR_BAR,
-        bordersize = Size.border.thin,
+        bordersize = Screen:scaleBySize(2),
         radius = CARD_RADIUS,
         padding = CARD_PAD,
         margin = 0,
         CenterContainer:new{
-            dimen = Geom:new{ w = cardInnerWidth(card_w), h = content:getSize().h },
+            dimen = Geom:new{ w = cardInnerWidth(card_w), h = h },
             content,
         },
+    }
+end
+
+-- Width of the two columns of a row: the left one gets `left_ratio` of it
+local function columnWidths(w_width, left_ratio)
+    local usable = w_width - CARD_GAP
+    local left = math.floor(usable * (left_ratio or 0.5))
+    return left, usable - left
+end
+
+-- A column of rows: the caption on the left, the value (bold) on the right,
+-- a thin line between rows. rows = { { value, caption }, ... }
+local function buildStatRows(inner_w, rows)
+    local vg = VerticalGroup:new{ align = "left" }
+    local pad = SPACE.m
+    for i, r in ipairs(rows) do
+        local value = TextWidget:new{
+            text = r[1], face = getFace(FONT_BIG - 4), bold = true, fgcolor = COLOR_TEXT,
+            max_width = math.floor(inner_w * 0.55),
+        }
+        local caption = TextWidget:new{
+            text = r[2], face = getFace(FONT_SUMMARY), fgcolor = COLOR_MUTED,
+            max_width = inner_w - value:getSize().w - SPACE.m, ellipsis = true,
+        }
+        local h = math.max(value:getSize().h, caption:getSize().h)
+        if i > 1 then
+            vg[#vg + 1] = VerticalSpan:new{ width = pad }
+            vg[#vg + 1] = LineWidget:new{
+                background = COLOR_TRACK,
+                dimen = Geom:new{ w = inner_w, h = Size.line.thin },
+            }
+            vg[#vg + 1] = VerticalSpan:new{ width = pad }
+        end
+        vg[#vg + 1] = HorizontalGroup:new{
+            align = "center",
+            LeftContainer:new{ dimen = Geom:new{ w = inner_w - value:getSize().w, h = h }, caption },
+            value,
+        }
+    end
+    return vg
+end
+
+-- Two cards side by side (same height, a gap between them)
+local function buildCardRow(w_width, left_ratio, build_left, build_right)
+    local lw, rw = columnWidths(w_width, left_ratio)
+    local lc, rc = build_left(lw), build_right(rw)
+    -- the taller content sets the height of both cards
+    local h = math.max(lc[1].dimen.h, rc[1].dimen.h)
+    lc, rc = build_left(lw, h), build_right(rw, h)
+    return HorizontalGroup:new{
+        align = "top",
+        lc,
+        HorizontalSpan:new{ width = CARD_GAP },
+        rc,
     }
 end
 
@@ -1359,27 +1419,25 @@ local function buildColumns(inner_w, cols, caption_on_top)
     return row
 end
 
--- Two rows: differential (ΔL), today and yesterday; then this week, month,
--- last month and year
-local function buildBreakdownCard(card_w, data)
-    local inner_w = cardInnerWidth(card_w)
+-- Two columns: differential (ΔL), today and yesterday on the left; this week,
+-- month, last month and year on the right.
+local function buildBreakdownCard(w_width, data)
     local pace = readPace()
     local delta = math.ceil((data.year / 3600) - (data.yday * pace))
-    return makeCard(card_w, VerticalGroup:new{
-        align = "center",
-        buildColumns(inner_w, {
-            { (delta > 0 and "+" or "") .. tostring(delta), DELTA_L .. " " .. formatPace(pace) },
-            { secondsToShortHM(data.today),                  _("Today") },
-            { secondsToBreakdownTime(data.yesterday),        _("Yesterday") },
-        }, true),
-        VerticalSpan:new{ width = SPACE.l },
-        buildColumns(inner_w, {
-            { data.week and secondsToStatsTime(data.week) or "-", _("This week") },
-            { secondsToBreakdownTime(data.month),            _("Month") },
-            { secondsToBreakdownTime(data.lmonth),           _("Last month") },
-            { secondsToBreakdownTime(data.year),             _("Year") },
-        }, true),
-    })
+    local left_rows = {
+        { (delta > 0 and "+" or "") .. tostring(delta), DELTA_L .. " " .. formatPace(pace) },
+        { secondsToShortHM(data.today),                  _("Today") },
+        { secondsToBreakdownTime(data.yesterday),        _("Yesterday") },
+    }
+    local right_rows = {
+        { data.week and secondsToStatsTime(data.week) or "-", _("This week") },
+        { secondsToBreakdownTime(data.month),            _("Month") },
+        { secondsToBreakdownTime(data.lmonth),           _("Last month") },
+        { secondsToBreakdownTime(data.year),             _("Year") },
+    }
+    return buildCardRow(w_width, 0.5,
+        function(w, h) return makeCard(w, buildStatRows(cardInnerWidth(w), left_rows), h) end,
+        function(w, h) return makeCard(w, buildStatRows(cardInnerWidth(w), right_rows), h) end)
 end
 
 -- Reading speed: words per minute and pages of the current session. Read from
@@ -1408,77 +1466,67 @@ local function cleanTopBarText(s)
     return (s:match("^%s*(.-)%s*$"))
 end
 
--- Two rows. First: title, series, words and publication year of the open book,
--- with the time on this book on the right. Second: the session time, wpm and
--- pages of the session.
-local function buildBookCard(card_w, session, book)
-    local full_w = cardInnerWidth(card_w)
-    local right_w = math.floor(full_w * 0.28)
-    local gap = SPACE.xl
-    local inner_w = full_w - right_w - gap  -- width of the title block
-
-    local right = buildColumns(right_w, {
-        { book and secondsToShortHM(book) or "-", _("This book") },
-    }, false)
+-- Two columns. Left: title, series, words and publication year of the open
+-- book. Right: time on this book, the session time, wpm and pages of the session.
+local function buildBookCard(w_width, session, book)
     local wpm, pages = readWpmSession()
-    local session_row = buildColumns(full_w, {
+    local right_rows = {
+        { book and secondsToShortHM(book) or "-",       _("This book") },
         { session and secondsToShortHM(session) or "-", _("Session") },
         { tostring(wpm),                                _("wpm") },
         { tostring(pages),                              _("pages") },
-    }, false)
-    local function withRight(left)
-        local h = math.max(left:getSize().h, right:getSize().h)
-        return makeCard(card_w, VerticalGroup:new{
-            align = "center",
-            HorizontalGroup:new{
-                align = "top",
-                CenterContainer:new{ dimen = Geom:new{ w = inner_w, h = h }, left },
-                HorizontalSpan:new{ width = gap },
-                CenterContainer:new{ dimen = Geom:new{ w = right_w, h = h }, right },
-            },
-            VerticalSpan:new{ width = SPACE.l },
-            session_row,
-        })
-    end
-
-    local ui = getReaderUI()
-    local topbar = ui and ui.view and ui.view.topbar
-    local title = topbar and topbar.title or ""
-    if title == "" then
-        return withRight(TextWidget:new{
-            text = _("Not reading"), face = getFace(FONT_BIG),
-            fgcolor = COLOR_MUTED, max_width = inner_w,
-        })
-    end
-    local words = tonumber(topbar.total_words) or 0
-    local parts = {}
-    if words > 0 then
-        parts[#parts + 1] = (words >= 1000 and string.format("%dk", math.floor(words / 1000)) or tostring(words)) .. "w"
-    end
-    local pub = tostring(topbar.pub_date or "")
-    if pub ~= "" then parts[#parts + 1] = pub end
-
-    local vg = VerticalGroup:new{ align = "center" }
-    vg[#vg + 1] = TextWidget:new{
-        text = cleanTopBarText(title), face = getFace(FONT_BIG), bold = true,
-        fgcolor = COLOR_TEXT, max_width = inner_w, ellipsis = true,
     }
-    local series = cleanTopBarText(topbar.series)
-    if series ~= "" then
-        vg[#vg + 1] = VerticalSpan:new{ width = SPACE.s }
+
+    local function leftContent(inner_w)
+        local ui = getReaderUI()
+        local topbar = ui and ui.view and ui.view.topbar
+        local title = topbar and topbar.title or ""
+        if title == "" then
+            return TextWidget:new{
+                text = _("Not reading"), face = getFace(FONT_BIG),
+                fgcolor = COLOR_MUTED, max_width = inner_w,
+            }
+        end
+        local words = tonumber(topbar.total_words) or 0
+        local parts = {}
+        if words > 0 then
+            parts[#parts + 1] = (words >= 1000 and string.format("%dk", math.floor(words / 1000)) or tostring(words)) .. "w"
+        end
+        local pub = tostring(topbar.pub_date or "")
+        if pub ~= "" then parts[#parts + 1] = pub end
+
+        local vg = VerticalGroup:new{ align = "center" }
         vg[#vg + 1] = TextWidget:new{
-            text = series, face = getFace(FONT_SUBTITLE),
-            fgcolor = COLOR_MUTED, max_width = inner_w, ellipsis = true,
+            text = cleanTopBarText(title), face = getFace(FONT_BIG - 2), bold = true,
+            fgcolor = COLOR_TEXT, max_width = inner_w, ellipsis = true,
         }
+        local series = cleanTopBarText(topbar.series)
+        if series ~= "" then
+            vg[#vg + 1] = VerticalSpan:new{ width = SPACE.s }
+            vg[#vg + 1] = TextWidget:new{
+                text = series, face = getFace(FONT_SUMMARY),
+                fgcolor = COLOR_MUTED, max_width = inner_w, ellipsis = true,
+            }
+        end
+        if #parts > 0 then
+            vg[#vg + 1] = VerticalSpan:new{ width = SPACE.s }
+            vg[#vg + 1] = TextWidget:new{
+                text = table.concat(parts, SUMMARY_SEPARATOR), face = getFace(FONT_SUMMARY),
+                fgcolor = COLOR_MUTED, max_width = inner_w, ellipsis = true,
+            }
+        end
+        return vg
     end
-    if #parts > 0 then
-        vg[#vg + 1] = VerticalSpan:new{ width = SPACE.s }
-        vg[#vg + 1] = TextWidget:new{
-            text = table.concat(parts, SUMMARY_SEPARATOR), face = getFace(FONT_SUBTITLE),
-            fgcolor = COLOR_MUTED, max_width = inner_w, ellipsis = true,
-        }
-    end
-    return withRight(vg)
+
+    return buildCardRow(w_width, 0.5,
+        function(w, h)
+            local inner_w = cardInnerWidth(w)
+            local c = leftContent(inner_w)
+            return makeCard(w, CenterContainer:new{
+                dimen = Geom:new{ w = inner_w, h = c:getSize().h }, c,
+            }, h)
+        end,
+        function(w, h) return makeCard(w, buildStatRows(cardInnerWidth(w), right_rows), h) end)
 end
 
 -- ── Tappable zones of the summary ────────────────────────────────────────────
