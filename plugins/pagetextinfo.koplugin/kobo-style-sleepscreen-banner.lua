@@ -2,6 +2,12 @@
 --redesigns the inbuilt 'banner' type sleep screen message to
 --make it look like the kobo lockscreen tag.
 
+--[ v2.1.0 ]
+--bookshelf integration: when bookshelf.koplugin is installed, the title line of the
+--banner is replaced by bookshelf's own top panel (the "currently reading" card:
+--cover, title, author, progress...), rendered with bookshelf's own code and settings.
+--without bookshelf (or if the panel cannot be built) the banner is exactly as before.
+
 --[ v2.0.2 ]
 --crash guard when uiman:show() called w/o widget
 
@@ -25,6 +31,22 @@ local B_SETT = {	--BANNER SETTINGS
 					max_height = 50,		-- percentage of screen height
 					max_width_hl_off = 40,	-- width when highlight off, min: 20
 					max_width_hl_on = 60,  	-- width when highlight on, min: 20
+}
+local PANEL_SETT = {	--BOOKSHELF TOP PANEL SETTINGS
+					enabled = true,		-- false = always the plain banner
+					only_in_reader = false,	-- true = only when a book is open (not in the file manager / shelf)
+					width_pct = 60,		-- banner width (% of screen) when the panel is shown
+					height_pct = 12,	-- panel height (% of screen height)
+					hide_regions = { "status", "rating", "metadata", "description", "tags" },	-- regions of bookshelf's card to hide in the banner, e.g.
+										-- { "status", "description", "tags" }
+										-- options: status (time / battery / wifi / light),
+										-- rating, title, author, metadata (series),
+										-- description, tags
+										-- (only changes the banner, not your shelf settings)
+					show_progress = true,	-- force the progress bar region on
+					keep_stats = false,	-- true = also show the original banner lines below the
+										-- panel (page x of y, read today, ΔL...)
+					show_highlight = false,	-- true = also show the random highlight below the panel
 }
 local HL_SETT = {	--HIGHLIGHT SETTINGS
 					showRandomHighlight = true,
@@ -65,6 +87,7 @@ local HorizontalGroup = require("ui/widget/horizontalgroup")
 local HorizontalSpan = require("ui/widget/horizontalspan")
 local LeftContainer = require("ui/widget/container/leftcontainer")
 local LineWidget = require("ui/widget/linewidget")
+local logger = require("logger")
 local Screen = Device.screen
 local Size = require("ui/size")
 local TextBoxWidget = require("ui/widget/textboxwidget")
@@ -197,6 +220,179 @@ local function parseFooterText(hl_array, text, index)
 		end
 	end
 	return text
+end
+
+-- Progress line in bookshelf's own style: "42%   [bar]   2h left".
+-- The bar is bookshelf's own widget (lib/bookshelf_hero_bar), with the bar style and
+-- colours chosen in bookshelf's settings.
+local function buildProgressRow(width, pct, book, device_state, progress_cfg)
+	local HeroBar = require("lib/bookshelf_hero_bar")
+	local fg = B_SETT.background == 1 and Bb.COLOR_WHITE or Bb.COLOR_BLACK
+	local bg = B_SETT.background == 0 and Bb.COLOR_WHITE or Bb.COLOR_BLACK
+	local face = Font:getFace(B_SETT.stats_fontFace, B_SETT.stats_fontSize) or Font:getFace("cfont", 17)
+	local gap = Screen:scaleBySize(8)
+
+	local pct_widget = TextWidget:new{
+		text = string.format("%d%%", math.floor(math.max(0, math.min(1, pct)) * 100 + 0.5)),
+		face = face, bold = false, padding = 0, fgcolor = fg, bgcolor = bg,
+	}
+
+	-- time left, as bookshelf words it (empty when unknown)
+	local left_text = ""
+	pcall(function()
+		local Tokens = require("lib/bookshelf_tokens")
+		left_text = util.trim(tostring(Tokens.expand("%book_time_left", book, device_state) or ""))
+	end)
+	local left_widget
+	if left_text ~= "" then
+		left_widget = TextWidget:new{
+			text = left_text, face = face, padding = 0, fgcolor = fg, bgcolor = bg,
+		}
+	end
+
+	local used = pct_widget:getSize().w + gap * 2 + (left_widget and left_widget:getSize().w or 0)
+	local bar_colors
+	if progress_cfg.bar_style ~= "pacman" then
+		local ok_cp, CP = pcall(require, "lib/bookshelf_cover_progress")
+		if ok_cp and CP and CP.pickedBarColors then
+			bar_colors = CP.pickedBarColors()
+		end
+	end
+	local bar = HeroBar:new{
+		width = math.max(10, width - used),
+		height = Screen:scaleBySize(8),
+		percentage = pct,
+		style = progress_cfg.bar_style or "bordered",
+		colors = bar_colors,
+	}
+
+	local row = HorizontalGroup:new{align = "center", pct_widget, HorizontalSpan:new{width = gap}, bar}
+	if left_widget then
+		table.insert(row, HorizontalSpan:new{width = gap})
+		table.insert(row, left_widget)
+	end
+	return row
+end
+
+-- Builds bookshelf's top panel (the "currently reading" hero card) for the book
+-- that is open / was read last. Returns the widget, or nil when bookshelf is not
+-- installed or anything fails (the caller then falls back to the plain banner).
+local function buildBookshelfPanel(width, height)
+	local ok, card = pcall(function()
+		local HeroCard = require("lib/bookshelf_hero_card")
+		local Repo = require("lib/bookshelf_book_repository")
+		local Space = require("lib/bookshelf_space")
+		local BookshelfWidget = require("lib/bookshelf_widget")
+
+		-- The card reads progress (%) from the book's saved data on disk. While reading,
+		-- that is not always written yet, and bookshelf drops the progress bar for a book
+		-- with no saved progress. So save the open book first, and clear the caches.
+		local rui = require("apps/reader/readerui").instance
+		if rui and rui.document then
+			pcall(function() rui:saveSettings() end)
+			local file = rui.document.file
+			if Repo.invalidateProgressCache then pcall(Repo.invalidateProgressCache, file) end
+			if Repo.invalidateStatsCache then pcall(Repo.invalidateStatsCache, file) end
+		end
+
+		local book = Repo.getCurrent()
+		if not book then
+			return nil
+		end
+		-- still nothing on disk: take the live value of the open book
+		if not book.book_pct and rui and rui.doc_settings then
+			book.book_pct = rui.doc_settings:readSetting("percent_finished")
+		end
+		if Repo.enrichStats then
+			Repo.enrichStats(book)
+		end
+		-- clock / battery / wifi etc. (does not use the widget instance)
+		local device_state = BookshelfWidget._buildDeviceState({})
+
+		-- same proportions bookshelf uses: 2:3 cover, capped so the text column keeps room
+		local pad = math.min(math.floor(Space.padding.fullscreen * 2 * 0.8),
+								math.floor(screen_w * 0.03))
+		local cover_h = math.max(1, height)
+		local cover_w = math.max(1, math.floor(cover_h / 1.5))
+		local max_cover_w = math.max(1, math.floor(width * 0.58))
+		if cover_w > max_cover_w then
+			cover_w = max_cover_w
+			cover_h = math.max(1, math.floor(cover_w * 1.5))
+		end
+
+		-- Choose which regions of the card are drawn, for this build only: Regions.read()
+		-- is swapped for a patched copy while the card is built and then restored,
+		-- so the settings of the real shelf are never touched.
+		local Regions = require("lib/bookshelf_hero_regions")
+		local original_read = Regions.read
+		local progress_cfg = original_read().progress or {}
+		Regions.read = function(...)
+			local base = original_read(...)
+			local patched = {}
+			for key, region in pairs(base) do
+				patched[key] = region
+			end
+			local function withDisabled(key, disabled)
+				if type(patched[key]) == "table" then
+					local copy = {}
+					for k, v in pairs(patched[key]) do copy[k] = v end
+					copy.disabled = disabled
+					patched[key] = copy
+				end
+			end
+			for _, key in ipairs(PANEL_SETT.hide_regions or {}) do
+				withDisabled(key, true)
+			end
+			-- the progress bar is drawn below the card by buildProgressRow (the card drops its
+			-- own progress line when it is short), so switch the card's own one off
+			if PANEL_SETT.show_progress then
+				withDisabled("progress", true)
+			end
+			return patched
+		end
+
+		local ok_card, card_or_err = pcall(HeroCard.new, HeroCard, {
+			book = book,
+			has_wallpaper = false,
+			width = width,
+			height = height,
+			cover_w = cover_w,
+			cover_h = cover_h,
+			pad = pad,
+			device_state = device_state,
+		})
+		Regions.read = original_read	-- always restore
+		if not ok_card then
+			error(card_or_err)
+		end
+		if not PANEL_SETT.show_progress then
+			return card_or_err
+		end
+
+		-- progress: saved value, else the live position in the open book
+		local pct = tonumber(book.book_pct)
+		if not pct and rui and rui.doc_settings then
+			pct = tonumber(rui.doc_settings:readSetting("percent_finished"))
+		end
+		if not pct and rui and rui.document then
+			local ok_pg, v = pcall(function()
+				return rui.document:getCurrentPage() / rui.document:getPageCount()
+			end)
+			pct = ok_pg and v or nil
+		end
+		local row = buildProgressRow(width, pct or 0, book, device_state, progress_cfg)
+		return VerticalGroup:new{
+			align = "left",
+			card_or_err,
+			VerticalSpan:new{width = Screen:scaleBySize(6)},
+			row,
+		}
+	end)
+	if not ok then
+		logger.warn("[banner-bookshelf] could not build the bookshelf panel:", card)
+		return nil
+	end
+	return card
 end
 
 local og_uiMan_show = UIManager.show
@@ -346,6 +542,34 @@ function UIManager:show(widget, ...)
 						screen_h * 0.5
 	max_height = max_height - overflow_h
 
+	--BOOKSHELF TOP PANEL (replaces the title line when bookshelf is installed)
+	local panel_widget
+	-- "reader mode" = a book is open AND it is what is on screen. With bookshelf's hot
+	-- parking the book stays open (parked) underneath the shelf, so it must not count.
+	local in_reader = self.ui and self.ui.document and true or false
+	if in_reader then
+		local ok_park, Park = pcall(require, "lib/bookshelf_reader_park")
+		if ok_park and type(Park) == "table" and Park.isParked and Park.isParked() then
+			in_reader = false
+		end
+	end
+	if PANEL_SETT.enabled and (in_reader or not PANEL_SETT.only_in_reader) then
+		local panel_overflow = highlightEnabled and overflow_w_hl or overflow_w
+		local panel_max_wid = screen_w * math.min(math.max(PANEL_SETT.width_pct, 20), 100) / 100
+								- panel_overflow
+		local panel_h = math.min(
+							math.floor(screen_h * math.min(math.max(PANEL_SETT.height_pct, 5), 100) / 100),
+							math.floor(max_height))
+		-- the highlight row is drawn wider than max_wid by its accent line:
+		-- make the panel as wide as the widest row so the banner has no gap
+		panel_widget = buildBookshelfPanel(
+							math.floor(panel_max_wid + (panel_overflow - overflow_w)),
+							panel_h)
+		if panel_widget then
+			max_wid = panel_max_wid
+		end
+	end
+
 	--TITLE WIDGET
 	local title_text
 
@@ -355,7 +579,7 @@ function UIManager:show(widget, ...)
 		title_text = BookInfo:expandString(B_SETT.title_text, last_file) or "N/A"
 	end
 
-	local title_widget = buildTextField(
+	local title_widget = panel_widget or buildTextField(
 							title_text,
 							font_.title_font,
 							max_height,
@@ -365,12 +589,17 @@ function UIManager:show(widget, ...)
 	local title_dimen = title_widget:getSize()
 
 	--STATS WIDGET
-	local stats_widget = buildTextField(
+	local stats_widget
+	if panel_widget and not PANEL_SETT.keep_stats then
+		stats_widget = VerticalSpan:new{width = 0}
+	else
+		stats_widget = buildTextField(
 							orig_sleep_text,
 							font_.stats_font,
 							max_height - title_dimen.h,
 							max_wid
-	)
+		)
+	end
 	local stats_dimen = stats_widget:getSize()
 
 	--HIGHLIGHTS WIDGET
@@ -512,6 +741,10 @@ function UIManager:show(widget, ...)
             max_wid
         )
     end
+	if panel_widget and not PANEL_SETT.keep_stats then
+		time_widget = nil
+		progress_year_widget = nil
+	end
 	content_widget = VerticalGroup:new{
 		align = "left",
 		title_widget,
@@ -520,7 +753,8 @@ function UIManager:show(widget, ...)
         progress_year_widget or VerticalSpan:new{width = 0},
 	}
 
-	if highlightEnabled and highlight_widget then
+	if highlightEnabled and highlight_widget and
+			(not panel_widget or PANEL_SETT.show_highlight) then
 		table.insert(content_widget, VerticalSpan:new{width = dimen_.hl_wgt_clearance})
 		table.insert(content_widget, highlight_widget)
 	end
