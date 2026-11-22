@@ -782,16 +782,18 @@ function PageTextInfo:onSwipe(_, ges)
             UIManager:broadcastEvent(Event:new("ShowReadingHoursDaily"))
         end
     elseif direction == "east" then
-        -- The "go back" bubble of the reading-location patch is showing: this swipe only closes it (it accepts the
-        -- current page as the new reference point, like the bubble's own X), and nothing else happens.
+        -- The "go back" bubble of the reading-location patch is showing: this swipe closes it and takes you to the page
+        -- it points to (what tapping the bubble does). Nothing else happens.
         -- Without the bubble the swipe does what it did before.
         local rlt = self.ui and self.ui._rlt_overlay
         if rlt and rlt.visible then
+            local target = self.ui._rlt_anchor
             local region = rlt.box_dimen
-            self.ui._rlt_anchor = self.ui._rlt_current_page or self.ui._rlt_anchor
             rlt.visible = false
-            if region then
-                -- the shadow pokes out a few px under the bubble
+            if target then
+                -- the jump repaints the whole page, already without the bubble
+                self.ui:handleEvent(Event:new("GotoPage", target))
+            elseif region then
                 region = Geom:new{ x = region.x, y = region.y, w = region.w, h = region.h + Screen:scaleBySize(2) }
                 UIManager:setDirty(self.ui.dialog or self.ui, function() return "flashui", region end)
             else
