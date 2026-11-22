@@ -444,6 +444,7 @@ if settings:isTrue("enable_no_bar_menu") then
 end
 
 function PageTextInfo:onDispatcherRegisterActions()
+    Dispatcher:registerAction("toggle_dots_bg", {category="none", event="ToggleDotsAndBackground", title=_("Toggle dots / background"), general=true,})
     Dispatcher:registerAction("pagetextinfo_action", {category="none", event="PageTextInfo", title=_("Page text info widget"), general=true,})
     Dispatcher:registerAction("series", {category="none", event="ShowSeriesList", title=_("Series"), general=true,})
     Dispatcher:registerAction("generate_favorites", {category="none", event="GenerateFavorites", title=_("Generate favorites"), general=true,})
@@ -911,6 +912,130 @@ function PageTextInfo:toggleFullScreenRuledLines()
     return UIManager:setDirty(self.view.dialog, "ui")
 end
 
+-- Cycles between the "paperdots" plugin, the "custombg" background and the bookends bars:
+--   bookends on: dots only -> background only -> dots + background
+--   -> bookends OFF (dots and background stay as they are)
+--   -> bookends ON again with dots and background OFF -> dots only -> ...
+-- Without the bookends plugin the bookends steps are skipped: dots + background -> nothing -> dots only.
+-- Works with the paperdots plugin as it is: the state is read from settings/paperdots.lua and changed with the plugin's own
+-- "PaperDotsToggle" event. That event asks for a flashing full refresh, so setDirty is muted while it runs; the reader is
+-- repainted once at the end of this function instead.
+function PageTextInfo:toggleDotsAndBackground()
+    local util = require("util")
+    local is_pdf = self.document and util.getFileNameSuffix(self.document.file) == "pdf"
+    local dots = self.ui and self.ui.paperdots
+    local custombg = (not is_pdf) and self.ui and self.ui.custombg or nil
+    local bookends = self.ui and self.ui.bookends
+    if not dots and not custombg then return false end
+
+    local function bookendsOn()
+        return bookends ~= nil and bookends.enabled and true or false
+    end
+    local function setBookends(on)
+        if not bookends or (bookends.enabled and true or false) == on then return end
+        bookends.enabled = on
+        if bookends.settings then bookends.settings:saveSetting("enabled", on) end
+        -- With bookends off the topbar would show up by itself (it only hides its bars while bookends is on):
+        -- keep it hidden, in both directions.
+        local topbar = self.view and self.view.topbar
+        if topbar and topbar.is_enabled and topbar.quickToggleOnOff then
+            topbar:quickToggleOnOff(false)
+        end
+    end
+
+    local function dotsOn()
+        if not dots then return false end
+        if dots.isEnabled then return dots:isEnabled() end
+        local DataStorage = require("datastorage")
+        local LuaSettings = require("luasettings")
+        local v = LuaSettings:open(DataStorage:getSettingsDir() .. "/paperdots.lua"):readSetting("enabled")
+        return v ~= false
+    end
+    local function setDots(on)
+        if not dots or dotsOn() == on then return end
+        if dots.setEnabled then
+            dots:setEnabled(on)
+        else
+            local Event = require("ui/event")
+            local real_setDirty = UIManager.setDirty
+            UIManager.setDirty = function() end
+            local ok, err = pcall(self.ui.handleEvent, self.ui, Event:new("PaperDotsToggle"))
+            UIManager.setDirty = real_setDirty
+            if not ok then error(err, 0) end
+        end
+    end
+
+    local dots_on = dotsOn()
+    local bg_on = custombg ~= nil and custombg:getCurrentDocBg() ~= nil
+    local bk_on = bookendsOn()
+    local want_dots, want_bg, want_bk = dots_on, bg_on, bk_on
+    if bookends and not bk_on then
+        want_dots, want_bg, want_bk = false, false, true   -- bookends back ON, dots and background OFF
+    elseif dots_on and not bg_on then
+        want_dots, want_bg = false, true       -- background only
+    elseif bg_on and not dots_on then
+        want_dots, want_bg = true, true        -- dots + background
+    elseif dots_on and bg_on then
+        if bookends then
+            want_bk = false                    -- bookends OFF, dots and background stay
+        else
+            want_dots, want_bg = false, false  -- nothing
+        end
+    else
+        want_dots, want_bg = true, false       -- dots only
+    end
+    -- without custombg (or in a PDF) only the dots can change: just flip them
+    if not custombg then want_dots, want_bg = not dots_on, false end
+    -- without the dots plugin only the background can change
+    if not dots then want_dots, want_bg = false, not bg_on end
+
+    setDots(want_dots)
+    setBookends(want_bk)
+
+    if custombg and want_bg ~= bg_on then
+        local function applyBg()
+            if want_bg then
+                -- Follow the global default; if there is none, pick a random one (it then becomes the global default)
+                if custombg:getGlobalDefaultBg() then
+                    custombg:applyBackground(nil)
+                else
+                    local names = {}
+                    for name in pairs(custombg:getCurrentImageCache()) do
+                        names[#names + 1] = name
+                    end
+                    if #names > 0 then
+                        custombg:applyBackground(names[math.random(#names)])
+                    else
+                        custombg:applyBackground(nil)
+                    end
+                end
+            else
+                custombg:applyBackground("")        -- No background
+            end
+        end
+        -- applyBackground() repaints by itself; mute it so there is ONE repaint for the whole toggle (see below)
+        local own_repaint = rawget(custombg, "toggleRepaint")
+        custombg.toggleRepaint = function() end
+        local ok, err = pcall(applyBg)
+        custombg.toggleRepaint = own_repaint
+        if not ok then error(err, 0) end
+    end
+
+    -- Repaint the reader itself so the page is drawn again with the new state (the dots are added on refresh)
+    if custombg and custombg.toggleRepaint then
+        custombg:toggleRepaint(self.view.dialog)
+        return true
+    end
+    UIManager:setDirty(self.view.dialog, "ui")
+    return true
+end
+
+-- Gesture action: "Toggle dots / background" (Gestures -> General)
+function PageTextInfo:onToggleDotsAndBackground()
+    self:toggleDotsAndBackground()
+    return true
+end
+
 -- Handle multiswipes: only "north east" is used, everything else is ignored
 function PageTextInfo:onMultiSwipe(arg, ges)
     if ges and ges.multiswipe_directions == "north east" then
@@ -925,7 +1050,7 @@ function PageTextInfo:onMultiSwipe(arg, ges)
     end
     if ges and ges.multiswipe_directions == "east south" then
         -- Toggle the full-screen ruled lines of the custombg plugin
-        self:toggleFullScreenRuledLines()
+        self:toggleDotsAndBackground()
         return true
     end
     -- Not our gesture: let other handlers deal with it
