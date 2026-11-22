@@ -123,7 +123,6 @@ local DOC_BG_GLOBAL = "@global"                              -- this book explic
 local NOFLASH_KEY = "custombg_noflash"                       -- avoid full-screen flashing on page turns while a background is shown (default: on)
 local PAGE_REFRESH_KEY = "custombg_page_refresh"             -- page turns with a background: "ui" (default, no flash) / "partial" (crisper text)
 local NODITHER_KEY = "custombg_no_dither"                     -- turn KOReader's software dithering off while a background is shown (default: OFF; only has an effect while a background is shown)
-local SKIP_BOOKENDS_KEY = "custombg_skip_bookends_refresh"   -- ignore the extra full-screen refresh the bookends plugin asks for right after opening (default: on)
 local SWIPE_ANIM_KEY = "custombg_swipe_anim"                -- Kindle page-turn animation while a background is shown: "keep" (default) / "off"
 local OPEN_REFRESH_KEY = "custombg_open_refresh"             -- refresh used when the book is shown: "ui" (soft, default) / "partial" (light) / "full" (KOReader default)
 local TOGGLE_WITH_BG_KEY = "custombg_toggle_with_background"   -- the lines gesture (pagetextinfo) also switches the background: true (default) / false = lines only
@@ -835,19 +834,6 @@ function CustomBg:_installRefreshHook()
     h.setDirty = function(um, widget, refreshtype, ...)
         local from_reader = false
         local plugin = CustomBg.active_instance
-        -- The bookends plugin schedules a full-screen "ui" refresh of the reader right after a book is opened, even when it draws
-        -- nothing. It arrives late (alone, after the book is already shown), so it shows up as one more visible refresh.
-        -- Skipped only inside the opening window, only with a background shown, and only if the option is on.
-        if h.enabled and refreshtype == "ui" and widget ~= nil and widget ~= "all" and plugin and plugin._open_window
-           and plugin:_wantsNoFlash() and CFG:readSetting(SKIP_BOOKENDS_KEY) ~= false then
-            local reader_ui = plugin.ui
-            if widget == reader_ui or (reader_ui.view ~= nil and widget == reader_ui.view.dialog) then
-                local tb = debug.traceback("", 2)
-                if type(tb) == "string" and tb:find("bookends%.koplugin") then
-                    return
-                end
-            end
-        end
         -- Opening a book: ReaderUI:doShowReader calls UIManager:show(reader, "full"), which is a flashing full refresh
         -- (this is KOReader's own, not the plugin's). Turn that single request into a "ui" refresh.
         if h.enabled and refreshtype == "full" and widget ~= nil and plugin and plugin._open_pending and plugin:_wantsNoFlash() then
@@ -2857,8 +2843,6 @@ function CustomBg:init()
     -- the flag also expires by itself so a later, explicit full refresh is never touched.
     self._open_pending = true
     UIManager:scheduleIn(5, function() self._open_pending = nil end)
-    self._open_window = true   -- stays on for a few seconds (unlike _open_pending, which is used up by the first full refresh)
-    UIManager:scheduleIn(8, function() self._open_window = nil end)
     local folder = getBackgroundsFolder()
     self.cache_day = loadImageList(folder, SCENE_DAY)
     self.cache_night = loadImageList(folder, SCENE_NIGHT)
@@ -3790,20 +3774,6 @@ function CustomBg:addToMainMenu(menu_items)
                         },
                     })
 
-                    table.insert(sub, {
-                        text = _("Skip the extra refresh of the bookends plugin when opening a book"),
-                        enabled_func = function() return self:_wantsNoFlash() and true or false end,
-                        help_text = _(
-                            "ON: while a background is shown, the full-screen refresh that the bookends plugin schedules right after " ..
-                            "a book is opened is ignored (it showed up as one more visible refresh). Only the first seconds after opening are affected.\n\n" ..
-                            "Turn it OFF if bookends bars do not appear until you turn the page."),
-                        checked_func = function() return CFG:readSetting(SKIP_BOOKENDS_KEY) ~= false end,
-                        keep_menu_open = true,
-                        callback = function(touchmenu_instance)
-                            CFG:saveSetting(SKIP_BOOKENDS_KEY, CFG:readSetting(SKIP_BOOKENDS_KEY) == false)
-                            if touchmenu_instance then touchmenu_instance:updateItems() end
-                        end,
-                    })
                     -- Diagnostics: shows exactly what the plugin sees, to find why a background does not appear
                     table.insert(sub, {
                         text = _("Diagnostics (why is there no background?)"),
