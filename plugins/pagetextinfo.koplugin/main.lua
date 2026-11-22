@@ -931,6 +931,109 @@ function PageTextInfo:toggleFullScreenRuledLines()
     return UIManager:setDirty(self.view.dialog, "ui")
 end
 
+-- Cycle: bookends -> +lines -> +background (lines off) -> +lines and background
+--        -> bookends OFF / topbar disabled (lines + background kept)
+--        -> lines and background OFF (bookends OFF / topbar disabled)
+--        -> bookends ON alone -> ...
+-- Without the bookends plugin: lines -> background -> both -> nothing -> lines ...
+function PageTextInfo:toggleFullScreenRuledLinesNoTopbar()
+    local util = require("util")
+    local is_pdf = self.document and util.getFileNameSuffix(self.document.file) == "pdf"
+    if is_pdf then return end
+    if self.view.footer_visible then return end
+
+    local custombg = self.ui and self.ui.custombg
+    if not custombg then return false end
+    local bookends = self.ui and self.ui.bookends
+
+    local function bookendsOn()
+        return bookends ~= nil and bookends.enabled and true or false
+    end
+    local function setBookends(on)
+        if not bookends or bookendsOn() == on then return end
+        bookends.enabled = on
+        if bookends.settings then bookends.settings:saveSetting("enabled", on) end
+        -- Topbar disabled in both directions (with bookends off it would show up by itself)
+        local topbar = self.view and self.view.topbar
+        if topbar and topbar.is_enabled and topbar.quickToggleOnOff then
+            topbar:quickToggleOnOff(false)
+        end
+    end
+
+    local lines_on = custombg.fs_enabled and true or false
+    local bg_on = custombg:getCurrentDocBg() ~= nil
+    local has_bk = bookends ~= nil
+    local bk_on = bookendsOn()
+    local want_lines, want_bg, want_bk = lines_on, bg_on, bk_on
+
+    if bk_on or not has_bk then
+        if not lines_on and not bg_on then
+            want_lines, want_bg = true, false          -- lines (with bookends)
+        elseif lines_on and not bg_on then
+            want_lines, want_bg = false, true          -- background (with bookends)
+        elseif bg_on and not lines_on then
+            want_lines, want_bg = true, true           -- lines + background (with bookends)
+        elseif has_bk then
+            want_bk = false                            -- bookends OFF / topbar disabled, both stay
+        else
+            want_lines, want_bg = false, false         -- nothing (no bookends plugin)
+        end
+    else
+        -- bookends OFF
+        if lines_on and bg_on then
+            want_lines, want_bg = false, false         -- only "topbar disabled"
+        else
+            want_lines, want_bg, want_bk = false, false, true  -- bookends ON alone
+        end
+    end
+
+    setBookends(want_bk)
+
+    if want_lines ~= lines_on then
+        if custombg.setLinesEnabled then
+            custombg:setLinesEnabled(want_lines)
+        else
+            custombg.fs_enabled = want_lines
+            custombg:saveDocSetting("fs_lines_enabled", want_lines)
+        end
+    end
+
+    if want_bg ~= bg_on then
+        local function applyBg()
+            if want_bg then
+                if custombg:getGlobalDefaultBg() then
+                    custombg:applyBackground(nil)
+                else
+                    local names = {}
+                    for name in pairs(custombg:getCurrentImageCache()) do
+                        names[#names + 1] = name
+                    end
+                    if #names > 0 then
+                        custombg:applyBackground(names[math.random(#names)])
+                    else
+                        custombg:applyBackground(nil)
+                    end
+                end
+            else
+                custombg:applyBackground("")        -- No background
+            end
+        end
+        -- Mute the inner repaint: one repaint for the whole toggle (below)
+        local own_repaint = rawget(custombg, "toggleRepaint")
+        custombg.toggleRepaint = function() end
+        local ok, err = pcall(applyBg)
+        custombg.toggleRepaint = own_repaint
+        if not ok then error(err, 0) end
+    end
+
+    if custombg.toggleRepaint then
+        custombg:toggleRepaint(self.view.dialog)
+        return true
+    end
+    UIManager:setDirty(self.view.dialog, "ui")
+    return true
+end
+
 -- Cycles between the "paperdots" plugin, the "custombg" background and the bookends bars:
 --   bookends on: dots only -> background only -> dots + background
 --   -> bookends OFF (dots and background stay as they are)
@@ -1069,7 +1172,7 @@ function PageTextInfo:onMultiSwipe(arg, ges)
     end
     if ges and ges.multiswipe_directions == "east south" then
         -- Toggle the full-screen ruled lines of the custombg plugin
-        self:toggleDotsAndBackground()
+        self:toggleFullScreenRuledLinesNoTopbar()
         return true
     end
     -- Not our gesture: let other handlers deal with it
