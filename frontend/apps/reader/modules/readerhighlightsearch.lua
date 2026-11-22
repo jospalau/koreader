@@ -31,6 +31,14 @@ local SEARCH_FLAGS  = 0x10FF -- CRE default flags + MATCH_WHOLE_WORDS
 -- (same measurement as PageTextInfo:getCurrentXHeightMm in main.lua). nil = keep KOReader's own sizes.
 local LIST_XHEIGHT_MM    = 1.8   -- results list (the first screen)
 local PREVIEW_XHEIGHT_MM = 1.5   -- extended context of one occurrence (after tapping a row)
+-- Occurrences inside the table of contents or an index are left out of the results. A hit counts as one when
+-- the chapter title it falls under (from the book's own table of contents) starts with one of these words.
+-- Limit: a contents page that is not itself listed in the table of contents is not detected.
+local SKIP_INDEX_SECTIONS = true
+local INDEX_TITLES = {
+    "index", "indice", "índice", "Índice", "contents", "table of contents", "contenido", "tabla de contenido",
+    "sumario", "sommaire", "table des mati", "inhalt", "inhaltsverzeichnis", "indholds", "register",
+}
 -- Only these fields cross back from the subprocess ("page" is computed there).
 local FIELDS = { "prev_text", "matched_word_prefix", "matched_text",
                  "matched_word_suffix", "next_text", "start", "end" }
@@ -214,6 +222,21 @@ function ReaderHighlightSearch:search(hl)
 
     local ui = hl.ui
     local document = ui.document
+
+    -- true if the xpointer falls in a chapter whose title looks like a table of contents / an index
+    local function inIndexSection(xp)
+        if not SKIP_INDEX_SECTIONS or not xp or not ui.toc or not ui.toc.getTocTitleByPage then return false end
+        local okp, page = pcall(document.getPageFromXPointer, document, xp)
+        if not okp or type(page) ~= "number" then return false end
+        local okt, title = pcall(ui.toc.getTocTitleByPage, ui.toc, page)
+        if not okt or type(title) ~= "string" or title == "" then return false end
+        local lower = title:lower()
+        for _, pat in ipairs(INDEX_TITLES) do
+            local p = pat:gsub("%p", "%%%0")
+            if title:find("^%s*" .. p) or lower:find("^%s*" .. p) then return true end
+        end
+        return false
+    end
     ui.search.start_page = ui.paging and hl.view.state.page or document:getXPointer()
 
     -- PDF/DjVu (or no findAllText): keep the original behaviour.
@@ -348,6 +371,7 @@ function ReaderHighlightSearch:search(hl)
                                            r["end"], selected_position)
                     -- compareXPointers(a, b): 1 if b follows a, 0 if equal, -1 if a follows b
                     if not okc or cmp == nil or cmp < 0 then break end
+                    if inIndexSection(r.start) then goto next_hit end
                     local c = {}
                     for _, f in ipairs(FIELDS) do c[f] = r[f] end
                     -- Stable page label if the book has the page map enabled;
@@ -366,6 +390,7 @@ function ReaderHighlightSearch:search(hl)
                         c.page = label
                     end
                     out[#out + 1] = c
+                    ::next_hit::
                 end
                 return out
             end)
