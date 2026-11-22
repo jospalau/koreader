@@ -14,6 +14,7 @@ local HorizontalGroup = require("ui/widget/horizontalgroup")
 local HorizontalSpan = require("ui/widget/horizontalspan")
 local InputContainer = require("ui/widget/container/inputcontainer")
 local LeftContainer = require("ui/widget/container/leftcontainer")
+local RightContainer = require("ui/widget/container/rightcontainer")
 local Math = require("optmath")
 local OverlapGroup = require("ui/widget/overlapgroup")
 local Size = require("ui/size")
@@ -270,6 +271,29 @@ local SPAN_COLORS_RGB = {
     { Blitbuffer.COLOR_BLACK, Blitbuffer.colorFromName("purple") },
 }
 
+-- Day view design: zebra bands per hour, soft grid, rounded chips
+local BAND_COLOR   = Blitbuffer.Color8(0xF3)  -- every other hour
+local GRID_H_COLOR = Blitbuffer.Color8(0xD8)  -- hour lines
+local GRID_V_COLOR = Blitbuffer.Color8(0xE6)  -- 10-minute lines
+local HOUR_MUTED   = Blitbuffer.Color8(0x80)  -- hour labels
+local CHIP_RADIUS  = Screen:scaleBySize(6)
+
+-- Black and white friendly look: each book is told apart by its rank number
+-- (1 = longest) and by two styles that alternate: solid dark with white text,
+-- or white with a thick black outline and black text.
+local function rankStyle(rank, color)
+    rank = rank or 1
+    if color then
+        -- color readers: one color per rank, black text
+        local c = SPAN_COLORS_RGB[(rank - 1) % #SPAN_COLORS_RGB + 1]
+        return c[1], c[2], Size.border.thin
+    end
+    if rank % 2 == 1 then
+        return Blitbuffer.COLOR_WHITE, Blitbuffer.Color8(0x30), Size.border.thin
+    end
+    return Blitbuffer.COLOR_BLACK, Blitbuffer.COLOR_WHITE, Size.border.default * 2
+end
+
 function CalendarWeek:update()
     self.dimen = Geom:new{w = self.width, h = self.height}
     self.day_container = HorizontalGroup:new{
@@ -394,6 +418,36 @@ local BookDailyItem = InputContainer:extend{
     color = false,
 }
 
+-- Thin rounded bar under a book title: the share of the day's longest book.
+-- Light track, and a fill with a dark outline in the book's span color, so it
+-- matches the book's strips on the timeline.
+local BookBar = Widget:extend{
+    width = 0,
+    height = 0,
+    ratio = 0,
+    fill = Blitbuffer.COLOR_WHITE,
+}
+
+function BookBar:init()
+    self.dimen = Geom:new{ w = self.width, h = self.height }
+end
+
+function BookBar:getSize()
+    return self.dimen
+end
+
+function BookBar:paintTo(bb, x, y)
+    self.dimen.x, self.dimen.y = x, y
+    local r = math.floor(self.height / 2)
+    bb:paintRoundedRect(x, y, self.width, self.height, Blitbuffer.Color8(0xE6), r)
+    local w = math.max(self.height, math.floor(self.width * math.min(self.ratio, 1)))
+    local b = Size.border.thin
+    bb:paintRoundedRect(x, y, w, self.height, Blitbuffer.COLOR_BLACK, r)
+    bb:paintRoundedRect(x + b, y + b, w - 2 * b, self.height - 2 * b, self.fill, math.max(0, r - b))
+end
+
+BookDailyItem.bar_height = Screen:scaleBySize(7)
+
 function BookDailyItem:init()
     self.dimen = Geom:new{x = 0, y = 0, w = self.width, h = self.height}
     self.ges_events.Tap = {
@@ -408,23 +462,48 @@ function BookDailyItem:init()
             range = self.dimen,
         }
     }
-    self.checkmark_widget = CheckMark:new{
-        checked = self.item.checked,
+    local fgcolor, bgcolor, border = rankStyle(self.item.rank, self.color)
+    local gap = Size.padding.large
+    local badge_size = TextWidget.getTextHeight(" ", self.face) + Size.padding.small
+    local badge = FrameContainer:new{
+        width = badge_size,
+        height = badge_size,
+        margin = 0,
+        padding = 0,
+        bordersize = border,
+        radius = CHIP_RADIUS,
+        background = bgcolor,
+        CenterContainer:new{
+            dimen = Geom:new{ w = badge_size - 2 * border, h = badge_size - 2 * border },
+            TextWidget:new{
+                text = tostring(self.item.rank or ""),
+                face = self.face,
+                bold = true,
+                fgcolor = fgcolor,
+                padding = 0,
+            },
+        },
     }
-    local checked_widget = CheckMark:new{
-        checked = true
-    }
+    local title_w = self.dimen.w - badge_size - 2 * gap - self.value_width
+    local ratio = (self.max_duration and self.max_duration > 0)
+        and ((self.item.duration or 0) / self.max_duration) or 0
 
-    local title_max_width = self.dimen.w - 2 * Size.padding.default - checked_widget:getSize().w  - self.value_width
-    local fgcolor, bgcolor
-    if self.color then
-        fgcolor, bgcolor = unpack(SPAN_COLORS_RGB[(self.item.book_id % #SPAN_COLORS_RGB)+1])
-    else
-        fgcolor, bgcolor = unpack(SPAN_COLORS[(self.item.book_id % #SPAN_COLORS)+1])
-    end
-    self.check_container = CenterContainer:new{
-        dimen = Geom:new{ w = checked_widget:getSize().w },
-        self.checkmark_widget,
+    local title_block = VerticalGroup:new{
+        align = "left",
+        TextWidget:new{
+            text = self.item[1],
+            max_width = title_w,
+            face = self.face,
+            fgcolor = self.item.checked and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY,
+            padding = 0,
+        },
+        VerticalSpan:new{ width = Size.padding.small },
+        BookBar:new{
+            width = title_w,
+            height = self.bar_height,
+            ratio = ratio,
+            fill = bgcolor,
+        },
     }
     self[1] = FrameContainer:new{
         padding = 0,
@@ -432,82 +511,35 @@ function BookDailyItem:init()
         focusable = true,
         focus_border_size = Size.border.thin,
         LeftContainer:new{
-            dimen = Geom:new{
-                w = self.width,
-                h = self.height,
-            },
+            dimen = Geom:new{ w = self.width, h = self.height },
             HorizontalGroup:new{
                 align = "center",
-                self.check_container,
-                CenterContainer:new{
-                    dimen = Geom:new{ w = Size.padding.default, h = self.height },
-                    HorizontalSpan:new{ w = Size.padding.default },
+                badge,
+                HorizontalSpan:new{ width = gap },
+                title_block,
+                HorizontalSpan:new{ width = gap },
+                RightContainer:new{
+                    dimen = Geom:new{ w = self.value_width, h = self.height },
+                    TextWidget:new{
+                        text = self.item[2],
+                        max_width = self.value_width,
+                        face = self.face,
+                        bold = true,
+                    },
                 },
-                OverlapGroup:new{
-                    dimen = Geom:new{ w = title_max_width, h = self.height},
-                    allow_mirroring = false,
-                    FrameContainer:new{
-                        width = title_max_width,
-                        height = self.height - 2 * Size.padding.small,
-                        padding = 0,
-                        padding_left = self.padding,
-                        padding_right = self.padding,
-                        background = bgcolor,
-                        bordersize = Size.border.thin,
-                        overlap_offset = { 0, Size.padding.small },
-                        LeftContainer:new{
-                            dimen = Geom:new{
-                                w = title_max_width,
-                                h = self.height - 2 * Size.padding.small,
-                            },
-                            TextWidget:new{
-                                text = self.item[1],
-                                max_width = title_max_width - 2 * self.padding,
-                                face = self.face,
-                                bgcolor = bgcolor,
-                                fgcolor = fgcolor,
-                                padding = 0,
-                                bordersize = Size.border.thin,
-                            }
-                        }
-                    }
-                },
-                FrameContainer:new{
-                    width = self.value_width,
-                    padding = 0,
-                    padding_left = Size.padding.default,
-                    bordersize = 0,
-                    LeftContainer:new{
-                        dimen = Geom:new{ w = self.value_width, h = self.height},
-                        padding = 0,
-                        TextWidget:new{
-                            text = self.item[2],
-                            max_width = self.value_width,
-                            face = self.face
-                        }
-                    }
-                }
-            }
-        }
+            },
+        },
     }
-    checked_widget:free()
     self[1].invert = self.invert
 end
 
-function BookDailyItem:onTap(_, ges)
-    local x_intersect = function()
-        local dimen = self.checkmark_widget.dimen
-        return ges.pos.x >= dimen.x - dimen.w and ges.pos.x <= dimen.x + 2 * dimen.w
-    end
-    if self.item.check_cb and x_intersect() then
+function BookDailyItem:onTap()
+    -- A tap on a book shows or hides it in the chart (hidden ones are dimmed)
+    if self.item.check_cb then
         self.item:check_cb()
-        self.checkmark_widget = CheckMark:new{
-            checked = self.item.checked,
-        }
-        self.check_container[1] = self.checkmark_widget
-        UIManager:setDirty(self, function()
-            return "ui", self.check_container.dimen
-        end)
+        if self.show_parent and self.show_parent._populateBooks then
+            self.show_parent:_populateBooks()
+        end
     elseif self.item.callback then
         self.item:callback()
     end
@@ -520,6 +552,131 @@ function BookDailyItem:onHold()
     end
     return true
 end
+
+-- Stacked bar chart of the day: one bar per hour, as tall as the minutes read
+-- in it, split in segments per book (same number/style as the list below).
+local DayChart = Widget:extend{
+    width = 0,
+    height = 0,
+    pad = 0,            -- left and right margin
+    mins = nil,         -- mins[h] = { [rank] = seconds } for hours 1..24
+    ranks = nil,        -- ranks to stack, bottom first
+    start_hour = 0,     -- label offset (the day may not start at 00:00)
+    current = nil,      -- index (1..24) of the current hour, if today
+    color = false,
+}
+
+function DayChart:init()
+    self.dimen = Geom:new{ w = self.width, h = self.height }
+    -- text grows with the chart (14 to 22 pt)
+    local fsize = math.min(22, math.max(14, math.floor(self.height / Screen:scaleBySize(20))))
+    local face = Font:getFace("cfont", fsize)
+    local face_b = face
+    self.totals, self.max_total = {}, 0
+    for h = 1, 24 do
+        local t = 0
+        for _, sec in pairs(self.mins[h] or {}) do t = t + sec end
+        self.totals[h] = t
+        if t > self.max_total then self.max_total = t end
+    end
+    local max_min = self.max_total / 60
+    self.y_max = (max_min <= 15 and 15) or (max_min <= 30 and 30) or (math.ceil(max_min / 60) * 60)
+    self.value_widgets, self.hour_widgets = {}, {}
+    for h = 1, 24 do
+        if self.totals[h] >= 30 then
+            self.value_widgets[h] = TextWidget:new{
+                text = tostring(math.floor(self.totals[h] / 60 + 0.5)),
+                face = face, padding = 0, fgcolor = Blitbuffer.COLOR_BLACK,
+            }
+        end
+        if (h - 1) % 3 == 0 or h == self.current then
+            self.hour_widgets[h] = TextWidget:new{
+                text = string.format("%02d", (h - 1 + self.start_hour) % 24),
+                face = face_b, padding = 0, bold = (h == self.current),
+                fgcolor = (h == self.current) and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY,
+            }
+        end
+    end
+    self.tick_widgets = {}
+    for i = 0, 2 do
+        self.tick_widgets[i + 1] = TextWidget:new{
+            text = string.format("%d", self.y_max * i / 2),
+            face = face, padding = 0, fgcolor = Blitbuffer.COLOR_DARK_GRAY,
+        }
+    end
+    self.text_h = self.tick_widgets[1]:getSize().h
+    self.axis_w = self.tick_widgets[3]:getSize().w + Size.padding.default
+end
+
+function DayChart:getSize()
+    return self.dimen
+end
+
+function DayChart:paintTo(bb, x, y)
+    self.dimen.x, self.dimen.y = x, y
+    local top = y + self.text_h + Size.padding.small            -- room for value labels
+    local plot_h = self.height - (self.text_h + Size.padding.small) - (self.text_h + Size.padding.default)
+    local plot_x = x + self.pad + self.axis_w
+    local plot_w = self.width - 2 * self.pad - self.axis_w
+    local slot = plot_w / 24
+    local bar_w = math.max(2, math.floor(slot * 0.74))
+    local base = top + plot_h
+
+    -- grid: 0, half and full scale
+    for i = 0, 2 do
+        local gy = base - math.floor(plot_h * i / 2)
+        bb:paintRect(plot_x, gy, plot_w, Size.line.thin, i == 0 and Blitbuffer.COLOR_BLACK or Blitbuffer.Color8(0xD8))
+        local tw = self.tick_widgets[i + 1]
+        local ts = tw:getSize()
+        tw:paintTo(bb, plot_x - Size.padding.default - ts.w, gy - math.floor(ts.h / 2))
+    end
+
+    for h = 1, 24 do
+        local cx = plot_x + math.floor((h - 0.5) * slot)
+        local bx = cx - math.floor(bar_w / 2)
+        if h == self.current then
+            -- soft column behind the current hour
+            bb:paintRect(plot_x + math.floor((h - 1) * slot), top - Size.padding.small,
+                math.ceil(slot), plot_h + Size.padding.small, Blitbuffer.Color8(0xEE))
+        end
+        local cursor = base
+        local segs = self.mins[h] or {}
+        for _, rank in ipairs(self.ranks) do
+            local sec = segs[rank]
+            if sec and sec > 0 then
+                local sh = math.max(2, math.floor(plot_h * (sec / 60) / self.y_max + 0.5))
+                local fg, bg, border = rankStyle(rank, self.color)
+                local sy = cursor - sh
+                local b = math.min(border, math.floor(bar_w / 2), math.floor(sh / 2))
+                bb:paintRect(bx, sy, bar_w, sh, Blitbuffer.COLOR_BLACK)
+                if b > 0 and sh - 2 * b > 0 then
+                    bb:paintRect(bx + b, sy + b, bar_w - 2 * b, sh - 2 * b, bg)
+                end
+                cursor = sy
+            end
+        end
+        local vw = self.value_widgets[h]
+        if vw and cursor < base then
+            local vs = vw:getSize()
+            vw:paintTo(bb, cx - math.floor(vs.w / 2), cursor - vs.h - Size.padding.tiny)
+        end
+        local hw = self.hour_widgets[h]
+        if hw then
+            local hs = hw:getSize()
+            hw:paintTo(bb, cx - math.floor(hs.w / 2), base + Size.padding.default)
+        end
+    end
+end
+
+function DayChart:free()
+    for _, list in ipairs({ self.value_widgets, self.hour_widgets, self.tick_widgets }) do
+        for _, w in pairs(list) do w:free() end
+    end
+end
+
+-- Extra share of the free height added above the hero line and chart, besides
+-- half of it (the rest goes between the chart and the list)
+local CONTENT_DOWN = 0.25
 
 local CalendarDayView = FocusManager:extend{
     day_ts = nil,
@@ -666,7 +823,8 @@ function CalendarDayView:init()
     self.footer_height = self.page_info:getSize().h
 
     self.items_per_page = 5
-    self.book_item_height = TextWidget.getTextHeight(" ", BookDailyItem.face) + 2 * Size.padding.small
+    self.book_item_height = TextWidget.getTextHeight(" ", BookDailyItem.face) + BookDailyItem.bar_height
+        + Size.padding.small + 2 * Size.padding.default
 
     self.book_items = VerticalGroup:new{}
     self.timeline = OverlapGroup:new{
@@ -777,8 +935,12 @@ function CalendarDayView:setupView()
     -- })
     table.sort(self.kv_pairs, function(a,b) return a.duration > b.duration end) --sort by value
     local total_day = 0
-    for _, pair in ipairs(self.kv_pairs) do total_day = total_day + pair.duration end
+    for i, pair in ipairs(self.kv_pairs) do
+        pair.rank = i
+        total_day = total_day + pair.duration
+    end
 
+    self.total_day = total_day
     self.title = self:getTitle() .. tostring(string.format(", %02d:%02d:%02d", math.floor(total_day/3600), math.floor((total_day%3600)/60), total_day%60))
 
     self.show_page = 1
@@ -882,6 +1044,103 @@ end
 function CalendarDayView:_populateBooks()
     self.book_items:clear()
     self.layout = {}
+    -- Hero line: the day's total time big, and how many books
+    local total = self.total_day or 0
+    local hours, mins = math.floor(total / 3600), math.floor((total % 3600) / 60)
+    local hero_text = hours > 0 and string.format("%dh %02dm", hours, mins) or string.format("%dm", mins)
+    local hero_total = TextWidget:new{
+        text = hero_text, face = Font:getFace("cfont", 34), bold = true, padding = 0,
+    }
+    local hero_sub = TextWidget:new{
+        text = T(_("%1 books"), #self.kv_pairs),
+        face = Font:getFace("cfont", 18), fgcolor = Blitbuffer.COLOR_DARK_GRAY, padding = 0,
+    }
+    self.hero_height = hero_total:getSize().h + 2 * Size.padding.default
+    -- top space: pushes the whole content down so it sits centered (see below)
+    self.top_spacer = VerticalSpan:new{ width = 0 }
+    table.insert(self.book_items, self.top_spacer)
+    table.insert(self.book_items, CenterContainer:new{
+        dimen = Geom:new{ w = self.dimen.w, h = self.hero_height },
+        HorizontalGroup:new{
+            align = "bottom",
+            hero_total,
+            HorizontalSpan:new{ width = Size.padding.large },
+            hero_sub,
+        },
+    })
+    -- Stats row: when you started and stopped reading, and the busiest hour
+    self.stats_height = 0
+    local first_t, last_t, hour_secs = nil, nil, {}
+    local all_periods = {}
+    for _, v in ipairs(self.kv_pairs) do
+        for _, period in ipairs(v.periods or {}) do
+            all_periods[#all_periods + 1] = { start = period.start, finish = period.finish }
+            if not first_t or period.start < first_t then first_t = period.start end
+            if not last_t or period.finish > last_t then last_t = period.finish end
+            for h = math.floor(period.start / 3600), math.floor(period.finish / 3600) do
+                local sec = math.min(period.finish, (h + 1) * 3600) - math.max(period.start, h * 3600)
+                if sec > 0 then hour_secs[h] = (hour_secs[h] or 0) + sec end
+            end
+        end
+    end
+    if first_t then
+        local best_h, best_s = nil, 0
+        for h, sec in pairs(hour_secs) do
+            if sec > best_s then best_h, best_s = h, sec end
+        end
+        local start_hour = self.reader_statistics.settings.calendar_day_start_hour or 0
+        -- Longest session: readings less than 2 minutes apart count as one
+        table.sort(all_periods, function(a, b) return a.start < b.start end)
+        local long_start, long_len = nil, 0
+        local cur_start, cur_end
+        for _, pr in ipairs(all_periods) do
+            if cur_end and pr.start - cur_end <= 120 then
+                cur_end = math.max(cur_end, pr.finish)
+            else
+                cur_start, cur_end = pr.start, pr.finish
+            end
+            if cur_end - cur_start > long_len then
+                long_start, long_len = cur_start, cur_end - cur_start
+            end
+        end
+        local long_h, long_m = math.floor(long_len / 3600), math.floor((long_len % 3600) / 60)
+        local long_text = long_h > 0 and string.format("%dh %02dm", long_h, long_m) or string.format("%dm", long_m)
+        local cols = {
+            { os.date("%H:%M", self.day_ts + first_t), _("Started") },
+            { os.date("%H:%M", self.day_ts + last_t), _("Last read") },
+            { long_text, T(_("Longest (%1)"), os.date("%H:%M", self.day_ts + long_start)) },
+            { string.format("%d min", math.floor(best_s / 60 + 0.5)),
+              T(_("Best hour (%1h)"), string.format("%02d", (best_h + start_hour) % 24)) },
+        }
+        local col_w = math.floor((self.dimen.w - 2 * self.outer_padding) / #cols)
+        local row = HorizontalGroup:new{ align = "top" }
+        for _, c in ipairs(cols) do
+            local value = TextWidget:new{
+                text = c[1], face = Font:getFace("cfont", 22), bold = true, padding = 0,
+                max_width = col_w,
+            }
+            local caption = TextWidget:new{
+                text = c[2], face = Font:getFace("cfont", 14), padding = 0,
+                fgcolor = Blitbuffer.COLOR_DARK_GRAY, max_width = col_w,
+            }
+            local vg = VerticalGroup:new{ align = "center", value, caption }
+            row[#row + 1] = CenterContainer:new{
+                dimen = Geom:new{ w = col_w, h = vg:getSize().h }, vg,
+            }
+        end
+        self.stats_height = row:getSize().h + Size.padding.large
+        table.insert(self.book_items, row)
+        table.insert(self.book_items, VerticalSpan:new{ width = Size.padding.large })
+    end
+    -- the chart goes here (see refreshTimeline)
+    self.chart_holder = FrameContainer:new{
+        padding = 0, margin = 0, bordersize = 0,
+        VerticalSpan:new{ width = 0 },
+    }
+    table.insert(self.book_items, self.chart_holder)
+    -- gap between the chart and the list: the list stays stuck to the bottom
+    self.mid_spacer = VerticalSpan:new{ width = 0 }
+    table.insert(self.book_items, self.mid_spacer)
     local idx_offset = (self.show_page - 1) * self.items_per_page
     local page_last = #self.kv_pairs
     if self.pages > 1 and idx_offset + self.items_per_page < #self.kv_pairs then
@@ -891,7 +1150,8 @@ function CalendarDayView:_populateBooks()
     local value_width = 0
     local value_text = TextWidget:new{
         text = "",
-        face = BookDailyItem.face
+        face = BookDailyItem.face,
+        bold = true,
     }
     for idx = idx_offset+1, page_last do
         value_text:setText( self.kv_pairs[idx][2] )
@@ -904,6 +1164,7 @@ function CalendarDayView:_populateBooks()
             item = self.kv_pairs[idx],
             width = self.dimen.w - 2 * self.outer_padding,
             value_width = value_width,
+            max_duration = self.kv_pairs[1] and self.kv_pairs[1].duration or 0,
             height = self.book_item_height,
             show_parent = self,
             color = self.reader_statistics.color,
@@ -911,8 +1172,8 @@ function CalendarDayView:_populateBooks()
         table.insert(self.layout, { item })
         table.insert(self.book_items, item)
     end
-    self.timeline_offset = self.titlebar_height + #self.book_items * self.book_item_height + Size.padding.default
-    self.timeline_height = self.dimen.h - self.timeline_offset
+    -- room left for the chart: what the list, hero line and footer do not use
+    local footer_h = 0
     if self.pages > 1 then
         self.footer_page:setText(T(_("Page %1 of %2"), self.show_page, self.pages), self.footer_center_width)
         self.footer_page:enable()
@@ -921,13 +1182,20 @@ function CalendarDayView:_populateBooks()
         self.footer_right:enableDisable(self.show_page < self.pages)
         self.footer_first_up:enableDisable(self.show_page > 1)
         self.footer_last_down:enableDisable(self.show_page < self.pages)
-
-        self.timeline_height = self.timeline_height - self.footer_height
-    else
-        self.timeline_height = self.timeline_height - Size.padding.default
+        footer_h = self.footer_height
     end
-    self.hour_height = math.floor(self.timeline_height / 24)
-    self.timeline_width = self.dimen.w - self.outer_padding - self.time_text_width
+    local used = self.titlebar_height + self.hero_height + self.stats_height
+        + (page_last - idx_offset) * self.book_item_height + footer_h + 2 * Size.padding.large
+    self.chart_h = math.max(Screen:scaleBySize(180),
+        math.min(math.floor(self.dimen.h * 0.58), self.dimen.h - used))
+    -- center the block (hero line, chart and list) between the title bar and the
+    -- footer; CONTENT_DOWN moves it a bit lower than the exact center
+    -- (the list of books stays at the bottom, just above the footer)
+    local free = self.dimen.h - (self.titlebar_height + self.hero_height + self.stats_height + self.chart_h
+        + (page_last - idx_offset) * self.book_item_height + footer_h + 2 * Size.padding.large)
+    free = math.max(0, free)
+    self.top_spacer.width = math.floor(free * (0.5 + CONTENT_DOWN))
+    self.mid_spacer.width = free - self.top_spacer.width
 
     if #self.kv_pairs == 0 then
         -- Needed when the first opened day has no data, then move to another day with data
@@ -940,117 +1208,44 @@ function CalendarDayView:_populateBooks()
 end
 
 function CalendarDayView:refreshTimeline()
-    self.timeline:clear()
-
-    -- Draw decorations first, so read spans can be drawn over them
-    -- Vertical lines (first, so horizontal lines can override them if we use another color)
-    for i=0, self.NB_VERTICAL_SEPARATORS_PER_HOUR do
-        local offset_x = self.time_text_width + self.timeline_width * i / self.NB_VERTICAL_SEPARATORS_PER_HOUR
-        table.insert(self.timeline, FrameContainer:new{
-            width = Size.border.thin,
-            height = 24 * self.hour_height, -- unscaled_size_check: ignore
-            background = Blitbuffer.COLOR_LIGHT_GRAY,
-            bordersize = 0,
-            padding = 0,
-            overlap_offset = { offset_x, self.timeline_offset },
-            VerticalSpan:new{ w = 0 }
-        })
-    end
-    -- Hour indicator
-    for i=0, 23 do
-        local offset_y = self.timeline_offset + self.hour_height * i
-        table.insert(self.timeline, FrameContainer:new{
-            width = self.time_text_width,
-            height = self.hour_height,
-            margin = 0,
-            padding = 0,
-            background = Blitbuffer.COLOR_WHITE,
-            bordersize = 0,
-            overlap_offset = {0, offset_y},
-            CenterContainer:new{
-                dimen = Geom:new{ w = self.time_text_width, h = self.hour_height},
-                TextWidget:new{
-                    text = string.format("%02d:%02d",
-                        (i + (self.reader_statistics.settings.calendar_day_start_hour or 0)) % 24,
-                        self.reader_statistics.settings.calendar_day_start_minute or 0
-                    ),
-                    face = self.time_text_face,
-                    padding = Size.padding.small
-                }
-            }
-        })
-    end
-    -- Horizontal lines
-    local idx_00h00
-    if self.reader_statistics.settings.calendar_day_start_hour and self.reader_statistics.settings.calendar_day_start_hour ~= 0 then
-        idx_00h00 = 24 - self.reader_statistics.settings.calendar_day_start_hour
-    end
-    for i=0, 24 do
-        local offset_y = self.timeline_offset + self.hour_height * i
-        local height = Size.border.default
-        if idx_00h00 and i == idx_00h00 then
-            -- Thicker separator between 23:00 and 00:00
-            offset_y = offset_y - math.floor(height/2) -- shift it a bit up
-            height = height * 2
-        end
-        table.insert(self.timeline, FrameContainer:new{
-            width = self.timeline_width,
-            height = height,
-            background = Blitbuffer.COLOR_LIGHT_GRAY,
-            bordersize = 0,
-            padding = 0,
-            overlap_offset = { self.time_text_width, offset_y - Size.border.thin },
-            CenterContainer:new{
-                dimen = Geom:new{ w = self.timeline_width, h = Size.border.default },
-                VerticalSpan:new{ w = 0 }
-            }
-        })
-    end
-    -- Current time arrow indicator
-    if self.is_current_day then
-        -- Get the arrow glyph a bit bigger than what it is with the hour indicator font
-        local font_size = TextWidget:getFontSizeToFitHeight("cfont", self.hour_height*1.1, 0)
-        local current_time_icon = TextWidget:new{
-            text = "\u{25B2}", -- black up-pointing triangle
-            face = Font:getFace("cfont", font_size),
-            padding = 0,
-        }
-        local offset_x = self.time_text_width + math.floor( self.timeline_width * self.current_hour_second / 3600 - current_time_icon:getWidth()/2)
-        local offset_y = self.timeline_offset + self.hour_height * (self.current_day_hour + 1)
-        offset_y = offset_y - math.floor(self.hour_height*0.3) -- move it up so it sits over the horizontal line
-        current_time_icon.overlap_offset = { offset_x, offset_y }
-        table.insert(self.timeline, current_time_icon)
-    end
-    -- Finally, the read books spans
+    -- Seconds read in each hour by each book (only the checked ones)
+    local mins, ranks = {}, {}
+    for h = 1, 24 do mins[h] = {} end
     for _, v in ipairs(self.kv_pairs) do
-        if v.checked and v.periods then
-            local fgcolor, bgcolor
-            if self.color then
-                fgcolor, bgcolor = unpack(SPAN_COLORS_RGB[(v.book_id % #SPAN_COLORS_RGB)+1])
-            else
-                fgcolor, bgcolor = unpack(SPAN_COLORS[(v.book_id % #SPAN_COLORS)+1])
-            end
+        if v.checked and v.periods and v.rank then
+            ranks[#ranks + 1] = v.rank
             for _, period in ipairs(v.periods) do
-                local start_hour = math.floor(period.start / 3600)
-                local finish_hour = math.floor(period.finish / 3600)
-                for i=0, finish_hour-start_hour do
-                    local start = i==0 and period.start or (start_hour+i) * 3600
-                    if start >= 24 * 3600 then
-                        break
+                for h = math.floor(period.start / 3600), math.floor(period.finish / 3600) do
+                    if h >= 0 and h < 24 then
+                        local sec = math.min(period.finish, (h + 1) * 3600) - math.max(period.start, h * 3600)
+                        if sec > 0 then
+                            mins[h + 1][v.rank] = (mins[h + 1][v.rank] or 0) + sec
+                        end
                     end
-                    local finish = i==finish_hour-start_hour and period.finish or (start_hour+i+1) * 3600 - 1
-                    local span = self:generateSpan(start, finish, bgcolor, fgcolor, v[1], period.device)
-                    if span then table.insert(self.timeline, span) end
                 end
             end
         end
     end
+    table.sort(ranks)
+    local chart = DayChart:new{
+        width = self.dimen.w,
+        height = self.chart_h,
+        pad = self.outer_padding,
+        mins = mins,
+        ranks = ranks,
+        start_hour = self.reader_statistics.settings.calendar_day_start_hour or 0,
+        current = self.is_current_day and (self.current_day_hour + 1) or nil,
+        color = self.reader_statistics.color,
+    }
+    if self.chart_holder[1] and self.chart_holder[1].free then self.chart_holder[1]:free() end
+    self.chart_holder[1] = chart
+    self.book_items:resetLayout()
     UIManager:setDirty(self, function()
         return "ui", self.dimen
     end)
 end
 
-function CalendarDayView:generateSpan(start, finish, bgcolor, fgcolor, title, device)
+function CalendarDayView:generateSpan(start, finish, bgcolor, fgcolor, title, device, rank, border)
     if device == nil then
         device = Device.model
         if Device:isAndroid() then
@@ -1071,18 +1266,26 @@ function CalendarDayView:generateSpan(start, finish, bgcolor, fgcolor, title, de
         face = Font:getFace("cfont", font_size),
         padding = 0.3
     }:getWidth()
+    -- "2  Kindle, Title"; only the rank when the strip is too short for more
+    local face = Font:getFace("cfont", font_size)
+    local label = string.format("%d  %s, %s", rank or 0, device, title)
+    if rank and width <= min_width * 4 then
+        label = tostring(rank)
+    end
     return FrameContainer:new{
         width = width,
         height = self.hour_height - 2 * self.inner_padding,
-        bordersize = Size.border.thin,
+        bordersize = border or Size.border.thin,
+        radius = math.floor((self.hour_height - 2 * self.inner_padding) / 2),
         overlap_offset = {offset_x, offset_y},
         background = bgcolor,
         padding = 0.3,
         CenterContainer:new{
             dimen = Geom:new{ h = self.hour_height - 2 * self.inner_padding, w = width },
             width > min_width and TextWidget:new{
-                text = device .. ", " .. title,
-                face = Font:getFace("cfont", font_size),
+                text = label,
+                face = face,
+                bold = true,
                 padding = 0,
                 fgcolor = fgcolor,
                 max_width = width
