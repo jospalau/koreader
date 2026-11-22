@@ -1071,6 +1071,16 @@ end
 function Bookends:markDirty(refresh_mode)
     local mode = refresh_mode or "ui"
     self:_scheduleRepaint(function()
+        -- Nothing is drawn now and nothing was drawn before (e.g. bookends is off and the top bar is the one
+        -- showing bars): there is nothing to repaint or to erase, and a whole-page refresh would only be an
+        -- extra, visible refresh (typically right after opening a book). If it WAS drawing (just turned off or
+        -- hidden), the refresh is still needed to erase it.
+        if (not self.enabled or self._format_hidden) and not self._has_painted then
+            return
+        end
+        if not self.enabled or self._format_hidden then
+            self._has_painted = false   -- this refresh erases the overlay
+        end
         UIManager:setDirty(self.ui, mode)
     end)
 end
@@ -1552,6 +1562,8 @@ function Bookends:paintTo(bb, x, y)
     -- code paths (notably %batt_icon → powerd:isCharging via lipc) block for
     -- ~10s after fork because the parent shares a stateful FD with the child.
     if Bookends._is_subprocess then return end
+    -- The overlay has drawn something that is on screen (see markDirty)
+    self._has_painted = true
 
     -- #114: a value-tick repaint was deferred while something covered the
     -- reader. We are being painted now, so the framebuffer is current again,
