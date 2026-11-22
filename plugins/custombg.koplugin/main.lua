@@ -121,6 +121,8 @@ local GLOBAL_DEFAULT_BG_KEY = "custombg_global_default_bg"
 local DOC_BG_NONE = ""                                       -- means explicitly no background
 local DOC_BG_GLOBAL = "@global"                              -- this book explicitly uses the global default background
 local NOFLASH_KEY = "custombg_noflash"                       -- avoid full-screen flashing on page turns while a background is shown (default: on)
+local PAGE_REFRESH_KEY = "custombg_page_refresh"             -- page turns with a background: "ui" (default, no flash) / "partial" (crisper text)
+local NODITHER_KEY = "custombg_no_dither"                     -- turn KOReader's software dithering off while a background is shown (default: OFF; only has an effect while a background is shown)
 local SKIP_BOOKENDS_KEY = "custombg_skip_bookends_refresh"   -- ignore the extra full-screen refresh the bookends plugin asks for right after opening (default: on)
 local SWIPE_ANIM_KEY = "custombg_swipe_anim"                -- Kindle page-turn animation while a background is shown: "keep" (default) / "off"
 local OPEN_REFRESH_KEY = "custombg_open_refresh"             -- refresh used when the book is shown: "ui" (soft, default) / "partial" (light) / "full" (KOReader default)
@@ -758,6 +760,13 @@ function CustomBg:isToggleWithBackground()
     return CFG:readSetting(TOGGLE_WITH_BG_KEY) ~= false
 end
 
+-- Refresh used for the page turns while a background is shown (only with No-flash page turns ON):
+--   "ui"      (default) non-flashing, but text can look softer / ghost more
+--   "partial" KOReader's own page-turn refresh: crisper text. The "background counts as an image" flash is still avoided.
+function CustomBg:getPageRefreshMode()
+    return CFG:readSetting(PAGE_REFRESH_KEY) == "partial" and "partial" or "ui"
+end
+
 function CustomBg:getOpenRefreshMode()
     local v = CFG:readSetting(OPEN_REFRESH_KEY)
     if v == "partial" or v == "full" then return v end
@@ -768,6 +777,42 @@ function CustomBg:_wantsNoFlash()
     return self:isNoFlashEnabled()
        and self.ui and self.ui.document
        and self._bg_last_name ~= nil and self._bg_last_name ~= ""
+end
+
+-- ===== No dithering of the background =====
+-- Devices without hardware dithering (e.g. Kindle Paperwhite 12) use KOReader's SOFTWARE dithering: Screen.sw_dithering is
+-- passed to crengine, which then draws every image of the page, INCLUDING the page background, through an 8x8 ordered
+-- dither (lvdrawbuf.cpp, dither_o8x8). That is the grainy/patterned look of the background.
+-- While a background is shown (and the option is on) the flag is switched off, and it is put back as soon as the background
+-- is turned off or the book is closed. Inline images of the book lose their dithering during that time too.
+-- default OFF (only has an effect while a background is shown)
+function CustomBg._noDitherOn()
+    return CFG:readSetting(NODITHER_KEY) == true
+end
+
+function CustomBg:_wantsNoDither()
+    return CustomBg._noDitherOn()
+       and self:isNoFlashEnabled()
+       and self.ui and self.ui.document
+       and self._bg_last_name ~= nil and self._bg_last_name ~= ""
+end
+
+function CustomBg:_syncDither()
+    if self:_wantsNoDither() then
+        if Screen.sw_dithering and not self._dither_suspended then
+            self._dither_suspended = true
+            Screen.sw_dithering = false
+        end
+    else
+        self:_releaseDither()
+    end
+end
+
+function CustomBg:_releaseDither()
+    if self._dither_suspended then
+        self._dither_suspended = nil
+        Screen.sw_dithering = true
+    end
 end
 
 -- Wrap UIManager.setDirty / UIManager._refresh (class-wide, but only while a book with a background is open).
@@ -817,6 +862,7 @@ function CustomBg:_installRefreshHook()
             end
         end
         if h.enabled and refreshtype == "partial" and widget ~= nil and plugin and plugin:_wantsNoFlash()
+           and plugin:getPageRefreshMode() == "ui"
            and not CustomBg._toggle_refresh then
             local reader_ui = plugin.ui
             from_reader = (widget == reader_ui) or (reader_ui.view ~= nil and widget == reader_ui.view.dialog)
@@ -887,6 +933,7 @@ end
 
 -- Turn the whole feature on or off to match the current state (call after the background or the option changed)
 function CustomBg:_syncNoFlash()
+    self:_syncDither()
     if not self:_wantsNoFlash() then
         self:_releaseNoFlash()
         return
@@ -2872,6 +2919,7 @@ end
 
 function CustomBg:onCloseDocument()
     self:_releaseNoFlash()
+    self:_releaseDither()
     if self._night_check_timer then
         UIManager:unschedule(self._night_check_timer)
         self._night_check_timer = nil
@@ -3614,21 +3662,48 @@ function CustomBg:addToMainMenu(menu_items)
                     })
 
                     table.insert(sub, {
+                        text = _("No dithering of the background (removes the grain on devices with software dithering)"),
+                        help_text = _(
+                            "Only available while a background image is shown and No-flash page turns is ON.\n\n" ..
+                            "ON: while a background is shown, KOReader's software dithering is switched off, so the background is drawn " ..
+                            "smooth instead of with a grainy pattern (typical of the Kindle Paperwhite 12). " ..
+                            "With the \"ui\" page-turn refresh it can make page turns smear more; it works best with \"partial\". OFF by default.\n\n" ..
+                            "Images inside the book are not dithered either while a background is shown. Dithering comes back " ..
+                            "when the background is turned off or the book is closed.\n\n" ..
+                            "OFF: KOReader's own behaviour."),
+                        -- Only useful while a background image is shown and No-flash page turns is ON: greyed out (and ignored) otherwise
+                        enabled_func = function()
+                            return self:isNoFlashEnabled() and self.ui ~= nil and self.ui.document ~= nil
+                                and self._bg_last_name ~= nil and self._bg_last_name ~= ""
+                        end,
+                        checked_func = function() return CustomBg._noDitherOn() end,
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
+                            CFG:saveSetting(NODITHER_KEY, not CustomBg._noDitherOn())
+                            self:_syncDither()
+                            self:repaintView()
+                            if touchmenu_instance then touchmenu_instance:updateItems() end
+                        end,
+                    })
+
+                    table.insert(sub, {
                         text_func = function()
-                            local labels = { ui = _("Soft"), partial = _("Light"), full = _("Full") }
+                            local labels = { ui = _("\"ui\" mode"), partial = _("\"partial\" mode"), full = _("\"full\" mode") }
                             return _("Refresh when opening the book") .. ": " .. labels[self:getOpenRefreshMode()]
                         end,
+                        -- Same condition the hook uses (background shown + No-flash page turns ON): greyed out otherwise
+                        enabled_func = function() return self:_wantsNoFlash() and true or false end,
                         help_text = _(
                             "Refresh KOReader does when it shows the book (only with a background and No-flash page turns ON).\n\n" ..
-                            "Soft: no flash, but the previous screen can fade out slowly (faint remains).\n" ..
-                            "Light: a mild flash, cleaner than Soft.\n" ..
-                            "Full: KOReader's own refresh, full flash, cleanest."),
+                            "\"ui\" mode: no flash, but the previous screen can fade out slowly (faint remains).\n" ..
+                            "\"partial\" mode: a mild flash, cleaner than \"ui\".\n" ..
+                            "\"full\" mode: KOReader's own refresh, full flash, cleanest."),
                         sub_item_table = (function()
                             local items = {}
                             local opts = {
-                                { text = _("Soft (no flash, may leave a faint fade of the previous screen)"), mode = "ui" },
-                                { text = _("Light (mild flash, cleaner)"), mode = "partial" },
-                                { text = _("Full (KOReader default: full flash, cleanest)"), mode = "full" },
+                                { text = _("\"ui\" mode: no flash, may leave a faint fade of the previous screen"), mode = "ui" },
+                                { text = _("\"partial\" mode: mild flash, cleaner"), mode = "partial" },
+                                { text = _("\"full\" mode: KOReader default, full flash, cleanest"), mode = "full" },
                             }
                             for _, opt in ipairs(opts) do
                                 table.insert(items, {
@@ -3647,9 +3722,47 @@ function CustomBg:addToMainMenu(menu_items)
 
                     table.insert(sub, {
                         text_func = function()
+                            local labels = { ui = _("\"ui\" mode (no flash, may degrade)"), partial = _("\"partial\" mode (sharp, may flash)") }
+                            return _("Page-turn refresh with a background") .. ": " .. labels[self:getPageRefreshMode()]
+                        end,
+                        -- Only has an effect with a background shown and No-flash page turns ON: greyed out otherwise
+                        enabled_func = function() return self:_wantsNoFlash() and true or false end,
+                        help_text = _(
+                            "Refresh used when you turn the page while a background is shown (needs No-flash page turns ON). " ..
+                            "It is a trade-off between degradation and flashing:\n\n" ..
+                            "\"ui\" mode (no flash, may degrade): the page never flashes, but the text can look softer and ghost more " ..
+                            "until the next full refresh.\n" ..
+                            "\"partial\" mode (sharp, may flash): KOReader's own page-turn refresh, crisper text, but the screen may flash. " ..
+                            "The background is still not treated as image content, and the periodic full refresh keeps working."),
+                        sub_item_table = {
+                            {
+                                text = _("\"ui\" mode: no flash, softer text, ghosting"),
+                                checked_func = function() return self:getPageRefreshMode() == "ui" end,
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
+                                    CFG:saveSetting(PAGE_REFRESH_KEY, "ui")
+                                    if touchmenu_instance then touchmenu_instance:updateItems() end
+                                end,
+                            },
+                            {
+                                text = _("\"partial\" mode: crisper text, may flash"),
+                                checked_func = function() return self:getPageRefreshMode() == "partial" end,
+                                keep_menu_open = true,
+                                callback = function(touchmenu_instance)
+                                    CFG:saveSetting(PAGE_REFRESH_KEY, "partial")
+                                    if touchmenu_instance then touchmenu_instance:updateItems() end
+                                end,
+                            },
+                        },
+                    })
+
+                    table.insert(sub, {
+                        text_func = function()
                             local off = CFG:readSetting(SWIPE_ANIM_KEY) == "off"
                             return _("Kindle page-turn animation with a background") .. ": " .. (off and _("Off") or _("Keep"))
                         end,
+                        -- Same condition the hook uses (background shown + No-flash page turns ON): greyed out otherwise
+                        enabled_func = function() return self:_wantsNoFlash() and true or false end,
                         help_text = _(
                             "Only for Kindles that have the page-turn animation (turned on in KOReader's own settings).\n\n" ..
                             "Keep: KOReader's animation, as it is.\n" ..
@@ -3679,6 +3792,7 @@ function CustomBg:addToMainMenu(menu_items)
 
                     table.insert(sub, {
                         text = _("Skip the extra refresh of the bookends plugin when opening a book"),
+                        enabled_func = function() return self:_wantsNoFlash() and true or false end,
                         help_text = _(
                             "ON: while a background is shown, the full-screen refresh that the bookends plugin schedules right after " ..
                             "a book is opened is ignored (it showed up as one more visible refresh). Only the first seconds after opening are affected.\n\n" ..
@@ -3716,6 +3830,8 @@ function CustomBg:addToMainMenu(menu_items)
                                     "Image file found: " .. show(resolved and imgs[resolved] or nil),
                                     "Images in list: " .. count,
                                     "Folder: " .. getBackgroundsFolder(),
+                                    "Screen dithering (sw / hw): " .. tostring(Screen.sw_dithering) .. " / " .. tostring(Screen.hw_dithering)
+                                        .. (self._dither_suspended and "  [sw switched off by the plugin]" or ""),
                                     (function()
                                         local d = self.ui.document
                                         local out = { "setBackgroundImage: " .. type(d and d.setBackgroundImage) }
