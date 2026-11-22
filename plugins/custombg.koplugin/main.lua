@@ -345,8 +345,15 @@ local function isOverlayMode()
     return CFG:readSetting(OVERLAY_KEY) == true
 end
 
+-- Colour screens (emulator, Kaleido, ...) keep the colours of the picture: the pieces are RGB32 (r,g,b,alpha) instead of
+-- 8-bit gray + alpha. Grayscale e-ink screens are not affected (same cache files as before).
+local function overlayIsColor()
+    local ok, c = pcall(function() return Screen:isColorScreen() end)
+    return ok and c == true
+end
+
 local function overlayCachePath(source_path)
-    return getCacheDir() .. string.format("ovl2_%dx%d_%s.bin", Screen:getWidth(), Screen:getHeight(), hashString(source_path))
+    return getCacheDir() .. string.format("ovl2%s_%dx%d_%s.bin", overlayIsColor() and "c" or "", Screen:getWidth(), Screen:getHeight(), hashString(source_path))
 end
 
 -- Returns a list of pieces { bb = BB8A, x, y, w, h }, an empty list (image is blank), or false (use the classic background)
@@ -366,6 +373,15 @@ local function buildOverlayPieces(source_path)
     local gray = Blitbuffer.new(W, H, Blitbuffer.TYPE_BB8)
     gray:fill(Blitbuffer.COLOR_WHITE)
     gray:blitFrom(src, 0, 0, 0, 0, W, H)
+    local color = overlayIsColor()
+    local rgb, rp, rstride
+    if color then
+        rgb = Blitbuffer.new(W, H, Blitbuffer.TYPE_BBRGB32)
+        rgb:fill(Blitbuffer.COLOR_WHITE)
+        rgb:blitFrom(src, 0, 0, 0, 0, W, H)
+        rp = ffi.cast("uint8_t*", rgb.data)
+        rstride = tonumber(rgb.stride)
+    end
     src:free()
 
     local gp = ffi.cast("uint8_t*", gray.data)
@@ -400,7 +416,7 @@ local function buildOverlayPieces(source_path)
     local pieces_rects = {}
     local bx0, by0, bx1, by1 = contentBBox(0, 0, W, H)
     if not bx0 then
-        gray:free()
+        gray:free(); if rgb then rgb:free() end
         return {}
     end
     if (bx1 - bx0) * (by1 - by0) <= OVERLAY_MAX_AREA * W * H then
@@ -432,7 +448,7 @@ local function buildOverlayPieces(source_path)
         end
         local cx, cy = math.floor(W / 2), math.floor(H / 2)
         if isContent(cx, cy) then
-            gray:free()
+            gray:free(); if rgb then rgb:free() end
             return false, "centre of the image is not empty (full-page picture)"
         end
         local hx0, hy0, hx1, hy1 = cx, cy, cx + 1, cy + 1
@@ -459,7 +475,7 @@ local function buildOverlayPieces(source_path)
     local area = 0
     for _, r in ipairs(pieces_rects) do area = area + (r[3] - r[1]) * (r[4] - r[2]) end
     if area > OVERLAY_MAX_AREA * W * H then
-        gray:free()
+        gray:free(); if rgb then rgb:free() end
         return false, string.format("pieces cover %d%% of the screen (limit %d%%)", math.floor(area * 100 / (W * H)), math.floor(OVERLAY_MAX_AREA * 100))
     end
 
@@ -467,10 +483,15 @@ local function buildOverlayPieces(source_path)
     for _, r in ipairs(pieces_rects) do
         local x0, y0, x1, y1 = r[1], r[2], r[3], r[4]
         local w, h = x1 - x0, y1 - y0
-        local pb = Blitbuffer.new(w, h, Blitbuffer.TYPE_BB8A, nil, w * 2, w)
+        local pb
+        if color then
+            pb = Blitbuffer.new(w, h, Blitbuffer.TYPE_BBRGB32)
+        else
+            pb = Blitbuffer.new(w, h, Blitbuffer.TYPE_BB8A, nil, w * 2, w)
+        end
         local pstride = tonumber(pb.stride)
         ffi.fill(pb.data, pstride * h, 0)           -- everything transparent
-        -- NOTE: for a BB8A buffer `data` is an array of Color8A structs, not bytes: write through a byte pointer
+        -- NOTE: BB8A `data` is an array of Color8A structs (gray, alpha) and BBRGB32 an array of (r, g, b, alpha): write through a byte pointer
         local pp = ffi.cast("uint8_t*", pb.data)
         for y = 0, h - 1 do
             local srow = (y0 + y) * stride + x0
@@ -480,14 +501,20 @@ local function buildOverlayPieces(source_path)
                 local d = v - bg
                 if d < 0 then d = -d end
                 if d > OVERLAY_TOL then
-                    pp[drow + 2 * x] = v
-                    pp[drow + 2 * x + 1] = 255
+                    if color then
+                        local ro = (y0 + y) * rstride + (x0 + x) * 4
+                        local o = drow + 4 * x
+                        pp[o], pp[o + 1], pp[o + 2], pp[o + 3] = rp[ro], rp[ro + 1], rp[ro + 2], 255
+                    else
+                        pp[drow + 2 * x] = v
+                        pp[drow + 2 * x + 1] = 255
+                    end
                 end
             end
         end
         pieces[#pieces + 1] = { bb = pb, x = x0, y = y0, w = w, h = h }
     end
-    gray:free()
+    gray:free(); if rgb then rgb:free() end
     return pieces
 end
 
@@ -522,9 +549,15 @@ local function loadOverlayPieces(source_path)
                 local x, y, w, h = line:match("^(%d+) (%d+) (%d+) (%d+)$")
                 x, y, w, h = tonumber(x), tonumber(y), tonumber(w), tonumber(h)
                 if not (x and y and w and h) then error("bad overlay cache entry") end
-                local bytes = f:read(w * 2 * h)
-                if not bytes or #bytes ~= w * 2 * h then error("short overlay cache") end
-                local pb = Blitbuffer.new(w, h, Blitbuffer.TYPE_BB8A, nil, w * 2, w)
+                local bpp = overlayIsColor() and 4 or 2
+                local bytes = f:read(w * bpp * h)
+                if not bytes or #bytes ~= w * bpp * h then error("short overlay cache") end
+                local pb
+                if bpp == 4 then
+                    pb = Blitbuffer.new(w, h, Blitbuffer.TYPE_BBRGB32)
+                else
+                    pb = Blitbuffer.new(w, h, Blitbuffer.TYPE_BB8A, nil, w * 2, w)
+                end
                 ffi.copy(pb.data, bytes, #bytes)
                 pieces[i] = { bb = pb, x = x, y = y, w = w, h = h }
             end
@@ -568,7 +601,9 @@ function CustomBg:_setOverlay(source_path)
     -- White paper takes the gray of the picture, black text stays black (anti-aliased text only gets slightly darker).
     local multiply = CFG:readSetting(OVERLAY_BLEND_KEY) ~= "cover"
     self._overlay_multiply = multiply
-    for _, pc in ipairs(multiply and pieces or {}) do
+    self._overlay_color = overlayIsColor()
+    -- (colour pieces keep their RGB and are multiplied per channel while painting, see _paintOverlay)
+    for _, pc in ipairs((multiply and not self._overlay_color) and pieces or {}) do
         local pb = pc.bb
         local pstride = tonumber(pb.stride)
         local pp = ffi.cast("uint8_t*", pb.data)
@@ -587,11 +622,54 @@ function CustomBg:_setOverlay(source_path)
     return true
 end
 
+-- Colour screens: page * piece / 255 per channel (white paper takes the colour of the picture, black text stays black).
+-- No C blit does this, so it is a pixel loop over the piece (only its opaque pixels). Direct memory access when the screen buffer
+-- is a plain RGB32 one (not rotated, not inverted); otherwise the slower getPixel / setPixel path.
+function CustomBg:_multiplyColorPiece(bb, p, dx, dy)
+    local src = ffi.cast("uint8_t*", p.bb.data)
+    local sstride = tonumber(p.bb.stride)
+    local bw, bh = bb:getWidth(), bb:getHeight()
+    local direct = bb:getType() == Blitbuffer.TYPE_BBRGB32 and bb:getRotation() == 0 and bb:getInverse() == 0
+    local dst, dstride
+    if direct then
+        dst = ffi.cast("uint8_t*", bb.data)
+        dstride = tonumber(bb.stride)
+    end
+    for y = 0, p.h - 1 do
+        local py = dy + y
+        if py >= 0 and py < bh then
+            local srow = y * sstride
+            for x = 0, p.w - 1 do
+                local px = dx + x
+                local so = srow + 4 * x
+                if src[so + 3] ~= 0 and px >= 0 and px < bw then
+                    local r, g, b = src[so], src[so + 1], src[so + 2]
+                    if direct then
+                        local o = py * dstride + px * 4
+                        dst[o] = math.floor(dst[o] * r / 255)
+                        dst[o + 1] = math.floor(dst[o + 1] * g / 255)
+                        dst[o + 2] = math.floor(dst[o + 2] * b / 255)
+                    else
+                        local c = bb:getPixel(px, py):getColorRGB32()
+                        bb:setPixel(px, py, Blitbuffer.ColorRGB32(
+                            math.floor(c.r * r / 255), math.floor(c.g * g / 255), math.floor(c.b * b / 255), 0xFF))
+                    end
+                end
+            end
+        end
+    end
+end
+
 function CustomBg:_paintOverlay(bb, x, y)
     local ov = self._overlay
     if not ov then return end
     for _, p in ipairs(ov) do
-        pcall(self._overlay_multiply and bb.pmulalphablitFrom or bb.alphablitFrom, bb, p.bb, (x or 0) + p.x, (y or 0) + p.y, 0, 0, p.w, p.h)
+        if self._overlay_color and self._overlay_multiply then
+            local ok, err = pcall(self._multiplyColorPiece, self, bb, p, (x or 0) + p.x, (y or 0) + p.y)
+            if not ok then logger.warn("CustomBg: colour piece failed: " .. tostring(err)) end
+        else
+            pcall(self._overlay_multiply and bb.pmulalphablitFrom or bb.alphablitFrom, bb, p.bb, (x or 0) + p.x, (y or 0) + p.y, 0, 0, p.w, p.h)
+        end
     end
 end
 
