@@ -1452,11 +1452,52 @@ local function readWpmSession()
     f:close()
     if not raw or raw == "" then return 0, 0 end
     local wpm     = tonumber(raw:match('"wpm"%s*:%s*(%d+)'))
-    local pages   = tonumber(raw:match('"Pages"%s*:%s*(%d+)'))
+    local pages   = tonumber(raw:lower():match('"pages[%w_]*"%s*:%s*(%d+)'))
     local updated = tonumber(raw:match('"updated"%s*:%s*(%d+)'))
     if not wpm or not updated then return 0, 0 end
     if os.time() - updated > WPM_STALE_S then return 0, 0 end
     return wpm, pages or 0
+end
+
+-- Pages read in the session in progress: the distinct pages of
+-- page_stat_data since the session started (the window already saved the
+-- session, see onShowLongestSessions). If that gives nothing, the pages of
+-- wpm_session.json are used (only valid while that file is recent).
+local function getSessionPages(session_start)
+    local ui = getReaderUI()
+    local stats = ui and ui.statistics
+    -- the statistics plugin's own start of the session may be earlier
+    local from = tonumber(stats and stats.start_current_period) or 0
+    if from <= 0 or (session_start and session_start < from) then from = session_start end
+    from = math.floor(from)
+
+    -- 1. saved pages (page_stat_data); all the books, since `from`
+    local db_pages = 0
+    local rows = queryAll(string.format([[
+        SELECT COUNT(DISTINCT (id_book || ':' || page))
+        FROM page_stat_data WHERE start_time >= %d
+    ]], from), function(row) return tonumber(row[1]) or 0 end)
+    if rows and rows[1] then db_pages = rows[1] end
+
+    -- 2. pages still in the statistics plugin's memory (not saved yet)
+    local mem_pages = 0
+    if stats and type(stats.page_stat) == "table" then
+        for _page, list in pairs(stats.page_stat) do
+            for _i, tuple in ipairs(list) do
+                if (tonumber(tuple[1]) or 0) >= from and (tonumber(tuple[2]) or 0) > 0 then
+                    mem_pages = mem_pages + 1
+                    break
+                end
+            end
+        end
+    end
+
+    -- 3. the json of the wpm module
+    local _wpm, json_pages = readWpmSession()
+    local pages = math.max(db_pages, mem_pages, json_pages or 0)
+    logger.info(string.format("longest sessions: session pages db=%d mem=%d json=%s from=%d",
+        db_pages, mem_pages, tostring(json_pages), from))
+    return pages
 end
 
 -- Cleans a top bar text: drops its leading bullet, [b] tags and the object
@@ -1470,6 +1511,10 @@ end
 -- book. Right: time on this book, the session time, wpm and pages of the session.
 local function buildBookCard(w_width, session, book)
     local wpm, pages = readWpmSession()
+    if session then
+        -- the json may be stale or lack the pages: count them in the database
+        pages = math.max(pages, getSessionPages(os.time() - session))
+    end
     local right_rows = {
         { book and secondsToShortHM(book) or "-",       _("This book") },
         { session and secondsToShortHM(session) or "-", _("Session") },
@@ -2276,10 +2321,13 @@ local function buildTodayView(w_width)
         if st and st > 0 then session = math.max(0, os.time() - st) end
     end
     if session then
+        local pages = getSessionPages(os.time() - session)
+        local session_text = _("Current session") .. "  " .. secondsToShortHM(session)
+            .. SUMMARY_SEPARATOR .. tostring(pages) .. " " .. _("pages")
         session_line = CenterContainer:new{
             dimen = Geom:new{ w = w_width, h = Screen:scaleBySize(26) },
             TextWidget:new{
-                text = _("Current session") .. "  " .. secondsToShortHM(session),
+                text = session_text,
                 face = getFace(FONT_SUBTITLE), bold = true, fgcolor = COLOR_MUTED,
             },
         }
