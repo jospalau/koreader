@@ -59,6 +59,8 @@ local filemanagerutil = require("apps/filemanager/filemanagerutil")
 local FileManagerConverter = require("apps/filemanager/filemanagerconverter")
 local ButtonDialog = require("ui/widget/buttondialog")
 local BookList = require("ui/widget/booklist")
+local Version = require("version")
+local lfs = require("libs/libkoreader-lfs")
 
 local PageTextInfo = InputContainer:extend{
     is_enabled = nil,
@@ -4287,17 +4289,17 @@ function PageTextInfo:getCovers(filepath, max_w, max_h)
     -- Query database for books in this folder with covers
     local SQ3 = require("lua-ljsqlite3/init")
     local DataStorage = require("datastorage")
-    local db_conn = SQ3.open(DataStorage:getSettingsDir() .. "/bookinfo_cache.sqlite3")
-    db_conn:set_busy_timeout(5000)
 
 
     local res
     local special_cover = nil
     if not filepath:match("✪ Collections") and not filepath:match(" Metadata") then
+            local db_conn = SQ3.open(DataStorage:getSettingsDir() .. "/bookinfo_cache.sqlite3")
+            db_conn:set_busy_timeout(5000)
             local query = string.format([[
                 SELECT directory, filename FROM bookinfo
                 WHERE directory = '%s/' AND has_cover = 'Y'
-                ORDER BY filename ASC LIMIT 4;
+                ORDER BY filename ASC LIMIT 40;
         ]], filepath:gsub("'", "''"))
         res = db_conn:exec(query)
         db_conn:close()
@@ -4430,6 +4432,7 @@ function PageTextInfo:getSubfolderCoverStack(filepath, max_w, max_h, factor_x, f
             local num_books = #res[1]
             -- Save all covers
             for i = 1, num_books do
+                if #covers >= 4 then break end
                 local fullpath = res[1][i] .. res[2][i]
 
                 if util.fileExists(fullpath) then
@@ -4823,6 +4826,7 @@ function PageTextInfo:getSubfolderCoverGrid(filepath, max_w, max_h, mosaic)
             local images = {}
             local w, h = 0, 0
             for i = 1, num_books do
+                if #images >= 4 then break end -- the grid only has 4 slots
                 local fullpath = res[1][i] .. res[2][i]
 
                 if util.fileExists(fullpath) then
