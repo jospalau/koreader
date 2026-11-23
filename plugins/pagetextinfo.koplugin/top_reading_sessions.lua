@@ -17,6 +17,7 @@ local LineWidget = require("ui/widget/linewidget")
 local RightContainer = require("ui/widget/container/rightcontainer")
 local Screen = Device.screen
 local ScrollableContainer = require("ui/widget/container/scrollablecontainer")
+local TextBoxWidget = require("ui/widget/textboxwidget")
 local Size = require("ui/size")
 local TextWidget = require("ui/widget/textwidget")
 local UIManager = require("ui/uimanager")
@@ -1500,6 +1501,56 @@ local function getSessionPages(session_start)
     return pages
 end
 
+-- Words that count as one page when turning the words read into pages
+local WORDS_PER_PAGE = 300
+
+-- Figures over ALL the reading (not just the session in progress):
+--   * total sessions: the number of rows of wpm_stat_data
+--   * total read: the sum of their durations (seconds)
+--   * words per minute: the mean wpm of the saved sessions that have one (wpm > 0)
+--   * pages per day: pages read divided by the days that count as read
+--     (at least MIN_DAY_SECONDS of reading, like the other views)
+-- Not the screens read (they depend on the font size): the words of each session are estimated as
+-- wpm * minutes and divided by WORDS_PER_PAGE.
+-- Returns total_sessions, total_seconds, avg_wpm, pages_per_day (0 when there is no data).
+local function loadReadingStats()
+    local total_sessions, total_secs, avg_wpm, pages_per_day = 0, 0, 0, 0
+
+    local t = queryAll([[
+        SELECT COUNT(*), COALESCE(SUM(duration), 0), COALESCE(AVG(CASE WHEN wpm > 0 THEN wpm END), 0)
+        FROM wpm_stat_data
+    ]], function(row)
+        return { count = tonumber(row[1]) or 0, secs = tonumber(row[2]) or 0, wpm = tonumber(row[3]) or 0 }
+    end)
+    if t and t[1] then
+        total_sessions, total_secs, avg_wpm = t[1].count, t[1].secs, t[1].wpm
+    end
+
+    local d = queryAll(string.format([[
+        SELECT COUNT(*), COALESCE(SUM(words), 0) FROM (
+            SELECT SUM(wpm * duration / 60.0) AS words
+            FROM wpm_stat_data
+            WHERE start_time > 0
+            GROUP BY strftime('%%Y-%%m-%%d', start_time, 'unixepoch', 'localtime')
+            HAVING SUM(duration) >= %d
+        )
+    ]], MIN_DAY_SECONDS), function(row)
+        return { days = tonumber(row[1]) or 0, words = tonumber(row[2]) or 0 }
+    end)
+    if d and d[1] and d[1].days > 0 then
+        pages_per_day = d[1].words / WORDS_PER_PAGE / d[1].days
+    end
+    return total_sessions, total_secs, avg_wpm, pages_per_day
+end
+
+-- Whole number from 10 up, one decimal below ("7.4"), "0" for nothing
+local function formatAverage(v)
+    v = tonumber(v) or 0
+    if v <= 0 then return "0" end
+    if v >= 10 then return tostring(math.floor(v + 0.5)) end
+    return string.format("%.1f", v)
+end
+
 -- Cleans a top bar text: drops its leading bullet, [b] tags and the object
 -- replacement character.
 local function cleanTopBarText(s)
@@ -1507,20 +1558,100 @@ local function cleanTopBarText(s)
     return (s:match("^%s*(.-)%s*$"))
 end
 
+-- Small window with the same look as the summary (white, rounded, outlined) that explains the figures of the
+-- book card. A tap (or Back) closes it. Only shown from the summary, never while reading.
+local ExplainWindow = InputContainer:extend{
+    modal = true,
+    name = "longest_sessions_explain",
+}
+
+function ExplainWindow:init()
+    local sw, sh = Screen:getWidth(), Screen:getHeight()
+    local w = math.floor(sw * 0.86)
+    local inner_w = w - 2 * (CARD_PAD + Screen:scaleBySize(2))
+    local vg = VerticalGroup:new{ align = "left" }
+    vg[#vg + 1] = TextWidget:new{
+        text = self.title, face = getFace(FONT_TITLE), bold = true,
+        fgcolor = COLOR_TEXT, max_width = inner_w,
+    }
+    for _i, item in ipairs(self.items) do
+        vg[#vg + 1] = VerticalSpan:new{ width = SPACE.m }
+        vg[#vg + 1] = LineWidget:new{
+            background = COLOR_TRACK, dimen = Geom:new{ w = inner_w, h = Size.line.thin },
+        }
+        vg[#vg + 1] = VerticalSpan:new{ width = SPACE.m }
+        vg[#vg + 1] = TextWidget:new{
+            text = item[1], face = getFace(FONT_TEXT), bold = true,
+            fgcolor = COLOR_TEXT, max_width = inner_w,
+        }
+        vg[#vg + 1] = VerticalSpan:new{ width = SPACE.s }
+        vg[#vg + 1] = TextBoxWidget:new{
+            text = item[2], face = getFace(FONT_SUMMARY), fgcolor = COLOR_MUTED, width = inner_w,
+        }
+    end
+    local frame = FrameContainer:new{
+        radius = Screen:scaleBySize(28),
+        bordersize = Screen:scaleBySize(2),
+        padding = CARD_PAD,
+        margin = 0,
+        background = Blitbuffer.COLOR_WHITE,
+        vg,
+    }
+    self.dimen = Geom:new{ x = 0, y = 0, w = sw, h = sh }
+    self[1] = CenterContainer:new{ dimen = self.dimen, frame }
+    self.frame = frame
+    if Device:hasKeys() then
+        self.key_events.Close = { { Device.input.group.Back } }
+    end
+    if Device:isTouchDevice() then
+        self.ges_events.TapClose = { GestureRange:new{ ges = "tap", range = self.dimen } }
+        self.ges_events.Swipe = { GestureRange:new{ ges = "swipe", range = self.dimen } }
+    end
+end
+
+function ExplainWindow:onShow()
+    UIManager:setDirty(self, function() return "ui", self.frame.dimen end)
+    return true
+end
+
+function ExplainWindow:onClose()
+    UIManager:close(self, "ui", self.frame.dimen)
+    return true
+end
+ExplainWindow.onTapClose = ExplainWindow.onClose
+function ExplainWindow:onSwipe() return self:onClose() end
+
+-- The book card of the summary on screen (a row of two cards), for the hold that explains it
+local summary_book_card = nil
+local summary_book_reading = false  -- true: the card shows the session in progress; false: the totals
+
 -- Two columns. Left: title, series, words and publication year of the open
--- book. Right: time on this book, the session time, wpm and pages of the session.
+-- book. Right: totals and averages of all the reading: total time read, total
+-- number of sessions, wpm of the sessions and pages per day read.
 local function buildBookCard(w_width, session, book)
-    local wpm, pages = readWpmSession()
+    local right_rows
+    summary_book_reading = session ~= nil
     if session then
+        -- reading: this book, the session in progress, its wpm and its pages
+        local wpm, pages = readWpmSession()
         -- the json may be stale or lack the pages: count them in the database
         pages = math.max(pages, getSessionPages(os.time() - session))
+        right_rows = {
+            { book and secondsToShortHM(book) or "-",       _("This book") },
+            { secondsToShortHM(session),                    _("Session") },
+            { tostring(wpm),                                _("wpm") },
+            { tostring(pages),                              _("pages") },
+        }
+    else
+        -- not reading: totals of all the reading
+        local total_sessions, total_secs, avg_wpm, pages_per_day = loadReadingStats()
+        right_rows = {
+            { string.format("%.1fd", total_secs / SECONDS_PER_DAY), _("Total read") },
+            { tostring(total_sessions),                     _("Total sessions") },
+            { formatAverage(avg_wpm),                       _("avg wpm") },
+            { formatAverage(pages_per_day),                 _("pages/day") },
+        }
     end
-    local right_rows = {
-        { book and secondsToShortHM(book) or "-",       _("This book") },
-        { session and secondsToShortHM(session) or "-", _("Session") },
-        { tostring(wpm),                                _("wpm") },
-        { tostring(pages),                              _("pages") },
-    }
 
     local function leftContent(inner_w)
         local ui = getReaderUI()
@@ -1563,7 +1694,7 @@ local function buildBookCard(w_width, session, book)
         return vg
     end
 
-    return buildCardRow(w_width, 0.5,
+    local row = buildCardRow(w_width, 0.5,
         function(w, h)
             local inner_w = cardInnerWidth(w)
             local c = leftContent(inner_w)
@@ -1572,6 +1703,8 @@ local function buildBookCard(w_width, session, book)
             }, h)
         end,
         function(w, h) return makeCard(w, buildStatRows(cardInnerWidth(w), right_rows), h) end)
+    summary_book_card = row
+    return row
 end
 
 -- ── Tappable zones of the summary ────────────────────────────────────────────
@@ -2723,6 +2856,9 @@ function ShowLongestSessionsWindow:_buildUI()
         self.ges_events.Swipe = {
             GestureRange:new{ ges = "swipe", range = self.dimen },
         }
+        self.ges_events.HoldExplain = {
+            GestureRange:new{ ges = "hold", range = self.dimen },
+        }
     end
     Perf.log("_buildUI TOTAL (view " .. self.current_view .. ")", t_ui)
 end
@@ -2786,6 +2922,41 @@ end
 function ShowLongestSessionsWindow:onClose()
     local frame_dimen = self[1] and self[1][1] and self[1][1].dimen
     UIManager:close(self, "ui", frame_dimen)
+    return true
+end
+
+-- Hold on the right card of the book card (bottom right of the summary): a window explaining its four figures.
+-- A hold anywhere else on this window is swallowed, so it never reaches the reader underneath.
+function ShowLongestSessionsWindow:onHoldExplain(arg, ges)
+    if VIEWS[self.current_view].build ~= buildSummaryView or not (ges and ges.pos) then
+        return true
+    end
+    local rc = summary_book_card and summary_book_card[3]
+    local rd = rc and rc.dimen
+    if not (rd and rd.w and rd.w > 0) then return true end
+    local pos = ges.pos
+    if pos.x < rd.x or pos.x >= rd.x + rd.w or pos.y < rd.y or pos.y >= rd.y + rd.h then
+        return true
+    end
+    local title, items
+    if summary_book_reading then
+        title = _("This session")
+        items = {
+            { _("This book"), _("Total time read on the open book.") },
+            { _("Session"), _("Time of the reading session in progress.") },
+            { _("wpm"), _("Words per minute of the session in progress, from the real words of each page turned.") },
+            { _("pages"), _("Pages read in the session in progress.") },
+        }
+    else
+        title = _("Reading totals")
+        items = {
+            { _("Total read"), _("Days of reading: the sum of the duration of all the saved sessions.") },
+            { _("Total sessions"), _("Number of reading sessions saved in the statistics database.") },
+            { _("avg wpm"), _("Mean words per minute of all the sessions that have one. It is based on the real words of each page turned, so it does not depend on the font.") },
+            { _("pages/day"), _("Words read per day divided by 300 words per page, over the days with at least 5 minutes of reading. The words of a session are estimated as wpm x minutes, so the figure is approximate and does not depend on the font size.") },
+        }
+    end
+    UIManager:show(ExplainWindow:new{ title = title, items = items }, "ui")
     return true
 end
 
