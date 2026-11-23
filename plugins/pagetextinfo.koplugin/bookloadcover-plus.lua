@@ -520,54 +520,29 @@ local function getWidgetText(widget)
 	return nil
 end
 
-local function textHasAllWords(text, words)
-	for _i, word in ipairs(words) do
-		if not text:find(word, 1, true) then
-			return false
-		end
-	end
-	return true
+-- Lowercase, trim, and drop a trailing "…" / "..." so "Closing book…" == "Closing book".
+local function normalizeNoticeText(text)
+	text = text:gsub("^%s+", ""):gsub("%s+$", "")
+	text = text:gsub("…$", ""):gsub("%.%.%.$", "")
+	text = text:gsub("%s+$", "")
+	return text:lower()
 end
 
+-- Only the exact "Closing book…" notice matches (in the user's language, or in English).
+-- Any other text, however it is worded, is never touched.
 local function textLooksLikeClosingBookNotice(text)
 	if type(text) ~= "string" then
 		return false
 	end
 
-	-- The real notice is a short "Closing book…"; longer texts (like menu help messages that
-	-- merely contain those words) must never be swallowed.
-	if #text > 60 then
-		return false
-	end
-
-	local normalized = text:lower()
-	local localized = {
+	local normalized = normalizeNoticeText(text)
+	local candidates = {
 		_("Closing book…"),
-		_("Closing book..."),
-		_("Closing book"),
+		"Closing book…",
 	}
 
-	for _i, candidate in ipairs(localized) do
-		if type(candidate) == "string" and candidate ~= "" and normalized:find(candidate:lower(), 1, true) then
-			return true
-		end
-	end
-
-	local word_sets = {
-		{ "closing", "book" }, -- English
-		{ "fechando", "livro" }, -- Portuguese
-		{ "chiusura", "libro" }, -- Italian
-		{ "chiudendo", "libro" }, -- Italian alternative
-		{ "fermeture", "livre" }, -- French
-		{ "cerrando", "libro" }, -- Spanish
-		{ "schließen", "buch" }, -- German
-		{ "schlies", "buch" }, -- German fallback without ß
-		{ "закры", "кни" }, -- Russian stem fallback
-		{ "Закры", "кни" }, -- Russian, capitalized (lower() is ASCII-only)
-	}
-
-	for _i, words in ipairs(word_sets) do
-		if textHasAllWords(normalized, words) or textHasAllWords(text, words) then
+	for _i, candidate in ipairs(candidates) do
+		if type(candidate) == "string" and candidate ~= "" and normalized == normalizeNoticeText(candidate) then
 			return true
 		end
 	end
