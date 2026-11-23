@@ -162,6 +162,14 @@ local function hashString(s)
     return string.format("%x", h)
 end
 
+-- Stamp of a source file (mtime + size): caches are keyed by it, so replacing an image that keeps its file name
+-- never reuses the old scaled image / old pieces / old "FALLBACK" verdict.
+local function srcStamp(path)
+    local a = path and lfs.attributes(path)
+    if not a then return "" end
+    return ":" .. tostring(a.modification or 0) .. ":" .. tostring(a.size or 0)
+end
+
 local function getPluginDir()
     local info = debug.getinfo(1, "S")
     local script_path = info.source:sub(2)
@@ -230,7 +238,7 @@ local function getScaledPath(source_path)
     -- Fix: the original implementation used gsub("[^%w%.%-]","_"), which replaced every multi-byte character (e.g. Chinese) with "_",
     -- so images with different names got the same cache filename, hit the same cache and showed each other's picture.
     -- Now the full path is hashed, so each source file gets a unique cache entry (also distinguished by screen resolution).
-    local cache_name = hashString(source_path)
+    local cache_name = hashString(source_path .. srcStamp(source_path))
     local cache_path = getCacheDir() .. string.format("%s%dx%d_%s.png", bgCacheTag(), screen_w, screen_h, cache_name)
     do
         local cattr = lfs.attributes(cache_path)
@@ -278,7 +286,7 @@ local function getRotatedScaledPath(source_path)
     local screen_w = Device.screen:getWidth()
     local screen_h = Device.screen:getHeight()
     local cache_path = getCacheDir() .. string.format("rot90_%s%dx%d_%s.png",
-        bgCacheTag(), screen_w, screen_h, hashString(source_path))
+        bgCacheTag(), screen_w, screen_h, hashString(source_path .. srcStamp(source_path)))
     do
         local cattr = lfs.attributes(cache_path)
         if cattr and cattr.mode == "file" and (cattr.size or 0) > 1024 then
@@ -353,7 +361,9 @@ local function overlayIsColor()
 end
 
 local function overlayCachePath(source_path)
-    return getCacheDir() .. string.format("ovl2%s_%dx%d_%s.bin", overlayIsColor() and "c" or "", Screen:getWidth(), Screen:getHeight(), hashString(source_path))
+    -- "ovl3": new background detection. The tolerance and the area limit are part of the name, so changing them rebuilds the pieces.
+    return getCacheDir() .. string.format("ovl3_%d_%d%s_%dx%d_%s.bin", OVERLAY_TOL, math.floor(OVERLAY_MAX_AREA * 100),
+        overlayIsColor() and "c" or "", Screen:getWidth(), Screen:getHeight(), hashString(source_path .. srcStamp(source_path)))
 end
 
 -- Returns a list of pieces { bb = BB8A, x, y, w, h }, an empty list (image is blank), or false (use the classic background)
@@ -387,10 +397,27 @@ local function buildOverlayPieces(source_path)
     local gp = ffi.cast("uint8_t*", gray.data)
     local stride = tonumber(gray.stride)
 
-    -- Background value of the image: median of the four corners
-    local corners = { gp[0], gp[W - 1], gp[(H - 1) * stride], gp[(H - 1) * stride + W - 1] }
-    table.sort(corners)
-    local bg = corners[2]
+    -- Background value of the image: the most frequent gray (histogram of the whole image, 4-level bins, neighbours added).
+    -- The old "median of the four corners" took the picture itself as background when it touched two or more corners
+    -- (a strip along the bottom, a frame with corner ornaments), which made the paper count as content -> classic background.
+    local hcnt, hsum = {}, {}
+    for b = -1, 64 do hcnt[b] = 0; hsum[b] = 0 end
+    for y = 0, H - 1, 3 do
+        local row = y * stride
+        for x = 0, W - 1, 3 do
+            local v = gp[row + x]
+            local b = math.floor(v / 4)
+            hcnt[b] = hcnt[b] + 1
+            hsum[b] = hsum[b] + v
+        end
+    end
+    local best_b, best_n = 0, -1
+    for b = 0, 63 do
+        local n = hcnt[b - 1] + hcnt[b] + hcnt[b + 1]
+        if n > best_n then best_b, best_n = b, n end
+    end
+    local bsum = hsum[best_b - 1] + hsum[best_b] + hsum[best_b + 1]
+    local bg = math.floor(bsum / math.max(1, best_n) + 0.5)
 
     -- Tight bounding box of the content inside [x0,x1) x [y0,y1); returns nil when there is none. Max values are exclusive.
     local function contentBBox(x0, y0, x1, y1)
@@ -592,7 +619,21 @@ function CustomBg:_setOverlay(source_path)
     if not source_path then self._overlay_info = "no image"; return false end
     local ok, pieces, why = pcall(loadOverlayPieces, source_path)
     if not ok then self._overlay_info = "ERROR " .. tostring(pieces); return false end
-    if pieces == false or pieces == nil then self._overlay_info = "classic background: " .. tostring(why); return false end
+    if pieces == false or pieces == nil then
+        self._overlay_info = "classic background: " .. tostring(why)
+        self._ovl_warned = self._ovl_warned or {}
+        local wk = tostring(source_path) .. "|" .. tostring(why)
+        if not self._ovl_warned[wk] then
+            self._ovl_warned[wk] = true
+            UIManager:scheduleIn(2, function()
+                UIManager:show(InfoMessage:new{
+                    text = _("Draw as pieces: this image uses the classic full-page background.\n\n") .. tostring(why),
+                    timeout = 6,
+                })
+            end)
+        end
+        return false
+    end
     local parts = {}
     for _, p in ipairs(pieces) do parts[#parts + 1] = string.format("%dx%d@%d,%d", p.w, p.h, p.x, p.y) end
     self._overlay_info = "ON, " .. #pieces .. " piece(s): " .. table.concat(parts, " ")
@@ -668,7 +709,7 @@ function CustomBg:_paintOverlay(bb, x, y)
             local ok, err = pcall(self._multiplyColorPiece, self, bb, p, (x or 0) + p.x, (y or 0) + p.y)
             if not ok then logger.warn("CustomBg: colour piece failed: " .. tostring(err)) end
         else
-            pcall(self._overlay_multiply and bb.pmulalphablitFrom or bb.alphablitFrom, bb, p.bb, (x or 0) + p.x, (y or 0) + p.y, 0, 0, p.w, p.h)
+            pcall(self._overlay_multiply and (bb.pmulalphablitFrom or bb.alphablitFrom) or bb.alphablitFrom, bb, p.bb, (x or 0) + p.x, (y or 0) + p.y, 0, 0, p.w, p.h)
         end
     end
 end
@@ -952,6 +993,7 @@ function CustomBg:loadBackgroundByName(name, from_menu)
     self._bg_last_scene = self:getSceneMode()
     self._bg_last_dir = self.fs_line_direction
     self._bg_last_rot = (self.ui.document._is_rotated_by_plugin == true)
+    self._bg_last_ovl = isOverlayMode()
     self._bg_last_sw = Screen:getWidth()
     self._bg_last_sh = Screen:getHeight()
     self:_syncNoFlash()
@@ -1803,6 +1845,7 @@ function CustomBg:_reapplyBackgroundImage(doc)
     if name == self._bg_last_name and self._bg_last_scene == self:getSceneMode()
        and self._bg_last_dir == self.fs_line_direction
        and self._bg_last_rot == rot
+       and self._bg_last_ovl == isOverlayMode()
        and self._bg_last_sw == sw and self._bg_last_sh == sh then
         return false   -- state unchanged, no re-apply needed
     end
@@ -1810,6 +1853,7 @@ function CustomBg:_reapplyBackgroundImage(doc)
     self._bg_last_scene = self:getSceneMode()
     self._bg_last_dir = self.fs_line_direction
     self._bg_last_rot = rot
+    self._bg_last_ovl = isOverlayMode()
     self._bg_last_sw = sw
     self._bg_last_sh = sh
     local overlay_active = false
@@ -4236,10 +4280,14 @@ function CustomBg:addToMainMenu(menu_items)
                                                 local a = lfs.attributes(scaled)
                                                 out[#out + 1] = "Scaled size: " .. tostring(a and a.size)
                                             end
-                                            local ok2, err = pcall(function()
-                                                d:setBackgroundImage(ok and scaled or src)
-                                            end)
-                                            out[#out + 1] = "Apply: " .. (ok2 and "ok" or ("ERROR " .. tostring(err)))
+                                            if self._overlay_active then
+                                                out[#out + 1] = "Apply: skipped (pieces mode is active, crengine gets no image)"
+                                            else
+                                                local ok2, err = pcall(function()
+                                                    d:setBackgroundImage(ok and scaled or src)
+                                                end)
+                                                out[#out + 1] = "Apply: " .. (ok2 and "ok" or ("ERROR " .. tostring(err)))
+                                            end
                                         end
                                         return table.concat(out, "\n")
                                     end)(),
