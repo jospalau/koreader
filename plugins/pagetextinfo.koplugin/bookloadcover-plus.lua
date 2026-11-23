@@ -16,7 +16,7 @@ local _ = require("gettext")
 
 local PLUGIN_NAME = "BookLoadCover Plus"
 local LOG_PREFIX = PLUGIN_NAME .. " patch:"
-local PATCH_VERSION = "v1.2.1"
+local PATCH_VERSION = "v1.2.5"
 
 local function pluginName()
 	return _("BookLoadCover Plus")
@@ -352,6 +352,13 @@ local function closeBookInfoDbIfLoaded()
 end
 
 local function closeCover()
+	if State.notice_widget then
+		pcall(function()
+			UIManager:close(State.notice_widget)
+		end)
+		State.notice_widget = nil
+	end
+
 	if State.cover_widget then
 		local ok, err = pcall(function()
 			UIManager:close(State.cover_widget)
@@ -366,10 +373,17 @@ local function closeCover()
 	closeBookInfoDbIfLoaded()
 end
 
+-- Widgets created with timeout == 0.0 are third-party "Closing book…" notices
+-- (e.g. Bookshelf). They are left alone: not suppressed and not closed.
+local function isForeignClosingNotice(widget)
+	return type(widget) == "table" and widget.timeout == 0.0
+end
+
 local function closeOverlayWidgets()
+	local kept = {}
 	local stack = UIManager._window_stack
 	if not stack or #stack == 0 then
-		return
+		return kept
 	end
 
 	local widgets = {}
@@ -386,15 +400,20 @@ local function closeOverlayWidgets()
 			if name == "readerui" or name == "filemanager" or name == "bookshelf" then
 				break
 			end
-			local ok, err = pcall(function()
-				UIManager:close(widget)
-			end)
-			if not ok then
-				warn("failed to close overlay widget before showing cover", err)
+			if isForeignClosingNotice(widget) then
+				table.insert(kept, widget)
+			else
+				local ok, err = pcall(function()
+					UIManager:close(widget)
+				end)
+				if not ok then
+					warn("failed to close overlay widget before showing cover", err)
+				end
 			end
 		end
 	end
 	UIManager:forceRePaint()
+	return kept
 end
 
 local function scheduleCloseCover(delay)
@@ -908,7 +927,7 @@ local function showCover(filepath, options)
 	-- cancel stale close timers so they can't remove this new cover early
 	UIManager:unschedule(closeCover)
 	closeCover()
-	closeOverlayWidgets()
+	local kept_notices = closeOverlayWidgets()
 
 	local cover_bb, needs_free = findCover(filepath, options)
 	if not cover_bb then
@@ -936,6 +955,26 @@ local function showCover(filepath, options)
 		warn("failed to display cover", err)
 		freeOwnedCover()
 		return false
+	end
+
+	-- "Cover + default widgets": put the third-party "Closing book…" notice back on top of the cover.
+	if options.reason == "close" and getCloseMode() == Mode.cover_with_widgets then
+		-- The third-party notice may already be gone (or hidden under the cover), so drop it
+		-- and show our own persistent notice above the cover instead.
+		for _i, notice in ipairs(kept_notices) do
+			pcall(function()
+				UIManager:close(notice)
+			end)
+		end
+		pcall(function()
+			local notice = InfoMessage:new({ text = _("Closing book…") })
+			State.notice_widget = notice
+			UIManager:show(notice)
+			UIManager:setDirty(notice, function()
+				return "partial", notice.dimen
+			end)
+		end)
+		UIManager:forceRePaint()
 	end
 
 	State.cover_widget = cover_widget
@@ -1212,7 +1251,8 @@ local function patchUIManagerShow()
 
 	UIManager.show = function(self, widget, ...)
 		if
-			widgetLooksLikeClosingBookNotice(widget)
+			not (isForeignClosingNotice(widget) and not shouldSuppressClosingNotice())
+			and widgetLooksLikeClosingBookNotice(widget)
 			and (State.suppress_closing_notice or shouldSuppressClosingNotice())
 		then
 			startSuppressingClosingNotice()
