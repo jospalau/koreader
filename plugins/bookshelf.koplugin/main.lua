@@ -3791,8 +3791,9 @@ function Bookshelf:onBookshelfRefresh()
     self:onBookMetadataChanged()
 end
 
-function Bookshelf:markMetadataDirty()
+function Bookshelf:markMetadataDirty(filepath)
     local Repo = require("lib/bookshelf_book_repository")
+    if filepath and Repo.invalidateProgressCache then Repo.invalidateProgressCache(filepath) end
     if Repo.invalidateBookCache then Repo.invalidateBookCache("StatusChanged") end
     if _live_widget then
         _live_widget._metadata_dirty_force_full_refresh = true

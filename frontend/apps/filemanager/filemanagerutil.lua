@@ -252,26 +252,53 @@ function filemanagerutil.genStatusButtonsRow(doc_settings_or_file, caller_callba
                 -- BookList.getBookInfo() is invoked in many places to retrieve the proper updated information
                 -- require("bookinfomanager"):deleteBookInfo(file)
 
-                if G_reader_settings:isTrue("top_manager_infmandhistory")
-                    and util.getFileNameSuffix(file) == "epub"
-                    and _G.all_files
-                    and _G.all_files[file] then
-                        _G.all_files[file].status = to_status
-                        local pattern = "(%d+)-(%d+)-(%d+)"
-                        local last_modified_date = filemanagerutil.getLastModified(file)
-                        local ryear, rmonth, rday = last_modified_date:match(pattern)
-                        _G.all_files[file].last_modified_year = ryear
-                        _G.all_files[file].last_modified_month = rmonth
-                        _G.all_files[file].last_modified_day = rday
+                pcall(function()
+                    if G_reader_settings:isTrue("top_manager_infmandhistory")
+                        and util.getFileNameSuffix(file) == "epub"
+                        and _G.all_files
+                        and _G.all_files[file] then
+                            _G.all_files[file].status = to_status
+                            local pattern = "(%d+)-(%d+)-(%d+)"
+                            local last_modified_date = filemanagerutil.getLastModified(file) or os.date("%Y-%m-%d")
+                            local ryear, rmonth, rday = last_modified_date:match(pattern)
+                            _G.all_files[file].last_modified_year = ryear
+                            _G.all_files[file].last_modified_month = rmonth
+                            _G.all_files[file].last_modified_day = rday
 
-                        local util = require("util")
-                        util.generateStats()
-                        UIManager:broadcastEvent(Event:new("FooterStatsRefresh"))
-                end
-                caller_callback(file, to_status)
+                            local util = require("util")
+                            util.generateStats()
+                            UIManager:broadcastEvent(Event:new("FooterStatsRefresh"))
+                    end
+                end)
+                -- Bookshelf keeps its own caches that only its live widget refreshes, so call its own
+                -- method (it works with Bookshelf closed).
+                pcall(function()
+                    local fm = require("apps/filemanager/filemanager").instance
+                    local bookshelf = fm and fm.bookshelf
+                    if bookshelf then bookshelf:markMetadataDirty(file) end
+                end)
+                -- Bookshelf listens to BookMetadataChanged (drops its caches and rebuilds the shelf)
+                pcall(function()
+                    UIManager:broadcastEvent(Event:new("BookMetadataChanged"))
+                end)
+                -- The history order must be up to date before the list is redrawn
                 local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-                ui.history:sortHistoryByStatus()
+                pcall(function()
+                    ui.history:sortHistoryByStatus()
+                end)
                 _G.history_status_changed = true
+                -- Refresh on the next tick, once cache, history order and flags are settled.
+                -- The extra updateItems is needed so the rows are redrawn after a display mode switch.
+                UIManager:nextTick(function()
+                    pcall(caller_callback, file, to_status)
+                    UIManager:nextTick(function()
+                        pcall(function()
+                            local fm = require("apps/filemanager/filemanager").instance
+                            local fc = fm and fm.file_chooser
+                            if fc then fc:updateItems(1, true) end
+                        end)
+                    end)
+                end)
                 if ui and ui.history and ui.history.booklist_menu then
                     ui.history:fetchStatuses(false)
                     ui.history:updateItemTable()
@@ -323,7 +350,7 @@ function filemanagerutil.genMultipleStatusButtonsRow(files, caller_callback, but
                                 and _G.all_files[file] then
                                     _G.all_files[file].status = to_status
                                     local pattern = "(%d+)-(%d+)-(%d+)"
-                                    local last_modified_date = filemanagerutil.getLastModified(file)
+                                    local last_modified_date = filemanagerutil.getLastModified(file) or os.date("%Y-%m-%d")
                                     local ryear, rmonth, rday = last_modified_date:match(pattern)
                                     _G.all_files[file].last_modified_year = ryear
                                     _G.all_files[file].last_modified_month = rmonth
