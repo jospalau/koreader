@@ -24,7 +24,7 @@ local _ = require("gettext")
 
 local PLUGIN_NAME = "BookLoadCover Plus"
 local LOG_PREFIX = PLUGIN_NAME .. " patch:"
-local PATCH_VERSION = "v1.6.5"
+local PATCH_VERSION = "v1.6.8"
 
 local function pluginName()
 	return _("BookLoadCover Plus")
@@ -65,6 +65,7 @@ local Settings = {
 	status_label_open = "bookloadcover_status_label_open",
 	status_label_close = "bookloadcover_status_label_close",
 	status_icon = "bookloadcover_status_icon",
+	refresh_mode = "bookloadcover_refresh_mode",
 	suppress_closing_notice = "bookloadcover_suppress_closing_notice",
 	open_close_delay = "bookloadcover_close_delay",
 	after_close_delay = "bookloadcover_after_close_delay",
@@ -258,6 +259,11 @@ local function shouldShowStatusIcon()
 	return G_reader_settings:nilOrTrue(Settings.status_icon)
 end
 
+local function getRefreshMode()
+	local mode = G_reader_settings:readSetting(Settings.refresh_mode, "full")
+	return mode == "partial" and "partial" or "full"
+end
+
 local function shouldShowOnTeardown()
 	return G_reader_settings:isTrue(Settings.close_on_teardown)
 end
@@ -419,6 +425,7 @@ local function closeOverlayWidgets()
 		end
 	end
 
+	local closed_any = false
 	for _i, widget in ipairs(widgets) do
 		if widget ~= State.cover_widget then
 			local name = type(widget.name) == "string" and widget.name:lower() or nil
@@ -428,6 +435,7 @@ local function closeOverlayWidgets()
 			if isForeignClosingNotice(widget) then
 				table.insert(kept, widget)
 			else
+				closed_any = true
 				local ok, err = pcall(function()
 					UIManager:close(widget)
 				end)
@@ -437,7 +445,10 @@ local function closeOverlayWidgets()
 			end
 		end
 	end
-	UIManager:forceRePaint()
+	-- Only repaint if something was actually closed: an extra repaint is a visible flicker.
+	if closed_any then
+		UIManager:forceRePaint()
+	end
 	return kept
 end
 
@@ -520,6 +531,12 @@ end
 
 local function textLooksLikeClosingBookNotice(text)
 	if type(text) ~= "string" then
+		return false
+	end
+
+	-- The real notice is a short "Closing book…"; longer texts (like menu help messages that
+	-- merely contain those words) must never be swallowed.
+	if #text > 60 then
 		return false
 	end
 
@@ -1057,17 +1074,27 @@ local function makeStatusLabelWidget(reason, screen_w, screen_h, filepath, optio
 	if icon_path then
 		local ok, group = pcall(function()
 			local icon_size = Screen:scaleBySize(36)
+			local text_size = text_widget:getSize()
+			-- Both the icon and the text sit in boxes of the same height with their content
+			-- centred vertically, so they always line up with each other and with the pill.
+			local row_h = math.max(icon_size, text_size.h)
 			return HorizontalGroup:new({
 				align = "center",
-				ImageWidget:new({
-					file = icon_path,
-					width = icon_size,
-					height = icon_size,
-					scale_factor = 0,
-					alpha = true,
+				CenterContainer:new({
+					dimen = Geom:new({ w = icon_size, h = row_h }),
+					ImageWidget:new({
+						file = icon_path,
+						width = icon_size,
+						height = icon_size,
+						scale_factor = 0,
+						alpha = true,
+					}),
 				}),
 				HorizontalSpan:new({ width = Screen:scaleBySize(10) }),
-				text_widget,
+				CenterContainer:new({
+					dimen = Geom:new({ w = text_size.w, h = row_h }),
+					text_widget,
+				}),
 			})
 		end)
 		if ok and group then
@@ -1147,7 +1174,8 @@ local function showCover(filepath, options)
 	end
 
 	local ok, err = pcall(function()
-		UIManager:show(cover_widget, "full")
+		-- Reloads happen while reading: a "ui" refresh avoids the full-screen flash.
+		UIManager:show(cover_widget, options.reload and "ui" or getRefreshMode())
 		if options.reason == "close" then
 			UIManager:forceRePaint()
 		end
@@ -1297,6 +1325,33 @@ local function makeCardSizeMenu()
 	return items
 end
 
+local function makeRefreshModeMenu()
+	local items = {}
+	local modes = {
+		{ id = "full", label = _("Full (clean, flashes)") },
+		{ id = "partial", label = _("Partial (no flash, may ghost)") },
+	}
+
+	for _i, entry in ipairs(modes) do
+		table.insert(items, {
+			text = entry.label,
+			radio = true,
+			keep_menu_open = true,
+			checked_func = function()
+				return getRefreshMode() == entry.id
+			end,
+			callback = function(touchmenu_instance)
+				saveSetting(Settings.refresh_mode, entry.id)
+				if touchmenu_instance then
+					touchmenu_instance:updateItems()
+				end
+			end,
+		})
+	end
+
+	return items
+end
+
 local function showVersionInfo()
 	UIManager:show(InfoMessage:new({
 		text = pluginName() .. "\n" .. _("Version") .. ": " .. PATCH_VERSION,
@@ -1351,6 +1406,18 @@ function BookLoadCoverMenu:addToMainMenu(menu_items)
 						end,
 						keep_menu_open = true,
 						sub_item_table = makeLayoutModeMenu(),
+					},
+					{
+						text_func = function()
+							return _("Refresh when showing cover") .. ": " .. (getRefreshMode() == "partial" and _("Partial") or _("Full"))
+						end,
+						keep_menu_open = true,
+						hold_callback = function()
+							UIManager:show(InfoMessage:new({
+								text = _("Used when entering or leaving a book.\nInternal reloads (changing document settings) always use the non-flashing \"ui\" refresh."),
+							}))
+						end,
+						sub_item_table = makeRefreshModeMenu(),
 					},
 					{
 						text = _("Show label on cover"),
@@ -1509,6 +1576,24 @@ local function patchUIManagerShow()
 	end
 end
 
+-- KOReader shows its own "Opening file…" notice (with a repaint) in showReader() BEFORE
+-- showReaderCoroutine runs, so forcing seamless later is too late: that notice flashes
+-- just before our cover appears. Force seamless here, at the entry point.
+local function patchShowReader()
+	if not ReaderUI.showReader or ReaderUI._original_showReader_bookloadcover then
+		return
+	end
+
+	ReaderUI._original_showReader_bookloadcover = ReaderUI.showReader
+
+	ReaderUI.showReader = function(self, file, provider, seamless, ...)
+		if shouldUseSeamlessOpening() then
+			seamless = true
+		end
+		return ReaderUI._original_showReader_bookloadcover(self, file, provider, seamless, ...)
+	end
+end
+
 local function patchShowReaderCoroutine()
 	if ReaderUI._original_showReaderCoroutine_bookloadcover then
 		return
@@ -1663,6 +1748,7 @@ end
 ReaderUI = require("apps/reader/readerui")
 patchUIManagerShow()
 patchFileManagerMenu()
+patchShowReader()
 patchShowReaderCoroutine()
 patchReloadDocument()
 patchReaderInit()

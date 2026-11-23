@@ -4046,6 +4046,15 @@ end
 
 -- ===== Función principal =====
 function PageTextInfo:onShowReadingMotive()
+    -- BookLoadCover Plus (patches/2-bookloadcover.lua) already shows its own cover on internal
+    -- reloads when "Show cover on internal reload/document switch" is on and the opening mode
+    -- shows a cover: in that case this popup is not shown.
+    if G_reader_settings:isTrue("bookloadcover_close_on_teardown") then
+        local open_mode = G_reader_settings:readSetting("bookloadcover_open_mode", "cover_only")
+        if open_mode == "cover_only" or open_mode == "cover_with_widgets" then
+            return
+        end
+    end
     local ScreenSaverWidget = require("ui/widget/screensaverwidget")
     local OverlapGroup = require("ui/widget/overlapgroup")
     local CenterContainer = require("ui/widget/container/centercontainer")
@@ -4112,7 +4121,11 @@ function PageTextInfo:onShowReadingMotive()
     screensaver_widget.dithered = not transparent
     screensaver_widget.name = "ReadingMotive"
     screensaver_widget.onCloseWidget = function() end
-    UIManager:show(screensaver_widget, "full")
+    -- ScreenSaverWidget:onShow() requests its own "full" refresh whatever UIManager:show() is
+    -- given, which is what flashed. Neutralise it so the "ui" refresh below is the only one.
+    screensaver_widget.onShow = function() return true end
+    -- "ui" instead of "full": no full-screen flash when the popup appears
+    UIManager:show(screensaver_widget, "ui")
 
     UIManager:scheduleIn(0.25, function()
         UIManager:close(screensaver_widget)
