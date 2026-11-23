@@ -613,7 +613,16 @@ function MosaicMenuItem:update()
             if subfolder_cover_image.dont_draw then
                 folder_name_widget = nil
             else
-                local directory, nbitems = self:_getTextBoxes { w = subfolder_cover_image.wide and subfolder_cover_image.wide or size.w, h = size.h }
+                -- Guard: some folder images report a size of 0, and TextBoxWidget crashes on a width <= 0
+                local name_w = subfolder_cover_image.wide or size.w
+                local name_h = size.h
+                if not name_w or name_w <= 0 or not name_h or name_h <= 0 then
+                    logger.warn("mosaicmenu: folder image with an unusable size for", self.filepath,
+                        "w:", name_w, "h:", name_h)
+                    name_w = (name_w and name_w > 0) and name_w or max_img_w
+                    name_h = (name_h and name_h > 0) and name_h or max_img_h
+                end
+                local directory, nbitems = self:_getTextBoxes { w = name_w, h = name_h }
                 size = nbitems:getSize()
                 local nb_size = math.max(size.w, size.h)
 
