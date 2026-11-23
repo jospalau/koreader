@@ -1657,6 +1657,24 @@ function BookshelfWidget:_commitBookStatus(book, status)
     if ok_bl and BookList and BookList.resetBookInfoCache then
         BookList.resetBookInfoCache(book.filepath)
     end
+
+    -- Redraw the file manager list (mosaic or list) behind the shelf, so it shows the new
+    -- status. Same recipe as a status change made from the file manager itself: order the
+    -- history first (the list reads the TBR position from it), then redraw ONCE on the next
+    -- tick, with the book info cache and the history already up to date.
+    -- _G.history_status_changed is deliberately NOT set here: KOReader's reset code skips it
+    -- while the shelf is the top widget.
+    pcall(function()
+        UIManager:nextTick(function()
+            local fm = require("apps/filemanager/filemanager").instance
+            local fc = fm and fm.file_chooser
+            if not fc then return end
+            if fm.history and fm.history.sortHistoryByStatus then
+                fm.history:sortHistoryByStatus()
+            end
+            fc:updateItems(1, true)
+        end)
+    end)
 end
 
 -- The book detail modal's scrolling tabs: flush-right bar, drawn as a rail
