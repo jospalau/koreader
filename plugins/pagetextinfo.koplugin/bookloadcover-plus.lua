@@ -11,6 +11,9 @@ local OverlapGroup = require("ui/widget/overlapgroup")
 local TextWidget = require("ui/widget/textwidget")
 local Font = require("ui/font")
 local Geom = require("ui/geometry")
+local HorizontalGroup = require("ui/widget/horizontalgroup")
+local HorizontalSpan = require("ui/widget/horizontalspan")
+local DataStorage = require("datastorage")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local Blitbuffer = require("ffi/blitbuffer")
 local Device = require("device")
@@ -21,7 +24,7 @@ local _ = require("gettext")
 
 local PLUGIN_NAME = "BookLoadCover Plus"
 local LOG_PREFIX = PLUGIN_NAME .. " patch:"
-local PATCH_VERSION = "v1.3.1"
+local PATCH_VERSION = "v1.6.3"
 
 local function pluginName()
 	return _("BookLoadCover Plus")
@@ -45,6 +48,7 @@ local State = {
 	file_manager_book_info = nil,
 	coverbrowser_path_added = false,
 	suppress_closing_notice = false,
+	reload_pending = false,
 }
 
 local Settings = {
@@ -60,6 +64,7 @@ local Settings = {
 	status_label = "bookloadcover_status_label", -- legacy: applied to both
 	status_label_open = "bookloadcover_status_label_open",
 	status_label_close = "bookloadcover_status_label_close",
+	status_icon = "bookloadcover_status_icon",
 	suppress_closing_notice = "bookloadcover_suppress_closing_notice",
 	open_close_delay = "bookloadcover_close_delay",
 	after_close_delay = "bookloadcover_after_close_delay",
@@ -247,6 +252,10 @@ local function shouldShowStatusLabel(reason)
 		return G_reader_settings:isTrue(key)
 	end
 	return G_reader_settings:nilOrTrue(Settings.status_label)
+end
+
+local function shouldShowStatusIcon()
+	return G_reader_settings:nilOrTrue(Settings.status_icon)
 end
 
 local function shouldShowOnTeardown()
@@ -934,26 +943,150 @@ local function makeCoverImageWidget(cover_bb)
 	})
 end
 
--- Small rounded "pill" at the bottom of the cover: "Opening book…" / "Closing book…".
-local function makeStatusLabelWidget(reason, screen_w, screen_h)
-	local text = reason == "close" and _("Closing book…") or _("Opening book…")
+-- Small PNG icons (open book with sparkles / sleeping closed book), embedded as base64
+-- and written once to KOReader's cache dir so ImageWidget can load them from a file.
+local ICONS_B64 = {
+	open = "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",
+	close = "iVBORw0KGgoAAAANSUhEUgAAAGAAAABgCAYAAADimHc4AAAGN0lEQVR42u2dz2tcVRTHP/e+NxNDMjOZpmhwmVUXUhsUa1UKNYEEN1lZwY0oiOJGxD+gexe6rLhQEFclm7jQohWRCsGKTQQ3YhFEEaq2JjP5YTMz77mYe8t1nJlkmnm/5p0Dl0yG9+a9e77nnl/v3XMUQlGT1+P7AAiFPQmTEhZESj5wBigYaVfO3++BW8KiaAX7GLBrmN45TgNo4VVsNiA0er8JNIDXgElfVF5fOqqRbACfmXk/BVSAllFJDwNjcUqBzqgq8Y8gOFbAnwd2gH0D6nUDRuQSqTokqeJ8p1Iu+Qr42/lOGxVyWLLHvwK8az4r4Etg0agirSJmvmX8S0YKTjpSkQX1cwP4FHgH2BoABLvaXwfetswGbhtAbgE/ROkFKTOmgcs9vIAsjR+BxzqYexAAHvCBUTt3DAj7zm8+HaX0aDM+NxfbNzcQZGy0HKbdBB4wgqU77Fvn8M0xk2be3UCdJyJ14JkbfxFYMBMoZtif18abuR94C3ihA4BWn/O3gVWg6tiVwJx/KypDqM3FvjKuV9AnH5I1d7QOzBrmKTOvMwcI8hrwT9x+/hTwpxN8hCMwWmacdebbL9K14wlzbNFRzdrySkfsP48a6S7z8npkOt2Id8KxBYGbCfWTjiKVSlc4EIbhYeelDIMvAyXz/06fiHc3ThVUNT7vqKmgEDjXR/JtxHvHHHvNRry97G2iakIpRblcRmtNGIaJrgZ7/Xq9TrPZHOTUMcPwV4GLRtX4wLcm4u0bwPlJMT4MQyqVCuvr61QqlVSoHqUUy8vLXL16Fc/zaLVah8n13AFeNsxvGLVzHXgG2HTcclK5AqanpymVSqmxAYVCYRCD3DDMf8989oEvgCWzEg6KE5L3VBqNBmEYJq6CgiC4qwoPewrwhpPr8Ux8cBF40vA2ADZMUk91c0wSB0ApdZfxSQLg3scADsdJI/k2yq0AKx3HLZhVobutBnkidu/UND6+MkGWZ/T/QA+hfOHjkVzuAvCJiQPCDmbbnM9f/eKi1AJwCA/kaCGt1kdVeRqoAcsD2IzsAOB5XpbSEwdFzmGmVFCz2WRtbW3QgGggOnXqFNVqdRjeV8ARXxxKVR5GKUWtVmNxcZG9vb3IrnXlyhXm5+cJgiDR1abzagMG8PeJ+tW51FGhUGBpaYl6vX43bTFM4xsEAcePH09FNjZVAFhmlEolVldX41EBWgsAvVIDKYt88wXAsNTOEPz9fAKQoThg9AAYZhwwRH9/9AGIIg5Ii7+f2zggLf5+7uKAtPn7uY8Dkvb3cxsHpMXfzxwAaZXY3BhhcrSPNXFVEwRBKt6KSMJrSvy9oFKplAp1Y+/B9/3RB8BKWa1WY2FhIfZJ96ONjY1YkoHycm40L+dmzwakLT1g7VFujHDUjx7FDRUSAAQAIQFAABASAAQAIQFAABASAAQAIQFAABASAAQAIQFAABAAhAQAAUBIABAAhAQAAUBIABAAhEYBANvAQXgWMwC2bloN+MV5O5oRKF+vgD3gpyF1WIpsBXi0KwquOg0Lsk4tM5drwG/30NCHJLpOVICfnRYmWdwnENCuC2pLzj+SFdtpb/BR4Hf+3wQhzjFog4Zu59oSxZlyXOyNPgi8T7t+ZmLSrJTqOg44b5t2J7zTw9wVE2drQVdXHgMeiqmfjK3TXAI+6lFYtdPAvgmsd1Q7vwH82tGcKHO9HVWvusnEswPoplLqWLlcDrXWym6HdfoFBM1mUwOPA9/0camDrG5RCh0vQsfoCISTk5NT29vbqlufgs5+ARMTE5M7Ozteh6SHUXe+9mP2pVtxAuB5XuugPgVOv4DAub9W7mtFEEGfAndHvi3glHQ9odwAEIbhf3bk23pCkowjnr2/4+PjAOzu7raA5tbWFlrrxLfJ5mIFjI2Nsbm5yfnz51u+73tzc3NcunQpXFlZoVwuIxRRyYRKpVIFbler1eDEiRO21ciHwAUgnJmZCWdnZ/eNwT4XVbCVWwBM8PeHjWyLxeIFW0GrUCg859SzaDLkGhACQJvKQEMptVksFp91GFw0LuicUuo7A8JZAWD4AMwAX9NOCtLRZMd3Or9+TLvxmgAwZBoH7uvjcLjMnooxPYM8eo03HybqKMfPsIX60b9CN3sdVYgRGQAAAABJRU5ErkJggg==",
+}
+
+local function getIconPath(reason)
+	local key = reason == "close" and "close" or "open"
+	local ok, path = pcall(function()
+		local dir = DataStorage:getDataDir() .. "/cache"
+		local file = dir .. "/bookloadcover_" .. key .. ".png"
+		if lfs.attributes(file, "mode") == "file" then
+			return file
+		end
+		local sha2 = require("ffi/sha2")
+		if not sha2.base64_to_bin then
+			return nil
+		end
+		if lfs.attributes(dir, "mode") ~= "directory" then
+			lfs.mkdir(dir)
+		end
+		local data = sha2.base64_to_bin(ICONS_B64[key])
+		local f = io.open(file, "wb")
+		if not f then
+			return nil
+		end
+		f:write(data)
+		f:close()
+		return file
+	end)
+	return ok and path or nil
+end
+
+local FUN_TEXTS = {
+	open = {
+		_("Opening book…"),
+		_("Cracking it open…"),
+		_("Dusting off the cover…"),
+		_("Turning to your page…"),
+		_("Chapter loading…"),
+	},
+	reload = {
+		_("Reflowing the pages…"),
+		_("Rearranging the words…"),
+		_("Giving the text a new look…"),
+		_("Shuffling the paragraphs…"),
+		_("Re-shelving the letters…"),
+		_("Fresh coat of layout…"),
+	},
+	close = {
+		_("Closing book…"),
+		_("Saving your spot…"),
+		_("Tucking in the bookmark…"),
+		_("Shutting it softly…"),
+		_("Until next chapter…"),
+	},
+}
+
+-- Font of the book being opened/closed, resolved to a font file; nil -> keep the UI font.
+-- Closing: the live font face from the reader. Opening: the book's own sidecar setting,
+-- then KOReader's default book font.
+local function getBookFontFace(reason, filepath, options)
+	local ok, face = pcall(function()
+		local face_name = options and options.font_face
+		if not face_name and reason ~= "close" and filepath then
+			local DocSettings = require("docsettings")
+			local doc_settings = DocSettings:open(filepath)
+			face_name = doc_settings and doc_settings:readSetting("font_face")
+		end
+		if not face_name then
+			face_name = G_reader_settings:readSetting("cre_font")
+		end
+		if type(face_name) ~= "string" or face_name == "" then
+			return nil
+		end
+
+		local cre = require("libs/libkoreader-cre")
+		if type(cre) ~= "table" or type(cre.getFontFaceFilenameAndFaceIndex) ~= "function" then
+			return nil
+		end
+		local filename = cre.getFontFaceFilenameAndFaceIndex(face_name)
+		if type(filename) ~= "string" or filename == "" then
+			return nil
+		end
+
+		return Font:getFace(filename, 20)
+	end)
+
+	if ok and face then
+		return face
+	end
+	return nil
+end
+
+local function pickFunText(reason, is_reload)
+	local list = FUN_TEXTS[is_reload and "reload" or (reason == "close" and "close" or "open")]
+	return list[math.random(#list)]
+end
+
+-- Rounded "pill" at the bottom of the cover: icon + a playful opening/closing phrase.
+local function makeStatusLabelWidget(reason, screen_w, screen_h, filepath, options)
 	local text_widget = TextWidget:new({
-		text = text,
-		face = Font:getFace("cfont", 20),
+		text = pickFunText(reason, options and options.reload),
+		face = getBookFontFace(reason, filepath, options) or Font:getFace("cfont", 20),
 		bold = true,
 		fgcolor = Blitbuffer.COLOR_BLACK,
 	})
+
+	local content = text_widget
+	local icon_path = shouldShowStatusIcon() and getIconPath(reason) or nil
+	if icon_path then
+		local ok, group = pcall(function()
+			local icon_size = Screen:scaleBySize(36)
+			return HorizontalGroup:new({
+				align = "center",
+				ImageWidget:new({
+					file = icon_path,
+					width = icon_size,
+					height = icon_size,
+					scale_factor = 0,
+					alpha = true,
+				}),
+				HorizontalSpan:new({ width = Screen:scaleBySize(10) }),
+				text_widget,
+			})
+		end)
+		if ok and group then
+			content = group
+		else
+			warn("failed to build label icon", group)
+		end
+	end
 
 	local pill = FrameContainer:new({
 		background = Blitbuffer.COLOR_WHITE,
 		color = Blitbuffer.COLOR_BLACK,
 		bordersize = Screen:scaleBySize(2),
-		radius = Screen:scaleBySize(22),
+		radius = Screen:scaleBySize(26),
 		padding = Screen:scaleBySize(8),
-		padding_left = Screen:scaleBySize(20),
+		padding_left = Screen:scaleBySize(16),
 		padding_right = Screen:scaleBySize(20),
 		margin = 0,
-		text_widget,
+		content,
 	})
 
 	return BottomContainer:new({
@@ -962,14 +1095,14 @@ local function makeStatusLabelWidget(reason, screen_w, screen_h)
 	})
 end
 
-local function addStatusLabel(cover_widget, reason)
+local function addStatusLabel(cover_widget, reason, filepath, options)
 	local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
 	local ok, result = pcall(function()
 		return OverlapGroup:new({
 			dimen = Geom:new({ w = screen_w, h = screen_h }),
 			allow_mirroring = false,
 			cover_widget,
-			makeStatusLabelWidget(reason, screen_w, screen_h),
+			makeStatusLabelWidget(reason, screen_w, screen_h, filepath, options),
 		})
 	end)
 
@@ -1004,7 +1137,7 @@ local function showCover(filepath, options)
 	local cover_widget = makeCoverImageWidget(cover_bb)
 	local label_shown = false
 	if shouldShowStatusLabel(options.reason) then
-		local with_label = addStatusLabel(cover_widget, options.reason)
+		local with_label = addStatusLabel(cover_widget, options.reason, filepath, options)
 		label_shown = with_label ~= cover_widget
 		cover_widget = with_label
 	end
@@ -1027,7 +1160,7 @@ local function showCover(filepath, options)
 	end
 
 	-- "Cover + default widgets": put the third-party "Closing book…" notice back on top of the cover.
-	if options.reason == "close" and getCloseMode() == Mode.cover_with_widgets and not label_shown then
+	if options.reason == "close" and getCloseMode() == Mode.cover_with_widgets then
 		-- The third-party notice may already be gone (or hidden under the cover), so drop it
 		-- and show our own persistent notice above the cover instead.
 		for _i, notice in ipairs(kept_notices) do
@@ -1248,6 +1381,18 @@ function BookLoadCoverMenu:addToMainMenu(menu_items)
 										touchmenu_instance:updateItems()
 									end
 								end,
+								separator = true,
+							},
+							{
+								text = _("Show book icon"),
+								checked_func = shouldShowStatusIcon,
+								keep_menu_open = true,
+								callback = function(touchmenu_instance)
+									saveSetting(Settings.status_icon, not shouldShowStatusIcon())
+									if touchmenu_instance then
+										touchmenu_instance:updateItems()
+									end
+								end,
 							},
 						},
 					},
@@ -1378,11 +1523,13 @@ local function patchShowReaderCoroutine()
 		-- would be shown on every such reload regardless of the
 		-- "Show cover on internal reload/document switch" setting, since that
 		-- setting was previously only honored on the closing side.
-		local is_internal_reload = (self.reloading or self.tearing_down) and true or false
+		local is_internal_reload = (self.reloading or self.tearing_down or State.reload_pending) and true or false
+		State.reload_pending = false
 
 		if shouldShowOpeningCover() and not (is_internal_reload and not shouldShowOnTeardown()) then
 			local ok, result = pcall(showCover, file, {
 				reason = "open",
+				reload = is_internal_reload,
 				allow_direct_extract = true,
 			})
 			if not ok then
@@ -1425,15 +1572,31 @@ local function patchReaderOnClose()
 		local cover_shown = false
 		local suppress_started = false
 
+		-- Internal reload / document switch: onClose(false) or a tearing-down reader.
+		-- reloadDocument() sets self.reloading. Do NOT use full_refresh == false here:
+		-- Bookshelf also closes books with onClose(false).
+		local is_reload = self.reloading and true or false
+		State.reload_pending = is_reload
+		if is_reload then
+			-- safety net: never let the flag leak into a later, unrelated opening
+			UIManager:scheduleIn(10, function()
+				State.reload_pending = false
+			end)
+		end
+
 		if shouldSuppressClosingNotice() then
 			startSuppressingClosingNotice()
 			suppress_started = State.suppress_closing_notice
 		end
 
-		if shouldShowClosingCover(self, full_refresh) then
+		-- On a reload the cover is shown once, on the opening side (the end of the reload),
+		-- instead of twice (close + open).
+		if not is_reload and shouldShowClosingCover(self, full_refresh) then
 			local ok, result = pcall(showCover, self.document.file, {
 				reason = "close",
+				reload = is_reload,
 				open_document = self.document,
+				font_face = self.font and self.font.font_face or nil,
 				allow_direct_extract = false,
 			})
 
