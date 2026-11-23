@@ -24,7 +24,7 @@ local _ = require("gettext")
 
 local PLUGIN_NAME = "BookLoadCover Plus"
 local LOG_PREFIX = PLUGIN_NAME .. " patch:"
-local PATCH_VERSION = "v1.6.3"
+local PATCH_VERSION = "v1.6.5"
 
 local function pluginName()
 	return _("BookLoadCover Plus")
@@ -1526,13 +1526,16 @@ local function patchShowReaderCoroutine()
 		local is_internal_reload = (self.reloading or self.tearing_down or State.reload_pending) and true or false
 		State.reload_pending = false
 
+		local cover_shown_on_open = false
 		if shouldShowOpeningCover() and not (is_internal_reload and not shouldShowOnTeardown()) then
 			local ok, result = pcall(showCover, file, {
 				reason = "open",
 				reload = is_internal_reload,
 				allow_direct_extract = true,
 			})
-			if not ok then
+			if ok then
+				cover_shown_on_open = result and true or false
+			else
 				warn("showCover failed", result)
 			end
 		end
@@ -1541,8 +1544,31 @@ local function patchShowReaderCoroutine()
 		if shouldUseSeamlessOpening() then
 			final_seamless = true
 		end
+		-- On an internal reload our cover + label is the only message: don't let KOReader
+		-- add its own "Opening book…" notice on top.
+		if is_internal_reload and cover_shown_on_open then
+			final_seamless = true
+		end
 
 		return ReaderUI._original_showReaderCoroutine_bookloadcover(self, file, provider, final_seamless)
+	end
+end
+
+-- Mark the whole close+reopen sequence of ReaderUI:reloadDocument() as an internal reload,
+-- so onClose and showReaderCoroutine agree on it and only one cover/message is shown.
+local function patchReloadDocument()
+	if not ReaderUI.reloadDocument or ReaderUI._original_reloadDocument_bookloadcover then
+		return
+	end
+
+	ReaderUI._original_reloadDocument_bookloadcover = ReaderUI.reloadDocument
+
+	ReaderUI.reloadDocument = function(self, ...)
+		State.reload_pending = true
+		UIManager:scheduleIn(10, function()
+			State.reload_pending = false
+		end)
+		return ReaderUI._original_reloadDocument_bookloadcover(self, ...)
 	end
 end
 
@@ -1575,9 +1601,10 @@ local function patchReaderOnClose()
 		-- Internal reload / document switch: onClose(false) or a tearing-down reader.
 		-- reloadDocument() sets self.reloading. Do NOT use full_refresh == false here:
 		-- Bookshelf also closes books with onClose(false).
-		local is_reload = self.reloading and true or false
-		State.reload_pending = is_reload
+		-- (also set by the reloadDocument wrapper below, in case self.reloading is not set)
+		local is_reload = (self.reloading or State.reload_pending) and true or false
 		if is_reload then
+			State.reload_pending = true
 			-- safety net: never let the flag leak into a later, unrelated opening
 			UIManager:scheduleIn(10, function()
 				State.reload_pending = false
@@ -1637,6 +1664,7 @@ ReaderUI = require("apps/reader/readerui")
 patchUIManagerShow()
 patchFileManagerMenu()
 patchShowReaderCoroutine()
+patchReloadDocument()
 patchReaderInit()
 patchReaderOnClose()
 
