@@ -720,6 +720,14 @@ function PageTextInfo:_closeLocationBubble(go_to_page)
     local target = go_to_page and self.ui._rlt_anchor or nil
     local region = rlt.box_dimen
     rlt.visible = false
+    if not target then
+        -- Only closing: accept the current page as the new reference, like the "X" of the bubble does. If the
+        -- anchor is left where it was, the bubble shows up again on the next page turn.
+        if self.ui._rlt_current_page then
+            self.ui._rlt_anchor = self.ui._rlt_current_page
+            self.ui._rlt_anchor_ref = self.ui._rlt_current_ref
+        end
+    end
     if target then
         -- the jump repaints the whole page, already without the bubble
         self.ui:handleEvent(Event:new("GotoPage", target))
