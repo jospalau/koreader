@@ -152,6 +152,35 @@ local function purgeFontFacesLater(self)
     UIManager:scheduleIn(2, purge_fn)
 end
 
+-- Reading time of the CURRENT session per font. The session is the one of the top
+-- bar (topbar.start_session_time, the same one "Session" shows in the reading
+-- summary), so the figures agree with it. The time since the last check is added
+-- to the font that was in use during it: if that font already has time, it is
+-- accumulated; if not, it starts as new. The first check credits all the time since
+-- the session started to the font in use (the one the session began with).
+-- Kept on the plugin instance: a new book (new reader) starts at zero.
+-- Returns { secs = {normalized_name = seconds}, font = name, since = time, start = time }.
+local function sessionFlush(self)
+    local cur = self.ui and self.ui.font and self.ui.font.font_face
+    local topbar = self.ui and self.ui.view and self.ui.view.topbar
+    local start = topbar and tonumber(topbar.start_session_time)
+    local now = os.time()
+    local sess = self.fonts_session
+    if not sess or (start and start > sess.start) then
+        -- first check, or the top bar began a new session: count from its start
+        sess = { secs = {}, names = {}, font = cur, start = start or now, since = start or now }
+        self.fonts_session = sess
+    end
+    if sess.font then
+        local key = (sess.font:gsub("%s+", ""):lower())
+        sess.secs[key] = (sess.secs[key] or 0) + math.max(0, now - sess.since)
+        sess.names[key] = sess.font
+    end
+    sess.since = now
+    sess.font = cur or sess.font
+    return sess
+end
+
 -- Close the fonts menu and repaint the page underneath
 function PageTextInfo:closeFontsMenu()
     local d = self.fonts_dialog
@@ -203,8 +232,10 @@ function PageTextInfo:applyFont(face)
         require("logger").dbg("[PTI] timing: font change,", name, time.to_ms(time.since(t0)), "ms")
     end
 
+    pcall(sessionFlush, self)   -- the time so far belongs to the previous font
     self.ui:handleEvent(Event:new("SetFont", face))
     lap("SetFont")
+    pcall(sessionFlush, self)   -- from here on it is counted for the new one
     return lap
 end
 
@@ -221,6 +252,18 @@ function PageTextInfo:applyFontAndReopen(face)
     end)
 end
 
+-- Session time: "<1m" / "12m" / "1.5h" (compact, for the grid) or the long form
+-- ("12 min" / "1.5 h") for the info window
+local function formatSessionTime(secs, long)
+    if secs < 60 then return long and "<1 min" or "<1m" end
+    if secs < 3600 then
+        local m = math.floor(secs / 60 + 0.5)
+        return long and string.format("%d min", m) or string.format("%dm", m)
+    end
+    local h = secs / 3600
+    return long and string.format("%.1f h", h) or string.format("%.1fh", h)
+end
+
 -- Info window for a font (opened with a long press)
 function PageTextInfo:showFontInfo(face, label)
     local TextBoxWidget = require("ui/widget/textboxwidget")
@@ -230,6 +273,7 @@ function PageTextInfo:showFontInfo(face, label)
     local VerticalGroup = require("ui/widget/verticalgroup")
     local VerticalSpan = require("ui/widget/verticalspan")
     local lfs = require("libs/libkoreader-lfs")
+    local LineWidget = require("ui/widget/linewidget")
 
     local path = self.font_paths and self.font_paths[face]
 
@@ -238,6 +282,16 @@ function PageTextInfo:showFontInfo(face, label)
     local styles = {}
     for __, s in ipairs({ "Regular", "Bold", "Italic", "Bold Italic" }) do
         if has[s] then table.insert(styles, s) end
+    end
+
+    -- Time read with this font in the current session
+    local session_txt
+    do
+        local ok, sess = pcall(sessionFlush, self)
+        local secs = ok and sess and sess.secs[(face:gsub("%s+", ""):lower())]
+        if secs and secs >= 1 then
+            session_txt = formatSessionTime(secs, true)
+        end
     end
 
     -- File data
@@ -275,6 +329,7 @@ function PageTextInfo:showFontInfo(face, label)
         "File: " .. filename,
         "Folder: " .. dir,
         "Size: " .. size_txt,
+        "Session: " .. (session_txt or "-"),
         "Styles: " .. (#styles > 0 and table.concat(styles, ", ") or "?"),
     }
     for __, l in ipairs(metrics_lines) do
@@ -282,29 +337,46 @@ function PageTextInfo:showFontInfo(face, label)
     end
     local info_text = table.concat(lines, "\n")
     local screen = Screen:getSize()
-    local pad = Size.padding.large
-    local width = math.floor(screen.w * 0.8)
-    local inner_w = width - 2 * pad - 2 * Size.border.window
+    local pad = Size.padding.large + Screen:scaleBySize(6)
+    local win_border = Screen:scaleBySize(3)
+    local thin = Screen:scaleBySize(1)
+    local width = math.floor(screen.w * 0.84)
+    local inner_w = width - 2 * pad - 2 * win_border
 
-    local sample_face
+    local sample_face, title_face
     if path then
         local ok, f = pcall(Font.getFace, Font, path, 20)
         if ok then sample_face = f end
+        local okt, ft = pcall(Font.getFace, Font, path, 28)
+        if okt then title_face = ft end
     end
     sample_face = sample_face or Font:getFace("cfont", 20)
+    title_face = title_face or Font:getFace("cfont", 28)
 
     local content = VerticalGroup:new{ align = "left" }
+    -- Title: the family name, big, in its own font, with a heavy rule under it
     table.insert(content, TextBoxWidget:new{
         text = label or face,
-        face = sample_face,
+        face = title_face,
         width = inner_w,
         alignment = "center",
+    })
+    table.insert(content, VerticalSpan:new{ width = Size.padding.large })
+    table.insert(content, LineWidget:new{
+        dimen = Geom:new{ w = inner_w, h = Screen:scaleBySize(2) },
+        background = Blitbuffer.COLOR_BLACK,
     })
     table.insert(content, VerticalSpan:new{ width = Size.padding.large })
     table.insert(content, TextBoxWidget:new{
         text = info_text,
         face = Font:getFace("cfont", 16),
+        fgcolor = Blitbuffer.COLOR_DARK_GRAY,
         width = inner_w,
+    })
+    table.insert(content, VerticalSpan:new{ width = Size.padding.large })
+    table.insert(content, LineWidget:new{
+        dimen = Geom:new{ w = inner_w, h = thin },
+        background = Blitbuffer.COLOR_LIGHT_GRAY,
     })
     table.insert(content, VerticalSpan:new{ width = Size.padding.large })
     for __, line in ipairs({
@@ -318,12 +390,13 @@ function PageTextInfo:showFontInfo(face, label)
             face = sample_face,
             width = inner_w,
         })
+        table.insert(content, VerticalSpan:new{ width = Screen:scaleBySize(3) })
     end
 
     local frame = FrameContainer:new{
         background = Blitbuffer.COLOR_WHITE,
-        bordersize = Size.border.window,
-        radius = Size.radius.window,
+        bordersize = win_border,
+        radius = math.max(Size.radius.window, Screen:scaleBySize(12)),
         padding = pad,
         content,
     }
@@ -364,7 +437,11 @@ end
 -- Reading time per font, most-read first (same query as "Time per Font").
 -- Returns { order = {names...}, secs = {normalized_name = seconds} }.
 -- Empty if the DB or the table/column doesn't exist.
-local function getFontStats()
+-- `before`: only the sessions that started before this time are read from the
+-- database, and `sess` (see sessionFlush) is added on top. The statistics plugin may
+-- already have saved part of the session in progress, so cutting at its start
+-- avoids counting it twice, and the fonts rise in the ranking as they are read.
+local function getFontStats(before, sess)
     local stats = { order = {}, secs = {} }
     pcall(function()
         local SQ3 = require("lua-ljsqlite3/init")
@@ -377,9 +454,11 @@ local function getFontStats()
         local conn = SQ3.open(db_path)
         -- Close the connection even if the query fails
         local ok, err = pcall(function()
+            local where = before and string.format("WHERE start_time < %d", math.floor(before)) or ""
             local stmt = conn:prepare([[
                 SELECT COALESCE(font_name, 'Unknown'), SUM(duration) as total_duration
                 FROM wpm_stat_data
+            ]] .. where .. [[
                 GROUP BY font_name
                 ORDER BY total_duration DESC
             ]])
@@ -397,6 +476,31 @@ local function getFontStats()
         conn:close()
         if not ok then require("logger").warn("[PTI] getFontStats failed:", err) end
     end)
+
+    -- Add the session: a font that already has time accumulates, one that has none
+    -- is new. Then the ranking is ordered again (most-read first, ties keep the
+    -- order they had).
+    if sess and sess.secs then
+        local known = {}
+        for __, name in ipairs(stats.order) do known[(name:gsub("%s+", ""):lower())] = true end
+        for key, secs in pairs(sess.secs) do
+            if secs >= 1 then
+                stats.secs[key] = (stats.secs[key] or 0) + secs
+                if not known[key] then
+                    stats.order[#stats.order + 1] = sess.names and sess.names[key] or key
+                    known[key] = true
+                end
+            end
+        end
+        local pos = {}
+        for i, name in ipairs(stats.order) do pos[name] = i end
+        table.sort(stats.order, function(a, b)
+            local sa = stats.secs[(a:gsub("%s+", ""):lower())] or 0
+            local sb = stats.secs[(b:gsub("%s+", ""):lower())] or 0
+            if sa ~= sb then return sa > sb end
+            return pos[a] < pos[b]
+        end)
+    end
     return stats
 end
 
@@ -417,7 +521,7 @@ end
 -- renders through KOReader's fallback fonts, but "📌" often won't on e-ink.
 local PIN_MARK = "★ "
 
-local function pinFonts(fonts, names, stats)
+local function pinFonts(fonts, names, stats, session)
     local function norm(s) return (s:gsub("%s+", ""):lower()) end
     stats = stats or { order = {}, secs = {} }
 
@@ -430,6 +534,9 @@ local function pinFonts(fonts, names, stats)
         local label = (names and names[i]) or fonts[i]
         local t = formatReadTime(stats.secs[norm(fonts[i])])
         if t then label = label .. " (" .. t .. ")" end
+        -- Time read in the current session, after the total
+        local ss = session and session[norm(fonts[i])]
+        if ss and ss >= 1 then label = label .. " · " .. formatSessionTime(ss) end
         new_fonts[#new_fonts + 1] = fonts[i]
         new_names[#new_names + 1] = pinned and (PIN_MARK .. label) or label
     end
@@ -477,8 +584,17 @@ function PageTextInfo:onShowFonts(page)
     self.fonts_dialog = nil
 
     local fonts, names = FontList.getFontArgFunc()
-    self.fonts_stats = self.fonts_stats or getFontStats()
-    fonts, names = pinFonts(fonts, names, self.fonts_stats)
+    if not self.fonts_stats then
+        -- Read once per opening of the menu (closeFontsMenu clears it), so the order
+        -- does not move while paging
+        local okF, fsess = pcall(sessionFlush, self)
+        local cut = okF and fsess and fsess.start or nil
+        local st = self.ui.statistics and tonumber(self.ui.statistics.start_current_period)
+        if cut and st and st > 0 and st < cut then cut = st end
+        self.fonts_stats = getFontStats(cut, okF and fsess or nil)
+    end
+    local okS, sess = pcall(sessionFlush, self)
+    fonts, names = pinFonts(fonts, names, self.fonts_stats, okS and sess and sess.secs or nil)
     local current = ui.font.font_face
     if not self.font_paths then
         self.font_paths, self.font_styles = buildFaceMaps()
@@ -506,20 +622,22 @@ function PageTextInfo:onShowFonts(page)
 
     -- Sizes
     local screen = Screen:getSize()
-    local frame_w = math.floor(screen.w * 0.8)
-    local outer_pad = Screen:scaleBySize(5)
+    local frame_w = math.floor(screen.w * 0.84)
+    local outer_pad = Screen:scaleBySize(9)
+    local win_border = Screen:scaleBySize(3)
     -- Inner width available for the grid (window width minus padding and border)
-    local dialog_w = frame_w - 2 * (outer_pad + Size.border.window)
-    local gap = Screen:scaleBySize(3)   -- space between cells and between rows
+    local dialog_w = frame_w - 2 * (outer_pad + win_border)
+    local gap = Screen:scaleBySize(5)   -- space between cells and between rows
     local thin = Screen:scaleBySize(1)
     local cell_w = math.floor((dialog_w - gap * (COLUMNS - 1)) / COLUMNS)
     -- The last column takes the rounding remainder so rows span exactly dialog_w
     local last_cell_w = dialog_w - gap * (COLUMNS - 1) - cell_w * (COLUMNS - 1)
-    local label_h = math.floor(Screen:scaleBySize(11) * 1.4)
+    local label_h = math.floor(Screen:scaleBySize(12) * 1.5)
     local font_px = Screen:scaleBySize(FONT_SIZE)
-    local cell_h = math.floor(font_px * 2.0)
+    local cell_h = math.floor(font_px * 2.3)
     local text_h = math.floor(font_px * 1.6)
     local baseline = math.floor(font_px * 1.15)
+    local cell_radius = Screen:scaleBySize(9)
     local cells = {}   -- font cells: { frame, face, label }
     local btn_prev, btn_next   -- declared here so dialog:onHold can see them
 
@@ -627,7 +745,7 @@ function PageTextInfo:onShowFonts(page)
     -- menu). Kept in cap_widget to change its text in place.
     local cap_widget = TextWidget:new{
         text = caption,
-        face = Font:getFace("cfont", 11),
+        face = Font:getFace("cfont", 12),
         fgcolor = Blitbuffer.COLOR_DARK_GRAY,
         max_width = dialog_w - 2 * gap,
     }
@@ -639,10 +757,10 @@ function PageTextInfo:onShowFonts(page)
         },
     })
     table.insert(grid, LineWidget:new{
-        dimen = Geom:new{ w = dialog_w, h = thin },
-        background = Blitbuffer.COLOR_DARK_GRAY,
+        dimen = Geom:new{ w = dialog_w, h = Screen:scaleBySize(2) },
+        background = Blitbuffer.COLOR_BLACK,
     })
-    table.insert(grid, VerticalSpan:new{ width = gap })
+    table.insert(grid, VerticalSpan:new{ width = gap * 2 })
 
     local row = HorizontalGroup:new{}
     local col = 0   -- cells in the current row (spacers don't count)
@@ -683,9 +801,9 @@ function PageTextInfo:onShowFonts(page)
         local cell_frame = FrameContainer:new{
             bordersize = thin,
             color = is_current and Blitbuffer.COLOR_BLACK
-                or (face and Blitbuffer.COLOR_DARK_GRAY or Blitbuffer.COLOR_WHITE),
+                or (face and Blitbuffer.COLOR_LIGHT_GRAY or Blitbuffer.COLOR_WHITE),
             background = is_current and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE,
-            radius = Size.radius.button,
+            radius = cell_radius,
             margin = 0,
             padding = 0,
             CenterContainer:new{
@@ -728,7 +846,7 @@ function PageTextInfo:onShowFonts(page)
     -- Navigation row
     local nav_w = math.floor((dialog_w - 2 * gap) / 3)
     local nav_last_w = dialog_w - 2 * gap - 2 * nav_w
-    local nav_h = math.floor(font_px * 2)
+    local nav_h = math.floor(font_px * 2.2)
     -- Arrows and counter share the same baseline (a plain centered text box
     -- would put the "‹" "›" glyphs higher than the digits). The baseline is
     -- placed so the middle of the arrow glyph sits in the middle of the button.
@@ -736,11 +854,12 @@ function PageTextInfo:onShowFonts(page)
 
     -- boxed: rounded outline (arrows); the page counter has none
     local function navCell(text, enabled, boxed, size, w)
-        local bs = boxed and thin or 0
+        -- a disabled arrow loses its outline and fades out
+        local bs = (boxed and enabled) and thin or 0
         return FrameContainer:new{
             bordersize = bs,
-            color = enabled and Blitbuffer.COLOR_DARK_GRAY or Blitbuffer.COLOR_LIGHT_GRAY,
-            radius = Size.radius.button,
+            color = Blitbuffer.COLOR_DARK_GRAY,
+            radius = cell_radius,
             padding = 0,
             margin = 0,
             CenterContainer:new{
@@ -756,6 +875,13 @@ function PageTextInfo:onShowFonts(page)
         }
     end
 
+    -- Thin rule between the grid and the navigation row
+    table.insert(grid, LineWidget:new{
+        dimen = Geom:new{ w = dialog_w, h = thin },
+        background = Blitbuffer.COLOR_LIGHT_GRAY,
+    })
+    table.insert(grid, VerticalSpan:new{ width = gap })
+
     btn_prev = navCell("‹", has_prev, true, 24, nav_w)
     local btn_info = navCell(string.format("%d / %d", page, total_pages), true, false, 18, nav_w)
     btn_next = navCell("›", has_next, true, 24, nav_last_w)
@@ -769,8 +895,8 @@ function PageTextInfo:onShowFonts(page)
 
     local frame = FrameContainer:new{
         background = Blitbuffer.COLOR_WHITE,
-        bordersize = Size.border.window,
-        radius = Size.radius.window,
+        bordersize = win_border,
+        radius = math.max(Size.radius.window, Screen:scaleBySize(12)),
         padding = outer_pad,
         margin = 0,
         grid,
@@ -809,7 +935,7 @@ function PageTextInfo:onShowFonts(page)
             if c == cell or c.current then
                 local on = (c == cell)
                 c.frame.background = on and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_WHITE
-                c.frame.color = on and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_DARK_GRAY
+                c.frame.color = on and Blitbuffer.COLOR_BLACK or Blitbuffer.COLOR_LIGHT_GRAY
                 c.text.fgcolor = on and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
                 c.current = on
                 if c.frame.dimen then
