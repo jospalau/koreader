@@ -8,14 +8,15 @@ local InfoMessage = require("ui/widget/infomessage")
 local CenterContainer = require("ui/widget/container/centercontainer")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local Blitbuffer = require("ffi/blitbuffer")
-local Screen = require("device").screen
+local Device = require("device")
+local Screen = Device.screen
 local lfs = require("libs/libkoreader-lfs")
 local DocumentRegistry = require("document/documentregistry")
 local _ = require("gettext")
 
 local PLUGIN_NAME = "BookLoadCover Plus"
 local LOG_PREFIX = PLUGIN_NAME .. " patch:"
-local PATCH_VERSION = "v1.2.0"
+local PATCH_VERSION = "v1.2.1"
 
 local function pluginName()
 	return _("BookLoadCover Plus")
@@ -34,6 +35,7 @@ local ReaderUI
 local State = {
 	cover_widget = nil,
 	owned_cover_bb = nil,
+	stretched_bb = nil,
 	book_info_manager = nil,
 	file_manager_book_info = nil,
 	coverbrowser_path_added = false,
@@ -223,10 +225,6 @@ local function shouldSuppressClosingNotice()
 	return close_mode == Mode.cover_only and G_reader_settings:nilOrTrue(Settings.suppress_closing_notice)
 end
 
-local function shouldPreSuppressClosingNotice()
-	return shouldSuppressClosingNotice()
-end
-
 local function shouldPreferBestQualityCover()
 	return getCoverSourceMode() == SourceMode.best_quality
 end
@@ -316,6 +314,13 @@ local function getFileManagerBookInfo()
 end
 
 local function freeOwnedCover()
+	if State.stretched_bb then
+		pcall(function()
+			State.stretched_bb:free()
+		end)
+		State.stretched_bb = nil
+	end
+
 	if not State.owned_cover_bb then
 		return
 	end
@@ -375,10 +380,10 @@ local function closeOverlayWidgets()
 		end
 	end
 
-	for _, widget in ipairs(widgets) do
+	for _i, widget in ipairs(widgets) do
 		if widget ~= State.cover_widget then
-			local name = widget.name
-			if name == "ReaderUI" or name == "FileManager" or name == "bookshelf" then
+			local name = type(widget.name) == "string" and widget.name:lower() or nil
+			if name == "readerui" or name == "filemanager" or name == "bookshelf" then
 				break
 			end
 			local ok, err = pcall(function()
@@ -389,7 +394,7 @@ local function closeOverlayWidgets()
 			end
 		end
 	end
-    UIManager:forceRePaint()
+	UIManager:forceRePaint()
 end
 
 local function scheduleCloseCover(delay)
@@ -451,7 +456,7 @@ local function getWidgetText(widget)
 		widget.label,
 	}
 
-	for _, value in ipairs(candidates) do
+	for _i, value in ipairs(candidates) do
 		if type(value) == "string" and value ~= "" then
 			return value
 		end
@@ -461,7 +466,7 @@ local function getWidgetText(widget)
 end
 
 local function textHasAllWords(text, words)
-	for _, word in ipairs(words) do
+	for _i, word in ipairs(words) do
 		if not text:find(word, 1, true) then
 			return false
 		end
@@ -481,7 +486,7 @@ local function textLooksLikeClosingBookNotice(text)
 		_("Closing book"),
 	}
 
-	for _, candidate in ipairs(localized) do
+	for _i, candidate in ipairs(localized) do
 		if type(candidate) == "string" and candidate ~= "" and normalized:find(candidate:lower(), 1, true) then
 			return true
 		end
@@ -497,10 +502,11 @@ local function textLooksLikeClosingBookNotice(text)
 		{ "schließen", "buch" }, -- German
 		{ "schlies", "buch" }, -- German fallback without ß
 		{ "закры", "кни" }, -- Russian stem fallback
+		{ "Закры", "кни" }, -- Russian, capitalized (lower() is ASCII-only)
 	}
 
-	for _, words in ipairs(word_sets) do
-		if textHasAllWords(normalized, words) then
+	for _i, words in ipairs(word_sets) do
+		if textHasAllWords(normalized, words) or textHasAllWords(text, words) then
 			return true
 		end
 	end
@@ -529,7 +535,7 @@ local function getCoverFromCoverImageCache(filepath)
 		return nil
 	end
 
-	local _, document_name = util.splitFilePathName(filepath)
+	local _dir, document_name = util.splitFilePathName(filepath)
 	if not document_name then
 		return nil
 	end
@@ -701,7 +707,6 @@ local function findCover(filepath, options)
 		table.insert(sources, getCoverFromDB)
 		table.insert(sources, getCoverFromCoverImageCache)
 	else
-		table.insert(sources, getCoverFromCoverImageCache)
 		table.insert(sources, getCoverFromDB)
 
 		if options.open_document then
@@ -713,9 +718,13 @@ local function findCover(filepath, options)
 		if options.allow_direct_extract ~= false then
 			table.insert(sources, extractCoverFromDocument)
 		end
+
+		-- Last resort: the CoverImage cache is already rendered at screen size with its own
+		-- letterboxing/cropping baked in, so stretching it cannot fix that.
+		table.insert(sources, getCoverFromCoverImageCache)
 	end
 
-	for _, source in ipairs(sources) do
+	for _i, source in ipairs(sources) do
 		local ok, cover_bb, needs_free = pcall(source, filepath)
 		if ok and cover_bb then
 			return cover_bb, needs_free
@@ -745,19 +754,53 @@ local function getCoverSize(cover_bb)
 end
 
 local function getDitheredOption()
-    local Screen = require("device").screen
 	return Screen.hw_dithering or nil
 end
 
-local function makeStretchCoverWidget(cover_bb, screen_w, screen_h)
-	return ImageWidget:new({
-		image = cover_bb,
+-- Full-screen opaque frame, so nothing underneath can ever show through.
+local function wrapFullScreen(child, screen_w, screen_h, background)
+	return FrameContainer:new({
 		width = screen_w,
 		height = screen_h,
-		alpha = true,
-        dithered = getDitheredOption(),
-		image_disposable = false,
+		padding = 0,
+		margin = 0,
+		bordersize = 0,
+		background = background or Blitbuffer.COLOR_BLACK,
+		CenterContainer:new({
+			dimen = { w = screen_w, h = screen_h },
+			child,
+		}),
 	})
+end
+
+local function makeStretchCoverWidget(cover_bb, screen_w, screen_h)
+	-- Scale the image to EXACTLY the screen size ourselves, instead of relying on
+	-- ImageWidget's scale_factor=0 (which may keep the aspect ratio / crop).
+	local image = cover_bb
+	local RenderImage = safeRequire("ui/renderimage")
+	if RenderImage and RenderImage.scaleBlitBuffer then
+		local ok, scaled = pcall(RenderImage.scaleBlitBuffer, RenderImage, cover_bb, screen_w, screen_h, false)
+		if ok and scaled then
+			State.stretched_bb = scaled
+			image = scaled
+		else
+			warn("failed to pre-scale cover, using ImageWidget scaling", scaled)
+		end
+	end
+
+	return wrapFullScreen(
+		ImageWidget:new({
+			image = image,
+			width = screen_w,
+			height = screen_h,
+			scale_factor = State.stretched_bb and 1 or 0,
+			alpha = true,
+			dithered = getDitheredOption(),
+			image_disposable = false,
+		}),
+		screen_w,
+		screen_h
+	)
 end
 
 local function makeCenteredCardCoverWidget(cover_bb, cover_w, cover_h, screen_w, screen_h)
@@ -817,14 +860,19 @@ local function makeCoverImageWidget(cover_bb)
 	local scale_factor
 	if layout_mode == LayoutMode.fill_zoom then
 		scale_factor = math.max(screen_w / cover_w, screen_h / cover_h)
-		return ImageWidget:new({
-			image = cover_bb,
-			width = screen_w,
-			height = screen_h,
-			scale_factor = scale_factor,
-			alpha = true,
-			image_disposable = false,
-		})
+		return wrapFullScreen(
+			ImageWidget:new({
+				image = cover_bb,
+				width = screen_w,
+				height = screen_h,
+				scale_factor = scale_factor,
+				alpha = true,
+				dithered = getDitheredOption(),
+				image_disposable = false,
+			}),
+			screen_w,
+			screen_h
+		)
 	end
 
 	scale_factor = math.min(screen_w / cover_w, screen_h / cover_h)
@@ -838,8 +886,10 @@ local function makeCoverImageWidget(cover_bb)
 	local background = layout_mode == LayoutMode.fit_white and Blitbuffer.COLOR_WHITE or Blitbuffer.COLOR_BLACK
 
 	return FrameContainer:new({
-		dimen = { w = screen_w, h = screen_h },
+		width = screen_w,
+		height = screen_h,
 		padding = 0,
+		margin = 0,
 		bordersize = 0,
 		background = background,
 		CenterContainer:new({
@@ -849,13 +899,14 @@ local function makeCoverImageWidget(cover_bb)
 	})
 end
 
-local Device = require("device")
-
 local function showCover(filepath, options)
 	if not filepath or filepath == "" then
 		return false
 	end
 
+	options = options or {}
+	-- cancel stale close timers so they can't remove this new cover early
+	UIManager:unschedule(closeCover)
 	closeCover()
 	closeOverlayWidgets()
 
@@ -870,15 +921,15 @@ local function showCover(filepath, options)
 
 	local cover_widget = makeCoverImageWidget(cover_bb)
 
-	if Device:isKobo() and Device:info() == "Kobo_io" then
+	if Device:isKobo() and Device.model == "Kobo_io" then
 		require("ffi/util").usleep(250 * 1000)
 	end
 
 	local ok, err = pcall(function()
 		UIManager:show(cover_widget, "full")
-        if options.reason == "close" then
-		    UIManager:forceRePaint()
-        end
+		if options.reason == "close" then
+			UIManager:forceRePaint()
+		end
 	end)
 
 	if not ok then
@@ -910,7 +961,7 @@ end
 local function makeModeMenu(setting_key, default_mode, get_current_mode)
 	local items = {}
 
-	for _, mode in ipairs(MODE_ORDER) do
+	for _i, mode in ipairs(MODE_ORDER) do
 		table.insert(items, {
 			text = modeLabel(mode),
 			radio = true,
@@ -938,7 +989,7 @@ end
 local function makeSourceModeMenu()
 	local items = {}
 
-	for _, mode in ipairs(SOURCE_MODE_ORDER) do
+	for _i, mode in ipairs(SOURCE_MODE_ORDER) do
 		table.insert(items, {
 			text = sourceModeLabel(mode),
 			radio = true,
@@ -961,7 +1012,7 @@ end
 local function makeLayoutModeMenu()
 	local items = {}
 
-	for _, mode in ipairs(LAYOUT_MODE_ORDER) do
+	for _i, mode in ipairs(LAYOUT_MODE_ORDER) do
 		table.insert(items, {
 			text = layoutModeLabel(mode),
 			radio = true,
@@ -985,7 +1036,7 @@ local function makeCardSizeMenu()
 	local items = {}
 	local options = { 40, 50, 60, 70, 80, 90 }
 
-	for _, percent in ipairs(options) do
+	for _i, percent in ipairs(options) do
 		table.insert(items, {
 			text = percent .. "%",
 			radio = true,
@@ -1162,7 +1213,7 @@ local function patchUIManagerShow()
 	UIManager.show = function(self, widget, ...)
 		if
 			widgetLooksLikeClosingBookNotice(widget)
-			and (State.suppress_closing_notice or shouldPreSuppressClosingNotice())
+			and (State.suppress_closing_notice or shouldSuppressClosingNotice())
 		then
 			startSuppressingClosingNotice()
 			return widget
@@ -1180,23 +1231,20 @@ local function patchShowReaderCoroutine()
 	ReaderUI._original_showReaderCoroutine_bookloadcover = ReaderUI.showReaderCoroutine
 
 	ReaderUI.showReaderCoroutine = function(self, file, provider, seamless)
-		local cover_shown = false
 		-- KOReader flags a document reload (e.g. triggered by changing a book
 		-- setting like font, margins, etc.) by setting self.reloading = true
 		-- on the new ReaderUI instance. Without this check, the opening cover
 		-- would be shown on every such reload regardless of the
 		-- "Show cover on internal reload/document switch" setting, since that
 		-- setting was previously only honored on the closing side.
-		local is_internal_reload = self.reloading and true or false
+		local is_internal_reload = (self.reloading or self.tearing_down) and true or false
 
 		if shouldShowOpeningCover() and not (is_internal_reload and not shouldShowOnTeardown()) then
 			local ok, result = pcall(showCover, file, {
 				reason = "open",
 				allow_direct_extract = true,
 			})
-			if ok then
-				cover_shown = result
-			else
+			if not ok then
 				warn("showCover failed", result)
 			end
 		end
@@ -1289,5 +1337,3 @@ patchReaderInit()
 patchReaderOnClose()
 
 info("initialized successfully")
-
-
