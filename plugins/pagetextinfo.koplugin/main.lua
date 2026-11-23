@@ -712,6 +712,26 @@ function RulerOverlay:onResume()
     return true
 end
 
+-- "Go back" bubble of the reading-location patch. Returns true if it was showing (it is closed now), false if not.
+-- go_to_page = true: also jump to the page it points to (same as tapping it); false: only close it.
+function PageTextInfo:_closeLocationBubble(go_to_page)
+    local rlt = self.ui and self.ui._rlt_overlay
+    if not (rlt and rlt.visible) then return false end
+    local target = go_to_page and self.ui._rlt_anchor or nil
+    local region = rlt.box_dimen
+    rlt.visible = false
+    if target then
+        -- the jump repaints the whole page, already without the bubble
+        self.ui:handleEvent(Event:new("GotoPage", target))
+    elseif region then
+        region = Geom:new{ x = region.x, y = region.y, w = region.w, h = region.h + Screen:scaleBySize(2) }
+        UIManager:setDirty(self.ui.dialog or self.ui, function() return "flashui", region end)
+    else
+        UIManager:setDirty(self.view.dialog, "ui")
+    end
+    return true
+end
+
 function PageTextInfo:onSwipe(_, ges)
     if not self.initialized then return end
     local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
@@ -742,6 +762,9 @@ function PageTextInfo:onSwipe(_, ges)
             UIManager:setDirty(self.view.dialog, "ui")
         end
     elseif direction == "north" then
+        -- The "go back" bubble is showing: this swipe only closes it (it does NOT go to the page).
+        -- Without the bubble the swipe does what it did before.
+        if self:_closeLocationBubble(false) then return true end
         if self.ui and self.ui.bookends and self.ui.bookends.enabled then
             -- local statistics = self.ui and self.ui.statistics
             -- if statistics and statistics.isEnabled and statistics:isEnabled() then
@@ -787,22 +810,7 @@ function PageTextInfo:onSwipe(_, ges)
         -- The "go back" bubble of the reading-location patch is showing: this swipe closes it and takes you to the page
         -- it points to (what tapping the bubble does). Nothing else happens.
         -- Without the bubble the swipe does what it did before.
-        local rlt = self.ui and self.ui._rlt_overlay
-        if rlt and rlt.visible then
-            local target = self.ui._rlt_anchor
-            local region = rlt.box_dimen
-            rlt.visible = false
-            if target then
-                -- the jump repaints the whole page, already without the bubble
-                self.ui:handleEvent(Event:new("GotoPage", target))
-            elseif region then
-                region = Geom:new{ x = region.x, y = region.y, w = region.w, h = region.h + Screen:scaleBySize(2) }
-                UIManager:setDirty(self.ui.dialog or self.ui, function() return "flashui", region end)
-            else
-                UIManager:setDirty(self.view.dialog, "ui")
-            end
-            return true
-        end
+        if self:_closeLocationBubble(true) then return true end
         -- local doc_settings = DocSettings:open(doc_path)
         -- local reference_page = self.ui.doc_settings:readSetting("reference_page_xpointer")
         -- if not reference_page then
