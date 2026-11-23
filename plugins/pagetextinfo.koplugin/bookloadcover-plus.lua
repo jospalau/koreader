@@ -6,6 +6,11 @@ local UIManager = require("ui/uimanager")
 local ImageWidget = require("ui/widget/imagewidget")
 local InfoMessage = require("ui/widget/infomessage")
 local CenterContainer = require("ui/widget/container/centercontainer")
+local BottomContainer = require("ui/widget/container/bottomcontainer")
+local OverlapGroup = require("ui/widget/overlapgroup")
+local TextWidget = require("ui/widget/textwidget")
+local Font = require("ui/font")
+local Geom = require("ui/geometry")
 local FrameContainer = require("ui/widget/container/framecontainer")
 local Blitbuffer = require("ffi/blitbuffer")
 local Device = require("device")
@@ -16,7 +21,7 @@ local _ = require("gettext")
 
 local PLUGIN_NAME = "BookLoadCover Plus"
 local LOG_PREFIX = PLUGIN_NAME .. " patch:"
-local PATCH_VERSION = "v1.2.5"
+local PATCH_VERSION = "v1.3.1"
 
 local function pluginName()
 	return _("BookLoadCover Plus")
@@ -52,6 +57,9 @@ local Settings = {
 	card_size_percent = "bookloadcover_card_size_percent",
 	card_rounded_corners = "bookloadcover_card_rounded_corners",
 	close_on_teardown = "bookloadcover_close_on_teardown",
+	status_label = "bookloadcover_status_label", -- legacy: applied to both
+	status_label_open = "bookloadcover_status_label_open",
+	status_label_close = "bookloadcover_status_label_close",
 	suppress_closing_notice = "bookloadcover_suppress_closing_notice",
 	open_close_delay = "bookloadcover_close_delay",
 	after_close_delay = "bookloadcover_after_close_delay",
@@ -231,6 +239,14 @@ end
 
 local function shouldExtractFromDocument()
 	return G_reader_settings:nilOrTrue(Settings.extract_enabled)
+end
+
+local function shouldShowStatusLabel(reason)
+	local key = reason == "close" and Settings.status_label_close or Settings.status_label_open
+	if G_reader_settings:has(key) then
+		return G_reader_settings:isTrue(key)
+	end
+	return G_reader_settings:nilOrTrue(Settings.status_label)
 end
 
 local function shouldShowOnTeardown()
@@ -918,6 +934,53 @@ local function makeCoverImageWidget(cover_bb)
 	})
 end
 
+-- Small rounded "pill" at the bottom of the cover: "Opening book…" / "Closing book…".
+local function makeStatusLabelWidget(reason, screen_w, screen_h)
+	local text = reason == "close" and _("Closing book…") or _("Opening book…")
+	local text_widget = TextWidget:new({
+		text = text,
+		face = Font:getFace("cfont", 20),
+		bold = true,
+		fgcolor = Blitbuffer.COLOR_BLACK,
+	})
+
+	local pill = FrameContainer:new({
+		background = Blitbuffer.COLOR_WHITE,
+		color = Blitbuffer.COLOR_BLACK,
+		bordersize = Screen:scaleBySize(2),
+		radius = Screen:scaleBySize(22),
+		padding = Screen:scaleBySize(8),
+		padding_left = Screen:scaleBySize(20),
+		padding_right = Screen:scaleBySize(20),
+		margin = 0,
+		text_widget,
+	})
+
+	return BottomContainer:new({
+		dimen = Geom:new({ w = screen_w, h = screen_h - Screen:scaleBySize(48) }),
+		pill,
+	})
+end
+
+local function addStatusLabel(cover_widget, reason)
+	local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
+	local ok, result = pcall(function()
+		return OverlapGroup:new({
+			dimen = Geom:new({ w = screen_w, h = screen_h }),
+			allow_mirroring = false,
+			cover_widget,
+			makeStatusLabelWidget(reason, screen_w, screen_h),
+		})
+	end)
+
+	if ok and result then
+		return result
+	end
+
+	warn("failed to build status label, showing plain cover", result)
+	return cover_widget
+end
+
 local function showCover(filepath, options)
 	if not filepath or filepath == "" then
 		return false
@@ -939,6 +1002,12 @@ local function showCover(filepath, options)
 	end
 
 	local cover_widget = makeCoverImageWidget(cover_bb)
+	local label_shown = false
+	if shouldShowStatusLabel(options.reason) then
+		local with_label = addStatusLabel(cover_widget, options.reason)
+		label_shown = with_label ~= cover_widget
+		cover_widget = with_label
+	end
 
 	if Device:isKobo() and Device.model == "Kobo_io" then
 		require("ffi/util").usleep(250 * 1000)
@@ -958,7 +1027,7 @@ local function showCover(filepath, options)
 	end
 
 	-- "Cover + default widgets": put the third-party "Closing book…" notice back on top of the cover.
-	if options.reason == "close" and getCloseMode() == Mode.cover_with_widgets then
+	if options.reason == "close" and getCloseMode() == Mode.cover_with_widgets and not label_shown then
 		-- The third-party notice may already be gone (or hidden under the cover), so drop it
 		-- and show our own persistent notice above the cover instead.
 		for _i, notice in ipairs(kept_notices) do
@@ -1149,6 +1218,38 @@ function BookLoadCoverMenu:addToMainMenu(menu_items)
 						end,
 						keep_menu_open = true,
 						sub_item_table = makeLayoutModeMenu(),
+					},
+					{
+						text = _("Show label on cover"),
+						keep_menu_open = true,
+						sub_item_table = {
+							{
+								text = _("When opening"),
+								checked_func = function()
+									return shouldShowStatusLabel("open")
+								end,
+								keep_menu_open = true,
+								callback = function(touchmenu_instance)
+									saveSetting(Settings.status_label_open, not shouldShowStatusLabel("open"))
+									if touchmenu_instance then
+										touchmenu_instance:updateItems()
+									end
+								end,
+							},
+							{
+								text = _("When closing"),
+								checked_func = function()
+									return shouldShowStatusLabel("close")
+								end,
+								keep_menu_open = true,
+								callback = function(touchmenu_instance)
+									saveSetting(Settings.status_label_close, not shouldShowStatusLabel("close"))
+									if touchmenu_instance then
+										touchmenu_instance:updateItems()
+									end
+								end,
+							},
+						},
 					},
 					{
 						text = _("Centered card"),
