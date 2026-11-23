@@ -132,7 +132,7 @@ return function(PageTextInfo)
 
     -- Refresh file list, history and stats after books changed on disk
     -- (used when the user chooses not to restart)
-    local function refreshAfterBookSync(paths)
+    local function refreshAfterBookSync(paths, skip_stats)
         if not G_reader_settings:isTrue("top_manager_infmandhistory") then
             return
         end
@@ -142,7 +142,7 @@ return function(PageTextInfo)
         -- Read the history file again, because it can contain books
         -- that are not physically in the device
         require("readhistory"):reload(true)
-        util.generateStats()
+        if not skip_stats then util.generateStats() end
 
         -- The file manager may not be open, so guard against a nil instance
         local FileManager = require("apps/filemanager/filemanager")
@@ -158,7 +158,8 @@ return function(PageTextInfo)
     -- opts.on_no_restart: function(paths) called when the user chooses not to restart.
     -- opts.progress_text: text shown while the script runs.
     -- opts.error_text:    text shown (followed by the output) when the script fails.
-    -- Returns true only if the script ran and succeeded.
+    -- opts.quiet:         if true, no result / restart dialog: the output is returned to the caller.
+    -- Returns true (plus the cleaned output) only if the script ran and succeeded.
     local function runSyncScript(script_name, opts)
         opts = opts or {}
         -- Texts can be overridden per call (defaults keep the sync wording)
@@ -221,6 +222,11 @@ return function(PageTextInfo)
             return false
         end
 
+        -- Part of a longer sequence: the caller shows the final result / restart question
+        if opts.quiet then
+            return true, clean
+        end
+
         if opts.ask_restart then
             -- Show the output and the restart question in a single dialog
             -- so they can't cover each other
@@ -250,7 +256,7 @@ return function(PageTextInfo)
                 face = Font:getFace("myfont"),
             })
         end
-        return true
+        return true, clean
     end
 
     function PageTextInfo:onSynchronizeCode()
@@ -284,6 +290,55 @@ return function(PageTextInfo)
             flash_no = true,
             on_no_restart = refreshAfterBookSync,
         })
+    end
+
+    -- Runs the three sync scripts one after the other: code, pull config and books.
+    -- It stops at the first failure (runSyncScript already shows the error) and asks
+    -- about the restart only once at the end, instead of once per script.
+    function PageTextInfo:onSyncCodeBooksAndPull()
+        local ConfirmBox = require("ui/widget/confirmbox")
+        local steps = {
+            { script = "syncKOReaderCode.sh", label = _("Code"),   progress = _("Synchronizing code...") },
+            { script = "pullConfig.sh",       label = _("Config"), progress = _("Pulling config...") },
+            { script = "syncBooks.sh",        label = _("Books"),  progress = _("Synchronizing books...") },
+        }
+        local parts = {}
+        for __, step in ipairs(steps) do
+            local ok, out = runSyncScript(step.script, {
+                quiet = true,
+                progress_text = step.progress,
+                error_text = T(_("Problem while running %1"), step.script),
+            })
+            if not ok then return end
+            out = (out or ""):gsub("^%s+", ""):gsub("%s+$", "")
+            if out ~= "" then
+                parts[#parts + 1] = step.label .. ":\n" .. out
+            end
+        end
+
+        -- Same as the single "Pull conf": regenerate stats if enabled
+        if G_reader_settings:isTrue("top_manager_infmandhistory") then
+            util.generateStats()
+        end
+
+        local paths = getPlatformPaths()
+        local confirm_box
+        confirm_box = ConfirmBox:new{
+            dismissable = false,
+            text = table.concat(parts, "\n\n") .. "\n\n" .. _("KOReader needs to be restarted."),
+            ok_text = Device:canRestart() and _("Restart") or _("Quit"),
+            cancel_text = _("No need to restart"),
+            flash_yes = true,
+            flash_no = true,
+            ok_callback = function()
+                restartKOReader(paths, confirm_box)
+            end,
+            cancel_callback = function()
+                -- Books may have changed: refresh the library instead of restarting (stats already done above)
+                refreshAfterBookSync(paths, true)
+            end,
+        }
+        UIManager:show(confirm_box)
     end
 
     function PageTextInfo:onInstallLastVersion()
@@ -529,6 +584,7 @@ return function(PageTextInfo)
             { label = "Sync books", callback = function() self:onSyncBooks() end },
             { label = "Pull conf",  callback = function() self:onPullConfig() end },
             { label = "Push conf",  callback = function() self:onPushConfig() end },
+            { label = "Sync code, pull and books", full_width = true, callback = function() self:onSyncCodeBooksAndPull() end },
         }
 
         table.insert(actions, {
