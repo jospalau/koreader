@@ -1,19 +1,26 @@
-        <svg width="318" height="317" viewBox="0 0 318 317" xmlns="http://www.w3.org/2000/svg">
-            <!-- Fondo blanco con hueco central recortado -->
+        <svg width="154" height="234" viewBox="0 0 154 234" xmlns="http://www.w3.org/2000/svg">
+
+            <!-- White background with an inner hole -->
             <path d="
-                M0,0 h318 v317 h-318 z
-                M2,35
-                a35,35 0 0 1 35,-35
-                h246
-                a35,35 0 0 1 35,35
-                v245
-                a35,35 0 0 1 -35,35
-                h-246
-                a35,35 0 0 1 -35,-35
+                M0,0 h154 v234 h-154 z
+                M2,20
+                a20,20 0 0 1 20,-20
+                h112
+                a20,20 0 0 1 20,20
+                v192
+                a20,20 0 0 1 -20,20
+                h-112
+                a20,20 0 0 1 -20,-20
                 z
             " fill="white" fill-rule="evenodd"></path>
 
-            <!-- Marco dibujado encima -->
-            <rect x="2" y="2" width="314" height="313" rx="35" ry="35" fill="none" stroke="black" stroke-width="1.5"/>
+            <!-- Outer frame (aligned with the cover's outer limits) -->
+            <rect x="1.00" y="1.00"
+                width="152.00" height="232.00"
+                rx="20" ry="20"
+                fill="none"
+                stroke="black"
+                stroke-width="2.00"/>
+
         </svg>
             
