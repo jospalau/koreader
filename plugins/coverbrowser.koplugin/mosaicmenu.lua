@@ -822,152 +822,73 @@ function MosaicMenuItem:update()
                 end
                 image:_render()
                 local image_size = image:getSize()
-                -- if self.show_parent.title == "Reading Planner & Tracker" then
-                local TextWidget = require("ui/widget/textwidget")
-                local AlphaContainer = require("ui/widget/container/alphacontainer")
-                local words = "N/A"
-                local pubdate = "N/A"
-                local grvotes = "N/A"
-                local grrating = "N/A"
+                -- Calibre metadata overlay (words / year / Goodreads rating) at the bottom of the cover
                 local fname = self.filepath and self.filepath:match("([^/]+)$")
-                if self.show_parent.calibre_data
-                and fname
-                and self.show_parent.calibre_data[fname]
-                and self.show_parent.calibre_data[fname]["words"]
-                and self.show_parent.calibre_data[fname]["pubdate"]
-                and self.show_parent.calibre_data[fname]["grvotes"]
-                and self.show_parent.calibre_data[fname]["grrating"] then
-                    words = tostring(math.floor(self.show_parent.calibre_data[fname]["words"]/1000)) .. "kw"
-                    pubdate = self.show_parent.calibre_data[fname]["pubdate"]:sub(1, 4)
-                    grvotes = self.show_parent.calibre_data[fname]["grvotes"]
-                    grrating = self.show_parent.calibre_data[fname]["grrating"]
+                local cal = self.show_parent.calibre_data and fname and self.show_parent.calibre_data[fname]
+                local words, pubdate, grvotes, grrating
+                if cal and cal.words and cal.pubdate and cal.grvotes and cal.grrating then
+                    words = tostring(math.floor(cal.words / 1000)) .. "kw"
+                    pubdate = cal.pubdate:sub(1, 4)
+                    grvotes = cal.grvotes
+                    grrating = cal.grrating
                 end
-                if self.status == "tbr" then
-                    if G_reader_settings:isTrue("top_manager_infmandhistory")
-                    and _G.all_files
-                    and _G.all_files[self.filepath] then
-                        local tbr_pos = self.show_parent.ui and self.show_parent.ui.history:getTBRPosition(self.filepath) or (self.show_parent.history and self.show_parent.history:getTBRPosition(self.filepath))
-                        if tbr_pos ~= nil then
-                            words = "TBR ".. tbr_pos .. " " .. words
-                        end
-                    else
-                        words = words
-                    end
+                local tbr_pos
+                if self.status == "tbr" and G_reader_settings:isTrue("top_manager_infmandhistory")
+                        and _G.all_files and _G.all_files[self.filepath] then
+                    local history = self.show_parent.ui and self.show_parent.ui.history or self.show_parent.history
+                    tbr_pos = history and history:getTBRPosition(self.filepath)
+                end
+                local words_line
+                if words then
+                    words_line = "W: " .. (tbr_pos and ("TBR " .. tbr_pos .. " ") or "") .. words
+                elseif tbr_pos then
+                    words_line = "TBR " .. tbr_pos
                 end
 
-                local tww = TextWidget:new{
-                    text = words,
-                    face = Font:getFace("cfont", 12),
-                }
+                local font_size = math.max(8, math.floor(image_size.h * 0.03))
+                local line_h = font_size + Screen:scaleBySize(4)
+                local pad = Screen:scaleBySize(4)
 
-                local sizew = tww:getSize()
-                tww:free()
-
-                -- local twpd = TextWidget:new{
-                --     text = pubdate,
-                --     face = Font:getFace("cfont", 12),
-                -- }
-
-                -- local sizepd = twpd:getSize()
-                -- twpd:free()
-
-                -- local twgrv = TextWidget:new{
-                --     text = grvotes,
-                --     face = Font:getFace("cfont", 12),
-                -- }
-
-                -- local sizegrv = twgrv:getSize()
-                -- twgrv:free()
-
-                -- local twgrr = TextWidget:new{
-                --     text = grrating,
-                --     face = Font:getFace("cfont", 12),
-                -- }
-
-                -- local sizegrr = twgrr:getSize()
-                -- twgrr:free()
-
-                local border_adjustment = 0
-
-                -- This adjusts the alpha overlayed rectangle drawn on top of the cover when enable_extra_tweaks_mosaic_view is enabled
-                -- But when the tweak is enabled the covers are expanded with no borders and the gaps of the lateral borders of the rectangle not covered can be seen.
-                -- Uncomenting it, the rectangle will be shifted 2 pixels to the right of the cover but since the borders are removed
-                -- it will not be seen and the sides of the rectangle will be covered grayed due to the alpha channel
-                -- if self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
-                --     border_adjustment = 2*Size.border.thin
-                -- end
-                -- if self.pagetextinfo.settings:isTrue("enable_rounded_corners") then
-                    -- border_adjustment = Size.border.thin
-                    if self.pagetextinfo.settings:isTrue("enable_rounded_corners") and self.pagetextinfo.settings:isTrue("draw_borders_mosaic_overlays") then
-                        border_adjustment = 2 * Size.border.thin
-                    end
-                -- end
-
-
-                local function makeTag(text, font_size)
-                    if not text or text == "" then
-                        return VerticalSpan:new{ width = Screen:scaleBySize(1) }
-                    end
-                    return TextWidget:new{
+                local info_rows = VerticalGroup:new{ align = "center" }
+                local function addTag(text)
+                    table.insert(info_rows, TextWidget:new{
                         text = text,
                         face = Font:getFace("cfont", font_size),
                         fgcolor = Blitbuffer.COLOR_WHITE,
                         padding = 0,
+                    })
+                end
+                if words_line then addTag(words_line) end
+                if pubdate then addTag("Y: " .. pubdate) end
+                if grrating then addTag("★ " .. grrating .. " (" .. grvotes .. ")") end
+                local num_lines = #info_rows
+
+                -- Only draw the strip when there is something to show in it
+                local info_overlay
+                if num_lines > 0 then
+                    -- height fitted exactly to the content
+                    local overlay_h = (num_lines * line_h) + (pad * 2)
+                    local overlay_y = image_size.h - overlay_h
+                    local overlay_w = math.min(image_size.w, max_img_w)
+                    info_overlay = OverlapGroup:new{
+                        dimen = Geom:new{ w = overlay_w, h = image_size.h },
+                        AlphaContainer:new{
+                            alpha = 0.65,
+                            overlap_offset = { 0, overlay_y },
+                            FrameContainer:new{
+                                margin = 0,
+                                padding = pad,
+                                bordersize = 0,
+                                background = Blitbuffer.COLOR_BLACK,
+                                dimen = Geom:new{ w = overlay_w, h = overlay_h },
+                                CenterContainer:new{
+                                    dimen = Geom:new{ w = overlay_w - pad*2, h = overlay_h - pad*2 },
+                                    info_rows,
+                                },
+                            },
+                        },
                     }
                 end
-
-                local text_h = Screen:scaleBySize(14) -- altura real aproximada de TextWidget con font 11
-                local num_lines = 0
-                if words ~= "N/A" then num_lines = num_lines + 1 end
-                if pubdate ~= "N/A" then num_lines = num_lines + 1 end
-                if grrating ~= "N/A" then num_lines = num_lines + 1 end
-
-                local target_h = math.floor(image_size.h * 0.5)
-                local rows_h = num_lines * text_h
-                local padding_h = math.max(0, target_h - rows_h)
-
-            local font_size = math.max(8, math.floor(image_size.h * 0.03))
-            local line_h = font_size + Screen:scaleBySize(4)
-            local pad = Screen:scaleBySize(4)
-
-            local info_rows = VerticalGroup:new{ align = "center" }
-            local num_lines = 0
-            if words ~= "N/A" then
-                table.insert(info_rows, makeTag("W: " .. words, font_size))
-                num_lines = num_lines + 1
-            end
-            if pubdate ~= "N/A" then
-                table.insert(info_rows, makeTag("Y: " .. pubdate, font_size))
-                num_lines = num_lines + 1
-            end
-            if grrating ~= "N/A" then
-                table.insert(info_rows, makeTag("★ " .. grrating .. " (" .. grvotes .. ")", font_size))
-                num_lines = num_lines + 1
-            end
-
-            -- alto exacto al contenido
-            local overlay_h = (num_lines * line_h) + (pad * 2)
-            local overlay_y = image_size.h - overlay_h
-            local overlay_w = math.min(image_size.w, max_img_w)
-
-            local info_overlay = OverlapGroup:new{
-                dimen = Geom:new{ w = overlay_w, h = image_size.h },
-                AlphaContainer:new{
-                    alpha = 0.65,
-                    overlap_offset = { 0, overlay_y },
-                    FrameContainer:new{
-                        margin = 0,
-                        padding = pad,
-                        bordersize = 0,
-                        background = Blitbuffer.COLOR_BLACK,
-                        dimen = Geom:new{ w = overlay_w, h = overlay_h },
-                        CenterContainer:new{
-                            dimen = Geom:new{ w = overlay_w - pad*2, h = overlay_h - pad*2 },
-                            info_rows,
-                        },
-                    },
-                },
-            }
 
                 widget = CenterContainer:new{
                     dimen = dimen,
@@ -1082,6 +1003,114 @@ function MosaicMenuItem:update()
         previous_widget:free()
     end
     self._underline_container[1] = widget
+end
+
+-- The rounded-corner overlay is an SVG generated for the cover's size. It used to be written to disk
+-- and turned into a new IconWidget (never freed) on every paint of every item. Now each size/radius is
+-- generated once, and its widget is kept and reused.
+local ROUNDED_CORNERS_SVG = "resources/icons/mdlight/rounded.corners.svg"
+local rounded_corners_cache = {}
+local rounded_corners_count = 0
+
+local function writeRoundedCornersSVG(path_out, target_width, target_height, base_radius)
+    base_radius = base_radius or 70  -- default corner radius
+
+    -- Scale radius
+    local scale_x = target_width / 450
+    local scale_y = target_height / 680
+    local rx = math.floor(base_radius * ((scale_x + scale_y) / 2))
+
+    -- Inner hole positioning
+    local dx = rx
+    local dy = rx
+    local inner_w = math.max(10, target_width - 2) - 2*rx
+    local inner_h = math.max(10, target_height - 2) - 2*rx
+
+    -- The stroke is centered on the rect's edge, so inset the rect by half the
+    -- stroke width to make the border touch the cover's outer limits exactly.
+    local stroke = 2
+    local inset = stroke / 2
+    local rect_x = inset
+    local rect_y = inset
+    local rect_w = target_width - stroke
+    local rect_h = target_height - stroke
+
+    local svg_content = string.format([[
+        <svg width="%d" height="%d" viewBox="0 0 %d %d" xmlns="http://www.w3.org/2000/svg">
+
+            <!-- White background with an inner hole -->
+            <path d="
+                M0,0 h%d v%d h-%d z
+                M2,%d
+                a%d,%d 0 0 1 %d,-%d
+                h%d
+                a%d,%d 0 0 1 %d,%d
+                v%d
+                a%d,%d 0 0 1 -%d,%d
+                h-%d
+                a%d,%d 0 0 1 -%d,-%d
+                z
+            " fill="white" fill-rule="evenodd"></path>
+
+            <!-- Outer frame (aligned with the cover's outer limits) -->
+            <rect x="%.2f" y="%.2f"
+                width="%.2f" height="%.2f"
+                rx="%d" ry="%d"
+                fill="none"
+                stroke="black"
+                stroke-width="%.2f"/>
+
+        </svg>
+            ]],
+        -- SVG size
+        target_width, target_height, target_width, target_height,
+        -- Outer frame cut
+        target_width, target_height, target_width,
+        -- Inner hole
+        dy, rx, rx, dx, dy,
+        inner_w,
+        rx, rx, dx, dy,
+        inner_h,
+        rx, rx, dx, dy,
+        inner_w,
+        rx, rx, dx, dy,
+        -- Outer frame rect
+        rect_x, rect_y,
+        rect_w, rect_h,
+        rx, rx,
+        stroke
+    )
+
+    local f, err = io.open(path_out, "w")
+    if not f then
+        logger.warn("MosaicMenuItem: could not write rounded corners SVG:", err)
+        return false
+    end
+    f:write(svg_content)
+    f:close()
+    return true
+end
+
+-- The widget renders the SVG file right when it is first painted, and the caller paints it
+-- straight away, so the single shared file can safely be rewritten for the next size.
+local function getRoundedCorners(w, h, radius)
+    local key = w .. "x" .. h .. "r" .. radius
+    local widget = rounded_corners_cache[key]
+    if widget == nil then
+        if rounded_corners_count >= 8 then -- covers of many different sizes: start over
+            for _, cached in pairs(rounded_corners_cache) do
+                if cached then cached:free() end
+            end
+            rounded_corners_cache = {}
+            rounded_corners_count = 0
+        end
+        if writeRoundedCornersSVG(ROUNDED_CORNERS_SVG, w, h, radius) then
+            widget = IconWidget:new{ icon = "rounded.corners", alpha = true, width = w, height = h }
+        end
+        rounded_corners_cache[key] = widget or false -- false: failed, don't retry on every paint
+        rounded_corners_count = rounded_corners_count + 1
+    end
+    return widget or nil
 end
 
 function MosaicMenuItem:paintTo(bb, x, y)
@@ -1228,98 +1257,11 @@ function MosaicMenuItem:paintTo(bb, x, y)
 
     end
     if not self.is_directory and self.pagetextinfo and self.pagetextinfo.settings:isTrue("enable_rounded_corners") then
-        local function generateRoundedSVGDynamic(path_out, target_width, target_height, base_radius)
-            base_radius = base_radius or 70  -- default corner radius
-
-            -- Scale radius
-            local scale_x = target_width / 450
-            local scale_y = target_height / 680
-            local rx = math.floor(base_radius * ((scale_x + scale_y) / 2))
-
-            -- Inner hole positioning
-            local dx = rx
-            local dy = rx
-            local inner_w  = math.max(10, target_width  - 2) - 2*rx
-            local inner_h  = math.max(10, target_height - 2) - 2*rx
-            local offset_x = 2 + rx
-            local offset_y = 2 + rx
-
-            -- ---- FIX DEL BORDE EXTERIOR ----
-            -- Para que el borde toque *exactamente* los límites exteriores del cover,
-            -- hay que compensar el stroke-width (1.5 px).
-            -- Medio grosor = 0.75 px → colocamos el rect en (0.75, 0.75)
-            -- y su tamaño es W - 1.5 y H - 1.5.
-            local stroke = 2
-            local inset  = stroke / 2
-            local rect_x = inset
-            local rect_y = inset
-            local rect_w = target_width  - stroke
-            local rect_h = target_height - stroke
-
-            local svg_content = string.format([[
-        <svg width="%d" height="%d" viewBox="0 0 %d %d" xmlns="http://www.w3.org/2000/svg">
-
-            <!-- Fondo blanco con hueco interior -->
-            <path d="
-                M0,0 h%d v%d h-%d z
-                M2,%d
-                a%d,%d 0 0 1 %d,-%d
-                h%d
-                a%d,%d 0 0 1 %d,%d
-                v%d
-                a%d,%d 0 0 1 -%d,%d
-                h-%d
-                a%d,%d 0 0 1 -%d,-%d
-                z
-            " fill="white" fill-rule="evenodd"></path>
-
-            <!-- Marco exterior corregido (perfectamente alineado) -->
-            <rect x="%.2f" y="%.2f"
-                width="%.2f" height="%.2f"
-                rx="%d" ry="%d"
-                fill="none"
-                stroke="black"
-                stroke-width="%.2f"/>
-
-        </svg>
-            ]],
-                -- SVG SIZE
-                target_width, target_height, target_width, target_height,
-
-                -- Outer frame cut
-                target_width, target_height, target_width,
-
-                -- Inner hole
-                dy, rx, rx, dx, dy,
-                inner_w,
-                rx, rx, dx, dy,
-                inner_h,
-                rx, rx, dx, dy,
-                inner_w,
-                rx, rx, dx, dy,
-
-                -- Rect FIX values
-                rect_x, rect_y,
-                rect_w, rect_h,
-                rx, rx,
-                stroke
-            )
-
-            local f = io.open(path_out, "w")
-            f:write(svg_content)
-            f:close()
+        local radius = self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") and 40 or 60
+        local corners = getRoundedCorners(target.dimen.w, target.dimen.h, radius)
+        if corners then
+            corners:paintTo(bb, target.dimen.x, target.dimen.y)
         end
-
-        local temp_svg = "resources/icons/mdlight/rounded.corners.svg"
-        if self.pagetextinfo.settings:isTrue("enable_extra_tweaks_mosaic_view") then
-            generateRoundedSVGDynamic(temp_svg, target.dimen.w, target.dimen.h, 40)
-        else
-            generateRoundedSVGDynamic(temp_svg, target.dimen.w, target.dimen.h, 60) -- 200)
-        end
-
-        -- local corners = IconWidget:new{ icon = "rounded.corners", alpha = true, width = self.show_parent.width, height = self.show_parent.height }
-        local corners = IconWidget:new{ icon = "rounded.corners", alpha = true, width = target.dimen.w, height = target.dimen.h }
-        corners:paintTo(bb, target.dimen.x,  target.dimen.y)
     end
 end
 
@@ -1390,6 +1332,7 @@ function MosaicMenu:_recalculateDimen()
     end
 
     local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    local pagetextinfo
     if ui ~= nil then
         pagetextinfo = ui.pagetextinfo
     else
