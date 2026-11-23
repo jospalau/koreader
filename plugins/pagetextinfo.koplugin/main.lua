@@ -3878,77 +3878,243 @@ function PageTextInfo:getGenreBook()
     end
 end
 
-function PageTextInfo:onShowReadingMotive()
-    -- Screen:clear()
-    -- Screen:refreshFull(0, 0, Screen:getWidth(), Screen:getHeight())
+-- ===== Hero de bookshelf (adaptado del parche del banner) =====
+local HERO_SETT = {
+    width_pct = 85,     -- ancho del hero (% de pantalla)
+    height_pct = 30,    -- alto de la tarjeta (% de pantalla)
+    hide_regions = { "status", "rating", "metadata", "description", "tags" },
+    show_progress = true,
+    background = Blitbuffer.COLOR_WHITE,  -- fondo detrás del hero: Blitbuffer.COLOR_WHITE, Blitbuffer.COLOR_GRAY_E (gris claro) o Blitbuffer.COLOR_LIGHT_GRAY
+    padding = 12,        -- aire alrededor del hero (px sin escalar)
+    border = 2,          -- grosor del borde (0 = sin borde)
+    outer_border = 2,    -- marco exterior hueco (0 = sin marco hueco)
+    outer_gap = 6,       -- separación entre el recuadro y el marco hueco
+}
 
-    local util = require("ffi/util")
-    -- util.usleep(20000000)
+local function buildHeroProgressRow(width, pct, book, device_state, progress_cfg)
+    local Bb = require("ffi/blitbuffer")
+    local Font = require("ui/font")
+    local util = require("util")
+    local HorizontalGroup = require("ui/widget/horizontalgroup")
+    local HorizontalSpan = require("ui/widget/horizontalspan")
+    local TextWidget = require("ui/widget/textwidget")
+    local HeroBar = require("lib/bookshelf_hero_bar")
 
+    local face = Font:getFace("cfont", 17)
+    local gap = Screen:scaleBySize(8)
 
-    local ScreenSaverWidget = require("ui/widget/screensaverwidget")
-    local OverlapGroup = require("ui/widget/overlapgroup")
-    local ImageWidget = require("ui/widget/imagewidget")
-    local BookStatusWidget = require("ui/widget/bookstatuswidget")
-    local FileManagerBookInfo = require("apps/filemanager/filemanagerbookinfo")
-    local widget_settings = {
-        width = Screen:getWidth(),
-        height = Screen:getHeight(),
-        scale_factor = G_reader_settings:isFalse("screensaver_stretch_images") and 0 or nil,
-        stretch_limit_percentage = G_reader_settings:readSetting("screensaver_stretch_limit_percentage"),
+    local pct_widget = TextWidget:new{
+        text = string.format("%d%%", math.floor(math.max(0, math.min(1, pct)) * 100 + 0.5)),
+        face = face, padding = 0, fgcolor = Bb.COLOR_BLACK,
     }
 
-    widget_settings.image_disposable = true
-    -- widget_settings.file = "resources/screenSaverKeepCalm.jpg"
-    -- widget_settings.file = "resources/oneMoreChapter.jpg"
-    widget_settings.file = "resources/books.jpg"
-    -- if Device:isKobo() then
-    --     widget_settings.file = "/mnt/onboard/.adds/colores.png"
-    -- elseif Device:isPocketBook() then
-    --     widget_settings.file = "/mnt/ext1/colores.png"
-    -- end
+    local left_text = ""
+    pcall(function()
+        local Tokens = require("lib/bookshelf_tokens")
+        left_text = util.trim(tostring(Tokens.expand("%book_time_left", book, device_state) or ""))
+    end)
+    local left_widget
+    if left_text ~= "" then
+        left_widget = TextWidget:new{
+            text = left_text, face = face, padding = 0,
+            fgcolor = Bb.COLOR_BLACK,
+        }
+    end
 
+    local used = pct_widget:getSize().w + gap * 2 + (left_widget and left_widget:getSize().w or 0)
+    local bar_colors
+    if progress_cfg.bar_style ~= "pacman" then
+        local ok_cp, CP = pcall(require, "lib/bookshelf_cover_progress")
+        if ok_cp and CP and CP.pickedBarColors then
+            bar_colors = CP.pickedBarColors()
+        end
+    end
+    local bar = HeroBar:new{
+        width = math.max(10, width - used),
+        height = Screen:scaleBySize(8),
+        percentage = pct,
+        style = progress_cfg.bar_style or "bordered",
+        colors = bar_colors,
+    }
 
-    widget_settings.file_do_cache = false
-    widget_settings.alpha = true
+    local row = HorizontalGroup:new{ align = "center", pct_widget, HorizontalSpan:new{ width = gap }, bar }
+    if left_widget then
+        table.insert(row, HorizontalSpan:new{ width = gap })
+        table.insert(row, left_widget)
+    end
+    return row
+end
 
+-- Devuelve el widget del hero, o nil si bookshelf no está instalado / falla algo.
+local function buildBookshelfHero(width, height)
+    local logger = require("logger")
+    local VerticalGroup = require("ui/widget/verticalgroup")
+    local VerticalSpan = require("ui/widget/verticalspan")
 
-    local widget = ImageWidget:new(widget_settings)
+    local ok, card = pcall(function()
+        local HeroCard = require("lib/bookshelf_hero_card")
+        local Repo = require("lib/bookshelf_book_repository")
+        local Space = require("lib/bookshelf_space")
+        local BookshelfWidget = require("lib/bookshelf_widget")
 
-    -- local doc = ui.document
-    -- local doc_settings = ui.doc_settings
-    -- widget = BookStatusWidget:new{
-    --     thumbnail = FileManagerBookInfo:getCoverImage(doc),
-    --     props = ui.doc_props,
-    --     document = doc,
-    --     settings = doc_settings,
-    --     ui = ui,
-    --     readonly = true,
-    -- }
+        -- guardar el libro abierto para que el progreso esté en disco
+        local rui = require("apps/reader/readerui").instance
+        if rui and rui.document then
+            pcall(function() rui:saveSettings() end)
+            local file = rui.document.file
+            if Repo.invalidateProgressCache then pcall(Repo.invalidateProgressCache, file) end
+            if Repo.invalidateStatsCache then pcall(Repo.invalidateStatsCache, file) end
+        end
 
-    local widget = OverlapGroup:new{
-        dimen = {
-            w = Screen:getWidth(),
-            h = Screen:getHeight(),
-        },
-        widget,
+        local book = Repo.getCurrent()
+        if not book then return nil end
+        if not book.book_pct and rui and rui.doc_settings then
+            book.book_pct = rui.doc_settings:readSetting("percent_finished")
+        end
+        if Repo.enrichStats then Repo.enrichStats(book) end
+        local device_state = BookshelfWidget._buildDeviceState({})
+
+        local pad = math.min(math.floor(Space.padding.fullscreen * 2 * 0.8),
+                             math.floor(Screen:getWidth() * 0.03))
+        local cover_h = math.max(1, height)
+        local cover_w = math.max(1, math.floor(cover_h / 1.5))
+        local max_cover_w = math.max(1, math.floor(width * 0.58))
+        if cover_w > max_cover_w then
+            cover_w = max_cover_w
+            cover_h = math.max(1, math.floor(cover_w * 1.5))
+        end
+
+        -- parchear Regions.read solo mientras se construye la tarjeta
+        local Regions = require("lib/bookshelf_hero_regions")
+        local original_read = Regions.read
+        local progress_cfg = original_read().progress or {}
+        Regions.read = function(...)
+            local base = original_read(...)
+            local patched = {}
+            for key, region in pairs(base) do patched[key] = region end
+            local function withDisabled(key, disabled)
+                if type(patched[key]) == "table" then
+                    local copy = {}
+                    for k, v in pairs(patched[key]) do copy[k] = v end
+                    copy.disabled = disabled
+                    patched[key] = copy
+                end
+            end
+            for _, key in ipairs(HERO_SETT.hide_regions or {}) do withDisabled(key, true) end
+            if HERO_SETT.show_progress then withDisabled("progress", true) end
+            return patched
+        end
+
+        local ok_card, card_or_err = pcall(HeroCard.new, HeroCard, {
+            book = book,
+            has_wallpaper = true,   -- tarjeta sin fondo propio (transparente)
+            width = width,
+            height = height,
+            cover_w = cover_w,
+            cover_h = cover_h,
+            pad = pad,
+            device_state = device_state,
+        })
+        Regions.read = original_read -- siempre restaurar
+        if not ok_card then error(card_or_err) end
+        if not HERO_SETT.show_progress then return card_or_err end
+
+        local pct = tonumber(book.book_pct)
+        if not pct and rui and rui.doc_settings then
+            pct = tonumber(rui.doc_settings:readSetting("percent_finished"))
+        end
+        if not pct and rui and rui.document then
+            local ok_pg, v = pcall(function()
+                return rui.document:getCurrentPage() / rui.document:getPageCount()
+            end)
+            pct = ok_pg and v or nil
+        end
+        local row = buildHeroProgressRow(width, pct or 0, book, device_state, progress_cfg)
+        return VerticalGroup:new{
+            align = "left",
+            card_or_err,
+            VerticalSpan:new{ width = Screen:scaleBySize(6) },
+            row,
+        }
+    end)
+    if not ok then
+        logger.warn("[reading-motive] no se pudo construir el hero de bookshelf:", card)
+        return nil
+    end
+    return card
+end
+
+-- ===== Función principal =====
+function PageTextInfo:onShowReadingMotive()
+    local ScreenSaverWidget = require("ui/widget/screensaverwidget")
+    local OverlapGroup = require("ui/widget/overlapgroup")
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local ImageWidget = require("ui/widget/imagewidget")
+    local Geom = require("ui/geometry")
+
+    local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
+
+    -- hero de bookshelf (nil si no hay bookshelf o falla)
+    local hero = buildBookshelfHero(
+        math.floor(screen_w * HERO_SETT.width_pct / 100),
+        math.floor(screen_h * HERO_SETT.height_pct / 100)
+    )
+
+    local content
+    local transparent = false
+    if hero then
+        -- hero centrado, sin fondo: el resto de la pantalla queda transparente
+        transparent = true
+        content = CenterContainer:new{
+            dimen = Geom:new{ w = screen_w, h = screen_h },
+            FrameContainer:new{      -- marco exterior hueco (sin fondo: se ve lo de debajo)
+                color = Blitbuffer.COLOR_BLACK,
+                bordersize = Screen:scaleBySize(HERO_SETT.outer_border),
+                radius = Size.radius.window,
+                margin = 0,
+                padding = Screen:scaleBySize(HERO_SETT.outer_gap),
+                FrameContainer:new{
+                    background = HERO_SETT.background,
+                    color = Blitbuffer.COLOR_BLACK,
+                    bordersize = Screen:scaleBySize(HERO_SETT.border),
+                    radius = Size.radius.window,
+                    margin = 0,
+                    padding = Screen:scaleBySize(HERO_SETT.padding),
+                    hero,
+                },
+            },
+        }
+    else
+        -- sin bookshelf: la imagen de siempre
+        content = ImageWidget:new{
+            width = screen_w,
+            height = screen_h,
+            scale_factor = G_reader_settings:isFalse("screensaver_stretch_images") and 0 or nil,
+            stretch_limit_percentage = G_reader_settings:readSetting("screensaver_stretch_limit_percentage"),
+            image_disposable = true,
+            file = "resources/books.jpg",
+            file_do_cache = false,
+            alpha = true,
+        }
+    end
+
+    local group = OverlapGroup:new{
+        dimen = { w = screen_w, h = screen_h },
+        content,
         nil,
     }
     local screensaver_widget = ScreenSaverWidget:new{
-        widget = widget,
-        background = Blitbuffer.COLOR_WHITE,
-        covers_fullscreen = true,
+        widget = group,
+        background = (not transparent) and Blitbuffer.COLOR_WHITE or nil,
+        covers_fullscreen = not transparent,
     }
     screensaver_widget.modal = true
-    screensaver_widget.dithered = true
+    screensaver_widget.dithered = not transparent
     screensaver_widget.name = "ReadingMotive"
     screensaver_widget.onCloseWidget = function() end
     UIManager:show(screensaver_widget, "full")
 
-
     UIManager:scheduleIn(0.25, function()
-        -- Screen:refreshFullImp(0, 0, Screen:getWidth(), Screen:getHeight()) --
-        -- UIManager:setDirty("all", "full")
         UIManager:close(screensaver_widget)
     end)
 end
