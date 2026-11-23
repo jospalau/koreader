@@ -1501,44 +1501,61 @@ local function getSessionPages(session_start)
     return pages
 end
 
--- Words that count as one page when turning the words read into pages
-local WORDS_PER_PAGE = 300
+-- Date (as text, dd/mm/yyyy) from which wpm and pages/day have data; set by loadReadingStats
+local exact_since_text = nil
 
 -- Figures over ALL the reading (not just the session in progress):
 --   * total sessions: the number of rows of wpm_stat_data
 --   * total read: the sum of their durations (seconds)
---   * words per minute: the mean wpm of the saved sessions that have one (wpm > 0)
---   * pages per day: pages read divided by the days that count as read
---     (at least MIN_DAY_SECONDS of reading, like the other views)
--- Not the screens read (they depend on the font size): the words of each session are estimated as
--- wpm * minutes and divided by WORDS_PER_PAGE.
+--   * words per minute: all the words read over all the minutes read
+--   * pages per day: the reference pages of each session (ref_pages, saved with it: words read / words of the book *
+--     reference pages of the book, as the reader numbers them) divided by the days with at least MIN_DAY_SECONDS of reading
+-- Total sessions and total read use every session. Words per minute and pages per day use only the sessions that
+-- saved their exact figures (words, read_secs, ref_pages), no estimates: the older sessions are left out.
 -- Returns total_sessions, total_seconds, avg_wpm, pages_per_day (0 when there is no data).
 local function loadReadingStats()
     local total_sessions, total_secs, avg_wpm, pages_per_day = 0, 0, 0, 0
+    exact_since_text = nil
 
-    local t = queryAll([[
-        SELECT COUNT(*), COALESCE(SUM(duration), 0), COALESCE(AVG(CASE WHEN wpm > 0 THEN wpm END), 0)
-        FROM wpm_stat_data
-    ]], function(row)
-        return { count = tonumber(row[1]) or 0, secs = tonumber(row[2]) or 0, wpm = tonumber(row[3]) or 0 }
+    local t = queryAll("SELECT COUNT(*), COALESCE(SUM(duration), 0) FROM wpm_stat_data", function(row)
+        return { count = tonumber(row[1]) or 0, secs = tonumber(row[2]) or 0 }
     end)
-    if t and t[1] then
-        total_sessions, total_secs, avg_wpm = t[1].count, t[1].secs, t[1].wpm
+    if t and t[1] then total_sessions, total_secs = t[1].count, t[1].secs end
+
+    -- the exact columns may not be in the database yet
+    local found = 0
+    local cols = queryAll("PRAGMA table_info(wpm_stat_data)", function(row) return tostring(row[2]) end)
+    for _i, name in ipairs(cols or {}) do
+        if name == "words" or name == "read_secs" or name == "ref_pages" then
+            found = found + 1
+        end
+    end
+    if found < 3 then return total_sessions, total_secs, avg_wpm, pages_per_day end
+
+    local exact = [[words IS NOT NULL AND read_secs > 0 AND ref_pages IS NOT NULL AND start_time > 0]]
+
+    local w = queryAll("SELECT COALESCE(SUM(words), 0), COALESCE(SUM(read_secs), 0), COALESCE(MIN(start_time), 0) FROM wpm_stat_data WHERE " .. exact,
+        function(row)
+            return { words = tonumber(row[1]) or 0, secs = tonumber(row[2]) or 0, first = tonumber(row[3]) or 0 }
+        end)
+    if w and w[1] then
+        if w[1].secs > 0 then avg_wpm = w[1].words / (w[1].secs / 60) end
+        if w[1].first > 0 then exact_since_text = os.date("%d/%m/%Y", w[1].first) end
     end
 
     local d = queryAll(string.format([[
-        SELECT COUNT(*), COALESCE(SUM(words), 0) FROM (
-            SELECT SUM(wpm * duration / 60.0) AS words
+        SELECT COUNT(*), COALESCE(SUM(pages), 0) FROM (
+            SELECT SUM(ref_pages) AS pages
             FROM wpm_stat_data
-            WHERE start_time > 0
+            WHERE %s
             GROUP BY strftime('%%Y-%%m-%%d', start_time, 'unixepoch', 'localtime')
-            HAVING SUM(duration) >= %d
+            HAVING SUM(read_secs) >= %d
         )
-    ]], MIN_DAY_SECONDS), function(row)
-        return { days = tonumber(row[1]) or 0, words = tonumber(row[2]) or 0 }
+    ]], exact, MIN_DAY_SECONDS), function(row)
+        return { days = tonumber(row[1]) or 0, pages = tonumber(row[2]) or 0 }
     end)
     if d and d[1] and d[1].days > 0 then
-        pages_per_day = d[1].words / WORDS_PER_PAGE / d[1].days
+        pages_per_day = d[1].pages / d[1].days
     end
     return total_sessions, total_secs, avg_wpm, pages_per_day
 end
@@ -1558,8 +1575,170 @@ local function cleanTopBarText(s)
     return (s:match("^%s*(.-)%s*$"))
 end
 
+-- ── Exact sessions: summary and list for the explain window ──────────────────
+-- Only the sessions that saved their exact figures (words, read_secs, ref_pages) are listed and summed here: they
+-- are the ones that feed avg wpm and pages/day, so the numbers of the window agree with the card.
+
+-- The list is built as widgets and painted in an off-screen buffer as tall as itself, so it is kept bounded
+local MAX_LISTED_SESSIONS = 5
+
+local EXACT_WHERE = "words IS NOT NULL AND read_secs > 0 AND ref_pages IS NOT NULL AND start_time > 0"
+
+-- 1234567 -> "1,234,567"
+local function groupThousands(n)
+    local s = tostring(math.floor((tonumber(n) or 0) + 0.5))
+    local k
+    repeat
+        s, k = s:gsub("^(-?%d+)(%d%d%d)", "%1,%2")
+    until k == 0
+    return s
+end
+
+-- 45 min / 2h 05m
+local function formatReadMinutes(secs)
+    local m = math.floor((tonumber(secs) or 0) / 60 + 0.5)
+    if m < 60 then return string.format("%d min", m) end
+    return string.format("%dh %02dm", math.floor(m / 60), m % 60)
+end
+
+-- Everything the window needs in ONE connection and four statements (opening the database once per query was the
+-- slow part): totals over all the sessions with exact data (not only the ones listed) and the newest `limit` of
+-- them. Same rules as loadReadingStats: pages/day counts only the days with at least MIN_DAY_SECONDS of reading.
+-- If the exact columns are not in the database yet, the exact figures stay at zero. Raises if it cannot be read.
+local function loadExactData(limit)
+    local SQ3 = require("lua-ljsqlite3/init")
+    local s = {
+        total_sessions = 0, exact = 0, words = 0, secs = 0, ref_pages = 0, first = 0,
+        wpm_min = 0, wpm_max = 0, days = 0, day_pages = 0,
+    }
+    local list = {}
+    local conn = SQ3.open(getStatsDbPath())
+    local ok, err = pcall(function()
+        local function run(sql, each)
+            local stmt = conn:prepare(sql)
+            local row = {}
+            while stmt:step(row) do each(row) end
+            stmt:close()
+        end
+
+        run("SELECT COUNT(*) FROM wpm_stat_data", function(row)
+            s.total_sessions = tonumber(row[1]) or 0
+        end)
+
+        -- a missing exact column makes the first statement fail: no exact data yet
+        local has_exact = pcall(function()
+            run(string.format([[
+                SELECT COUNT(*), COALESCE(SUM(words), 0), COALESCE(SUM(read_secs), 0), COALESCE(SUM(ref_pages), 0),
+                       COALESCE(MIN(start_time), 0), COALESCE(MIN(words * 60.0 / read_secs), 0),
+                       COALESCE(MAX(words * 60.0 / read_secs), 0)
+                FROM wpm_stat_data
+                WHERE %s
+            ]], EXACT_WHERE), function(row)
+                s.exact, s.words, s.secs = tonumber(row[1]) or 0, tonumber(row[2]) or 0, tonumber(row[3]) or 0
+                s.ref_pages, s.first = tonumber(row[4]) or 0, tonumber(row[5]) or 0
+                s.wpm_min, s.wpm_max = tonumber(row[6]) or 0, tonumber(row[7]) or 0
+            end)
+        end)
+        if not has_exact or s.exact <= 0 then return end
+
+        run(string.format([[
+            SELECT COUNT(*), COALESCE(SUM(pages), 0) FROM (
+                SELECT SUM(ref_pages) AS pages
+                FROM wpm_stat_data
+                WHERE %s
+                GROUP BY strftime('%%Y-%%m-%%d', start_time, 'unixepoch', 'localtime')
+                HAVING SUM(read_secs) >= %d
+            )
+        ]], EXACT_WHERE, MIN_DAY_SECONDS), function(row)
+            s.days, s.day_pages = tonumber(row[1]) or 0, tonumber(row[2]) or 0
+        end)
+
+        run(string.format([[
+            SELECT w.start_time, w.duration, w.total_pages, w.words, w.read_secs, w.ref_pages, COALESCE(b.title, '')
+            FROM wpm_stat_data w
+            LEFT JOIN book b ON w.id_book = b.id
+            WHERE w.words IS NOT NULL AND w.read_secs > 0 AND w.ref_pages IS NOT NULL AND w.start_time > 0
+            ORDER BY w.start_time DESC
+            LIMIT %d
+        ]], limit), function(row)
+            list[#list + 1] = {
+                start = tonumber(row[1]) or 0, duration = tonumber(row[2]) or 0, screens = tonumber(row[3]) or 0,
+                words = tonumber(row[4]) or 0, secs = tonumber(row[5]) or 0, ref_pages = tonumber(row[6]) or 0,
+                title = tostring(row[7] or ""),
+            }
+        end)
+    end)
+    conn:close()
+    if not ok then error(err, 0) end
+    return s, list
+end
+
+-- The summary as { title, text } items, with the real figures
+local function buildSummaryItems(s)
+    if s.exact <= 0 then
+        return { { _("No exact data yet"), _("The sessions read from now on will be listed here with their words, time and reference pages") } }
+    end
+    local since = os.date("%d/%m/%Y", s.first)
+    local avg_wpm = s.words / (s.secs / 60)
+    local items = {}
+    items[#items + 1] = {
+        string.format(_("avg wpm  %s"), formatAverage(avg_wpm)),
+        string.format(_("%s words over %s of reading"), groupThousands(s.words), formatReadMinutes(s.secs)),
+    }
+    if s.days > 0 then
+        items[#items + 1] = {
+            string.format(_("pages/day  %s"), formatAverage(s.day_pages / s.days)),
+            string.format(_("%s reference pages over %s with at least %d minutes of reading"),
+                formatAverage(s.day_pages), s.days == 1 and _("1 day") or string.format(_("%d days"), s.days),
+                math.floor(MIN_DAY_SECONDS / 60)),
+        }
+    else
+        items[#items + 1] = {
+            _("pages/day  0"),
+            string.format(_("no day has reached %d minutes of reading yet"), math.floor(MIN_DAY_SECONDS / 60)),
+        }
+    end
+    items[#items + 1] = {
+        _("Sessions"),
+        string.format(_("%d with exact data, since %s, of %d saved in total"), s.exact, since, s.total_sessions),
+    }
+    items[#items + 1] = {
+        _("Per session"),
+        string.format(_("%s of reading and %s reference pages on average, from %d to %d wpm"),
+            formatReadMinutes(s.secs / s.exact), formatAverage(s.ref_pages / s.exact),
+            math.floor(s.wpm_min + 0.5), math.floor(s.wpm_max + 0.5)),
+    }
+    return items
+end
+
+-- One { title, text } item per session: when and what book, then the figures
+local function buildSessionItems(list)
+    local items = {}
+    for _i, s in ipairs(list) do
+        local head = formatDateTime(s.start)
+        if s.title ~= "" then head = head .. TITLE_SEPARATOR .. s.title end
+        local first = { string.format(_("%s read"), formatReadMinutes(s.secs)) }
+        if s.screens > 0 then
+            first[#first + 1] = string.format(_("%d screens"), s.screens)
+            first[#first + 1] = string.format(_("%d s/screen"), math.floor(s.secs / s.screens + 0.5))
+        end
+        local second = {
+            string.format(_("%s words"), groupThousands(s.words)),
+            string.format(_("%d wpm"), math.floor(s.words / (s.secs / 60) + 0.5)),
+            string.format(_("%s pages (stable)"), formatAverage(s.ref_pages)),
+        }
+        items[#items + 1] = {
+            head,
+            table.concat(first, SUMMARY_SEPARATOR) .. "\n" .. table.concat(second, SUMMARY_SEPARATOR),
+        }
+    end
+    return items
+end
+
 -- Small window with the same look as the summary (white, rounded, outlined) that explains the figures of the
--- book card. A tap (or Back) closes it. Only shown from the summary, never while reading.
+-- book card: the legend of each figure, a summary with the real numbers and the sessions with exact data, which
+-- scroll when they do not fit. A tap (or Back) closes it. Only shown from the summary, never while reading.
+local explain_window_open = false
 local ExplainWindow = InputContainer:extend{
     modal = true,
     name = "longest_sessions_explain",
@@ -1568,30 +1747,73 @@ local ExplainWindow = InputContainer:extend{
 function ExplainWindow:init()
     local sw, sh = Screen:getWidth(), Screen:getHeight()
     local w = math.floor(sw * 0.86)
-    local inner_w = w - 2 * (CARD_PAD + Screen:scaleBySize(2))
-    local vg = VerticalGroup:new{ align = "left" }
-    vg[#vg + 1] = TextWidget:new{
+    local border = Screen:scaleBySize(2)
+    local inner_w = w - 2 * (CARD_PAD + border)
+    -- the body leaves room for the scrollbar, so it is the same width whether it scrolls or not
+    local body_w = inner_w - ScrollableContainer:getScrollbarWidth()
+
+    local title_widget = TextWidget:new{
         text = self.title, face = getFace(FONT_TITLE), bold = true,
         fgcolor = COLOR_TEXT, max_width = inner_w,
     }
-    for _i, item in ipairs(self.items) do
-        vg[#vg + 1] = VerticalSpan:new{ width = SPACE.m }
-        vg[#vg + 1] = LineWidget:new{
-            background = COLOR_TRACK, dimen = Geom:new{ w = inner_w, h = Size.line.thin },
+
+    local body = VerticalGroup:new{ align = "left" }
+    -- a figure or a session: a rule, its name in bold and its text below
+    local function addItem(item)
+        body[#body + 1] = VerticalSpan:new{ width = SPACE.m }
+        body[#body + 1] = LineWidget:new{
+            background = COLOR_TRACK, dimen = Geom:new{ w = body_w, h = Size.line.thin },
         }
-        vg[#vg + 1] = VerticalSpan:new{ width = SPACE.m }
-        vg[#vg + 1] = TextWidget:new{
+        body[#body + 1] = VerticalSpan:new{ width = SPACE.m }
+        body[#body + 1] = TextWidget:new{
             text = item[1], face = getFace(FONT_TEXT), bold = true,
-            fgcolor = COLOR_TEXT, max_width = inner_w,
+            fgcolor = COLOR_TEXT, max_width = body_w,
         }
-        vg[#vg + 1] = VerticalSpan:new{ width = SPACE.s }
-        vg[#vg + 1] = TextBoxWidget:new{
-            text = item[2], face = getFace(FONT_SUMMARY), fgcolor = COLOR_MUTED, width = inner_w,
+        body[#body + 1] = VerticalSpan:new{ width = SPACE.s }
+        body[#body + 1] = TextBoxWidget:new{
+            text = item[2], face = getFace(FONT_SUMMARY), fgcolor = COLOR_MUTED, width = body_w,
         }
+    end
+    -- a section: a heavier rule and a bigger heading
+    local function addHeader(text)
+        body[#body + 1] = VerticalSpan:new{ width = SPACE.xl }
+        body[#body + 1] = LineWidget:new{
+            background = COLOR_ACCENT, dimen = Geom:new{ w = body_w, h = Size.line.medium },
+        }
+        body[#body + 1] = VerticalSpan:new{ width = SPACE.m }
+        body[#body + 1] = TextWidget:new{
+            text = text, face = getFace(FONT_SUBTITLE), bold = true,
+            fgcolor = COLOR_TEXT, max_width = body_w,
+        }
+    end
+
+    for _i, item in ipairs(self.items or {}) do addItem(item) end
+    if self.summary and #self.summary > 0 then
+        -- the title already says "Summary" unless a legend comes first
+        if self.items and #self.items > 0 then addHeader(_("Summary")) end
+        for _i, item in ipairs(self.summary) do addItem(item) end
+    end
+    if self.sessions and #self.sessions > 0 then
+        addHeader(self.sessions_title or _("Sessions"))
+        for _i, item in ipairs(self.sessions) do addItem(item) end
+    end
+
+    local vg = VerticalGroup:new{ align = "left", title_widget }
+    -- up to 90% of the screen: when the body is taller it scrolls (a swipe up or down), a horizontal swipe or a
+    -- tap still closes the window
+    local max_body_h = math.floor(sh * 0.9) - 2 * (CARD_PAD + border) - title_widget:getSize().h
+    if body:getSize().h > max_body_h then
+        vg[#vg + 1] = SwipePassthroughScrollable:new{
+            dimen = Geom:new{ w = inner_w, h = max_body_h },
+            show_parent = self,
+            body,
+        }
+    else
+        vg[#vg + 1] = body
     end
     local frame = FrameContainer:new{
         radius = Screen:scaleBySize(28),
-        bordersize = Screen:scaleBySize(2),
+        bordersize = border,
         padding = CARD_PAD,
         margin = 0,
         background = Blitbuffer.COLOR_WHITE,
@@ -1615,6 +1837,7 @@ function ExplainWindow:onShow()
 end
 
 function ExplainWindow:onClose()
+    explain_window_open = false
     UIManager:close(self, "ui", self.frame.dimen)
     return true
 end
@@ -1624,6 +1847,19 @@ function ExplainWindow:onSwipe() return self:onClose() end
 -- The book card of the summary on screen (a row of two cards), for the hold that explains it
 local summary_book_card = nil
 local summary_book_reading = false  -- true: the card shows the session in progress; false: the totals
+
+-- Reference pages read in the session in progress, as the reader numbers them: words read in the session / words of
+-- the book * reference pages of the book. Independent of the font size. nil when a figure is missing.
+local function getStablePages()
+    local ui = getReaderUI()
+    if not ui then return nil end
+    local words, book_words, ref_total
+    pcall(function() words = tonumber(ui.statistics._total_words) end)
+    pcall(function() book_words = tonumber(ui.view.topbar.total_words) end)
+    pcall(function() ref_total = tonumber(ui.pagemap:getLastPageLabel(true)) end)
+    if not (words and book_words and ref_total) or book_words <= 0 or ref_total <= 0 then return nil end
+    return words * ref_total / book_words
+end
 
 -- Two columns. Left: title, series, words and publication year of the open
 -- book. Right: totals and averages of all the reading: total time read, total
@@ -1640,7 +1876,11 @@ local function buildBookCard(w_width, session, book)
             { book and secondsToShortHM(book) or "-",       _("This book") },
             { secondsToShortHM(session),                    _("Session") },
             { tostring(wpm),                                _("wpm") },
-            { tostring(pages),                              _("pages") },
+            { tostring(pages),                              _("pages (screen)") },
+            { (function()
+                local stable = getStablePages()
+                return stable and string.format("%.1f", stable) or "-"
+            end)(),                                         _("pages (stable)") },
         }
     else
         -- not reading: totals of all the reading
@@ -2859,6 +3099,10 @@ function ShowLongestSessionsWindow:_buildUI()
         self.ges_events.HoldExplain = {
             GestureRange:new{ ges = "hold", range = self.dimen },
         }
+        -- some devices only report the hold when the finger is lifted
+        self.ges_events.HoldReleaseExplain = {
+            GestureRange:new{ ges = "hold_release", range = self.dimen },
+        }
     end
     Perf.log("_buildUI TOTAL (view " .. self.current_view .. ")", t_ui)
 end
@@ -2931,33 +3175,45 @@ function ShowLongestSessionsWindow:onHoldExplain(arg, ges)
     if VIEWS[self.current_view].build ~= buildSummaryView or not (ges and ges.pos) then
         return true
     end
+    -- the hold and its release both arrive: only one window
+    if explain_window_open then return true end
     local rc = summary_book_card and summary_book_card[3]
     local rd = rc and rc.dimen
-    if not (rd and rd.w and rd.w > 0) then return true end
     local pos = ges.pos
+    logger.info(string.format("longest sessions: hold at %s,%s card %s", tostring(pos.x), tostring(pos.y),
+        rd and string.format("%s,%s %sx%s", tostring(rd.x), tostring(rd.y), tostring(rd.w), tostring(rd.h)) or "nil"))
+    if not (rd and rd.w and rd.w > 0) then return true end
     if pos.x < rd.x or pos.x >= rd.x + rd.w or pos.y < rd.y or pos.y >= rd.y + rd.h then
         return true
     end
-    local title, items
-    if summary_book_reading then
-        title = _("This session")
-        items = {
-            { _("This book"), _("Total time read on the open book.") },
-            { _("Session"), _("Time of the reading session in progress.") },
-            { _("wpm"), _("Words per minute of the session in progress, from the real words of each page turned.") },
-            { _("pages"), _("Pages read in the session in progress.") },
-        }
-    else
-        title = _("Reading totals")
-        items = {
-            { _("Total read"), _("Days of reading: the sum of the duration of all the saved sessions.") },
-            { _("Total sessions"), _("Number of reading sessions saved in the statistics database.") },
-            { _("avg wpm"), _("Mean words per minute of all the sessions that have one. It is based on the real words of each page turned, so it does not depend on the font.") },
-            { _("pages/day"), _("Words read per day divided by 300 words per page, over the days with at least 5 minutes of reading. The words of a session are estimated as wpm x minutes, so the figure is approximate and does not depend on the font size.") },
-        }
+    -- while reading the card shows the session in progress: the hold does nothing there
+    if summary_book_reading then return true end
+    -- the summary with the real figures and the sessions with exact data
+    local summary, sessions, sessions_title
+    local ok_list, err_list = pcall(function()
+        local s, list = loadExactData(MAX_LISTED_SESSIONS)
+        summary = buildSummaryItems(s)
+        sessions = buildSessionItems(list)
+        if s.exact > #list then
+            sessions_title = string.format(_("Sessions (last %d of %d)"), #list, s.exact)
+        else
+            sessions_title = string.format(_("Sessions (%d)"), #list)
+        end
+    end)
+    if not ok_list then
+        logger.warn("longest sessions: could not build the session list:", err_list)
+        summary, sessions = nil, nil
+        summary = { { _("Statistics"), _("Could not read the statistics database") } }
     end
-    UIManager:show(ExplainWindow:new{ title = title, items = items }, "ui")
+    explain_window_open = true
+    UIManager:show(ExplainWindow:new{
+        title = _("Summary"), summary = summary, sessions = sessions, sessions_title = sessions_title,
+    }, "ui")
     return true
+end
+
+function ShowLongestSessionsWindow:onHoldReleaseExplain(arg, ges)
+    return self:onHoldExplain(arg, ges)
 end
 
 function ShowLongestSessionsWindow:onTapClose(arg, ges)

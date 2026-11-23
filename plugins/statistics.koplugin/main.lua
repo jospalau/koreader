@@ -1113,9 +1113,41 @@ function ReaderStatistics:insertDBSessionStats()
     --date -s "2024-08-22 23:59:33"
     --print(string.format("%d, %d, %d", self.start_current_period, duration_raw, self._total_pages))
     local conn = SQ3.open(db_location)
+    -- characters and words of the whole book (crengine); nil when it cannot be read
+    -- (it walks the whole text, so it is computed once per book and kept)
+    local book_words
+    ReaderStatistics._book_size_cache = ReaderStatistics._book_size_cache or {}
+    local cached = ReaderStatistics._book_size_cache[id_book]
+    if cached then
+        book_words = cached[2]
+    else
+        pcall(function()
+            local doc = self.ui.document._document
+            if doc.getBookCharactersCount then
+                local chars, words = doc:getBookCharactersCount()
+                if (tonumber(chars) or 0) > 0 and (tonumber(words) or 0) > 0 then
+                    book_words = words
+                    ReaderStatistics._book_size_cache[id_book] = { chars, words }
+                end
+            end
+        end)
+    end
+    -- total of reference pages of the book, as the reader shows it (the "Y" of "X of Y"); cheap, so it is read
+    -- every time, because it changes if the synthetic page size does
+    local ref_total
+    pcall(function()
+        local n = tonumber(self.ui.pagemap:getLastPageLabel(true))
+        if n and n > 0 then ref_total = math.floor(n) end
+    end)
+    -- reference pages read in the session: the fraction of the book read (words read / words of the book) in
+    -- reference pages of the book; nil when any of the figures is missing
+    local ref_pages
+    if ref_total and book_words and book_words > 0 and self._total_words > 0 then
+        ref_pages = self._total_words * ref_total / book_words
+    end
     -- conn:exec('BEGIN;')
-    local stmt = conn:prepare("INSERT OR IGNORE INTO wpm_stat_data VALUES(?, ?, ?, ?, ?, ?, ?);")
-    stmt:reset():bind(id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session, self.devices[device], self.ui.document._document:getFontFace()):step()
+    local stmt = conn:prepare("INSERT OR IGNORE INTO wpm_stat_data (id_book, start_time, duration, total_pages, wpm, id_device, font_name, words, read_secs, book_words, ref_total, ref_pages) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);")
+    stmt:reset():bind(id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session, self.devices[device], self.ui.document._document:getFontFace(), math.floor(self._total_words), math.floor(self._total_read_time), book_words, ref_total, ref_pages):step()
     -- conn:exec('COMMIT;')
     stmt:close()
     conn:close()
