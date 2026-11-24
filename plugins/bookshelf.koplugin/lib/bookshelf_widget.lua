@@ -21718,6 +21718,9 @@ function BookshelfWidget:_cycleCalibreSort(step)
     local pick = states[idx]
     tip.payload._sort_override = { key = pick.key, reverse = pick.reverse }
     self._cursor = 1
+    -- Spines keep the group's whole list for 30 s under a key that does not
+    -- know the sort: drop it so the new order is fetched and painted.
+    self._spine_fetch_cache = nil
     self:_rebuild()
     UIManager:setDirty(self, "ui")
     pcall(function()
