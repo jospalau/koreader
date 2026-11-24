@@ -21708,6 +21708,31 @@ function BookshelfWidget:_applyWithinGroupSort(group)
     local TabModel = require("lib/bookshelf_tab_model")
     local tab = TabModel.getById(self.chip)
     local sp  = tab and tab.sort_priority
+    -- A genre / tag / author... opens in the in-group order of the tab that
+    -- lists that kind of group, wherever it is opened from (2+ levels there;
+    -- else the current tab's order, as before). The kind -> order map is
+    -- rebuilt only when the tabs change (TabModel.generation), not per fetch.
+    do
+        local gen = TabModel.generation and TabModel.generation()
+        local c = BookshelfWidget._kind_sort
+        if not c or c.gen ~= gen then
+            c = { gen = gen, map = {}, on = {} }
+            local ok_t, all_tabs = pcall(TabModel.load)
+            for _i, t in ipairs(ok_t and type(all_tabs) == "table" and all_tabs or {}) do
+                local k = type(t) == "table" and t.source and t.source.kind
+                local ts = t.sort_priority
+                if k and ts and #ts >= 2 and (c.map[k] == nil or (not c.on[k] and t.enabled ~= false)) then
+                    c.map[k] = ts
+                    c.on[k] = t.enabled ~= false
+                end
+            end
+            BookshelfWidget._kind_sort = c
+        end
+        local own = ({ genre = "genres", tag = "tags", author = "authors",
+                       language = "languages", format = "formats",
+                       decade = "decades", rating = "ratings" })[group.kind]
+        if own and c.map[own] then sp = c.map[own] end
+    end
     if not sp or #sp < 2 then return end  -- default group order wins
     -- books_meta (the parallel sort-fields array) doesn't reliably survive the
     -- trip from the repo group to the rendered tile, so rebuild it from the
@@ -21782,6 +21807,28 @@ function BookshelfWidget:_applyWithinGroupSort(group)
                 if m.filepath and m.last_opened == nil and m._last_read == nil then
                     m._last_read = rh[m.filepath] or 0
                 end
+            end
+        end
+    end
+    -- Calibre-backed keys are not in the light books_meta either, so a
+    -- within-group sort by them saw every book as unknown. Fill them from the
+    -- cached Repo.readProgress.
+    local w_cal = false
+    for _i, lv in ipairs(within) do
+        local k = lv.key
+        if k == "pub_date" or k == "page_count" or k == "words" or k == "grrating"
+                or k == "grvotes" or k == "modified_date" then w_cal = true end
+    end
+    if w_cal then
+        for _i, m in ipairs(group.books_meta) do
+            if m.filepath then
+                local _a, _b, _c, pc, _e, _f, pd, md, w, gr, gv = Repo.readProgress(m.filepath)
+                if m.pub_date == nil      then m.pub_date = pd end
+                if m.page_count == nil    then m.page_count = pc end
+                if m.words == nil         then m.words = w end
+                if m.grrating == nil      then m.grrating = gr end
+                if m.grvotes == nil       then m.grvotes = gv end
+                if m.modified_date == nil then m.modified_date = md end
             end
         end
     end
