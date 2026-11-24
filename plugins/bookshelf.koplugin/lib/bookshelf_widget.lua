@@ -21202,6 +21202,9 @@ function BookshelfWidget:_drillInto(entry)
     -- backing out drops you on page 1 of the parent listing — disorienting
     -- when the parent has dozens of folders/series.
     entry.parent_cursor = self._cursor
+    -- The group object is shared with the cached shapes: forget a swipe sort
+    -- left on it by an earlier visit.
+    if type(entry.payload) == "table" then entry.payload._sort_override = nil end
     self._drilldown_path[#self._drilldown_path + 1] = entry
     self._cursor = 1
     self:_syncPageFromCursor()
@@ -21746,7 +21749,7 @@ function BookshelfWidget:_cycleCalibreSort(step)
         if cur and st.key == cur.key and st.reverse == cur.reverse then idx = i break end
     end
     if idx == 0 then
-        idx = step > 0 and 1 or #states
+        idx = 1
     else
         idx = ((idx - 1 + step) % #states) + 1
     end
