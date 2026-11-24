@@ -94,6 +94,12 @@ local HL_SETT = {	--HIGHLIGHT SETTINGS
 					}
 }
 
+local SUMMARY_SETT = {	--READING SUMMARY OVERLAY SETTINGS (alternative to the banner, chosen in the menu)
+					module = "reading_summary_embed",	-- registered by top_reading_sessions.lua when the plugin loads
+					scale = 0.5,		-- size of the card relative to its normal size (0.5 = half)
+					default_overlay = "banner",	-- default of the menu setting: "banner" or "summary"
+}
+
 local Bb = require("ffi/blitbuffer")
 local _ = require("gettext")
 local BookInfo = require("apps/filemanager/filemanagerbookinfo")
@@ -139,6 +145,15 @@ end
 local function getBannerPosition()
 	local saved = tonumber(G_reader_settings:readSetting("kobo_style_sleepscreen_position"))
 	return math.min(math.max(saved or tonumber(B_SETT.vertical_position) or 50, 0), 100)
+end
+
+-- what is drawn over the wallpaper: "banner" (default) or "summary" (reading summary card)
+local function getOverlayMode()
+	local saved = G_reader_settings:readSetting("kobo_style_sleepscreen_overlay")
+	if saved == "banner" or saved == "summary" then
+		return saved
+	end
+	return SUMMARY_SETT.default_overlay == "summary" and "summary" or "banner"
 end
 
 -- Expands tokens like "%T" / "%c" / "%t" the same way the inbuilt sleep screen message does.
@@ -443,9 +458,29 @@ local function buildBookshelfPanel(width, height)
 	return card
 end
 
+-- Builds the Reading Summary screen (first screen of top_reading_sessions.lua) as a small card. Returns the widget, or nil on any
+-- failure (the caller then falls back to the banner).
+local function buildSummaryCard(ui)
+	local ok, card = pcall(function()
+		if ui and ui.statistics then
+			pcall(function() ui.statistics:insertDB() end)
+			pcall(function() ui.statistics:insertDBSessionStats() end)
+		end
+		local Embed = require(SUMMARY_SETT.module)
+		local widget, err = Embed.build(SUMMARY_SETT.scale)
+		if not widget then error(err or "no widget", 0) end
+		return widget
+	end)
+	if not ok then
+		logger.warn("[kobo-style-sleepscreen] could not build the reading summary card:", card)
+		return nil
+	end
+	return card
+end
+
 -- Draws the banner on top of the sleep screen wallpaper, at the left edge. If the inbuilt
 -- sleep screen message is enabled (any container), it is dropped so it doesn't show twice.
-local function attachBanner(ss_widget, banner, message_enabled, drop_base)
+local function attachBanner(ss_widget, banner, message_enabled, drop_base, center_h)
 	local main_frame = ss_widget[1]
 	local base = main_frame and main_frame[1]
 	if not base then
@@ -454,7 +489,8 @@ local function attachBanner(ss_widget, banner, message_enabled, drop_base)
 
 	-- position = % of the free height, measured from the bottom (0 = bottom, 100 = top)
 	local free_h = math.max(0, screen_h - banner:getSize().h)
-	banner.overlap_offset = {0, math.floor(free_h * (100 - getBannerPosition()) / 100)}
+	banner.overlap_offset = {center_h and math.floor((screen_w - banner:getSize().w) / 2) or 0,
+								math.floor(free_h * (100 - getBannerPosition()) / 100)}
 
 	if drop_base then
 		-- 'Leave screen as-is': the widget only holds the inbuilt message, replace it by the banner
@@ -528,6 +564,15 @@ function UIManager:show(widget, ...)
 	self.ui = require("apps/reader/readerui").instance or
 				require("apps/filemanager/filemanager").instance
 	Sidecar:flush()
+
+	-- alternative overlay: the reading summary card (half size, centered) instead of the banner
+	if getOverlayMode() == "summary" then
+		local card = buildSummaryCard(self.ui)
+		if card and attachBanner(widget, card, message_container_enabled, forcing_as_is, true) then
+			return og_uiMan_show(self, widget, ...)
+		end
+		logger.warn("[kobo-style-sleepscreen] reading summary card not available, using the banner")
+	end
 
 	--dimen roundup
 	local dimen_ = {
@@ -967,6 +1012,32 @@ local function addWallpaperItems(ss_items)
 				end,
 			})
 		end,
+	})
+	table.insert(wp_items, {
+		text_func = function()
+			return T(_("Kobo style overlay: %1"),
+				getOverlayMode() == "summary" and _("reading summary") or _("banner"))
+		end,
+		help_text = _("What is drawn over the sleep screen: the Kobo style banner, or the Reading Summary screen at half size."),
+		enabled_func = isKoboStyleOn,
+		sub_item_table = {
+			{
+				text = _("Banner (title, stats, highlight)"),
+				radio = true,
+				checked_func = function() return getOverlayMode() == "banner" end,
+				callback = function()
+					G_reader_settings:saveSetting("kobo_style_sleepscreen_overlay", "banner")
+				end,
+			},
+			{
+				text = _("Reading summary (half size)"),
+				radio = true,
+				checked_func = function() return getOverlayMode() == "summary" end,
+				callback = function()
+					G_reader_settings:saveSetting("kobo_style_sleepscreen_overlay", "summary")
+				end,
+			},
+		},
 	})
 end
 

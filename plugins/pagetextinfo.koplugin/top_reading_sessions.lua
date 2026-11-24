@@ -3371,6 +3371,62 @@ function ShowLongestSessionsWindow:onTapClose(arg, ges)
     return true
 end
 
+-- ── Embedded Reading Summary (sleep screen) ─────────────────────────────────
+-- The first screen of the window (Reading Summary) as a small widget for other code, e.g. the sleep screen
+-- patch. It is built exactly as in the window, drawn in an off-screen buffer and shrunk by `scale`
+-- (0.5 = half of its normal size). Returns an image widget, or nil and a message. It has no input handling:
+-- the host widget paints it. Registered in package.loaded, so any code can use it once this module has loaded:
+--     local ok, Embed = pcall(require, "reading_summary_embed")
+--     local widget, err = Embed.build(0.5)
+
+local function buildEmbeddedSummary(scale)
+    scale = math.min(math.max(tonumber(scale) or 0.5, 0.1), 1)
+    local view = VIEWS[1]
+    local screen_width, screen_height = Screen:getWidth(), Screen:getHeight()
+    local w_width = math.floor(screen_width * (view.width_factor or WINDOW_WIDTH_FACTOR))
+    if screen_width > screen_height then
+        w_width = math.floor(w_width * screen_height / screen_width)
+    end
+
+    -- show_parent is only used to refresh a scroll; there is nothing to refresh here
+    local widgets, err = view.build(w_width, {})
+    if not widgets then return nil, err end
+
+    local content = VerticalGroup:new{
+        TextWidget:new{
+            text = type(view.title) == "function" and view.title() or view.title,
+            face = getFace(FONT_TITLE), bold = true, fgcolor = COLOR_TEXT, max_width = w_width,
+        },
+        makeVerticalSpacing(SPACE.xl, 1.2),
+    }
+    for _i, w in ipairs(widgets) do content[#content + 1] = w end
+
+    -- square corners: the buffer is white, so rounded ones would show white wedges over the wallpaper
+    local frame = FrameContainer:new{
+        radius = 0,
+        bordersize = Screen:scaleBySize(2),
+        padding = Screen:scaleBySize(14),
+        background = Blitbuffer.COLOR_WHITE,
+        content,
+    }
+    local size = frame:getSize()
+    local bb = Blitbuffer.new(size.w, size.h, Screen.bb:getType())
+    bb:fill(Blitbuffer.COLOR_WHITE)
+    frame:paintTo(bb, 0, 0)
+    pcall(function() frame:free() end)
+
+    local ImageWidget = require("ui/widget/imagewidget")
+    return ImageWidget:new{
+        image = bb,
+        image_disposable = true,   -- the image widget frees the buffer
+        width = math.max(1, math.floor(size.w * scale)),
+        height = math.max(1, math.floor(size.h * scale)),
+        scale_factor = 0,          -- exactly that size (same proportions, so no distortion)
+    }
+end
+
+package.loaded["reading_summary_embed"] = { build = buildEmbeddedSummary }
+
 -- ── Setup ────────────────────────────────────────────────────────────────────
 -- This file is a module, loaded from the plugin's main.lua:
 --
