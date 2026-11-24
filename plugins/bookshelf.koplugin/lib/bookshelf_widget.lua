@@ -1142,7 +1142,9 @@ function BookshelfWidget:_rebuild()
     do  -- feeds %sort_label; empty outside a swiped group, so a new chip resets it
         local p = self._drilldown_path
         local t = p and p[#p]
+        if self._chip_sort and self._chip_sort.chip ~= self.chip then self._chip_sort = nil end
         local o = t and t.payload and t.payload._sort_override
+        if not t then o = self._chip_sort end
         require("lib/bookshelf_tokens").sort_label = o and BookshelfWidget._sortLabel(o) or ""
     end
     local switching = self:_rebuildPrepare()
@@ -4214,7 +4216,7 @@ function BookshelfWidget:_fetchChipItems(n, want_all)
     -- holding groups or folders, or a source that hands back only a window,
     -- stays as it was.
     if not tip and tab and self:_coverSeriesBoxes() then
-        local all, hint = Repo.getBySource(tab.source, tab.filter, tab.sort_priority,
+        local all, hint = Repo.getBySource(tab.source, tab.filter, self:_chipSortPriority(tab),
             0, SPINE_ALL_LIMIT, { light_only = true })
         local whole = type(all) == "table" and not (hint and hint > #all)
         if whole then
@@ -4228,7 +4230,7 @@ function BookshelfWidget:_fetchChipItems(n, want_all)
         end
     end
     if tab then
-        return Repo.getBySource(tab.source, tab.filter, tab.sort_priority, offset, LIMIT, fetch_opts)
+        return Repo.getBySource(tab.source, tab.filter, self:_chipSortPriority(tab), offset, LIMIT, fetch_opts)
     end
     return Repo.getBySource({ kind = self.chip }, nil, nil, offset, LIMIT, fetch_opts)
 end
@@ -21722,20 +21724,41 @@ function BookshelfWidget:_subShelfItems(tab, offset, limit)
     return out, total
 end
 
--- _cycleCalibreSort(step): inside a tag / genre / author, step through the
--- Calibre sorts of its books: words, pub_date, GR votes, GR rating, each one
--- in both directions (step +1 next, -1 previous). Returns true when handled,
--- false when not inside such a group (the caller keeps its own behaviour).
+-- The chip's own sort, with a swipe-picked key (mbr shelf) first.
+function BookshelfWidget:_chipSortPriority(tab)
+    local o = self._chip_sort
+    if not (o and o.chip == self.chip) then return tab.sort_priority end
+    local out = { { key = o.key, reverse = o.reverse } }
+    for _i, lv in ipairs(tab.sort_priority or {}) do out[#out + 1] = lv end
+    return out
+end
+
 function BookshelfWidget._sortLabel(o)
     local names = { words = "Words", pub_date = "Pub. date",
         grvotes = "GR votes", grrating = "GR rating" }
     return (names[o.key] or o.key) .. (o.reverse and " \u{2193}" or " \u{2191}")
 end
 
+-- _cycleCalibreSort(step): inside a tag / genre / author (or on the mbr shelf), step through the
+-- Calibre sorts of its books: words, pub_date, GR votes, GR rating, each one
+-- in both directions (step +1 next, -1 previous). Returns true when handled,
+-- false when not inside such a group (the caller keeps its own behaviour).
 function BookshelfWidget:_cycleCalibreSort(step)
     local path = self._drilldown_path or {}
     local tip = path[#path]
-    if not (tip and tip.payload and (tip.kind == "tag" or tip.kind == "genre"
+    local top_chip = false
+    if not tip then
+        -- On the mbr shelf both directions cycle; from any other shelf the
+        -- swipe still opens tbr (west) / mbr (east).
+        local tab = require("lib/bookshelf_tab_model").getById(self.chip)
+        local st = tab and tab.filter and type(tab.filter.statuses) == "table"
+            and tab.filter.statuses or {}
+        local id = tostring(self.chip)
+        local label = tostring(tab and tab.label or ""):lower():gsub("[^%w]", "")
+        if not (id == "mbr" or label == "mbr" or st.mbr) then return false end
+        top_chip = true
+        tip = { payload = self._chip_sort or {} }
+    elseif not (tip.payload and (tip.kind == "tag" or tip.kind == "genre"
             or tip.kind == "author")) then
         return false
     end
@@ -21745,6 +21768,7 @@ function BookshelfWidget:_cycleCalibreSort(step)
         states[#states + 1] = { key = k, reverse = true }
     end
     local cur, idx = tip.payload._sort_override, 0
+    if top_chip and self._chip_sort and self._chip_sort.chip == self.chip then cur = self._chip_sort end
     for i, st in ipairs(states) do
         if cur and st.key == cur.key and st.reverse == cur.reverse then idx = i break end
     end
@@ -21754,7 +21778,11 @@ function BookshelfWidget:_cycleCalibreSort(step)
         idx = ((idx - 1 + step) % #states) + 1
     end
     local pick = states[idx]
-    tip.payload._sort_override = { key = pick.key, reverse = pick.reverse }
+    if top_chip then
+        self._chip_sort = { chip = self.chip, key = pick.key, reverse = pick.reverse }
+    else
+        tip.payload._sort_override = { key = pick.key, reverse = pick.reverse }
+    end
     self._cursor = 1
     -- Spines keep the group's whole list for 30 s under a key that does not
     -- know the sort: drop it so the new order is fetched and painted.
