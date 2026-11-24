@@ -478,6 +478,15 @@ local function buildSummaryCard(ui)
 	return card
 end
 
+-- true when the wallpaper is the sleep icon of the custom plugin (settings/custombg.lua) on a transparent background:
+-- a picture with only the icon opaque. Then the banner / summary card goes UNDER it, so the icon stays on top.
+-- (With a white or black screen-off background the picture is opaque, so the card would be hidden: it stays on top.)
+local function sleepIconIsWallpaper()
+	local ok, ss = pcall(require, "ui/screensaver")
+	local file = ok and type(ss) == "table" and ss.image_file
+	return type(file) == "string" and file:find("/sleep_%d+x%d+_[^/]*_transparent%.png$") ~= nil
+end
+
 -- Draws the banner on top of the sleep screen wallpaper, at the left edge. If the inbuilt
 -- sleep screen message is enabled (any container), it is dropped so it doesn't show twice.
 local function attachBanner(ss_widget, banner, message_enabled, drop_base, center_h)
@@ -489,9 +498,11 @@ local function attachBanner(ss_widget, banner, message_enabled, drop_base, cente
 
 	-- position = % of the free height, measured from the bottom (0 = bottom, 100 = top)
 	local free_h = math.max(0, screen_h - banner:getSize().h)
+	-- horizontally: left edge for the banner, centered for the summary card; vertically: the menu position for both
 	banner.overlap_offset = {center_h and math.floor((screen_w - banner:getSize().w) / 2) or 0,
 								math.floor(free_h * (100 - getBannerPosition()) / 100)}
 
+	local under = not drop_base and sleepIconIsWallpaper()
 	if drop_base then
 		-- 'Leave screen as-is': the widget only holds the inbuilt message, replace it by the banner
 		main_frame[1] = OverlapGroup:new{
@@ -501,15 +512,17 @@ local function attachBanner(ss_widget, banner, message_enabled, drop_base, cente
 	elseif message_enabled and #base >= 2 then
 		-- inbuilt message layout: overlap group of {wallpaper, message}
 		table.remove(base, 2)
-		table.insert(base, banner)
+		table.insert(base, under and 1 or #base + 1, banner)
 	else
+		local wallpaper = CenterContainer:new{
+			dimen = Geom:new{w = screen_w, h = screen_h},
+			base,
+		}
 		main_frame[1] = OverlapGroup:new{
 			dimen = Geom:new{w = screen_w, h = screen_h},
-			CenterContainer:new{
-				dimen = Geom:new{w = screen_w, h = screen_h},
-				base,
-			},
-			banner,
+			-- later = on top: under the sleep icon, over any other wallpaper
+			under and banner or wallpaper,
+			under and wallpaper or banner,
 		}
 	end
 	return true
