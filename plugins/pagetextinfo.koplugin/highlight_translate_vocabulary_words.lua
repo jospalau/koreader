@@ -35,12 +35,52 @@ local GRAMMAR_LABELS = {
     nm = true, nf = true, nmf = true, npl = true, nmpl = true, nfpl = true,
 }
 
+-- Dictionaries used for the inline glosses and the panel, in order of preference.
+-- The user picks them (and their order) in the "Dictionaries" menu; the names are the
+-- "bookname" of each dictionary (the same name sdcv uses with -u). They are stored in
+-- G_reader_settings. If none is selected, DEFAULT_DICTIONARIES is used.
+local SETTING_DICTIONARIES = "translation_preferred_dictionaries"
+local DEFAULT_DICTIONARIES = { "Babylon English-Spanish", "WordReference_EN_ES" }
+
+-- Selected dictionaries (list of names), or DEFAULT_DICTIONARIES when there is none
+local function getSelectedDictionaries()
+    local saved = G_reader_settings:readSetting(SETTING_DICTIONARIES)
+    local list = {}
+    if type(saved) == "table" then
+        for _, name in ipairs(saved) do
+            if type(name) == "string" and name ~= "" then list[#list + 1] = name end
+        end
+    end
+    return list
+end
+
+local function getDictionaries()
+    local list = getSelectedDictionaries()
+    return #list > 0 and list or DEFAULT_DICTIONARIES
+end
+
+-- An empty list clears the setting (the defaults are used again)
+local function saveDictionaries(list)
+    G_reader_settings:saveSetting(SETTING_DICTIONARIES, (list and #list > 0) and list or nil)
+    G_reader_settings:flush()
+end
+
+-- Identifies the dictionaries (and their order) that the cached translations come from
+local function dictionariesSignature()
+    return table.concat(getDictionaries(), "|")
+end
+
 -- Persistent cache of translations (only non-empty ones are stored on disk).
 local function translationsFile()
     return DataStorage:getSettingsDir() .. "/vocabulary_translations.json"
 end
 
+-- Key of the file that holds the dictionaries the translations were made with. It is not a word.
+local SIGNATURE_KEY = "__dictionaries__"
+
 -- Merges the translations saved on disk into self.translations (once per session).
+-- If the file was written with other dictionaries it is ignored (a file without the
+-- signature, from before it existed, is accepted).
 local function loadPersistedTranslations(self)
     if self._translations_loaded then return end
     self._translations_loaded = true
@@ -51,8 +91,10 @@ local function loadPersistedTranslations(self)
     f:close()
     local ok, decoded = pcall(JSON.decode, content)
     if ok and type(decoded) == "table" then
+        local stored = decoded[SIGNATURE_KEY]
+        if stored ~= nil and stored ~= dictionariesSignature() then return end
         for k, v in pairs(decoded) do
-            if type(k) == "string" and type(v) == "string" and v ~= ""
+            if k ~= SIGNATURE_KEY and type(k) == "string" and type(v) == "string" and v ~= ""
                 and self.translations[k] == nil then
                 self.translations[k] = v
             end
@@ -68,6 +110,7 @@ local function savePersistedTranslations(self)
     for k, v in pairs(self.translations or {}) do
         if type(v) == "string" and v ~= "" then out[k] = v end
     end
+    out[SIGNATURE_KEY] = dictionariesSignature()
     local ok, encoded = pcall(JSON.encode, out)
     if not ok or not encoded then return end
     local f = io.open(translationsFile(), "w")
@@ -228,14 +271,14 @@ end
 -- Queries the dictionary for a word and returns a short inline gloss.
 -- Tries each result in order until one yields a non-empty translation,
 -- so that if WordReference fails Babylon is used as fallback.
-local DICTIONARIES = { "Babylon English-Spanish", "WordReference_EN_ES" }
+-- (the dictionaries come from getDictionaries(), defined at the top of the file)
 
--- Orders sdcv results by the position of their dictionary in DICTIONARIES (the first one
--- is the preferred); the other dictionaries go last. sdcv returns the results in its own
--- order, so the order of DICTIONARIES alone does not decide which dictionary is used.
+-- Orders sdcv results by the position of their dictionary in getDictionaries() (the first
+-- one is the preferred); the other dictionaries go last. sdcv returns the results in its own
+-- order, so the order of the list alone does not decide which dictionary is used.
 local function sortByPreferredDictionary(results)
     local rank = {}
-    for i, name in ipairs(DICTIONARIES) do rank[name] = i end
+    for i, name in ipairs(getDictionaries()) do rank[name] = i end
     local indexed = {}
     for i, r in ipairs(results) do indexed[i] = { r = r, i = i } end
     table.sort(indexed, function(a, b)
@@ -325,7 +368,7 @@ local function getTranslation(self, word)
     end
 
     local dictionary = self.ui.dictionary
-    local results = sdcvLookup(dictionary, key, DICTIONARIES, true)
+    local results = sdcvLookup(dictionary, key, getDictionaries(), true)
 
     -- If the preferred dictionaries have no entry for this word, fall back to
     -- whatever dictionaries are installed.
@@ -1875,7 +1918,7 @@ local function collectTranslations(self, key)
         end
     end
 
-    add(sdcvLookup(dictionary, key, DICTIONARIES, true), false)
+    add(sdcvLookup(dictionary, key, getDictionaries(), true), false)
     add(sdcvLookup(dictionary, key, nil, true), true)
     return list
 end
@@ -1950,7 +1993,7 @@ local function collectExactTranslations(ui, key)
         end
     end
 
-    add(sortByPreferredDictionary(sdcvLookup(dictionary, key, DICTIONARIES, false)))
+    add(sortByPreferredDictionary(sdcvLookup(dictionary, key, getDictionaries(), false)))
     add(sdcvLookup(dictionary, key, nil, false))
     return list
 end
@@ -2056,6 +2099,184 @@ function PageTextInfo:getDictionaryPanelMenuItem()
             return true
         end,
     }
+end
+
+-- ─────────────────────────────────────────────────────────────────────────────
+-- Dictionaries menu: choose which installed dictionaries are used and in which order.
+
+-- Get all the .ifo under directory path.
+-- Don't walk into "res/" subdirectories, as per Stardict specs, they
+-- may contain possibly many resource files (image, audio files...)
+-- that could slow down our walk here.
+local function getIfosInDir(path)
+    local ifos = {}
+    local ok, iter, dir_obj = pcall(lfs.dir, path)
+    if ok then
+        for name in iter, dir_obj do
+            if name ~= "." and name ~= ".." and name ~= "res" then
+                local fullpath = path .. "/" .. name
+                local attributes = lfs.attributes(fullpath)
+                if attributes ~= nil then
+                    if attributes.mode == "directory" then
+                        local dirifos = getIfosInDir(fullpath) -- recurse
+                        for _, ifo in pairs(dirifos) do
+                            table.insert(ifos, ifo)
+                        end
+                    elseif fullpath:match("%.ifo$") then
+                        table.insert(ifos, fullpath)
+                    end
+                end
+            end
+        end
+    end
+    return ifos
+end
+
+-- Names ("bookname" of the .ifo) of the installed dictionaries, sorted. The same folders that
+-- sdcvLookup() uses are scanned: the data dir of KOReader's dictionary and its "_ext" one.
+local function listInstalledDictionaries(self)
+    local dictionary = self.ui and self.ui.dictionary
+    local base = (dictionary and dictionary.data_dir)
+        or (G_defaults and G_defaults:readSetting("STARDICT_DATA_DIR"))
+        or os.getenv("STARDICT_DATA_DIR")
+        or DataStorage:getDataDir() .. "/data/dict"
+    local dirs = { base }
+    if lfs.attributes(base .. "_ext", "mode") == "directory" then
+        table.insert(dirs, base .. "_ext")
+    end
+
+    local names, seen = {}, {}
+    for _, dir in ipairs(dirs) do
+        for _, ifo_file in ipairs(getIfosInDir(dir)) do
+            local f = io.open(ifo_file, "r")
+            if f then
+                local content = f:read("*all")
+                f:close()
+                local name = content:match("\nbookname=(.-)\r?\n")
+                name = name and name:gsub("^%s+", ""):gsub("%s+$", "")
+                if name and name ~= "" and not seen[name] then
+                    seen[name] = true
+                    table.insert(names, name)
+                end
+            end
+        end
+    end
+    table.sort(names, function(a, b) return a:lower() < b:lower() end)
+    return names
+end
+
+-- The dictionaries changed: the translations (and the glosses drawn) are made again
+local function applyDictionariesChange(self)
+    self.translations = {}
+    self._translations_loaded = false   -- the file on disk is only used if it matches the new dictionaries
+    self._tr_cache = {}
+    self._draw_cache = nil
+    pcall(function()
+        local doc = self.ui and self.ui.document
+        if doc and self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")
+            and not self.ui.searching and util.getFileNameSuffix(doc.file) == "epub" then
+            self:updateWordsVocabulary()
+        end
+    end)
+    require("ui/uimanager"):setDirty("all", "ui")
+end
+
+-- Window to drag the selected dictionaries into the order they are tried in
+function PageTextInfo:showDictionariesOrder(touchmenu_instance)
+    local _ = require("gettext")
+    local UIManager = require("ui/uimanager")
+    local ok, SortWidget = pcall(require, "ui/widget/sortwidget")
+    if not ok then
+        UIManager:show(require("ui/widget/infomessage"):new{ text = _("Sort widget not available") })
+        return
+    end
+    local item_table = {}
+    for _i, name in ipairs(getSelectedDictionaries()) do
+        item_table[#item_table + 1] = { text = name, orig_item = name }
+    end
+    if #item_table < 2 then return end
+    local sort_widget
+    sort_widget = SortWidget:new{
+        title = _("Dictionaries order"),
+        item_table = item_table,
+        callback = function()
+            local list = {}
+            for _j, item in ipairs(sort_widget.item_table) do
+                list[#list + 1] = item.orig_item
+            end
+            saveDictionaries(list)
+            applyDictionariesChange(self)
+            if touchmenu_instance then touchmenu_instance:updateItems() end
+        end,
+    }
+    UIManager:show(sort_widget)
+end
+
+-- Items of the "Dictionaries" menu (use it as sub_item_table_func so the installed dictionaries
+-- are scanned every time the menu opens):
+--   * "Default dictionaries": nothing selected, the two hardcoded ones are used
+--   * "Order…": reorder the selected dictionaries
+--   * one checkable item per installed dictionary; the number is its position in the order
+-- A dictionary is added at the end of the order when it is checked.
+function PageTextInfo:getDictionariesMenu()
+    local _ = require("gettext")
+    local plugin = self
+    local items = {}
+
+    table.insert(items, {
+        text_func = function()
+            return _("Default dictionaries") .. ": " .. table.concat(DEFAULT_DICTIONARIES, ", ")
+        end,
+        checked_func = function() return #getSelectedDictionaries() == 0 end,
+        keep_menu_open = true,
+        callback = function(touchmenu_instance)
+            saveDictionaries(nil)
+            applyDictionariesChange(plugin)
+            if touchmenu_instance then touchmenu_instance:updateItems() end
+        end,
+    })
+    table.insert(items, {
+        text = _("Order…"),
+        enabled_func = function() return #getSelectedDictionaries() > 1 end,
+        keep_menu_open = true,
+        separator = true,
+        callback = function(touchmenu_instance)
+            plugin:showDictionariesOrder(touchmenu_instance)
+        end,
+    })
+
+    local installed = listInstalledDictionaries(plugin)
+    if #installed == 0 then
+        table.insert(items, { text = _("No dictionaries found"), enabled = false })
+    end
+    for _k, name in ipairs(installed) do
+        local function position()
+            for i, selected in ipairs(getSelectedDictionaries()) do
+                if selected == name then return i end
+            end
+        end
+        table.insert(items, {
+            text_func = function()
+                local pos = position()
+                return pos and (pos .. ". " .. name) or name
+            end,
+            checked_func = function() return position() ~= nil end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                local list = getSelectedDictionaries()
+                local pos = position()
+                if pos then
+                    table.remove(list, pos)
+                else
+                    table.insert(list, name)
+                end
+                saveDictionaries(list)
+                applyDictionariesChange(plugin)
+                if touchmenu_instance then touchmenu_instance:updateItems() end
+            end,
+        })
+    end
+    return items
 end
 
 local function installDefaultDictionaryPanel()

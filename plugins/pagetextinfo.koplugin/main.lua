@@ -1938,34 +1938,6 @@ function PageTextInfo:showMonkeyPatches()
     })
 end
 
-local function getIfosInDir(path)
-    -- Get all the .ifo under directory path.
-    -- Don't walk into "res/" subdirectories, as per Stardict specs, they
-    -- may contain possibly many resource files (image, audio files...)
-    -- that could slow down our walk here.
-    local ifos = {}
-    local ok, iter, dir_obj = pcall(lfs.dir, path)
-    if ok then
-        for name in iter, dir_obj do
-            if name ~= "." and name ~= ".." and name ~= "res" then
-                local fullpath = path.."/"..name
-                local attributes = lfs.attributes(fullpath)
-                if attributes ~= nil then
-                    if attributes.mode == "directory" then
-                        local dirifos = getIfosInDir(fullpath) -- recurse
-                        for _, ifo in pairs(dirifos) do
-                            table.insert(ifos, ifo)
-                        end
-                    elseif fullpath:match("%.ifo$") then
-                        table.insert(ifos, fullpath)
-                    end
-                end
-            end
-        end
-    end
-    return ifos
-end
-
 -- ===== Dogear icon picker =====
 -- Returns the sub menu with every dogear-*.png / dogear-*.svg found in <koreader>/resources/icons and
 -- <koreader>/icons. Picking one stores its file name in G_reader_settings "custom_dogear_icon" and rebuilds the live dogear
@@ -2425,38 +2397,6 @@ This is to be active only if the option flash buttons and menu items or the opti
             },
         }
     else
-        self.data_dir = G_defaults:readSetting("STARDICT_DATA_DIR") or
-            os.getenv("STARDICT_DATA_DIR") or
-            DataStorage:getDataDir() .. "/data/dict"
-        local ifo_files = getIfosInDir(self.data_dir)
-        local table_dictionaries = {}
-        for _, ifo_file in pairs(ifo_files) do
-            local f = io.open(ifo_file, "r")
-            if f then
-                local content = f:read("*all")
-                f:close()
-                local dictname = content:match("\nbookname=(.-)\r?\n")
-                table.insert(table_dictionaries, {
-                    text = dictname,
-                    checked_func = function() return self.settings:readSetting("dictionary") == dictname end,
-                    callback = function()
-                        self.settings:saveSetting("dictionary", dictname)
-                        self.settings:flush()
-                        if self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
-                            self.translations = {}
-                            self:updateWordsVocabulary()
-                            UIManager:setDirty("all", "full")
-                        end
-                        if (self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap") or self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes")) and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
-                            self.translations = {}
-                            self:updateNotes()
-                            UIManager:setDirty("all", "full")
-                        end
-                        return true
-                    end,
-                })
-            end
-        end
         menu_items.pagetextinfo = {
             text = _("Page text info"),
             sub_item_table ={
@@ -2878,7 +2818,7 @@ This is to be active only if the option flash buttons and menu items or the opti
                         },
                         {
                             text = _("Dictionaries"),
-                            sub_item_table = table_dictionaries,
+                            sub_item_table_func = function() return self:getDictionariesMenu() end,
                         },
                     },
                 }
