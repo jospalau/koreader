@@ -579,8 +579,13 @@ return function(PageTextInfo)
             return ok == 0 or ok == true  -- LuaJIT returns 0, Lua 5.2+ returns true
         end
 
+        -- Server shown in the section header (same settings and defaults as readerrsync.lua)
+        local rsync_server = G_reader_settings:readSetting("rsync_server", "192.168.50.252")
+        local rsync_port = G_reader_settings:readSetting("rsync_port", "873")
+        local sync_header = string.format("KOReader sync - %s:%s", tostring(rsync_server), tostring(rsync_port))
+
         local actions = {
-            { header = "KOReader sync", label = "Sync code",  callback = function() self:onSynchronizeCode() end },
+            { header = sync_header, label = "Sync code",  callback = function() self:onSynchronizeCode() end },
             { label = "Sync books", callback = function() self:onSyncBooks() end },
             { label = "Pull conf",  callback = function() self:onPullConfig() end },
             { label = "Push conf",  callback = function() self:onPushConfig() end },
