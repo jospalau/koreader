@@ -21689,6 +21689,44 @@ function BookshelfWidget:_subShelfItems(tab, offset, limit)
     return out, total
 end
 
+-- _cycleCalibreSort(step): inside a tag / genre / author, step through the
+-- Calibre sorts of its books: words, pub_date, GR votes, GR rating, each one
+-- in both directions (step +1 next, -1 previous). Returns true when handled,
+-- false when not inside such a group (the caller keeps its own behaviour).
+function BookshelfWidget:_cycleCalibreSort(step)
+    local path = self._drilldown_path or {}
+    local tip = path[#path]
+    if not (tip and tip.payload and (tip.kind == "tag" or tip.kind == "genre"
+            or tip.kind == "author")) then
+        return false
+    end
+    local states, labels = {}, { words = "Words", pub_date = "Pub. date",
+        grvotes = "GR votes", grrating = "GR rating" }
+    for _i, k in ipairs({ "words", "pub_date", "grvotes", "grrating" }) do
+        states[#states + 1] = { key = k, reverse = false }
+        states[#states + 1] = { key = k, reverse = true }
+    end
+    local cur, idx = tip.payload._sort_override, 0
+    for i, st in ipairs(states) do
+        if cur and st.key == cur.key and st.reverse == cur.reverse then idx = i break end
+    end
+    if idx == 0 then
+        idx = step > 0 and 1 or #states
+    else
+        idx = ((idx - 1 + step) % #states) + 1
+    end
+    local pick = states[idx]
+    tip.payload._sort_override = { key = pick.key, reverse = pick.reverse }
+    self._cursor = 1
+    self:_rebuild()
+    UIManager:setDirty(self, "ui")
+    pcall(function()
+        require("ui/widget/notification"):notify(
+            labels[pick.key] .. (pick.reverse and " \u{2193}" or " \u{2191}"))
+    end)
+    return true
+end
+
 -- _applyWithinGroupSort(group): when the current chip's tab has sort_priority
 -- levels 2+, those levels apply to the books WITHIN this group at drill time.
 -- The group already has a default series-aware order from _buildGroups
@@ -21733,6 +21771,9 @@ function BookshelfWidget:_applyWithinGroupSort(group)
                        decade = "decades", rating = "ratings" })[group.kind]
         if own and c.map[own] then sp = c.map[own] end
     end
+    -- A two-finger swipe inside the group (_cycleCalibreSort) overrides the
+    -- tab's in-group order for as long as the group is open.
+    if group._sort_override then sp = { {}, group._sort_override } end
     if not sp or #sp < 2 then return end  -- default group order wins
     -- books_meta (the parallel sort-fields array) doesn't reliably survive the
     -- trip from the repo group to the rendered tile, so rebuild it from the

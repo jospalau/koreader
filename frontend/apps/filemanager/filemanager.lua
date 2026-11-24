@@ -163,6 +163,14 @@ function FileManager:initGesListener()
             },
             handler = function(ges)
                 local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
+                -- Inside a tag / genre / author of Bookshelf: step through the
+                -- Calibre sorts (east next, west previous). Elsewhere: tbr / mbr.
+                local plugin = self.bookshelf
+                local bw = plugin and plugin._widget
+                if bw and bw._cycleCalibreSort and plugin._isShowing and plugin:_isShowing() then
+                    local step = (direction == "east" and 1) or (direction == "west" and -1) or nil
+                    if step and bw:_cycleCalibreSort(step) then return true end
+                end
                 if direction == "west" then
                     self:openBookshelfOnStatus("tbr")
                     return true
