@@ -723,6 +723,30 @@ function BookshelfWidget:handleEvent(event)
         -- then, and a menu-intent gesture finishes the close and opens the
         -- real FM menu; see GestureZones.tryLiveZones).
         local ev = event.args[1]
+        -- No FileManager while a book is parked: its two-finger swipe zone is
+        -- absent, so cycle the Calibre sort here.
+        if ev and ev.ges == "two_finger_swipe"
+                and not require("apps/filemanager/filemanager").instance then
+            local step = (ev.direction == "east" and 1)
+                or (ev.direction == "west" and -1) or nil
+            if step and self:_cycleCalibreSort(step) then return true end
+            -- Otherwise the usual tbr (west) / mbr (east) chips.
+            local want = (ev.direction == "west" and "tbr")
+                or (ev.direction == "east" and "mbr") or nil
+            if want then
+                local TabModel = require("lib/bookshelf_tab_model")
+                for _i, tab in ipairs(TabModel.getActive()) do
+                    local f = tab.filter
+                    local label = tostring(tab.label or ""):lower():gsub("[^%w]", "")
+                    if tab.id == want or label == want
+                            or (type(f) == "table" and type(f.statuses) == "table"
+                                and f.statuses[want]) then
+                        self:_selectChip(tab.id)
+                        return true
+                    end
+                end
+            end
+        end
         if GestureZones.tryLiveZones(ev) then return true end
         -- A tap nothing took (empty shelf, the wall between rows, a gap
         -- between spines) drops a lifted book back onto the shelf. Last, so
