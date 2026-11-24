@@ -36,6 +36,9 @@ local DEFAULT_CALENDAR_NB_BOOK_SPANS = 3
 
 local MIN_TIME_VALID_SESSION = 180
 local MIN_PAGES_VALID_SESSION = 3
+-- A change of reference page bigger than this (in either direction) between two page turns is a jump
+-- (index, search, going back to find the place...): the session start is looked for again after it
+local MAX_REF_JUMP = 15
 -- Current DB schema version
 local DB_SCHEMA_VERSION = 20221111
 
@@ -73,6 +76,7 @@ local ReaderStatistics = Widget:extend{
     preserved_start_current_period = nil,
     preserved_initial_read_today = nil,
     preserved_total_read_time = nil,
+    preserved_session_start_ref = nil,
     curr_page = 0,
     id_curr_book = nil,
     is_enabled = nil,
@@ -151,6 +155,9 @@ function ReaderStatistics:init()
     self._total_chars = 0
     self._total_pages = 0
     self._total_read_time = 0
+    self._session_start_ref = nil -- reference page where the session starts (frozen when the session is valid)
+    self._pending_start_ref = nil -- provisional start, until the session is valid
+    self._prev_ref = nil          -- reference page after the last page turn
     self._initial_read_today = nil
     self.devices = {
         ["Kobo_io"] = 1, -- Kobo Libra 2
@@ -254,6 +261,11 @@ function ReaderStatistics:init()
         ReaderStatistics.preserved_total_read_time = nil
     end
 
+    if ReaderStatistics.preserved_session_start_ref then
+        self._session_start_ref = ReaderStatistics.preserved_session_start_ref
+        ReaderStatistics.preserved_session_start_ref = nil
+    end
+
     if self.ui.view and self.start_current_period then
         local duration_raw =  math.floor((os.time() - self.start_current_period))
         if duration_raw < self.min_time_valid_session or self._total_pages < self.min_pages_valid_session then
@@ -262,6 +274,8 @@ function ReaderStatistics:init()
             self._total_pages = 0
             self._total_words = 0
             self._total_read_time = 0
+            self._session_start_ref = nil
+            self._pending_start_ref = nil
             local res = nil
             local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
             self._last_nbwords = nbwords
@@ -385,6 +399,7 @@ function ReaderStatistics:onPreserveCurrentSession()
     ReaderStatistics.preserved_total_words = self._total_words
     ReaderStatistics.preserved_initial_read_today = self._initial_read_today
     ReaderStatistics.preserved_total_read_time = self._total_read_time
+    ReaderStatistics.preserved_session_start_ref = self._session_start_ref
 end
 
 function ReaderStatistics:resetVolatileStats(now_ts)
@@ -1081,9 +1096,50 @@ function ReaderStatistics:checkNewDay()
         self._total_pages = 0
         self._total_words  = 0
         self._total_read_time = 0
+        self._session_start_ref = nil
+        self._pending_start_ref = nil
         return true
     end
     return false
+end
+
+-- Reference page ("X" of "X of Y") the reader is on now; nil when it cannot be read
+function ReaderStatistics:getCurrentRefPage()
+    local n
+    pcall(function()
+        -- getCurrentPageLabel returns (label, idx, count): only the label, or tonumber() would take idx as its base
+        local label = self.ui.pagemap:getCurrentPageLabel(true)
+        n = tonumber(label)
+    end)
+    return n
+end
+
+-- Called at every page turn (all of them, counted as read or not): follows the reference page and, while the
+-- session start is not frozen yet, forgets the provisional start after a jump, so the start becomes the place
+-- where the reading resumes.
+function ReaderStatistics:trackSessionRef()
+    if self._session_start_ref then return end -- frozen: nothing more to follow in this session
+    local now = self:getCurrentRefPage()
+    if now and self._prev_ref and math.abs(now - self._prev_ref) > MAX_REF_JUMP then
+        self._pending_start_ref = nil
+    end
+    self._prev_ref = now
+end
+
+-- Called at every page turn counted as read. The start is provisional (the reference page of the page just
+-- read) and is frozen once the session is valid (same conditions insertDBSessionStats uses to save it): from
+-- then on jumps do not move it.
+function ReaderStatistics:markSessionStartRef()
+    if self._session_start_ref then return end
+    if not self._pending_start_ref then
+        self._pending_start_ref = self._prev_ref or self:getCurrentRefPage()
+        logger.info("Session start ref: provisional", self._pending_start_ref, "prev_ref", self._prev_ref)
+    end
+    if self._total_pages >= self.min_pages_valid_session
+        and os.time() - self.start_current_period >= self.min_time_valid_session then
+        self._session_start_ref = self._pending_start_ref
+        logger.info("Session start ref: frozen", self._session_start_ref)
+    end
 end
 
 -- Keep track of sessions that have been running for at least 5 minutes
@@ -1100,8 +1156,6 @@ function ReaderStatistics:insertDBSessionStats()
 
     local now_ts = os.time()
     local duration_raw = now_ts - self.start_current_period
-    local duration_raw_mins = math.floor(((now_ts - self.start_current_period)/60)* 100) / 100
-    local wpm_session = math.floor(self._total_words/duration_raw_mins)
     if duration_raw < self.min_time_valid_session or self._total_pages < self.min_pages_valid_session then
         return false
     end
@@ -1113,6 +1167,18 @@ function ReaderStatistics:insertDBSessionStats()
     --date -s "2024-08-22 23:59:33"
     --print(string.format("%d, %d, %d", self.start_current_period, duration_raw, self._total_pages))
     local conn = SQ3.open(db_location)
+    -- ref_start (reference page where the session became valid) is a column added by hand to wpm_stat_data:
+    -- it is only read here (never created), and until it exists the session is saved without it
+    if ReaderStatistics._has_ref_start == nil then
+        pcall(function()
+            local has_column = false
+            local cols = conn:exec("PRAGMA table_info(wpm_stat_data);")
+            for _i, name in ipairs(cols and cols.name or {}) do
+                if name == "ref_start" then has_column = true end
+            end
+            ReaderStatistics._has_ref_start = has_column
+        end)
+    end
     -- characters and words of the whole book (crengine); nil when it cannot be read
     -- (it walks the whole text, so it is computed once per book and kept)
     local book_words
@@ -1139,15 +1205,23 @@ function ReaderStatistics:insertDBSessionStats()
         local n = tonumber(self.ui.pagemap:getLastPageLabel(true))
         if n and n > 0 then ref_total = math.floor(n) end
     end)
-    -- reference pages read in the session: the fraction of the book read (words read / words of the book) in
-    -- reference pages of the book; nil when any of the figures is missing
+    -- reference pages read in the session: the reference page where the session ends minus the one where it
+    -- starts (see markSessionStartRef and trackSessionRef); nil when either is missing or the result is not positive
     local ref_pages
-    if ref_total and book_words and book_words > 0 and self._total_words > 0 then
-        ref_pages = self._total_words * ref_total / book_words
+    local ref_end = self:getCurrentRefPage()
+    if self._session_start_ref and ref_end then
+        local diff = ref_end - self._session_start_ref
+        if diff > 0 then ref_pages = diff end
     end
     -- conn:exec('BEGIN;')
-    local stmt = conn:prepare("INSERT OR IGNORE INTO wpm_stat_data (id_book, start_time, duration, total_pages, wpm, id_device, font_name, words, read_secs, book_words, ref_total, ref_pages) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);")
-    stmt:reset():bind(id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session, self.devices[device], self.ui.document._document:getFontFace(), math.floor(self._total_words), math.floor(self._total_read_time), book_words, ref_total, ref_pages):step()
+    local stmt
+    if ReaderStatistics._has_ref_start then
+        stmt = conn:prepare("INSERT OR IGNORE INTO wpm_stat_data (id_book, start_time, duration, total_pages, wpm, id_device, font_name, words, read_secs, book_words, ref_total, ref_pages, ref_start) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);")
+        stmt:reset():bind(id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session, self.devices[device], self.ui.document._document:getFontFace(), math.floor(self._total_words), math.floor(self._total_read_time), book_words, ref_total, ref_pages, self._session_start_ref):step()
+    else
+        stmt = conn:prepare("INSERT OR IGNORE INTO wpm_stat_data (id_book, start_time, duration, total_pages, wpm, id_device, font_name, words, read_secs, book_words, ref_total, ref_pages) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);")
+        stmt:reset():bind(id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session, self.devices[device], self.ui.document._document:getFontFace(), math.floor(self._total_words), math.floor(self._total_read_time), book_words, ref_total, ref_pages):step()
+    end
     -- conn:exec('COMMIT;')
     stmt:close()
     conn:close()
@@ -3265,6 +3339,7 @@ function ReaderStatistics:onPageUpdate(pageno)
             -- This to be done only when computing a page obviously
             self._total_words = self._last_nbwords + self._total_words
             self._total_pages = self._total_pages + 1
+            self:markSessionStartRef()
             self._total_read_time = self._total_read_time + diff_time
             -- local duration_raw = math.floor(((os.time() - self.start_current_period) / 60) * 100) / 100
             local read_mins = self._total_read_time / 60
@@ -3299,6 +3374,7 @@ function ReaderStatistics:onPageUpdate(pageno)
         if not closing and not self.ui.searching then -- don't count statistics when closing the book and when searching
             self._total_words = self._last_nbwords + self._total_words
             self._total_pages = self._total_pages + 1
+            self:markSessionStartRef()
             self._total_read_time = self._total_read_time + self.settings.max_sec
             -- local duration_raw = math.floor(((os.time() - self.start_current_period) / 60) * 100) / 100
             local read_mins = self._total_read_time / 60
@@ -3384,6 +3460,8 @@ function ReaderStatistics:onPageUpdate(pageno)
     else
         self.page_stat[pageno] = { { now_ts, 0 } }
     end
+
+    self:trackSessionRef()
 
     if self:checkNewDay() then
         self.ui.view.topbar:resetSession()
@@ -3487,6 +3565,9 @@ function ReaderStatistics:onResume()
         self._last_nbwords = 0
         self._total_words = 0
         self._total_read_time = 0
+        self._session_start_ref = nil
+        self._pending_start_ref = nil
+        self._prev_ref = self:getCurrentRefPage()
         local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
         self._last_nbwords = nbwords
         self._total_pages = 0
@@ -3548,6 +3629,7 @@ function ReaderStatistics:onReaderReady(config)
     end
     local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
     self._last_nbwords = nbwords
+    self._prev_ref = self:getCurrentRefPage()
     -- end)
 end
 

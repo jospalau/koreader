@@ -1508,8 +1508,9 @@ local exact_since_text = nil
 --   * total sessions: the number of rows of wpm_stat_data
 --   * total read: the sum of their durations (seconds)
 --   * words per minute: all the words read over all the minutes read
---   * pages per day: the reference pages of each session (ref_pages, saved with it: words read / words of the book *
---     reference pages of the book, as the reader numbers them) divided by the days with at least MIN_DAY_SECONDS of reading
+--   * pages per day: the reference pages of each session (ref_pages, saved with it: the reference page where the
+--     session ends minus the one where it starts, as the reader numbers them) divided by the days with at least
+--     MIN_DAY_SECONDS of reading
 -- Total sessions and total read use every session. Words per minute and pages per day use only the sessions that
 -- saved their exact figures (words, read_secs, ref_pages), no estimates: the older sessions are left out.
 -- Returns total_sessions, total_seconds, avg_wpm, pages_per_day (0 when there is no data).
@@ -1653,18 +1654,26 @@ local function loadExactData(limit)
             s.days, s.day_pages = tonumber(row[1]) or 0, tonumber(row[2]) or 0
         end)
 
+        -- ref_start (first reference page of the session) is not in the database until a session saves it
+        local has_ref_start = false
+        run("PRAGMA table_info(wpm_stat_data)", function(row)
+            if tostring(row[2]) == "ref_start" then has_ref_start = true end
+        end)
+
         run(string.format([[
-            SELECT w.start_time, w.duration, w.total_pages, w.words, w.read_secs, w.ref_pages, COALESCE(b.title, '')
+            SELECT w.start_time, w.duration, w.total_pages, w.words, w.read_secs, w.ref_pages, COALESCE(b.title, ''),
+                   %s
             FROM wpm_stat_data w
             LEFT JOIN book b ON w.id_book = b.id
             WHERE w.words IS NOT NULL AND w.read_secs > 0 AND w.ref_pages IS NOT NULL AND w.start_time > 0
             ORDER BY w.start_time DESC
             LIMIT %d
-        ]], limit), function(row)
+        ]], has_ref_start and "w.ref_start" or "NULL", limit), function(row)
             list[#list + 1] = {
                 start = tonumber(row[1]) or 0, duration = tonumber(row[2]) or 0, screens = tonumber(row[3]) or 0,
                 words = tonumber(row[4]) or 0, secs = tonumber(row[5]) or 0, ref_pages = tonumber(row[6]) or 0,
                 title = tostring(row[7] or ""),
+                ref_start = tonumber(row[8]),  -- nil for the sessions saved before it existed
             }
         end)
     end)
@@ -1722,10 +1731,15 @@ local function buildSessionItems(list)
             first[#first + 1] = string.format(_("%d screens"), s.screens)
             first[#first + 1] = string.format(_("%d s/screen"), math.floor(s.secs / s.screens + 0.5))
         end
+        local pages_text = string.format(_("%s pages (stable)"), formatAverage(s.ref_pages))
+        if s.ref_start then
+            -- from the reference page where the session started to the one where it ended
+            pages_text = pages_text .. string.format(" (%d \xE2\x86\x92 %d)", s.ref_start, s.ref_start + s.ref_pages)
+        end
         local second = {
             string.format(_("%s words"), groupThousands(s.words)),
             string.format(_("%d wpm"), math.floor(s.words / (s.secs / 60) + 0.5)),
-            string.format(_("%s pages (stable)"), formatAverage(s.ref_pages)),
+            pages_text,
         }
         items[#items + 1] = {
             head,
@@ -1848,17 +1862,37 @@ function ExplainWindow:onSwipe() return self:onClose() end
 local summary_book_card = nil
 local summary_book_reading = false  -- true: the card shows the session in progress; false: the totals
 
--- Reference pages read in the session in progress, as the reader numbers them: words read in the session / words of
--- the book * reference pages of the book. Independent of the font size. nil when a figure is missing.
+-- Reference pages read in the session in progress, as the reader numbers them. Same figure that is saved as ref_pages
+-- when the session ends: the reference page the reader is on minus the one where the session started (provisional
+-- until the session is valid). If there is no start yet, or the reader went back before it, an estimate from the
+-- words: words read in the session / words of the book * reference pages of the book. nil when a figure is missing.
 local function getStablePages()
     local ui = getReaderUI()
     if not ui then return nil end
+    local start, current
+    pcall(function() start = tonumber(ui.statistics._session_start_ref or ui.statistics._pending_start_ref) end)
+    pcall(function() current = ui.statistics:getCurrentRefPage() end)
+    if start and current and current >= start then return current - start end
+
     local words, book_words, ref_total
     pcall(function() words = tonumber(ui.statistics._total_words) end)
     pcall(function() book_words = tonumber(ui.view.topbar.total_words) end)
     pcall(function() ref_total = tonumber(ui.pagemap:getLastPageLabel(true)) end)
     if not (words and book_words and ref_total) or book_words <= 0 or ref_total <= 0 then return nil end
     return words * ref_total / book_words
+end
+
+-- Caption of the "pages (stable)" row while reading: with the reference page where the session started (the one
+-- saved as ref_start). Until the session is valid it is the provisional one.
+local function getStablePagesCaption()
+    local caption = _("pages (stable)")
+    local ui = getReaderUI()
+    local start
+    pcall(function() start = tonumber(ui.statistics._session_start_ref or ui.statistics._pending_start_ref) end)
+    if start then
+        caption = caption .. TITLE_SEPARATOR .. start
+    end
+    return caption
 end
 
 -- Two columns. Left: title, series, words and publication year of the open
@@ -1879,8 +1913,9 @@ local function buildBookCard(w_width, session, book)
             { tostring(pages),                              _("pages (screen)") },
             { (function()
                 local stable = getStablePages()
-                return stable and string.format("%.1f", stable) or "-"
-            end)(),                                         _("pages (stable)") },
+                if not stable then return "-" end
+                return stable == math.floor(stable) and string.format("%d", stable) or string.format("%.1f", stable)
+            end)(),                                         getStablePagesCaption() },
         }
     else
         -- not reading: totals of all the reading
