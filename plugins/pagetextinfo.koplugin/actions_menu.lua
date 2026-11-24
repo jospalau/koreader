@@ -16,6 +16,26 @@ return function(PageTextInfo)
     -- of the highlight); if it is missing the old InfoMessage is used.
     local ok_busy, BusyWidget = pcall(require, "ui/widget/busy_widget")
     if not ok_busy then BusyWidget = nil end
+    -- Scrollable window for the output of a script (frontend/ui/widget/output_window.lua); same fallback
+    local ok_out, OutputWindow = pcall(require, "ui/widget/output_window")
+    if not ok_out then OutputWindow = nil end
+
+    -- Output of a script in a scrollable window with a Close button (old message if the module is missing)
+    local function showOutput(title, subtitle, text)
+        if OutputWindow then
+            UIManager:show(OutputWindow:new{
+                icon = "check",
+                title = title,
+                subtitle = subtitle,
+                text = text,
+                face = Font:getFace("myfont"),
+                buttons = { { text = _("Close") } },
+            })
+            return
+        end
+        local InfoMessage = require("ui/widget/infomessage")
+        UIManager:show(InfoMessage:new{ text = T(_(text)), face = Font:getFace("myfont") })
+    end
     -- CrashLog is resolved lazily and safely: a missing module must not break loading
     local function getCrashLog()
         for __, name in ipairs({ "crashlog_overlay", "crashlog" }) do
@@ -232,6 +252,17 @@ return function(PageTextInfo)
 
         -- Failure: non-zero exit code, or known error strings in the output
         if code ~= 0 or clean:find("Problem") or clean:find("not connected") then
+            if OutputWindow then
+                UIManager:show(OutputWindow:new{
+                    icon = "notice-warning",
+                    title = error_text,
+                    subtitle = script_name,
+                    text = clean,
+                    face = Font:getFace("myfont"),
+                    buttons = { { text = _("Close") } },
+                })
+                return false
+            end
             UIManager:show(InfoMessage:new{
                 text = error_text .. "\n" .. clean,
                 face = Font:getFace("myfont"),
@@ -241,6 +272,35 @@ return function(PageTextInfo)
 
         -- Part of a longer sequence: the caller shows the final result / restart question
         if opts.quiet then
+            return true, clean
+        end
+
+        if OutputWindow then
+            local win_buttons, note
+            if opts.ask_restart then
+                -- the output and the restart question in a single window
+                note = _("KOReader needs to be restarted.")
+                win_buttons = {
+                    { text = _("No need to restart"), flash = opts.flash_no, callback = function()
+                        -- Optional hook, e.g. refresh the library instead of restarting
+                        if opts.on_no_restart then opts.on_no_restart(paths) end
+                    end },
+                    { text = Device:canRestart() and _("Restart") or _("Quit"), flash = true, callback = function()
+                        restartKOReader(paths)
+                    end },
+                }
+            else
+                win_buttons = { { text = _("Close") } }
+            end
+            UIManager:show(OutputWindow:new{
+                icon = "check",
+                title = _("Done"),
+                subtitle = script_name,
+                text = clean,
+                face = Font:getFace("myfont"),
+                note = note,
+                buttons = win_buttons,
+            })
             return true, clean
         end
 
@@ -340,6 +400,26 @@ return function(PageTextInfo)
         end
 
         local paths = getPlatformPaths()
+        if OutputWindow then
+            UIManager:show(OutputWindow:new{
+                icon = "check",
+                title = _("Sync finished"),
+                subtitle = _("Code") .. "  \xC2\xB7  " .. _("Config") .. "  \xC2\xB7  " .. _("Books"),
+                text = table.concat(parts, "\n\n"),
+                face = Font:getFace("myfont"),
+                note = _("KOReader needs to be restarted."),
+                buttons = {
+                    { text = _("No need to restart"), flash = true, callback = function()
+                        -- Books may have changed: refresh the library instead of restarting (stats already done above)
+                        refreshAfterBookSync(paths, true)
+                    end },
+                    { text = Device:canRestart() and _("Restart") or _("Quit"), flash = true, callback = function()
+                        restartKOReader(paths)
+                    end },
+                },
+            })
+            return
+        end
         local confirm_box
         confirm_box = ConfirmBox:new{
             dismissable = false,
@@ -371,10 +451,7 @@ return function(PageTextInfo)
             local execute = io.popen("/mnt/onboard/.adds/scripts/getKOReaderNewVersion.sh && echo $? || echo $?" )
             output = execute:read('*a')
             execute:close()
-            UIManager:show(InfoMessage:new{
-                text = T(_(output)),
-                face = Font:getFace("myfont"),
-            })
+            showOutput(_("Install last version"), "getKOReaderNewVersion.sh", output)
 
         end
     end
@@ -438,10 +515,7 @@ return function(PageTextInfo)
             end
             output = execute:read('*a')
             execute:close()
-            UIManager:show(InfoMessage:new{
-                text = T(_(output)),
-                face = Font:getFace("myfont"),
-            })
+            showOutput(_("RSync server"), "launchRsyncd.sh", output)
 
         end
     end
@@ -461,10 +535,7 @@ return function(PageTextInfo)
             end
             output = execute:read('*a')
             execute:close()
-            UIManager:show(InfoMessage:new{
-                text = T(_(output)),
-                face = Font:getFace("myfont"),
-            })
+            showOutput(_("Database stats"), "stats.sh", output)
 
         end
     end
