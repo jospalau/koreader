@@ -5786,7 +5786,55 @@ local function _groupShapeCmp(priority_or_key)
     else
         priority = priority_or_key
     end
-    return SortEngine.chainedComparator(priority)
+    local cmp = SortEngine.chainedComparator(priority)
+    -- Group shapes carry no words / pub_date / grrating / grvotes, so those
+    -- sorts saw every group as unknown. Fill them lazily from the members.
+    local want = false
+    if type(priority) == "table" then
+        for _i, lv in ipairs(priority) do
+            local k = lv.key
+            if k == "words" or k == "pub_date" or k == "modified_date" or k == "grrating" or k == "grvotes" then
+                want = true
+            end
+        end
+    end
+    if not want then return cmp end
+    local done = {}  -- per sort, so cached shapes never keep stale values
+    local function fill(g)
+        if done[g] then return end
+        done[g] = true
+        local words, votes, rsum, rn, pub, mod = 0, 0, 0, 0, nil, nil
+        local hw, hv = false, false
+        local function add(fp)
+            if not fp then return end
+            local _a, _b, _c, _d, _e, _f, pd, md, w, gr, gv = Repo.readProgress(fp)
+            w, gv, gr = tonumber(w), tonumber(gv), tonumber(gr)
+            if w  then words = words + w;  hw = true end
+            if gv then votes = votes + gv; hv = true end
+            if gr then rsum = rsum + gr; rn = rn + 1 end
+            if md ~= nil and md ~= "" then
+                local v = tonumber(md) or md
+                if mod == nil or (type(v) == type(mod) and v > mod) then mod = v end
+            end
+            if pd ~= nil and pd ~= "" then
+                local v = tonumber(pd) or pd
+                if pub == nil or (type(v) == type(pub) and v < pub) then pub = v end
+            end
+        end
+        if g.filepaths then
+            for _i, fp in ipairs(g.filepaths) do add(fp) end
+        elseif g.books then
+            for _i, b in ipairs(g.books) do add(b.filepath or b.file) end
+        else
+            add(g.filepath)
+        end
+        g.words    = hw and words or nil
+        g.grvotes  = hv and votes or nil
+        g.grrating = rn > 0 and (rsum / rn) or nil
+        g.pub_date = pub  -- earliest member date
+        g.modified_date = mod  -- latest member date
+    end
+    return function(a, b) fill(a); fill(b); return cmp(a, b) end
 end
 
 -- _attachFlattenedCounts(out, sorted, offset) -- spine mode flattens stacks,
