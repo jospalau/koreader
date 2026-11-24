@@ -1751,7 +1751,8 @@ end
 
 -- Small window with the same look as the summary (white, rounded, outlined) that explains the figures of the
 -- book card: the legend of each figure, a summary with the real numbers and the sessions with exact data, which
--- scroll when they do not fit. A tap (or Back) closes it. Only shown from the summary, never while reading.
+-- scroll when they do not fit. A tap (or Back) closes it. From the summary it shows the totals; while reading, how the
+-- figures of the session are worked out.
 local explain_window_open = false
 local ExplainWindow = InputContainer:extend{
     modal = true,
@@ -1869,6 +1870,10 @@ local summary_book_reading = false  -- true: the card shows the session in progr
 local function getStablePages()
     local ui = getReaderUI()
     if not ui then return nil end
+    -- this session does not use reference pages (see ReaderStatistics:decideSessionRefMode): nothing to show
+    local allowed = false
+    pcall(function() allowed = ui.statistics:refPagesAllowed() end)
+    if not allowed then return nil end
     local start, current
     pcall(function() start = tonumber(ui.statistics._session_start_ref or ui.statistics._pending_start_ref) end)
     pcall(function() current = ui.statistics:getCurrentRefPage() end)
@@ -1911,12 +1916,15 @@ local function buildBookCard(w_width, session, book)
             { secondsToShortHM(session),                    _("Session") },
             { tostring(wpm),                                _("wpm") },
             { tostring(pages),                              _("pages (screen)") },
-            { (function()
-                local stable = getStablePages()
-                if not stable then return "-" end
-                return stable == math.floor(stable) and string.format("%d", stable) or string.format("%.1f", stable)
-            end)(),                                         getStablePagesCaption() },
         }
+        -- "pages (stable)" only when the book has reference pages; otherwise the row is left out
+        local stable = getStablePages()
+        if stable then
+            right_rows[#right_rows + 1] = {
+                stable == math.floor(stable) and string.format("%d", stable) or string.format("%.1f", stable),
+                getStablePagesCaption(),
+            }
+        end
     else
         -- not reading: totals of all the reading
         local total_sessions, total_secs, avg_wpm, pages_per_day = loadReadingStats()
@@ -3210,6 +3218,61 @@ function ShowLongestSessionsWindow:onClose()
     return true
 end
 
+-- The text of the window that a hold on the card explains while reading: how each figure of the card is worked out
+-- (now, and how the stable pages were worked out before), and the real numbers of the session in progress.
+local function buildReadingExplainItems()
+    local ui = getReaderUI()
+    local stats = ui and ui.statistics
+    local min_pages = tonumber(stats and stats.min_pages_valid_session) or 3
+    local min_mins = math.floor((tonumber(stats and stats.min_time_valid_session) or 180) / 60)
+    local items = {}
+
+    items[#items + 1] = {
+        _("This book"),
+        _("The total time you have read this book: the time of all the previous sessions plus the session in progress."),
+    }
+    items[#items + 1] = {
+        _("Session"),
+        string.format(_("The time since the session started, by the clock, pauses between page turns included. A session starts when the book is opened, when the device wakes up and at midnight. It is only saved if it is valid: at least %d pages and %d minutes read."),
+            min_pages, min_mins),
+    }
+    items[#items + 1] = {
+        _("wpm"),
+        _("Words per minute of the session: the words of the pages counted as read, divided by the minutes of reading time. A page counts when you stay on it at least the minimum seconds and at most the maximum seconds set in the statistics settings (if you stay longer, it counts as the maximum). The reading time is the sum of those times, not the clock time, so a pause does not lower it. It is updated at every counted page turn, and it shows 0 if no page has been counted for 5 minutes. This is worked out as before."),
+    }
+    items[#items + 1] = {
+        _("pages (screen)"),
+        _("The screens (pages of the current layout) read in the session, so it changes with the font size and margins. It is the highest of three counts: the different pages saved in the statistics since the session started, the pages still in memory that are not saved yet, and the pages counted by the statistics plugin in this session. This is worked out as before."),
+    }
+    items[#items + 1] = {
+        _("pages (stable)"),
+        _("Reference pages: the pages of the print edition (the page numbers of the book's page map), so they do not change with the font size. The number after the dot is the reference page where the session started.\n\nNow: the reference page you are on minus the reference page where the session started. The start is taken at the first page turn counted as read and is provisional: if you jump more than 15 reference pages before the session is valid, it is forgotten and taken again where you resume reading. It is fixed when the session becomes valid (the pages and minutes above); from then on jumps do not move it. The same subtraction is what is saved as ref_pages, together with the start as ref_start. If you go back before the start, the figure falls back to the estimate below.\n\nBefore: it was an estimate from the words, the words read in the session divided by the words of the book, times the reference pages of the book. It assumed every reference page has the same amount of text, so a short page or a chapter start moved it, and it did not know where you actually were in the book.\n\nIt only appears when the book has reference pages and the reader is using them when the session starts. Turning that option on or off during the session changes nothing: the session keeps the mode it started with. A session that starts without reference pages is saved without them (no ref_pages, no ref_start), even if you turn the option on later, so it is left out of avg wpm and pages/day. A session that starts with them keeps them even if you turn the option off later."),
+    }
+
+    -- the real numbers of the session in progress
+    local live
+    pcall(function()
+        if not stats then return end
+        if not stats:refPagesAllowed() then
+            live = _("This session is not using reference pages, so there is no stable figure.")
+            return
+        end
+        local start = tonumber(stats._session_start_ref)
+        local pending = tonumber(stats._pending_start_ref)
+        local current = stats:getCurrentRefPage()
+        if start and current then
+            live = string.format(_("Start %d (fixed), now %d: %d pages."), start, current, current - start)
+        elseif pending and current then
+            live = string.format(_("Start %d (provisional, it is fixed when the session is valid), now %d: %d pages."),
+                pending, current, current - pending)
+        else
+            live = _("No start yet: it is taken at the first page turn counted as read.")
+        end
+    end)
+    if live then items[#items + 1] = { _("Right now"), live } end
+    return items
+end
+
 -- Hold on the right card of the book card (bottom right of the summary): a window explaining its four figures.
 -- A hold anywhere else on this window is swallowed, so it never reaches the reader underneath.
 function ShowLongestSessionsWindow:onHoldExplain(arg, ges)
@@ -3229,8 +3292,12 @@ function ShowLongestSessionsWindow:onHoldExplain(arg, ges)
     if pos.x < rd.x or pos.x >= rd.x + rd.w or pos.y < rd.y or pos.y >= rd.y + rd.h then
         return true
     end
-    -- while reading the card shows the session in progress: the hold does nothing there
-    if summary_book_reading then return true end
+    -- while reading the card shows the session in progress: the window explains how its figures are worked out
+    if summary_book_reading then
+        explain_window_open = true
+        UIManager:show(ExplainWindow:new{ title = _("Session"), items = buildReadingExplainItems() }, "ui")
+        return true
+    end
     -- the summary with the real figures and the sessions with exact data
     local summary, sessions, sessions_title
     local ok_list, err_list = pcall(function()
