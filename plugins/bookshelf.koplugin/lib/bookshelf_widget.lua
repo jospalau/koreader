@@ -21737,7 +21737,7 @@ function BookshelfWidget:_cycleCalibreSort(step)
         return false
     end
     local states = {}
-    for _i, k in ipairs({ "words", "pub_date", "grvotes", "grrating" }) do
+    for _i, k in ipairs({ "pub_date", "words", "grvotes", "grrating" }) do
         states[#states + 1] = { key = k, reverse = false }
         states[#states + 1] = { key = k, reverse = true }
     end
