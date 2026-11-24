@@ -21724,7 +21724,7 @@ function BookshelfWidget:_subShelfItems(tab, offset, limit)
     return out, total
 end
 
--- The chip's own sort, with a swipe-picked key (mbr shelf) first.
+-- The chip's own sort, with a swipe-picked key first.
 function BookshelfWidget:_chipSortPriority(tab)
     local o = self._chip_sort
     if not (o and o.chip == self.chip) then return tab.sort_priority end
@@ -21739,7 +21739,7 @@ function BookshelfWidget._sortLabel(o)
     return (names[o.key] or o.key) .. (o.reverse and " \u{2193}" or " \u{2191}")
 end
 
--- _cycleCalibreSort(step): inside a tag / genre / author (or on the mbr shelf), step through the
+-- _cycleCalibreSort(step): inside a tag / genre / author (or on a shelf of books), step through the
 -- Calibre sorts of its books: words, pub_date, GR votes, GR rating, each one
 -- in both directions (step +1 next, -1 previous). Returns true when handled,
 -- false when not inside such a group (the caller keeps its own behaviour).
@@ -21748,14 +21748,24 @@ function BookshelfWidget:_cycleCalibreSort(step)
     local tip = path[#path]
     local top_chip = false
     if not tip then
-        -- On the mbr shelf both directions cycle; from any other shelf the
-        -- swipe still opens tbr (west) / mbr (east).
-        local tab = require("lib/bookshelf_tab_model").getById(self.chip)
+        -- Any shelf of books cycles, except tbr (kept in the reader's own
+        -- order), folder-grouped shelves and shelves of shelves / catalogues.
+        -- So west / east only open tbr / mbr from those; from tbr, east opens mbr.
+        local TabModel = require("lib/bookshelf_tab_model")
+        local tab = TabModel.getById(self.chip)
+        local kind = tab and tab.source and tab.source.kind
         local st = tab and tab.filter and type(tab.filter.statuses) == "table"
             and tab.filter.statuses or {}
         local id = tostring(self.chip)
         local label = tostring(tab and tab.label or ""):lower():gsub("[^%w]", "")
-        if not (id == "mbr" or label == "mbr" or st.mbr) then return false end
+        if not kind or kind == "all" or kind == "folder" or TabModel.isShelves(tab)
+                or id == "tbr" or label == "tbr" or st.tbr
+                or require("lib/bookshelf_sources").get(kind) then
+            return false
+        end
+        for _i, it in ipairs(self._page_items or {}) do
+            if type(it) == "table" and it.kind == "folder" then return false end
+        end
         top_chip = true
         tip = { payload = self._chip_sort or {} }
     elseif not (tip.payload and (tip.kind == "tag" or tip.kind == "genre"
