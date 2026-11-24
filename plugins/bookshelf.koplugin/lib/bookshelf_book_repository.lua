@@ -6713,7 +6713,32 @@ local function _hydrateGroupShape(shape, within_priority, filter, light_only)
             and within_priority and #within_priority > 0 and meta and #meta > 1 then
         local SortEngine = require("lib/bookshelf_sort_engine")
         local meta_copy = {}
-        for i = 1, #meta do meta_copy[i] = meta[i] end
+        -- Calibre-backed keys (pub_date / words / GR / pages / modified) are not
+        -- in the light books_meta, so a within-priority on them saw every book
+        -- as unknown and the group cover never followed it. Fill them on COPIES
+        -- of the entries (the cached shape stays untouched).
+        local w_cal = false
+        for _i, lv in ipairs(within_priority) do
+            local k = lv.key
+            if k == "pub_date" or k == "page_count" or k == "words" or k == "grrating"
+                    or k == "grvotes" or k == "modified_date" then w_cal = true end
+        end
+        for i = 1, #meta do
+            local m = meta[i]
+            if w_cal and m.filepath then
+                local c = {}
+                for k, v in pairs(m) do c[k] = v end
+                local _a, _b, _c, pc, _e, _f, pd, md, w, gr, gv = Repo.readProgress(c.filepath)
+                if c.pub_date == nil      then c.pub_date = pd end
+                if c.page_count == nil    then c.page_count = pc end
+                if c.words == nil         then c.words = w end
+                if c.grrating == nil      then c.grrating = gr end
+                if c.grvotes == nil       then c.grvotes = gv end
+                if c.modified_date == nil then c.modified_date = md end
+                m = c
+            end
+            meta_copy[i] = m
+        end
         SortEngine.sort(meta_copy, within_priority)
         meta = meta_copy
         local sorted_fps = {}
