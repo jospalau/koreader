@@ -3247,14 +3247,14 @@ return function(PageTextInfo)
         general = true,
     })
 
-    -- Name of the device that saved the most recent session of the statistics
+    -- Name of the device that inserted the last session into the statistics
     -- database (id_device of the newest row of wpm_stat_data). Used by the title
-    -- of the actions menu. Returns nil when it cannot be read.
+    -- of the actions menu. Ordering by rowid is instant (no table scan).
+    -- Returns nil when it cannot be read.
     function PageTextInfo:getLastSessionDeviceName()
         local rows = queryAll([[
             SELECT id_device FROM wpm_stat_data
-            WHERE start_time > 0
-            ORDER BY start_time DESC
+            ORDER BY rowid DESC
             LIMIT 1
         ]], function(row) return tonumber(row[1]) end)
         if not rows or rows[1] == nil then return nil end

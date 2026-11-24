@@ -756,7 +756,19 @@ return function(PageTextInfo)
     end
 
     -- Face using the font configured in the reader (falls back to the UI font)
+    -- Cached per size while the menu is open: the font search below walks the whole
+    -- font list and renders a test text, and the menu asks for a face once per cell
     function PageTextInfo:getMenuFace(size)
+        self._menu_faces = self._menu_faces or {}
+        local face = self._menu_faces[size]
+        if not face then
+            face = self:_findMenuFace(size)
+            self._menu_faces[size] = face
+        end
+        return face
+    end
+
+    function PageTextInfo:_findMenuFace(size)
         local Font = require("ui/font")
         local logger = require("logger")
 
@@ -853,6 +865,7 @@ return function(PageTextInfo)
 
         -- Don't open a second menu
         if self.actions_dialog then return true end
+        self._menu_faces = nil  -- search the font again on every open (it may have changed)
 
         local COLUMNS = 2
         local FONT_SIZE = 18
