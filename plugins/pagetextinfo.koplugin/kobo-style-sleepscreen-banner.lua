@@ -2,6 +2,15 @@
 --redesigns the inbuilt 'banner' type sleep screen message to
 --make it look like the kobo lockscreen tag.
 
+--[ v2.2.0 ]
+--the banner no longer depends on the inbuilt sleep screen message being enabled.
+--new menu items under Settings > Screen > Sleep screen > Wallpaper:
+--  'Kobo style sleep screen'  : on/off. when on, the banner is always drawn on top of the
+--                               wallpaper (cover / random image / document cover), whether
+--                               or not the inbuilt sleep screen message is enabled.
+--  'Kobo style banner position': % of the screen height, measured from the bottom.
+--the values in BANNER SETTINGS below are only the defaults of these two menu settings.
+
 --[ v2.1.0 ]
 --bookshelf integration: when bookshelf.koplugin is installed, the title line of the
 --banner is replaced by bookshelf's own top panel (the "currently reading" card:
@@ -16,6 +25,14 @@
 --i've also borrowed some design cues from a similar patch written by reddit user u/juancoquet.
 
 local B_SETT = {	--BANNER SETTINGS
+					kobo_style_sleepscreen = true,	-- default of the menu toggle 'Kobo style sleep screen'. true = banner
+										-- always drawn on the sleep screen, whether or not the inbuilt sleep
+										-- screen message is enabled. false = patch does nothing.
+					vertical_position = 50,	-- default of the menu setting 'Kobo style banner position': % of the
+										-- screen height measured from the bottom (0 = bottom, 100 = top).
+					stats_text_fallback = "page %c of %t",	-- stats line text, only used when the inbuilt sleep
+										-- screen message is not in use. same tokens as title_text.
+										-- "" = no stats line.
 					title_text = "%T", 	--configure title_text like you'd configure the inbuilt
 										--sleep screen message. for eg, "%T" shows book title,
 										--"page %c of %t" shows 'page 1 of 400' etc.
@@ -76,8 +93,10 @@ local HL_SETT = {	--HIGHLIGHT SETTINGS
 }
 
 local Bb = require("ffi/blitbuffer")
+local _ = require("gettext")
 local BookInfo = require("apps/filemanager/filemanagerbookinfo")
 local BookList = require("ui/widget/booklist")
+local CenterContainer = require("ui/widget/container/centercontainer")
 local datetime = require("datetime")
 local Device = require("device")
 local Font = require("ui/font")
@@ -88,8 +107,11 @@ local HorizontalSpan = require("ui/widget/horizontalspan")
 local LeftContainer = require("ui/widget/container/leftcontainer")
 local LineWidget = require("ui/widget/linewidget")
 local logger = require("logger")
+local OverlapGroup = require("ui/widget/overlapgroup")
 local Screen = Device.screen
 local Size = require("ui/size")
+local SpinWidget = require("ui/widget/spinwidget")
+local T = require("ffi/util").template
 local TextBoxWidget = require("ui/widget/textboxwidget")
 local TextWidget = require("ui/widget/textwidget")
 local UIManager = require("ui/uimanager")
@@ -100,6 +122,30 @@ local VerticalSpan = require("ui/widget/verticalspan")
 local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
 local cached_random_highlight_index  = 1
 local Sidecar
+
+-- Current values of the two menu settings. The menu (Sleep screen > Wallpaper) saves them in
+-- G_reader_settings; until the user touches them the defaults from B_SETT apply.
+local function isKoboStyleOn()
+	local saved = G_reader_settings:readSetting("kobo_style_sleepscreen")
+	if saved == nil then
+		return B_SETT.kobo_style_sleepscreen and true or false
+	end
+	return saved and true or false
+end
+
+-- banner position, % of the screen height measured from the bottom
+local function getBannerPosition()
+	local saved = tonumber(G_reader_settings:readSetting("kobo_style_sleepscreen_position"))
+	return math.min(math.max(saved or tonumber(B_SETT.vertical_position) or 50, 0), 100)
+end
+
+-- Expands tokens like "%T" / "%c" / "%t" the same way the inbuilt sleep screen message does.
+local function expandTokens(ui, text, file)
+	if ui and ui.document and ui.toc and ui.bookinfo then
+		return ui.bookinfo:expandString(text, file) or "N/A"
+	end
+	return BookInfo:expandString(text, file) or "N/A"
+end
 
 local function buildTextField(
 								text,
@@ -395,6 +441,36 @@ local function buildBookshelfPanel(width, height)
 	return card
 end
 
+-- Draws the banner on top of the sleep screen wallpaper, at the left edge. If the inbuilt
+-- sleep screen message is enabled (any container), it is dropped so it doesn't show twice.
+local function attachBanner(ss_widget, banner, message_enabled)
+	local main_frame = ss_widget[1]
+	local base = main_frame and main_frame[1]
+	if not base then
+		return false
+	end
+
+	-- position = % of the free height, measured from the bottom (0 = bottom, 100 = top)
+	local free_h = math.max(0, screen_h - banner:getSize().h)
+	banner.overlap_offset = {0, math.floor(free_h * (100 - getBannerPosition()) / 100)}
+
+	if message_enabled and #base >= 2 then
+		-- inbuilt message layout: overlap group of {wallpaper, message}
+		table.remove(base, 2)
+		table.insert(base, banner)
+	else
+		main_frame[1] = OverlapGroup:new{
+			dimen = Geom:new{w = screen_w, h = screen_h},
+			CenterContainer:new{
+				dimen = Geom:new{w = screen_w, h = screen_h},
+				base,
+			},
+			banner,
+		}
+	end
+	return true
+end
+
 local og_uiMan_show = UIManager.show
 
 function UIManager:show(widget, ...)
@@ -402,7 +478,7 @@ function UIManager:show(widget, ...)
 	-- isn't 'book cover' or 'custom image' or if sleep screen message type
 	-- isn't 'banner', we do not intercept.
 
-	if not widget or widget.name ~= "ScreenSaver" then
+	if not widget or widget.name ~= "ScreenSaver" or not isKoboStyleOn() then
 		return og_uiMan_show(self, widget, ...)
 	end
 
@@ -410,25 +486,23 @@ function UIManager:show(widget, ...)
 	local message_container_enabled = G_reader_settings:isTrue("screensaver_show_message")
 	local message_container_type = G_reader_settings:readSetting("screensaver_message_container")
 
-	if not message_container_enabled or
-			message_container_type ~= "banner" then
-		return og_uiMan_show(self, widget, ...)
-	end
 	if screensaver_type ~= "cover" and
 			screensaver_type ~= "random_image" and
 			screensaver_type ~= "document_cover" then
 		return og_uiMan_show(self, widget, ...)
 	end
 
-	local txtBoxWgtFound = widget and
+	local txtBoxWgtFound = message_container_enabled and
+								message_container_type == "banner" and
+								widget and
 								widget[1] and  --screensaver wgt
 								widget[1][1] and  -- overlap group
 								widget[1][1][2] and --custom pos. container
 								widget[1][1][2].widget and --textbox widget
 								widget[1][1][2].widget.text
-	if not txtBoxWgtFound then
-		return og_uiMan_show(self, widget, ...)
-	end
+	-- txtBoxWgtFound: the inbuilt message is enabled with the 'banner' container, so its
+	-- text is reused for the stats line. in any case the banner is built from scratch and
+	-- placed by attachBanner() at the position set in the menu.
 	--=================================
 
 	local last_file = G_reader_settings:readSetting("lastfile")
@@ -485,10 +559,18 @@ function UIManager:show(widget, ...)
 
 	local cus_pos_container, orig_sleep_widget, content_widget
 
-	cus_pos_container = widget[1][1][2]
-	orig_sleep_widget = widget[1][1][2].widget
-	local orig_sleep_text = orig_sleep_widget.text
-	orig_sleep_widget:free()
+	local orig_sleep_text
+	if txtBoxWgtFound then
+		cus_pos_container = widget[1][1][2]
+		orig_sleep_widget = widget[1][1][2].widget
+		orig_sleep_text = orig_sleep_widget.text
+		orig_sleep_widget:free()
+	else
+		-- no inbuilt message: the stats line comes from 'stats_text_fallback'
+		local fallback = B_SETT.stats_text_fallback
+		orig_sleep_text = fallback and util.trim(fallback) ~= "" and
+							expandTokens(self.ui, fallback, last_file) or ""
+	end
 
 	local highlightCount, highlightEnabled, highlights_list
 
@@ -590,7 +672,7 @@ function UIManager:show(widget, ...)
 
 	--STATS WIDGET
 	local stats_widget
-	if panel_widget and not PANEL_SETT.keep_stats then
+	if (panel_widget and not PANEL_SETT.keep_stats) or orig_sleep_text == "" then
 		stats_widget = VerticalSpan:new{width = 0}
 	else
 		stats_widget = buildTextField(
@@ -770,9 +852,119 @@ function UIManager:show(widget, ...)
 		content_widget,
 	}
 
-	-- move custom position cont. to the left edge and replace child.
-	cus_pos_container.horizontal_position = 0
-	cus_pos_container.widget = content_widget
+	-- put the banner at the left edge (replacing the inbuilt message, if any)
+	if not attachBanner(widget, content_widget, message_container_enabled) then
+		-- unexpected sleep screen layout: leave it untouched
+		return og_uiMan_show(self, widget, ...)
+	end
 
 	return og_uiMan_show(self, widget, ...)
+end
+
+--MENU INTEGRATION (Settings > Screen > Sleep screen > Wallpaper)
+local function addWallpaperItems(ss_items)
+	if type(ss_items) ~= "table" then
+		return
+	end
+
+	local wallpaper
+	for i, item in ipairs(ss_items) do
+		if item.text == _("Wallpaper") then
+			wallpaper = item
+			break
+		end
+	end
+	wallpaper = wallpaper or (ss_items[1] and ss_items[1].sub_item_table and ss_items[1])
+	if not wallpaper or wallpaper.kobo_style_items_added then
+		return
+	end
+	wallpaper.kobo_style_items_added = true
+
+	local wp_items = wallpaper.sub_item_table
+	if #wp_items > 0 then
+		wp_items[#wp_items].separator = true
+	end
+	table.insert(wp_items, {
+		text = _("Kobo style sleep screen"),
+		help_text = _("Draw the Kobo style banner on top of the sleep screen wallpaper, whether or not the sleep screen message is enabled."),
+		checked_func = isKoboStyleOn,
+		callback = function()
+			G_reader_settings:saveSetting("kobo_style_sleepscreen", not isKoboStyleOn())
+		end,
+	})
+	table.insert(wp_items, {
+		text_func = function()
+			return T(_("Kobo style banner position: %1 %"), getBannerPosition())
+		end,
+		help_text = _("Vertical position of the banner, as a percentage of the screen height measured from the bottom (0 = bottom, 100 = top)."),
+		enabled_func = isKoboStyleOn,
+		keep_menu_open = true,
+		callback = function(touchmenu_instance)
+			UIManager:show(SpinWidget:new{
+				title_text = _("Banner position"),
+				info_text = _("Percentage of the screen height, measured from the bottom.\n0 = bottom, 100 = top."),
+				value = getBannerPosition(),
+				value_min = 0,
+				value_max = 100,
+				value_step = 1,
+				value_hold_step = 10,
+				default_value = math.min(math.max(tonumber(B_SETT.vertical_position) or 50, 0), 100),
+				unit = "%",
+				callback = function(spin)
+					G_reader_settings:saveSetting("kobo_style_sleepscreen_position", spin.value)
+					if touchmenu_instance then
+						touchmenu_instance:updateItems()
+					end
+				end,
+			})
+		end,
+	})
+end
+
+local function safely(fn, ...)
+	local ok, err = pcall(fn, ...)
+	if not ok then
+		logger.warn("[kobo-style-sleepscreen] could not add the menu items:", err)
+	end
+end
+
+local function addMenuItems(menu_items)
+	local ss_menu = menu_items and menu_items.screensaver
+	addWallpaperItems(ss_menu and ss_menu.sub_item_table)
+end
+
+-- koreader builds the sleep screen menu with dofile("frontend/ui/elements/screensaver_menu.lua")
+-- every time the menus are (re)built. catch that table as soon as it is created.
+local og_dofile = dofile
+dofile = function(path, ...)
+	local res = og_dofile(path, ...)
+	if type(path) == "string" and path:find("screensaver_menu%.lua$") then
+		safely(addWallpaperItems, res)
+	end
+	return res
+end
+
+-- as a second way in, also add the items right after the menus are (re)built
+local function hookMenu(module_path)
+	local ok, Menu = pcall(require, module_path)
+	if not ok or type(Menu) ~= "table" or not Menu.setUpdateItemTable then
+		return
+	end
+	local og_setUpdateItemTable = Menu.setUpdateItemTable
+	function Menu:setUpdateItemTable(...)
+		local res = og_setUpdateItemTable(self, ...)
+		safely(addMenuItems, self.menu_items)
+		return res
+	end
+end
+hookMenu("apps/filemanager/filemanagermenu")
+hookMenu("apps/reader/modules/readermenu")
+
+-- menus that already exist when this patch runs
+for i, module_path in ipairs{"apps/filemanager/filemanager", "apps/reader/readerui"} do
+	local ok, class = pcall(require, module_path)
+	local instance = ok and type(class) == "table" and class.instance
+	if instance and instance.menu then
+		safely(addMenuItems, instance.menu.menu_items)
+	end
 end
