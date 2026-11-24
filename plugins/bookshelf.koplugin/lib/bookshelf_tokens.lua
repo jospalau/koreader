@@ -173,6 +173,7 @@ Tokens.CATALOGUE = {
     { category = "Progress", token = "%books_finished2",  description = _("Books finished") },
     { category = "Progress", token = "%books_unread",     description = _("Books unread") },
     { category = "Progress", token = "%books_read_this_month", description = _("Books finished this month") },
+    { category = "Book",     token = "%sort_label",       description = _("Calibre sort picked with the two-finger swipe inside a tag, genre or author (empty otherwise)") },
     { category = "Book",     token = "%calibre2{name}",   description = _("A raw column from settings/calibre.lua by name (words, pages, pubdate, grrating, grvotes, series, genre) — 'N/A' if missing") },
 }
 
@@ -1240,6 +1241,11 @@ Tokens.expanders.books_read_this_month = function()
     if not ok then return "N/A" end
     return BookCounts.getFinishedThisMonth() or 0
 end
+
+-- Set by the widget on every rebuild from the open group's swipe sort, so it
+-- clears itself when the chip or the group changes.
+Tokens.sort_label = ""
+Tokens.expanders.sort_label = function() return Tokens.sort_label or "" end
 
 -- ── %calibre2{field}: any raw column from settings/calibre.lua by name ─────
 -- Independent of the "calibre beta" book.calibre map above -- this reads

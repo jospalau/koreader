@@ -1139,6 +1139,12 @@ function BookshelfWidget:_ornScanWindow()
 end
 
 function BookshelfWidget:_rebuild()
+    do  -- feeds %sort_label; empty outside a swiped group, so a new chip resets it
+        local p = self._drilldown_path
+        local t = p and p[#p]
+        local o = t and t.payload and t.payload._sort_override
+        require("lib/bookshelf_tokens").sort_label = o and BookshelfWidget._sortLabel(o) or ""
+    end
     local switching = self:_rebuildPrepare()
     local _perf_t0   = _gettime()
     local _perf_chip = self.chip
@@ -21717,6 +21723,12 @@ end
 -- Calibre sorts of its books: words, pub_date, GR votes, GR rating, each one
 -- in both directions (step +1 next, -1 previous). Returns true when handled,
 -- false when not inside such a group (the caller keeps its own behaviour).
+function BookshelfWidget._sortLabel(o)
+    local names = { words = "Words", pub_date = "Pub. date",
+        grvotes = "GR votes", grrating = "GR rating" }
+    return (names[o.key] or o.key) .. (o.reverse and " \u{2193}" or " \u{2191}")
+end
+
 function BookshelfWidget:_cycleCalibreSort(step)
     local path = self._drilldown_path or {}
     local tip = path[#path]
@@ -21724,8 +21736,7 @@ function BookshelfWidget:_cycleCalibreSort(step)
             or tip.kind == "author")) then
         return false
     end
-    local states, labels = {}, { words = "Words", pub_date = "Pub. date",
-        grvotes = "GR votes", grrating = "GR rating" }
+    local states = {}
     for _i, k in ipairs({ "words", "pub_date", "grvotes", "grrating" }) do
         states[#states + 1] = { key = k, reverse = false }
         states[#states + 1] = { key = k, reverse = true }
@@ -21748,8 +21759,7 @@ function BookshelfWidget:_cycleCalibreSort(step)
     self:_rebuild()
     UIManager:setDirty(self, "ui")
     pcall(function()
-        require("ui/widget/notification"):notify(
-            labels[pick.key] .. (pick.reverse and " \u{2193}" or " \u{2191}"))
+        require("ui/widget/notification"):notify(BookshelfWidget._sortLabel(pick))
     end)
     return true
 end
