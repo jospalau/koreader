@@ -9,26 +9,13 @@ This module is not a widget and is not registered in ReaderUI: ReaderHighlight u
 as a plain table of functions, passing its own instance (`hl`).
 ]]
 
-local Blitbuffer = require("ffi/blitbuffer")
-local CenterContainer = require("ui/widget/container/centercontainer")
+local BusyWidget = require("ui/widget/busy_widget")
 local Device = require("device")
 local Event = require("ui/event")
-local Font = require("ui/font")
-local FrameContainer = require("ui/widget/container/framecontainer")
-local Geom = require("ui/geometry")
-local GestureRange = require("ui/gesturerange")
-local IconWidget = require("ui/widget/iconwidget")
 local InfoMessage = require("ui/widget/infomessage")
-local InputContainer = require("ui/widget/container/inputcontainer")
 local Screen = Device.screen
-local Size = require("ui/size")
-local TextBoxWidget = require("ui/widget/textboxwidget")
 local TextViewer = require("ui/widget/textviewer")
-local TextWidget = require("ui/widget/textwidget")
 local UIManager = require("ui/uimanager")
-local VerticalGroup = require("ui/widget/verticalgroup")
-local VerticalSpan = require("ui/widget/verticalspan")
-local Widget = require("ui/widget/widget")
 local ffiUtil = require("ffi/util")
 local logger = require("logger")
 local util = require("util")
@@ -185,139 +172,6 @@ local function newBookMenuClass(Menu, font_file)
         return res
     end
     return BookMenu
-end
-
----------------------------------------------------------------------------
--- "Searching" widget: magnifier badge, the word, animated dots, cancel hint
----------------------------------------------------------------------------
-
-local TICK_SECONDS = 0.4   -- animation step of the dots
-
--- Row of dots; one is black, its neighbours fade out. Drawn by hand (no child widgets).
-local DotsWidget = Widget:extend{
-    count = 5,
-    active = 1,
-}
-
-function DotsWidget:init()
-    self.dot = Screen:scaleBySize(12)
-    self.gap = Screen:scaleBySize(12)
-    self.dimen = Geom:new{
-        w = self.count * self.dot + (self.count - 1) * self.gap,
-        h = self.dot,
-    }
-end
-
-function DotsWidget:step()
-    self.active = self.active % self.count + 1
-end
-
-function DotsWidget:paintTo(bb, x, y)
-    self.dimen.x, self.dimen.y = x, y
-    for i = 1, self.count do
-        local dist = math.abs(i - self.active)
-        local color = dist == 0 and Blitbuffer.COLOR_BLACK
-            or dist == 1 and Blitbuffer.COLOR_DARK_GRAY
-            or Blitbuffer.COLOR_LIGHT_GRAY
-        bb:paintRoundedRect(x + (i - 1) * (self.dot + self.gap), y, self.dot, self.dot,
-                            color, math.floor(self.dot / 2))
-    end
-end
-
--- Tap anywhere (or any key) dismisses it. It sets/calls `dismiss_callback` like InfoMessage does,
--- so Trapper:dismissableRunInSubprocess can use it as its trap widget.
-local SearchingWidget = InputContainer:extend{
-    word = "",
-    dismiss_callback = nil,
-}
-
-function SearchingWidget:init()
-    local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
-    local inner_w = math.floor(math.min(screen_w, screen_h) * 0.55)
-
-    -- Magnifier inside a round badge.
-    local icon_size = Screen:scaleBySize(56)
-    local badge_pad = Screen:scaleBySize(14)
-    local badge_border = Size.border.thick
-    local badge_size = icon_size + 2 * badge_pad + 2 * badge_border
-    local badge = FrameContainer:new{
-        radius = math.floor(badge_size / 2),
-        bordersize = badge_border,
-        padding = badge_pad,
-        margin = 0,
-        background = Blitbuffer.COLOR_WHITE,
-        IconWidget:new{ icon = "appbar.search", width = icon_size, height = icon_size },
-    }
-
-    local title = TextWidget:new{
-        text = "Searching…",
-        face = Font:getFace("tfont", 22),
-    }
-    local word = TextBoxWidget:new{
-        text = "“" .. self.word .. "”",
-        face = Font:getFace("tfont", 28),
-        width = inner_w,
-        alignment = "center",
-    }
-    self.dots = DotsWidget:new{}
-    local hint = TextWidget:new{
-        text = "Tap to cancel",
-        face = Font:getFace("cfont", 16),
-        fgcolor = Blitbuffer.COLOR_DARK_GRAY,
-    }
-    local function gap(n) return VerticalSpan:new{ width = Screen:scaleBySize(n) } end
-
-    self.frame = FrameContainer:new{
-        background = Blitbuffer.COLOR_WHITE,
-        bordersize = Size.border.window,
-        radius = Size.radius.window,
-        padding = Screen:scaleBySize(24),
-        margin = 0,
-        VerticalGroup:new{
-            align = "center",
-            badge, gap(14), title, gap(8), word, gap(18), self.dots, gap(18), hint,
-        },
-    }
-    self[1] = CenterContainer:new{
-        dimen = Geom:new{ w = screen_w, h = screen_h },
-        self.frame,
-    }
-
-    self.ges_events = {
-        TapClose = { GestureRange:new{
-            ges = "tap",
-            range = Geom:new{ x = 0, y = 0, w = screen_w, h = screen_h },
-        } },
-    }
-    if Device:hasKeys() then
-        self.key_events = { AnyKeyPressed = { { Device.input.group.Any } } }
-    end
-end
-
-function SearchingWidget:dismiss()
-    UIManager:close(self)
-    if self.dismiss_callback then self.dismiss_callback() end
-    return true
-end
-function SearchingWidget:onTapClose() return self:dismiss() end
-function SearchingWidget:onAnyKeyPressed() return self:dismiss() end
-
-function SearchingWidget:onShow()
-    UIManager:setDirty(self, function() return "ui", self.frame.dimen end)
-    self._tick = function()
-        if self._closed then return end
-        self.dots:step()
-        UIManager:setDirty(self, function() return "fast", self.dots.dimen end)
-        UIManager:scheduleIn(TICK_SECONDS, self._tick)
-    end
-    UIManager:scheduleIn(TICK_SECONDS, self._tick)
-    return true
-end
-
-function SearchingWidget:onCloseWidget()
-    self._closed = true
-    if self._tick then UIManager:unschedule(self._tick) end
-    UIManager:setDirty(nil, function() return "ui", self.frame.dimen end)
 end
 
 ---------------------------------------------------------------------------
@@ -491,7 +345,12 @@ function ReaderHighlightSearch:search(hl)
         UIManager:show(menu)
     end
 
-    local searching = SearchingWidget:new{ word = text }
+    local searching = BusyWidget:new{
+        icon = "appbar.search",
+        title = "Searching…",
+        subtitle = "“" .. text .. "”",
+        hint = "Tap to cancel",
+    }
     UIManager:show(searching)
     UIManager:forceRePaint()
 

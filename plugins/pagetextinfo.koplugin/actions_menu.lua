@@ -12,6 +12,10 @@ return function(PageTextInfo)
     local util = require("util")
     local _ = require("gettext")
     local T = require("ffi/util").template
+    -- Card shown while a script runs (frontend/ui/widget/busy_widget.lua, shared with the search
+    -- of the highlight); if it is missing the old InfoMessage is used.
+    local ok_busy, BusyWidget = pcall(require, "ui/widget/busy_widget")
+    if not ok_busy then BusyWidget = nil end
     -- CrashLog is resolved lazily and safely: a missing module must not break loading
     local function getCrashLog()
         for __, name in ipairs({ "crashlog_overlay", "crashlog" }) do
@@ -158,6 +162,7 @@ return function(PageTextInfo)
     -- opts.on_no_restart: function(paths) called when the user chooses not to restart.
     -- opts.progress_text: text shown while the script runs.
     -- opts.error_text:    text shown (followed by the output) when the script fails.
+    -- opts.step:          "1/3" style text shown before the script name in the progress card.
     -- opts.quiet:         if true, no result / restart dialog: the output is returned to the caller.
     -- Returns true (plus the cleaned output) only if the script ran and succeeded.
     local function runSyncScript(script_name, opts)
@@ -195,7 +200,19 @@ return function(PageTextInfo)
         cmd = string.format('(%s) 2>&1; echo "EXIT:$?"', cmd)
 
         -- Show progress so the UI doesn't look frozen while the script runs
-        local syncing = InfoMessage:new{ text = progress_text, face = Font:getFace("myfont") }
+        local syncing
+        if BusyWidget then
+            syncing = BusyWidget:new{
+                icon = "appbar.settings",
+                title = progress_text,
+                subtitle = (opts.step and (opts.step .. "  \xC2\xB7  ") or "") .. script_name,
+                -- the script runs in a blocking call (io.popen + read): nothing could move or be tapped
+                animate = false,
+                dismissable = false,
+            }
+        else
+            syncing = InfoMessage:new{ text = progress_text, face = Font:getFace("myfont") }
+        end
         UIManager:show(syncing)
         UIManager:forceRePaint()
 
@@ -303,9 +320,10 @@ return function(PageTextInfo)
             { script = "syncBooks.sh",        label = _("Books"),  progress = _("Synchronizing books...") },
         }
         local parts = {}
-        for __, step in ipairs(steps) do
+        for i, step in ipairs(steps) do
             local ok, out = runSyncScript(step.script, {
                 quiet = true,
+                step = string.format("%d/%d", i, #steps),
                 progress_text = step.progress,
                 error_text = T(_("Problem while running %1"), step.script),
             })
