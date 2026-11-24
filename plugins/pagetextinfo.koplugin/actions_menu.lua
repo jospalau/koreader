@@ -579,13 +579,8 @@ return function(PageTextInfo)
             return ok == 0 or ok == true  -- LuaJIT returns 0, Lua 5.2+ returns true
         end
 
-        -- Server shown in the section header (same settings and defaults as readerrsync.lua)
-        local rsync_server = G_reader_settings:readSetting("rsync_server", "192.168.50.252")
-        local rsync_port = G_reader_settings:readSetting("rsync_port", "873")
-        local sync_header = string.format("KOReader sync - %s:%s", tostring(rsync_server), tostring(rsync_port))
-
         local actions = {
-            { header = sync_header, label = "Sync code",  callback = function() self:onSynchronizeCode() end },
+            { header = "KOReader sync", label = "Sync code",  callback = function() self:onSynchronizeCode() end },
             { label = "Sync books", callback = function() self:onSyncBooks() end },
             { label = "Pull conf",  callback = function() self:onPullConfig() end },
             { label = "Push conf",  callback = function() self:onPushConfig() end },
@@ -682,6 +677,72 @@ return function(PageTextInfo)
         table.insert(actions, { header = "Restart or Exit", label = "Restart", callback = function() PageTextInfo.restartKOReader() end })
         table.insert(actions, { label = "Exit", callback = function() self.ui:handleEvent(Event:new("Exit")) end })
         return actions
+    end
+
+    -- Lines of the menu title:
+    --   1. KOReader version: "dateandversion" first (e.g. "24/11/2026 v7.4"), then git-rev
+    --   2. date of the statistics database (no time) and the device of its last session
+    --   3. rsync server and port
+    function PageTextInfo:getMenuTitleLines()
+        local lfs = require("libs/libkoreader-lfs")
+        local DataStorage = require("datastorage")
+
+        -- First line of a text file, trimmed (nil if missing or empty)
+        local function firstLine(path)
+            local f = io.open(path, "r")
+            if not f then return nil end
+            local line = f:read("*l")
+            f:close()
+            line = line and line:gsub("^%s+", ""):gsub("%s+$", "") or nil
+            if line and line ~= "" then return line end
+        end
+
+        -- KOReader folders where those files can be
+        local dirs = {
+            lfs.currentdir(),
+            DataStorage:getDataDir(),
+            (getPlatformPaths().fbink:match("^(.*)/[^/]*$")),
+        }
+        local function readFromKOReaderDir(name)
+            for __, dir in ipairs(dirs) do
+                if dir then
+                    local line = firstLine(dir .. "/" .. name)
+                    if line then return line end
+                end
+            end
+        end
+
+        local rev = readFromKOReaderDir("dateandversion")
+            or readFromKOReaderDir("git-rev")
+        if not rev then
+            local okv, Version = pcall(require, "version")
+            if okv and Version and Version.getCurrentRevision then
+                local okr, r = pcall(function() return Version:getCurrentRevision() end)
+                if okr and type(r) == "string" and r ~= "" then rev = r end
+            end
+        end
+
+        -- Statistics database: date of its last change (no time) and the device
+        -- that saved the most recent session (provided by top_reading_sessions.lua)
+        local db_path = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
+        local mtime = lfs.attributes(db_path, "modification")
+        local db_line = "Database: " .. (mtime and os.date("%d/%m/%Y", mtime) or "not found")
+        if mtime and self.getLastSessionDeviceName then
+            local ok, device = pcall(self.getLastSessionDeviceName, self)
+            if ok and device then
+                db_line = db_line .. "  \xC2\xB7  " .. device
+            end
+        end
+
+        -- Same settings and defaults as readerrsync.lua
+        local server = G_reader_settings:readSetting("rsync_server", "192.168.50.252")
+        local port = G_reader_settings:readSetting("rsync_port", "873")
+
+        return {
+            "KOReader " .. (rev or "?"),
+            db_line,
+            string.format("Sync server: %s:%s", tostring(server), tostring(port)),
+        }
     end
 
     -- Close the menu and repaint the area underneath
@@ -835,6 +896,31 @@ return function(PageTextInfo)
         -- Grid
         local grid = VerticalGroup:new{ align = "center" }
         local row = HorizontalGroup:new{}
+
+        -- Title at the very top: KOReader version and database date
+        local title_group = VerticalGroup:new{ align = "center" }
+        for _, line in ipairs(self:getMenuTitleLines()) do
+            table.insert(title_group, TextWidget:new{
+                text = line,
+                face = self:getMenuFace(FONT_SIZE - 1),
+                bold = true,
+                max_width = cell_w * COLUMNS - 4 * Size.padding.small,
+            })
+        end
+        table.insert(grid, FrameContainer:new{
+            bordersize = thin,
+            color = Blitbuffer.COLOR_BLACK,
+            background = Blitbuffer.COLOR_WHITE,
+            margin = 0,
+            padding = Size.padding.small,
+            CenterContainer:new{
+                dimen = Geom:new{
+                    w = cell_w * COLUMNS - 2 * thin - 2 * Size.padding.small,
+                    h = title_group:getSize().h,
+                },
+                title_group,
+            },
+        })
 
         for _, action in ipairs(actions) do
             -- Section header (full width, above the row that starts here)
