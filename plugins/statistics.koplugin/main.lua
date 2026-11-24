@@ -39,6 +39,8 @@ local MIN_PAGES_VALID_SESSION = 3
 -- A change of reference page bigger than this (in either direction) between two page turns is a jump
 -- (index, search, going back to find the place...): the session start is looked for again after it
 local MAX_REF_JUMP = 15
+-- screens: a jump larger than this moves the provisional start of the progress (about MAX_REF_JUMP reference pages)
+local MAX_SCREEN_JUMP = 20
 -- Current DB schema version
 local DB_SCHEMA_VERSION = 20221111
 
@@ -78,6 +80,7 @@ local ReaderStatistics = Widget:extend{
     preserved_total_read_time = nil,
     preserved_session_start_ref = nil,
     preserved_ref_mode = nil,
+    preserved_session_start_pct = nil,
     curr_page = 0,
     id_curr_book = nil,
     is_enabled = nil,
@@ -158,7 +161,11 @@ function ReaderStatistics:init()
     self._total_read_time = 0
     self._session_start_ref = nil -- reference page where the session starts (frozen when the session is valid)
     self._pending_start_ref = nil -- provisional start, until the session is valid
+    self._session_start_pct = nil
+    self._pending_start_pct = nil
     self._prev_ref = nil          -- reference page after the last page turn
+    self._prev_pct = nil          -- book progress (%) after the last page turn
+    self._prev_page = nil         -- screen page after the last page turn
     self._ref_mode = nil          -- nil: not decided yet; true/false: this session uses reference pages or not (fixed at its first page turn)
     self._initial_read_today = nil
     self.devices = {
@@ -267,6 +274,10 @@ function ReaderStatistics:init()
         self._session_start_ref = ReaderStatistics.preserved_session_start_ref
         ReaderStatistics.preserved_session_start_ref = nil
     end
+    if ReaderStatistics.preserved_session_start_pct then
+        self._session_start_pct = ReaderStatistics.preserved_session_start_pct
+        ReaderStatistics.preserved_session_start_pct = nil
+    end
     if ReaderStatistics.preserved_ref_mode ~= nil then
         self._ref_mode = ReaderStatistics.preserved_ref_mode
         ReaderStatistics.preserved_ref_mode = nil
@@ -282,6 +293,8 @@ function ReaderStatistics:init()
             self._total_read_time = 0
             self._session_start_ref = nil
             self._pending_start_ref = nil
+            self._session_start_pct = nil
+            self._pending_start_pct = nil
             self._ref_mode = nil
             local res = nil
             local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
@@ -408,6 +421,7 @@ function ReaderStatistics:onPreserveCurrentSession()
     ReaderStatistics.preserved_total_read_time = self._total_read_time
     ReaderStatistics.preserved_session_start_ref = self._session_start_ref
     ReaderStatistics.preserved_ref_mode = self._ref_mode
+    ReaderStatistics.preserved_session_start_pct = self._session_start_pct
 end
 
 function ReaderStatistics:resetVolatileStats(now_ts)
@@ -1106,6 +1120,8 @@ function ReaderStatistics:checkNewDay()
         self._total_read_time = 0
         self._session_start_ref = nil
         self._pending_start_ref = nil
+        self._session_start_pct = nil
+        self._pending_start_pct = nil
         self._ref_mode = nil
         return true
     end
@@ -1150,10 +1166,49 @@ function ReaderStatistics:getCurrentRefPage()
     return n
 end
 
+-- Reading progress of the book as a percentage (two decimals) and the screen page it comes from; nil when it cannot
+-- be read. Unlike the reference pages it exists in every book.
+function ReaderStatistics:getCurrentProgress()
+    local pct, page
+    pcall(function()
+        page = self.ui:getCurrentPage()
+        local total = self.ui.document:getPageCount()
+        if page and total and total > 0 then
+            pct = math.floor(page / total * 10000 + 0.5) / 100
+        end
+    end)
+    return pct, page
+end
+
+-- Same idea as trackSessionRef, for the progress of the book: it follows the page at every turn and, until the
+-- start is frozen, forgets the provisional start after a jump (more than MAX_SCREEN_JUMP screens).
+function ReaderStatistics:trackSessionPct()
+    if self._session_start_pct then return end
+    local pct, page = self:getCurrentProgress()
+    if page and self._prev_page and math.abs(page - self._prev_page) > MAX_SCREEN_JUMP then
+        self._pending_start_pct = nil
+    end
+    self._prev_pct, self._prev_page = pct, page
+end
+
+-- Same idea as markSessionStartRef: provisional start at the first page counted as read, frozen when the session is
+-- valid. It does not depend on the reference pages, so every session gets it.
+function ReaderStatistics:markSessionStartPct()
+    if self._session_start_pct then return end
+    if not self._pending_start_pct then
+        self._pending_start_pct = self._prev_pct or (self:getCurrentProgress())
+    end
+    if self._pending_start_pct and self._total_pages >= self.min_pages_valid_session
+        and os.time() - self.start_current_period >= self.min_time_valid_session then
+        self._session_start_pct = self._pending_start_pct
+    end
+end
+
 -- Called at every page turn (all of them, counted as read or not): follows the reference page and, while the
 -- session start is not frozen yet, forgets the provisional start after a jump, so the start becomes the place
 -- where the reading resumes.
 function ReaderStatistics:trackSessionRef()
+    self:trackSessionPct()
     self:decideSessionRefMode()
     if not self._ref_mode then return end -- session without reference pages: nothing to follow
     if self._session_start_ref then return end -- frozen: nothing more to follow in this session
@@ -1168,6 +1223,7 @@ end
 -- read) and is frozen once the session is valid (same conditions insertDBSessionStats uses to save it): from
 -- then on jumps do not move it.
 function ReaderStatistics:markSessionStartRef()
+    self:markSessionStartPct()
     self:decideSessionRefMode()
     -- A session that starts without reference pages stays without them, even if the option is turned on later
     if not self._ref_mode then return end
@@ -1210,18 +1266,19 @@ function ReaderStatistics:insertDBSessionStats()
     --date -s "2024-08-22 23:59:33"
     --print(string.format("%d, %d, %d", self.start_current_period, duration_raw, self._total_pages))
     local conn = SQ3.open(db_location)
-    -- ref_start (reference page where the session became valid) is a column added by hand to wpm_stat_data:
-    -- it is only read here (never created), and until it exists the session is saved without it
-    if ReaderStatistics._has_ref_start == nil then
+    -- ref_start, ref_end, pct_start and pct_end are columns added by hand to wpm_stat_data: they are only looked for
+    -- here (never created), and the session is saved with the ones that exist
+    if ReaderStatistics._extra_cols == nil then
         pcall(function()
-            local has_column = false
+            local found = {}
             local cols = conn:exec("PRAGMA table_info(wpm_stat_data);")
             for _i, name in ipairs(cols and cols.name or {}) do
-                if name == "ref_start" then has_column = true end
+                found[name] = true
             end
-            ReaderStatistics._has_ref_start = has_column
+            ReaderStatistics._extra_cols = found
         end)
     end
+    local extra_cols = ReaderStatistics._extra_cols or {}
     -- characters and words of the whole book (crengine); nil when it cannot be read
     -- (it walks the whole text, so it is computed once per book and kept)
     local book_words
@@ -1261,15 +1318,32 @@ function ReaderStatistics:insertDBSessionStats()
         local diff = ref_end - session_start_ref
         if diff > 0 then ref_pages = diff end
     end
+    -- progress of the book (%) where the session started (same rules as the start reference page) and where it ends
+    local pct_start = self._session_start_pct or self._pending_start_pct
+    local pct_end = self:getCurrentProgress()
     -- conn:exec('BEGIN;')
-    local stmt
-    if ReaderStatistics._has_ref_start then
-        stmt = conn:prepare("INSERT OR IGNORE INTO wpm_stat_data (id_book, start_time, duration, total_pages, wpm, id_device, font_name, words, read_secs, book_words, ref_total, ref_pages, ref_start) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);")
-        stmt:reset():bind(id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session, self.devices[device], self.ui.document._document:getFontFace(), math.floor(self._total_words), math.floor(self._total_read_time), book_words, ref_total, ref_pages, session_start_ref):step()
-    else
-        stmt = conn:prepare("INSERT OR IGNORE INTO wpm_stat_data (id_book, start_time, duration, total_pages, wpm, id_device, font_name, words, read_secs, book_words, ref_total, ref_pages) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);")
-        stmt:reset():bind(id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session, self.devices[device], self.ui.document._document:getFontFace(), math.floor(self._total_words), math.floor(self._total_read_time), book_words, ref_total, ref_pages):step()
+    local cols = "id_book, start_time, duration, total_pages, wpm, id_device, font_name, words, read_secs, book_words, ref_total, ref_pages"
+    local marks = "?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?"
+    local args = {
+        id_book, self.start_current_period, duration_raw, self._total_pages, wpm_session, self.devices[device],
+        self.ui.document._document:getFontFace(), math.floor(self._total_words), math.floor(self._total_read_time),
+        book_words, ref_total, ref_pages,
+    }
+    local n_args = 12
+    local optional = {
+        { "ref_start", session_start_ref }, { "ref_end", ref_end },
+        { "pct_start", pct_start }, { "pct_end", pct_end },
+    }
+    for _i, col in ipairs(optional) do
+        if extra_cols[col[1]] then
+            cols = cols .. ", " .. col[1]
+            marks = marks .. ", ?"
+            n_args = n_args + 1
+            args[n_args] = col[2]
+        end
     end
+    local stmt = conn:prepare("INSERT OR IGNORE INTO wpm_stat_data (" .. cols .. ") VALUES(" .. marks .. ");")
+    stmt:reset():bind(unpack(args, 1, n_args)):step()
     -- conn:exec('COMMIT;')
     stmt:close()
     conn:close()
@@ -3615,8 +3689,11 @@ function ReaderStatistics:onResume()
         self._total_read_time = 0
         self._session_start_ref = nil
         self._pending_start_ref = nil
+        self._session_start_pct = nil
+        self._pending_start_pct = nil
         self._ref_mode = nil
         self._prev_ref = self:getCurrentRefPage()
+        self._prev_pct, self._prev_page = self:getCurrentProgress()
         local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
         self._last_nbwords = nbwords
         self._total_pages = 0
@@ -3679,6 +3756,7 @@ function ReaderStatistics:onReaderReady(config)
     local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
     self._last_nbwords = nbwords
     self._prev_ref = self:getCurrentRefPage()
+    self._prev_pct, self._prev_page = self:getCurrentProgress()
     -- end)
 end
 

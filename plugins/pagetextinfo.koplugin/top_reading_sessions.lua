@@ -1654,26 +1654,29 @@ local function loadExactData(limit)
             s.days, s.day_pages = tonumber(row[1]) or 0, tonumber(row[2]) or 0
         end)
 
-        -- ref_start (first reference page of the session) is not in the database until a session saves it
-        local has_ref_start = false
+        -- ref_start, ref_end, pct_start and pct_end are added by hand to the database: select only the ones that exist
+        local have = {}
         run("PRAGMA table_info(wpm_stat_data)", function(row)
-            if tostring(row[2]) == "ref_start" then has_ref_start = true end
+            have[tostring(row[2])] = true
         end)
+        local function col(name) return have[name] and ("w." .. name) or "NULL" end
 
         run(string.format([[
             SELECT w.start_time, w.duration, w.total_pages, w.words, w.read_secs, w.ref_pages, COALESCE(b.title, ''),
-                   %s
+                   %s, %s, %s, %s
             FROM wpm_stat_data w
             LEFT JOIN book b ON w.id_book = b.id
             WHERE w.words IS NOT NULL AND w.read_secs > 0 AND w.ref_pages IS NOT NULL AND w.start_time > 0
             ORDER BY w.start_time DESC
             LIMIT %d
-        ]], has_ref_start and "w.ref_start" or "NULL", limit), function(row)
+        ]], col("ref_start"), col("ref_end"), col("pct_start"), col("pct_end"), limit), function(row)
             list[#list + 1] = {
                 start = tonumber(row[1]) or 0, duration = tonumber(row[2]) or 0, screens = tonumber(row[3]) or 0,
                 words = tonumber(row[4]) or 0, secs = tonumber(row[5]) or 0, ref_pages = tonumber(row[6]) or 0,
                 title = tostring(row[7] or ""),
-                ref_start = tonumber(row[8]),  -- nil for the sessions saved before it existed
+                -- nil for the sessions saved before these columns existed
+                ref_start = tonumber(row[8]), ref_end = tonumber(row[9]),
+                pct_start = tonumber(row[10]), pct_end = tonumber(row[11]),
             }
         end)
     end)
@@ -1734,13 +1737,17 @@ local function buildSessionItems(list)
         local pages_text = string.format(_("%s pages (stable)"), formatAverage(s.ref_pages))
         if s.ref_start then
             -- from the reference page where the session started to the one where it ended
-            pages_text = pages_text .. string.format(" (%d \xE2\x86\x92 %d)", s.ref_start, s.ref_start + s.ref_pages)
+            pages_text = pages_text .. string.format(" (%d \xE2\x86\x92 %d)", s.ref_start, s.ref_end or (s.ref_start + s.ref_pages))
         end
         local second = {
             string.format(_("%s words"), groupThousands(s.words)),
             string.format(_("%d wpm"), math.floor(s.words / (s.secs / 60) + 0.5)),
             pages_text,
         }
+        if s.pct_start and s.pct_end then
+            -- progress of the book where the session started and where it ended
+            second[#second + 1] = string.format("%.1f%% \xE2\x86\x92 %.1f%%", s.pct_start, s.pct_end)
+        end
         items[#items + 1] = {
             head,
             table.concat(first, SUMMARY_SEPARATOR) .. "\n" .. table.concat(second, SUMMARY_SEPARATOR),
@@ -3249,6 +3256,11 @@ local function buildReadingExplainItems()
         _("Reference pages: the pages of the print edition (the page numbers of the book's page map), so they do not change with the font size. The number after the dot is the reference page where the session started.\n\nNow: the reference page you are on minus the reference page where the session started. The start is taken at the first page turn counted as read and is provisional: if you jump more than 15 reference pages before the session is valid, it is forgotten and taken again where you resume reading. It is fixed when the session becomes valid (the pages and minutes above); from then on jumps do not move it. The same subtraction is what is saved as ref_pages, together with the start as ref_start. If you go back before the start, the figure falls back to the estimate below.\n\nBefore: it was an estimate from the words, the words read in the session divided by the words of the book, times the reference pages of the book. It assumed every reference page has the same amount of text, so a short page or a chapter start moved it, and it did not know where you actually were in the book.\n\nIt only appears when the book has reference pages and the reader is using them when the session starts. Turning that option on or off during the session changes nothing: the session keeps the mode it started with. A session that starts without reference pages is saved without them (no ref_pages, no ref_start), even if you turn the option on later, so it is left out of avg wpm and pages/day. A session that starts with them keeps them even if you turn the option off later."),
     }
 
+    items[#items + 1] = {
+        _("Progress"),
+        _("Besides the reference pages, every session saves the progress of the book (a percentage) where it started and where it ended (pct_start and pct_end), and the reference page where it ended (ref_end). The progress is saved even in books without reference pages. It follows the same rules as the start reference page: the start is provisional at the first page turn counted as read, it is taken again after a jump of more than 20 screens, and it is fixed when the session is valid. It is shown in the list of sessions, after the pages."),
+    }
+
     -- the real numbers of the session in progress
     local live
     pcall(function()
@@ -3267,6 +3279,15 @@ local function buildReadingExplainItems()
                 pending, current, current - pending)
         else
             live = _("No start yet: it is taken at the first page turn counted as read.")
+        end
+    end)
+    pcall(function()
+        if not stats then return end
+        local pct = stats:getCurrentProgress()
+        local start_pct = tonumber(stats._session_start_pct or stats._pending_start_pct)
+        if pct and start_pct then
+            local text = string.format(_("Progress from %.1f%% to %.1f%%."), start_pct, pct)
+            live = live and (live .. "\n" .. text) or text
         end
     end)
     if live then items[#items + 1] = { _("Right now"), live } end
