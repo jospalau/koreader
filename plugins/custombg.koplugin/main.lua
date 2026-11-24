@@ -1507,7 +1507,9 @@ function CustomBg:hookSleepScreen()
         orig_setup(ss, ...)
         pcall(function()
             local mode = CFG:readSetting(SLEEP_ICON_MODE_KEY) or "off"
-            if mode == "off" or not ss.ui then return end
+            -- only replace the 'Leave screen as-is' sleep screen: with any other wallpaper option
+            -- (Show book cover, random image, reading progress...) the user's choice is respected
+            if mode == "off" or not ss.ui or ss.screensaver_type ~= "disable" then return end
             local folder = CustomBg:getSleepIconsFolder()
             local icon_file
             if mode == "random" then

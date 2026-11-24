@@ -10,6 +10,8 @@
 --                               or not the inbuilt sleep screen message is enabled.
 --  'Kobo style banner position': % of the screen height, measured from the bottom.
 --the values in BANNER SETTINGS below are only the defaults of these two menu settings.
+--the banner also works with the wallpaper option 'Leave screen as-is': the banner is drawn
+--over whatever was on the screen (book page / file browser).
 
 --[ v2.1.0 ]
 --bookshelf integration: when bookshelf.koplugin is installed, the title line of the
@@ -443,7 +445,7 @@ end
 
 -- Draws the banner on top of the sleep screen wallpaper, at the left edge. If the inbuilt
 -- sleep screen message is enabled (any container), it is dropped so it doesn't show twice.
-local function attachBanner(ss_widget, banner, message_enabled)
+local function attachBanner(ss_widget, banner, message_enabled, drop_base)
 	local main_frame = ss_widget[1]
 	local base = main_frame and main_frame[1]
 	if not base then
@@ -454,7 +456,13 @@ local function attachBanner(ss_widget, banner, message_enabled)
 	local free_h = math.max(0, screen_h - banner:getSize().h)
 	banner.overlap_offset = {0, math.floor(free_h * (100 - getBannerPosition()) / 100)}
 
-	if message_enabled and #base >= 2 then
+	if drop_base then
+		-- 'Leave screen as-is': the widget only holds the inbuilt message, replace it by the banner
+		main_frame[1] = OverlapGroup:new{
+			dimen = Geom:new{w = screen_w, h = screen_h},
+			banner,
+		}
+	elseif message_enabled and #base >= 2 then
 		-- inbuilt message layout: overlap group of {wallpaper, message}
 		table.remove(base, 2)
 		table.insert(base, banner)
@@ -471,6 +479,9 @@ local function attachBanner(ss_widget, banner, message_enabled)
 	return true
 end
 
+-- true only while the 'Leave screen as-is' sleep screen is being built (see the end of the file)
+local forcing_as_is = false
+
 local og_uiMan_show = UIManager.show
 
 function UIManager:show(widget, ...)
@@ -482,17 +493,24 @@ function UIManager:show(widget, ...)
 		return og_uiMan_show(self, widget, ...)
 	end
 
-	local screensaver_type = G_reader_settings:readSetting("screensaver_type")
+	-- the type that is really in use: other patches / plugins may change it when the sleep
+	-- screen is set up (eg. turning 'Leave screen as-is' into an image), unlike the saved setting
+	local screensaver_type = require("ui/screensaver").screensaver_type or
+								G_reader_settings:readSetting("screensaver_type")
+	logger.info("[kobo-style-sleepscreen] sleep screen widget: type =", screensaver_type,
+			"as-is =", forcing_as_is)
 	local message_container_enabled = G_reader_settings:isTrue("screensaver_show_message")
 	local message_container_type = G_reader_settings:readSetting("screensaver_message_container")
 
-	if screensaver_type ~= "cover" and
+	if not forcing_as_is and
+			screensaver_type ~= "cover" and
 			screensaver_type ~= "random_image" and
 			screensaver_type ~= "document_cover" then
 		return og_uiMan_show(self, widget, ...)
 	end
 
-	local txtBoxWgtFound = message_container_enabled and
+	local txtBoxWgtFound = not forcing_as_is and
+								message_container_enabled and
 								message_container_type == "banner" and
 								widget and
 								widget[1] and  --screensaver wgt
@@ -853,7 +871,8 @@ function UIManager:show(widget, ...)
 	}
 
 	-- put the banner at the left edge (replacing the inbuilt message, if any)
-	if not attachBanner(widget, content_widget, message_container_enabled) then
+	logger.info("[kobo-style-sleepscreen] drawing the banner")
+	if not attachBanner(widget, content_widget, message_container_enabled, forcing_as_is) then
 		-- unexpected sleep screen layout: leave it untouched
 		return og_uiMan_show(self, widget, ...)
 	end
@@ -862,6 +881,15 @@ function UIManager:show(widget, ...)
 end
 
 --MENU INTEGRATION (Settings > Screen > Sleep screen > Wallpaper)
+-- is the sleep icon of the custom plugin (settings/custombg.lua) switched on?
+local function isSleepIconPluginOn()
+	local ok, mode = pcall(function()
+		local store = require("luasettings"):open(require("datastorage"):getSettingsDir() .. "/custombg.lua")
+		return store:readSetting("custombg_sleep_icon_mode")
+	end)
+	return ok and mode ~= nil and mode ~= "off"
+end
+
 local function addWallpaperItems(ss_items)
 	if type(ss_items) ~= "table" then
 		return
@@ -881,6 +909,27 @@ local function addWallpaperItems(ss_items)
 	wallpaper.kobo_style_items_added = true
 
 	local wp_items = wallpaper.sub_item_table
+
+	-- show what is acting on 'Leave screen as-is': "Leave screen as-is (Kobo + Custombg)"
+	local as_is_text = _("Leave screen as-is")
+	for i, item in ipairs(wp_items) do
+		if item.text == as_is_text then
+			item.text_func = function()
+				local active = {}
+				if isKoboStyleOn() then
+					table.insert(active, _("Kobo"))
+				end
+				if isSleepIconPluginOn() then
+					table.insert(active, _("Custombg"))
+				end
+				if #active == 0 then
+					return as_is_text
+				end
+				return as_is_text .. " (" .. table.concat(active, " + ") .. ")"
+			end
+			break
+		end
+	end
 	if #wp_items > 0 then
 		wp_items[#wp_items].separator = true
 	end
@@ -966,5 +1015,52 @@ for i, module_path in ipairs{"apps/filemanager/filemanager", "apps/reader/reader
 	local instance = ok and type(class) == "table" and class.instance
 	if instance and instance.menu then
 		safely(addMenuItems, instance.menu.menu_items)
+	end
+end
+
+--LEAVE SCREEN AS-IS
+-- With the wallpaper option 'Leave screen as-is' koreader builds no sleep screen widget at all
+-- (unless the sleep screen message is on), so there is nothing for the banner to hook into.
+-- Here a message is forced for that wallpaper type, with a transparent background so the
+-- screen stays as it is; the banner then replaces that message (see UIManager:show above).
+-- Nothing is saved: the forced values are restored as soon as the sleep screen is built.
+local ok_ss, Screensaver = pcall(require, "ui/screensaver")
+if not (ok_ss and type(Screensaver) == "table" and Screensaver.show) then
+	logger.warn("[kobo-style-sleepscreen] could not hook ui/screensaver:", Screensaver)
+else
+	local og_ss_show = Screensaver.show
+	function Screensaver:show(...)
+		logger.info("[kobo-style-sleepscreen] Screensaver:show(): type =", self.screensaver_type,
+				"message =", self.show_message, "on =", isKoboStyleOn())
+		if not isKoboStyleOn() or self.screensaver_type ~= "disable" then
+			return og_ss_show(self, ...)
+		end
+
+		-- koreader only builds the message if its container is 'box' or 'banner'
+		local container_key = "screensaver_message_container"
+		local og_container = G_reader_settings:readSetting(container_key)
+		local force_container = og_container ~= "banner" and og_container ~= "box"
+		if force_container then
+			G_reader_settings:saveSetting(container_key, "banner")
+		end
+		local og_show_message, og_background = self.show_message, self.screensaver_background
+		self.show_message = true
+		self.screensaver_background = "none"
+		forcing_as_is = true
+
+		local ok, err = pcall(og_ss_show, self, ...)
+
+		forcing_as_is = false
+		self.show_message, self.screensaver_background = og_show_message, og_background
+		if force_container then
+			if og_container == nil then
+				G_reader_settings:delSetting(container_key)
+			else
+				G_reader_settings:saveSetting(container_key, og_container)
+			end
+		end
+		if not ok then
+			error(err, 0)
+		end
 	end
 end
