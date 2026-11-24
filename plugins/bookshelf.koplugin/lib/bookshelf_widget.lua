@@ -21760,6 +21760,7 @@ function BookshelfWidget:_cycleCalibreSort(step)
     -- know the sort: drop it so the new order is fetched and painted.
     self._spine_fetch_cache = nil
     self:_rebuild()
+    pcall(self.refreshStatusLine, self)  -- %sort_label in the status line
     UIManager:setDirty(self, "ui")
     pcall(function()
         require("ui/widget/notification"):notify(BookshelfWidget._sortLabel(pick))
