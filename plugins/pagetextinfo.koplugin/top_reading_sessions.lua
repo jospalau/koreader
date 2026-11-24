@@ -3121,6 +3121,7 @@ local function showWindow(current_view)
 end
 
 function ShowLongestSessionsWindow:onSwipe(arg, ges)
+    self.ignore_hold = nil  -- a new touch: the opening hold is over
     -- a swipe down closes the window
     if ges.direction == "south" then
         return self:onClose()
@@ -3166,12 +3167,19 @@ end
 function ShowLongestSessionsWindow:onClose()
     local frame_dimen = self[1] and self[1][1] and self[1][1].dimen
     UIManager:close(self, "ui", frame_dimen)
+    -- Come back to where the window was opened from, if it says so (see
+    -- PageTextInfo:showReadingSummary). Swiping between views does not come here.
+    local back = ShowLongestSessionsWindow.on_close
+    ShowLongestSessionsWindow.on_close = nil
+    if back then UIManager:nextTick(back) end
     return true
 end
 
 -- Hold on the right card of the book card (bottom right of the summary): a window explaining its four figures.
 -- A hold anywhere else on this window is swallowed, so it never reaches the reader underneath.
 function ShowLongestSessionsWindow:onHoldExplain(arg, ges)
+    -- the hold that opened this window is still going on: not a hold on it
+    if self.ignore_hold then return true end
     if VIEWS[self.current_view].build ~= buildSummaryView or not (ges and ges.pos) then
         return true
     end
@@ -3213,14 +3221,22 @@ function ShowLongestSessionsWindow:onHoldExplain(arg, ges)
 end
 
 function ShowLongestSessionsWindow:onHoldReleaseExplain(arg, ges)
+    -- the release of the hold that opened this window: swallow it, once
+    if self.ignore_hold then
+        self.ignore_hold = nil
+        return true
+    end
     return self:onHoldExplain(arg, ges)
 end
 
 function ShowLongestSessionsWindow:onTapClose(arg, ges)
+    self.ignore_hold = nil  -- a new touch: the opening hold is over
     -- on the summary, a tap on a zone (TBR, MBR, Finished) closes the window and then acts
     if VIEWS[self.current_view].build == buildSummaryView and ges and ges.pos then
         local zone = hitSummaryZone(ges.pos)
         if zone then
+            -- leaving for Bookshelf: do not come back to where the window was opened from
+            ShowLongestSessionsWindow.on_close = nil
             self:onClose()
             UIManager:nextTick(zone.callback)
             return true
@@ -3260,6 +3276,26 @@ return function(PageTextInfo)
         if not rows or rows[1] == nil then return nil end
         local id = rows[1]
         return DEVICE_NAMES[id] or string.format(_("Device %s"), tostring(id))
+    end
+
+    -- Opens the Reading Summary like the ShowLongestSessions event and calls
+    -- `on_close` when the user closes it (not when swiping between views, and not
+    -- when a tap on TBR / MBR / Finished leaves for Bookshelf). The actions menu
+    -- uses it to come back to the menu. Returns true if the window was shown.
+    function PageTextInfo:showReadingSummary(on_close)
+        Perf.open_t0 = Perf.start()
+        -- save the session in progress first, so it is in the lists
+        if self.ui and self.ui.statistics then
+            self.ui.statistics:insertDB()
+        end
+        local widget = showWindow()
+        if widget then
+            ShowLongestSessionsWindow.on_close = on_close
+            -- opened by a hold of the menu: the finger may still be down, so that
+            -- hold and its release must not count as a hold on this window
+            widget.ignore_hold = true
+        end
+        return widget ~= nil
     end
 
     -- Reader: the plugin receives the event

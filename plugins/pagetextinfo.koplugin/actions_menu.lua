@@ -579,8 +579,13 @@ return function(PageTextInfo)
             return ok == 0 or ok == true  -- LuaJIT returns 0, Lua 5.2+ returns true
         end
 
+        -- Server shown in the section header (same settings and defaults as readerrsync.lua)
+        local rsync_server = G_reader_settings:readSetting("rsync_server", "192.168.50.252")
+        local rsync_port = G_reader_settings:readSetting("rsync_port", "873")
+        local sync_header = string.format("KOReader sync - %s:%s", tostring(rsync_server), tostring(rsync_port))
+
         local actions = {
-            { header = "KOReader sync", label = "Sync code",  callback = function() self:onSynchronizeCode() end },
+            { header = sync_header, label = "Sync code",  callback = function() self:onSynchronizeCode() end },
             { label = "Sync books", callback = function() self:onSyncBooks() end },
             { label = "Pull conf",  callback = function() self:onPullConfig() end },
             { label = "Push conf",  callback = function() self:onPushConfig() end },
@@ -645,13 +650,12 @@ return function(PageTextInfo)
             callback = function() self:onToggleDebugVerbose() end,
         })
 
-        -- "Miscellaneous" section: last book (if any) + top reading sessions.
-        -- The header goes on the first entry of the section.
-        local misc_header = "Miscellaneous"
+        -- "Miscellaneous" section: last book (if any). Holding that entry opens
+        -- the Reading Summary window.
         local last = self:getLastBook()
         if last then
             table.insert(actions, {
-                header = misc_header,
+                header = "Miscellaneous",
                 label = "Continue reading: " .. last.title,
                 full_width = true,
                 callback = function()
@@ -661,18 +665,18 @@ return function(PageTextInfo)
                         require("apps/reader/readerui"):showReader(last.file)
                     end
                 end,
+                -- Hold: opens the Reading Summary window (top_reading_sessions.lua
+                -- registers the ShowLongestSessions event for reader and file manager)
+                hold_callback = function()
+                    if self.showReadingSummary then
+                        -- when the summary is closed, come back to this menu
+                        self:showReadingSummary(function() self:onShowActionsMenu() end)
+                    else
+                        self.ui:handleEvent(Event:new("ShowLongestSessions"))
+                    end
+                end,
             })
-            misc_header = nil
         end
-
-        table.insert(actions, {
-            header = misc_header,
-            label = "Reading summary",
-            full_width = true,
-            -- Opens the Reading Summary window (top_reading_sessions.lua registers
-            -- the ShowLongestSessions event for both reader and file manager)
-            callback = function() self.ui:handleEvent(Event:new("ShowLongestSessions")) end,
-        })
 
         table.insert(actions, { header = "Restart or Exit", label = "Restart", callback = function() PageTextInfo.restartKOReader() end })
         table.insert(actions, { label = "Exit", callback = function() self.ui:handleEvent(Event:new("Exit")) end })
@@ -680,9 +684,9 @@ return function(PageTextInfo)
     end
 
     -- Lines of the menu title:
-    --   1. KOReader version: "dateandversion" first (e.g. "24/11/2026 v7.4"), then git-rev
-    --   2. date of the statistics database (no time) and the device of its last session
-    --   3. rsync server and port
+    --   1. date and version ("dateandversion" first, e.g. "24/11/2026 v7.4", then git-rev),
+    --      then "DB <date>" of the statistics database (no time) and the abbreviated
+    --      device of its last session. Example: "24/11/2026 v7.4  ·  DB 24/11/2026 Clara BW"
     function PageTextInfo:getMenuTitleLines()
         local lfs = require("libs/libkoreader-lfs")
         local DataStorage = require("datastorage")
@@ -726,22 +730,20 @@ return function(PageTextInfo)
         -- that saved the most recent session (provided by top_reading_sessions.lua)
         local db_path = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
         local mtime = lfs.attributes(db_path, "modification")
-        local db_line = "Database: " .. (mtime and os.date("%d/%m/%Y", mtime) or "not found")
+        local db_text = "DB " .. (mtime and os.date("%d/%m/%Y", mtime) or "?")
         if mtime and self.getLastSessionDeviceName then
             local ok, device = pcall(self.getLastSessionDeviceName, self)
             if ok and device then
-                db_line = db_line .. "  \xC2\xB7  " .. device
+                -- Abbreviated: without the brand ("Kobo Clara BW" -> "Clara BW")
+                local short = device:gsub("^Kobo%s+", ""):gsub("^Kindle%s+", "")
+                    :gsub("^Boox%s+", ""):gsub("^Xiaomi%s+", ""):gsub("^Likebook%s+", "")
+                db_text = db_text .. " " .. short
             end
         end
-
-        -- Same settings and defaults as readerrsync.lua
-        local server = G_reader_settings:readSetting("rsync_server", "192.168.50.252")
-        local port = G_reader_settings:readSetting("rsync_port", "873")
+        local sep = "  \xC2\xB7  "
 
         return {
-            "KOReader " .. (rev or "?"),
-            db_line,
-            string.format("Sync server: %s:%s", tostring(server), tostring(port)),
+            (rev or "?") .. sep .. db_text,
         }
     end
 
@@ -904,34 +906,42 @@ return function(PageTextInfo)
         }
         -- Consume swipe/hold so they don't reach the reader underneath
         function dialog:onSwipe() return true end
-        function dialog:onHold() return true end
+        -- A hold on an entry with a hold_callback closes the menu and runs it (like a tap)
+        function dialog:onHold(arg, ges)
+            if ges and ges.pos then
+                for _, cell in ipairs(cells) do
+                    local hold = cell.action and cell.action.hold_callback
+                    if hold and cell.frame.dimen and ges.pos:intersectWith(cell.frame.dimen) then
+                        self.plugin:closeActionsMenu()
+                        UIManager:nextTick(hold)
+                        return true
+                    end
+                end
+            end
+            return true
+        end
 
         -- Grid
         local grid = VerticalGroup:new{ align = "center" }
         local row = HorizontalGroup:new{}
 
-        -- Title at the very top: KOReader version and database date
-        local title_group = VerticalGroup:new{ align = "center" }
-        for _, line in ipairs(self:getMenuTitleLines()) do
-            table.insert(title_group, TextWidget:new{
-                text = line,
-                face = self:getMenuFace(FONT_SIZE - 1),
-                bold = true,
-                max_width = cell_w * COLUMNS - 4 * Size.padding.small,
-            })
-        end
+        -- Title at the very top: a black bar with the version and database (white text)
+        local title_lines = self:getMenuTitleLines()
+        local title_w = cell_w * COLUMNS
         table.insert(grid, FrameContainer:new{
-            bordersize = thin,
-            color = Blitbuffer.COLOR_BLACK,
-            background = Blitbuffer.COLOR_WHITE,
+            bordersize = 0,
+            background = Blitbuffer.COLOR_BLACK,
             margin = 0,
-            padding = Size.padding.small,
+            padding = 0,
             CenterContainer:new{
-                dimen = Geom:new{
-                    w = cell_w * COLUMNS - 2 * thin - 2 * Size.padding.small,
-                    h = title_group:getSize().h,
+                dimen = Geom:new{ w = title_w, h = header_h },
+                TextWidget:new{
+                    text = title_lines[1],
+                    face = self:getMenuFace(FONT_SIZE - 1),
+                    bold = true,
+                    fgcolor = Blitbuffer.COLOR_WHITE,
+                    max_width = title_w - 2 * Size.padding.small,
                 },
-                title_group,
             },
         })
 
