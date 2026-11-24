@@ -1569,6 +1569,13 @@ local function formatAverage(v)
     return string.format("%.1f", v)
 end
 
+-- Page counts (reference pages are whole numbers): "5", not "5.0"; a decimal only if the value has one
+local function formatPages(v)
+    v = tonumber(v) or 0
+    if v == math.floor(v) then return string.format("%d", v) end
+    return string.format("%.1f", v)
+end
+
 -- Cleans a top bar text: drops its leading bullet, [b] tags and the object
 -- replacement character.
 local function cleanTopBarText(s)
@@ -1701,7 +1708,7 @@ local function buildSummaryItems(s)
         items[#items + 1] = {
             string.format(_("pages/day  %s"), formatAverage(s.day_pages / s.days)),
             string.format(_("%s reference pages over %s with at least %d minutes of reading"),
-                formatAverage(s.day_pages), s.days == 1 and _("1 day") or string.format(_("%d days"), s.days),
+                formatPages(s.day_pages), s.days == 1 and _("1 day") or string.format(_("%d days"), s.days),
                 math.floor(MIN_DAY_SECONDS / 60)),
         }
     else
@@ -1734,7 +1741,7 @@ local function buildSessionItems(list)
             first[#first + 1] = string.format(_("%d screens"), s.screens)
             first[#first + 1] = string.format(_("%d s/screen"), math.floor(s.secs / s.screens + 0.5))
         end
-        local pages_text = string.format(_("%s pages (stable)"), formatAverage(s.ref_pages))
+        local pages_text = string.format(_("%s pages (stable)"), formatPages(s.ref_pages))
         if s.ref_start then
             -- from the reference page where the session started to the one where it ended
             pages_text = pages_text .. string.format(" (%d \xE2\x86\x92 %d)", s.ref_start, s.ref_end or (s.ref_start + s.ref_pages))
@@ -1872,8 +1879,8 @@ local summary_book_reading = false  -- true: the card shows the session in progr
 
 -- Reference pages read in the session in progress, as the reader numbers them. Same figure that is saved as ref_pages
 -- when the session ends: the reference page the reader is on minus the one where the session started (provisional
--- until the session is valid). If there is no start yet, or the reader went back before it, an estimate from the
--- words: words read in the session / words of the book * reference pages of the book. nil when a figure is missing.
+-- until the session is valid). Always a whole number: 0 while there is no start yet (nothing counted as read) or
+-- when the reader is before the start. nil when the session does not use reference pages or the page cannot be read.
 local function getStablePages()
     local ui = getReaderUI()
     if not ui then return nil end
@@ -1884,14 +1891,9 @@ local function getStablePages()
     local start, current
     pcall(function() start = tonumber(ui.statistics._session_start_ref or ui.statistics._pending_start_ref) end)
     pcall(function() current = ui.statistics:getCurrentRefPage() end)
-    if start and current and current >= start then return current - start end
-
-    local words, book_words, ref_total
-    pcall(function() words = tonumber(ui.statistics._total_words) end)
-    pcall(function() book_words = tonumber(ui.view.topbar.total_words) end)
-    pcall(function() ref_total = tonumber(ui.pagemap:getLastPageLabel(true)) end)
-    if not (words and book_words and ref_total) or book_words <= 0 or ref_total <= 0 then return nil end
-    return words * ref_total / book_words
+    if not current then return nil end
+    if not start then return 0 end
+    return math.max(0, current - start)
 end
 
 -- Caption of the "pages (stable)" row while reading: with the reference page where the session started (the one
@@ -1928,7 +1930,7 @@ local function buildBookCard(w_width, session, book)
         local stable = getStablePages()
         if stable then
             right_rows[#right_rows + 1] = {
-                stable == math.floor(stable) and string.format("%d", stable) or string.format("%.1f", stable),
+                formatPages(stable),
                 getStablePagesCaption(),
             }
         end
@@ -3253,7 +3255,7 @@ local function buildReadingExplainItems()
     }
     items[#items + 1] = {
         _("pages (stable)"),
-        _("Reference pages: the pages of the print edition (the page numbers of the book's page map), so they do not change with the font size. The number after the dot is the reference page where the session started.\n\nNow: the reference page you are on minus the reference page where the session started. The start is taken at the first page turn counted as read and is provisional: if you jump more than 15 reference pages before the session is valid, it is forgotten and taken again where you resume reading. It is fixed when the session becomes valid (the pages and minutes above); from then on jumps do not move it. The same subtraction is what is saved as ref_pages, together with the start as ref_start. If you go back before the start, the figure falls back to the estimate below.\n\nBefore: it was an estimate from the words, the words read in the session divided by the words of the book, times the reference pages of the book. It assumed every reference page has the same amount of text, so a short page or a chapter start moved it, and it did not know where you actually were in the book.\n\nIt only appears when the book has reference pages and the reader is using them when the session starts. Turning that option on or off during the session changes nothing: the session keeps the mode it started with. A session that starts without reference pages is saved without them (no ref_pages, no ref_start), even if you turn the option on later, so it is left out of avg wpm and pages/day. A session that starts with them keeps them even if you turn the option off later."),
+        _("Reference pages: the pages of the print edition (the page numbers of the book's page map), so they do not change with the font size. The number after the dot is the reference page where the session started.\n\nNow: the reference page you are on minus the reference page where the session started. The start is taken at the first page turn counted as read and is provisional: if you jump more than 15 reference pages before the session is valid, it is forgotten and taken again where you resume reading. It is fixed when the session becomes valid (the pages and minutes above); from then on jumps do not move it. The same subtraction is what is saved as ref_pages, together with the start as ref_start. If you go back before the start, it shows 0.\n\nBefore: it was an estimate from the words, the words read in the session divided by the words of the book, times the reference pages of the book. It assumed every reference page has the same amount of text, so a short page or a chapter start moved it, and it did not know where you actually were in the book.\n\nIt only appears when the book has reference pages and the reader is using them when the session starts. Turning that option on or off during the session changes nothing: the session keeps the mode it started with. A session that starts without reference pages is saved without them (no ref_pages, no ref_start), even if you turn the option on later, so it is left out of avg wpm and pages/day. A session that starts with them keeps them even if you turn the option off later."),
     }
 
     items[#items + 1] = {
