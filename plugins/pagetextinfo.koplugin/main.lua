@@ -2971,6 +2971,18 @@ This is to be active only if the option flash buttons and menu items or the opti
                     end,
                 },
                 {
+                    text = _("Show bookshelf hero as reload motive"),
+                    checked_func = function() return G_reader_settings:isTrue("reading_motive_bookshelf_hero") end,
+                    help_text = _([[On a document reload, show the bookshelf "currently reading" card as the motive instead of the image. Off: the image is shown.]]),
+                    callback = function()
+                        local show = not G_reader_settings:isTrue("reading_motive_bookshelf_hero")
+                        G_reader_settings:saveSetting("reading_motive_bookshelf_hero", show)
+                        G_reader_settings:flush()
+
+                        return true
+                    end,
+                },
+                {
                     text = _("Show page turn time"),
                     checked_func = function() return G_reader_settings:isTrue("show_page_turn_time") end,
                     help_text = _([[Show a notification with the time (in ms) it took to turn the page. The time is also always written to the log.]]),
@@ -4425,10 +4437,11 @@ function PageTextInfo:onShowReadingMotive()
     local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
 
     -- hero de bookshelf (nil si no hay bookshelf o falla)
-    local hero = buildBookshelfHero(
+    -- menu setting (Show bookshelf hero as reload motive), off by default: then the image is shown
+    local hero = G_reader_settings:isTrue("reading_motive_bookshelf_hero") and buildBookshelfHero(
         math.floor(screen_w * HERO_SETT.width_pct / 100),
         math.floor(screen_h * HERO_SETT.height_pct / 100)
-    )
+    ) or nil
 
     local content
     local transparent = false
@@ -4487,6 +4500,8 @@ function PageTextInfo:onShowReadingMotive()
     screensaver_widget.onShow = function() return true end
     -- "ui" instead of "full": no full-screen flash when the popup appears
     UIManager:show(screensaver_widget, "ui")
+    -- reloadDocument() blocks right after this event, so paint now or the popup is never seen
+    UIManager:forceRePaint()
 
     UIManager:scheduleIn(0.25, function()
         UIManager:close(screensaver_widget)
