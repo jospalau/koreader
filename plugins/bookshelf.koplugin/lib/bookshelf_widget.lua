@@ -4169,6 +4169,15 @@ function BookshelfWidget:_fetchChipItems(n, want_all)
             within = {}
             for i = 2, #sp do within[#within + 1] = sp[i] end
         end
+        -- A two-finger swipe inside the folder (_cycleCalibreSort) goes first.
+        local ov = tip.payload._sort_override
+        if ov then
+            local o = { key = ov.key, reverse = ov.reverse }
+            local w2, s2 = { o }, { o }
+            for _i, lv in ipairs(within or {}) do w2[#w2 + 1] = lv end
+            for _i, lv in ipairs(sp or {}) do s2[#s2 + 1] = lv end
+            within, sp = w2, s2
+        end
         -- The chip's status filter is inherited by the drill, exactly as its
         -- sort is. A filter is a property of the CHIP ("this shelf shows
         -- unread books"), not of the one listing you happened to be on when
@@ -21739,7 +21748,7 @@ function BookshelfWidget._sortLabel(o)
     return (names[o.key] or o.key) .. (o.reverse and " \u{2193}" or " \u{2191}")
 end
 
--- _cycleCalibreSort(step): inside a tag / genre / author (or on a shelf of books), step through the
+-- _cycleCalibreSort(step): inside a tag / genre / author / folder (or on a shelf of books), step through the
 -- Calibre sorts of its books: words, pub_date, GR votes, GR rating, each one
 -- in both directions (step +1 next, -1 previous). Returns true when handled,
 -- false when not inside such a group (the caller keeps its own behaviour).
@@ -21749,7 +21758,8 @@ function BookshelfWidget:_cycleCalibreSort(step)
     local top_chip = false
     if not tip then
         -- Any shelf of books cycles, except tbr (kept in the reader's own
-        -- order), folder-grouped shelves and shelves of shelves / catalogues.
+        -- order), recently read / latest added (chronological), folder-grouped
+        -- shelves and shelves of shelves / catalogues.
         -- So west / east only open tbr / mbr from those; from tbr, east opens mbr.
         local TabModel = require("lib/bookshelf_tab_model")
         local tab = TabModel.getById(self.chip)
@@ -21758,7 +21768,8 @@ function BookshelfWidget:_cycleCalibreSort(step)
             and tab.filter.statuses or {}
         local id = tostring(self.chip)
         local label = tostring(tab and tab.label or ""):lower():gsub("[^%w]", "")
-        if not kind or kind == "all" or kind == "folder" or TabModel.isShelves(tab)
+        if not kind or kind == "all" or kind == "folder" or kind == "recent"
+                or kind == "latest" or TabModel.isShelves(tab)
                 or id == "tbr" or label == "tbr" or st.tbr
                 or require("lib/bookshelf_sources").get(kind) then
             return false
@@ -21769,7 +21780,7 @@ function BookshelfWidget:_cycleCalibreSort(step)
         top_chip = true
         tip = { payload = self._chip_sort or {} }
     elseif not (tip.payload and (tip.kind == "tag" or tip.kind == "genre"
-            or tip.kind == "author")) then
+            or tip.kind == "author" or tip.kind == "folder")) then
         return false
     end
     local states = {}
