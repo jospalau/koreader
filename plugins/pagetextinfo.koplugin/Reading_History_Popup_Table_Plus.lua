@@ -1,6 +1,6 @@
 --[[
 Reading History Popup Table Plus
-Version: 2.12.0 (data from wpm_stat_data instead of page_stat_data)
+Version: 2.13.0 (cleaner look, no full-screen flashing refresh)
 
 Notes:
 - Keeps the visual layout of the user's preferred version
@@ -42,7 +42,7 @@ local PATCH_L10N = {
         ["DELTA"] = "ΔPROG",
         ["TOTAL"] = "TOTAL",
         ["RANGE"] = "RANGE",
-        ["Days Read"] = "days",
+        ["Days Read"] = "Days read",
         ["reading in this session"] = "reading in this session",
         ["Book total"] = "Book total",
         ["Actual reading total"] = "Actual reading",
@@ -52,9 +52,10 @@ local PATCH_L10N = {
         ["Avg session"] = "Avg session",
         ["Med session"] = "Med session",
         ["Summary"] = "Summary",
-        ["pages/h"] = "pg/hr",
-        ["pg/session"] = "pg/session",
-        ["%/hr"] = "%/hr",
+        ["PAGES and SPEED count stable pages"] = "PAGES and SPEED count stable pages",
+        ["Pages per hour"] = "Stable pages / hour",
+        ["Pages per session"] = "Stable pages / session",
+        ["Progress per hour"] = "Progress / hour",
         ["total"] = "total",
         ["gain"] = "gain",
         ["days"] = "days",
@@ -86,6 +87,11 @@ local ROWS_PER_PAGE = 7
 local SPEED_MIN_DURATION_SECONDS = 120
 local SPEED_MIN_PAGES = 3
 local _current_page = 1
+
+-- Colours: black for what matters, grey for labels and secondary text
+local COLOR_TEXT  = Blitbuffer.COLOR_BLACK
+local COLOR_MUTED = Blitbuffer.COLOR_DARK_GRAY or Blitbuffer.COLOR_BLACK
+local COLOR_RULE  = Blitbuffer.COLOR_LIGHT_GRAY
 
 local function truncateTitle(title, max_chars)
     if not title then return "" end
@@ -187,11 +193,11 @@ end
 
 local function formatMinutesSeconds(seconds)
     if not seconds or seconds <= 0 then
-        return "0 min 0 sec"
+        return "0m"
     end
     local minutes = math.floor(seconds / 60)
     local secs = math.floor(seconds % 60)
-    return string.format("%d min %d sec", minutes, secs)
+    return string.format("%dm %ds", minutes, secs)
 end
 
 local function formatProgressDelta(delta)
@@ -211,7 +217,7 @@ local function formatSpeed(pages, seconds)
         return "-"
     end
     local pph = (pages * 3600) / seconds
-    return string.format("%.0f", pph)
+    return string.format("%.0fpg/h", pph)
 end
 
 local function formatPages(pages)
@@ -609,27 +615,10 @@ local function fixedCol(widget, width)
     }
 end
 
-local function buildColumnSeparator(column_gap, height)
-    local v_padding = Size.padding.small
-    return HorizontalGroup:new{
-        HorizontalSpan:new{ width = column_gap },
-        VerticalGroup:new{
-            align = "center",
-            VerticalSpan:new{ height = v_padding },
-            LineWidget:new{
-                dimen = Geom:new{ w = Size.line.thin, h = height - 2 * v_padding },
-                background = Blitbuffer.COLOR_LIGHT_GRAY,
-            },
-            VerticalSpan:new{ height = v_padding },
-        },
-        HorizontalSpan:new{ width = column_gap },
-    }
-end
-
 local function buildRowSeparator(width)
     return LineWidget:new{
         dimen = Geom:new{ w = width, h = Size.line.thin },
-        background = Blitbuffer.COLOR_LIGHT_GRAY,
+        background = COLOR_RULE,
     }
 end
 
@@ -648,20 +637,27 @@ local function buildTableHeader(fonts, layout)
     local headers = { _("DATE"), _("TIME"), _("PAGES"), _("SPEED"), _("DELTA"), _("TOTAL"), _("RANGE") }
     local header_row = HorizontalGroup:new{ align = "center" }
     for i, header_text in ipairs(headers) do
-        local header_widget = TextWidget:new{ text = header_text, face = fonts.header }
+        local header_widget = TextWidget:new{ text = header_text, face = fonts.header, fgcolor = COLOR_MUTED }
         table.insert(header_row, fixedCol(header_widget, layout.col_width))
         if i < #headers then
-            table.insert(header_row, buildColumnSeparator(layout.column_gap, 24))
+            table.insert(header_row, HorizontalSpan:new{ width = 2 * layout.column_gap })
         end
     end
-    return FrameContainer:new{
-        background = Blitbuffer.COLOR_GRAY_E,
-        bordersize = 0,
-        padding_top = Size.padding.small,
-        padding_bottom = Size.padding.small,
-        padding_left = layout.padding_h,
-        padding_right = layout.padding_h,
-        header_row,
+    return VerticalGroup:new{
+        align = "left",
+        FrameContainer:new{
+            background = Blitbuffer.COLOR_WHITE,
+            bordersize = 0,
+            padding_top = Size.padding.small,
+            padding_bottom = Size.padding.small,
+            padding_left = layout.padding_h,
+            padding_right = layout.padding_h,
+            header_row,
+        },
+        LineWidget:new{
+            dimen = Geom:new{ w = layout.full_width, h = Size.line.medium },
+            background = COLOR_TEXT,
+        },
     }
 end
 
@@ -669,41 +665,31 @@ local function buildTableRows(stats_data, fonts, layout)
     local rows = VerticalGroup:new{ align = "left" }
     local today_iso = os.date("%Y-%m-%d")
     local highlight_latest = stats_data[1] and stats_data[1].date == today_iso
+    local gap = HorizontalSpan:new{ width = 2 * layout.column_gap }
+    local pad = Size.padding.small or 4
     for idx, item in ipairs(stats_data) do
-        local value_face = (highlight_latest and idx == 1 and (fonts.cell_bold or fonts.cell)) or fonts.cell
-        local date_widget = TextWidget:new{ text = formatDate(item.date), face = fonts.cell }
-        local time_widget = TextWidget:new{ text = formatDurationCompact(item.duration), face = value_face }
-        local pages_widget = TextWidget:new{ text = formatPages(item.pages), face = value_face }
-        local speed_widget = TextWidget:new{ text = formatSpeed(item.speed_pages, item.speed_secs), face = value_face }
-        local delta_widget = TextWidget:new{ text = formatProgressDelta(item.delta_progress), face = value_face }
-        local total_widget = TextWidget:new{ text = formatProgressTotal(item.progress), face = fonts.cell }
-        local range_widget = TextWidget:new{
-            text = formatRange(item.first_page, item.last_page, nil),
-            face = fonts.cell
-        }
+        local is_today = highlight_latest and idx == 1
+        local value_face = (is_today and (fonts.cell_bold or fonts.cell)) or fonts.cell
+        local function cell(text, face, color)
+            return fixedCol(TextWidget:new{ text = text, face = face, fgcolor = color or COLOR_TEXT }, layout.col_width)
+        end
 
         local row = HorizontalGroup:new{
             align = "center",
-            fixedCol(date_widget, layout.col_width),
-            buildColumnSeparator(layout.column_gap, 22),
-            fixedCol(time_widget, layout.col_width),
-            buildColumnSeparator(layout.column_gap, 22),
-            fixedCol(pages_widget, layout.col_width),
-            buildColumnSeparator(layout.column_gap, 22),
-            fixedCol(speed_widget, layout.col_width),
-            buildColumnSeparator(layout.column_gap, 22),
-            fixedCol(delta_widget, layout.col_width),
-            buildColumnSeparator(layout.column_gap, 22),
-            fixedCol(total_widget, layout.col_width),
-            buildColumnSeparator(layout.column_gap, 22),
-            fixedCol(range_widget, layout.col_width),
+            cell(formatDate(item.date), fonts.cell, COLOR_MUTED), gap,
+            cell(formatDurationCompact(item.duration), value_face), gap,
+            cell(item.pages and (formatPages(item.pages) .. "pg") or "-", value_face), gap,
+            cell(formatSpeed(item.speed_pages, item.speed_secs), value_face), gap,
+            cell(formatProgressDelta(item.delta_progress), value_face), gap,
+            cell(formatProgressTotal(item.progress), fonts.cell, COLOR_MUTED), gap,
+            cell(formatRange(item.first_page, item.last_page, nil), fonts.cell, COLOR_MUTED),
         }
 
+        table.insert(rows, VerticalSpan:new{ height = pad })
         table.insert(rows, row)
+        table.insert(rows, VerticalSpan:new{ height = pad })
         if idx < #stats_data then
-            table.insert(rows, VerticalSpan:new{ height = Size.padding.tiny or 2 })
             table.insert(rows, buildRowSeparator(layout.full_width - 2 * layout.padding_h))
-            table.insert(rows, VerticalSpan:new{ height = Size.padding.tiny or 2 })
         end
     end
     return rows
@@ -798,7 +784,8 @@ function ReadingStatsTable:init()
         cell_bold = Font:getFace("NotoSans-Bold.ttf", 15),
         title   = Font:getFace("NotoSans-Regular.ttf", 18),
         title_main = Font:getFace("NotoSans-Bold.ttf", 20),
-        title_meta = Font:getFace("NotoSans-Regular.ttf", 13),
+        stat_value = Font:getFace("NotoSans-Bold.ttf", 17),
+        stat_label = Font:getFace("NotoSans-Regular.ttf", 12),
         title_author = Font:getFace("NotoSans-Regular.ttf", 13),
         title_meta = Font:getFace("NotoSans-Regular.ttf", 14),
         meta    = Font:getFace("NotoSans-Regular.ttf", 15),
@@ -855,43 +842,62 @@ function ReadingStatsTable:buildContent()
         table.insert(stats_data, display_stats[i])
     end
 
-    local title_main = TextWidget:new{
-        text = wrapTitle(book_title, 28, 2),
-        face = self.fonts.title_main or self.fonts.title or self.fonts.cell,
-    }
+    local inner_w = self.layout.full_width - 2 * self.layout.padding_h
+    local fonts = self.fonts
 
-    local title_author = TextWidget:new{
-        text = book_author or "",
-        face = self.fonts.title_author or self.fonts.title_meta or self.fonts.meta or self.fonts.cell,
-    }
+    -- small grey label over the value, in a column of the given width
+    local function statBlock(value, label, width)
+        return LeftContainer:new{
+            dimen = Geom:new{ w = width, h = 0 },
+            VerticalGroup:new{
+                align = "left",
+                TextWidget:new{ text = label, face = fonts.stat_label, fgcolor = COLOR_MUTED },
+                TextWidget:new{ text = value, face = fonts.stat_value, fgcolor = COLOR_TEXT },
+            },
+        }
+    end
+    local function statRow(blocks)
+        local col_w = math.floor(inner_w / #blocks)
+        local row = HorizontalGroup:new{ align = "top" }
+        local h = 0
+        for _i, b in ipairs(blocks) do
+            local w = statBlock(b[1], b[2], col_w)
+            h = math.max(h, w[1]:getSize().h)
+            row[#row + 1] = w
+        end
+        for _i, w in ipairs(row) do w.dimen.h = h end
+        return row
+    end
 
     local total_book_time = sumDuration(daily_stats)
     local actual_book_time = getActualReadingTotal(book_id)
 
-    local title_meta = TextWidget:new{
-        text = string.format("%d %s   ·   %s: %s   ·   %s: %s",
-            days_read, _("Days Read"),
-            _("Book total"), formatDurationCompact(total_book_time),
-            _("Actual reading total"), formatDurationCompact(actual_book_time)),
-        face = self.fonts.title_meta or self.fonts.meta or self.fonts.cell,
-    }
-
+    -- title and author
     local title = VerticalGroup:new{
         align = "left",
-        title_main,
+        TextWidget:new{
+            text = wrapTitle(book_title, 28, 2),
+            face = fonts.title_main, fgcolor = COLOR_TEXT,
+        },
         VerticalSpan:new{ height = Size.padding.tiny or 2 },
-        title_author,
-        VerticalSpan:new{ height = Size.padding.tiny or 2 },
-        title_meta,
+        TextWidget:new{
+            text = book_author or "",
+            face = fonts.title_author, fgcolor = COLOR_MUTED,
+        },
     }
 
-    local title_row = title
+    -- the book in three numbers
+    local book_row = statRow{
+        { string.format("%dd", days_read), _("Days Read") },
+        { formatDurationCompact(total_book_time), _("Book total") },
+        { formatDurationCompact(actual_book_time), _("Actual reading total") },
+    }
 
     local all_time = sumDuration(all_stats)
     local visible_speed = "-"
     local overall_pph = getOverallSpeed(session_stats)
     if overall_pph then
-        visible_speed = string.format("%.0f %s", overall_pph, _("pages/h"))
+        visible_speed = string.format("%.0fpg/h", overall_pph)
     end
     local daily_avg_seconds = getDailyAverageSeconds(all_stats)
     local visible_sessions = getFilteredSessionStatsByDates(session_stats, all_stats)
@@ -900,55 +906,25 @@ function ReadingStatsTable:buildContent()
     local pages_per_session = getPagesPerSession(visible_sessions)
     local progress_efficiency = getProgressEfficiency(all_stats)
 
-    local left_stats = VerticalGroup:new{
+    -- habits: time per day and per session, then speed
+    local habits_row = statRow{
+        { formatDurationCompact(daily_avg_seconds), _("Daily avg") },
+        { avg_session_minutes, _("Avg session") },
+        { med_session_minutes, _("Med session") },
+    }
+    local speed_row = statRow{
+        { visible_speed, _("Pages per hour") },
+        { pages_per_session == "-" and "-" or (pages_per_session .. "pg"), _("Pages per session") },
+        { progress_efficiency == "-" and "-" or (progress_efficiency .. "%/h"), _("Progress per hour") },
+    }
+
+    local stats_widget = VerticalGroup:new{
         align = "left",
-        TextWidget:new{
-            text = string.format("%s: %s", _("Daily avg"), formatHoursMinutes(daily_avg_seconds)),
-            face = self.fonts.meta,
-        },
-        VerticalSpan:new{ height = Size.padding.tiny or 2 },
-        TextWidget:new{
-            text = string.format("%s: %s", _("Avg session"), avg_session_minutes),
-            face = self.fonts.meta,
-        },
-        VerticalSpan:new{ height = Size.padding.tiny or 2 },
-        TextWidget:new{
-            text = string.format("%s: %s", _("Med session"), med_session_minutes),
-            face = self.fonts.meta,
-        },
-    }
-
-    local right_stats = VerticalGroup:new{
-        align = "left",
-        TextWidget:new{
-            text = visible_speed,
-            face = self.fonts.meta,
-        },
-        VerticalSpan:new{ height = Size.padding.tiny or 2 },
-        TextWidget:new{
-            text = string.format("%s %s", pages_per_session, _("pg/session")),
-            face = self.fonts.meta,
-        },
-        VerticalSpan:new{ height = Size.padding.tiny or 2 },
-        TextWidget:new{
-            text = string.format("%s %s", progress_efficiency, _("%/hr")),
-            face = self.fonts.meta,
-        },
-    }
-
-    local stats_height = math.max(left_stats:getSize().h, right_stats:getSize().h)
-    local partition_height = math.max(1, stats_height - (Size.padding.small or 4))
-    local stats_partition = LineWidget:new{
-        dimen = Geom:new{ w = Size.line.medium, h = partition_height },
-        background = Blitbuffer.COLOR_BLACK,
-    }
-
-    local stats_widget = HorizontalGroup:new{
-        left_stats,
-        HorizontalSpan:new{ width = self.layout.column_gap },
-        stats_partition,
-        HorizontalSpan:new{ width = self.layout.column_gap },
-        right_stats,
+        book_row,
+        VerticalSpan:new{ height = Size.padding.default },
+        habits_row,
+        VerticalSpan:new{ height = Size.padding.default },
+        speed_row,
     }
 
     local session_duration = getCurrentSessionDuration(
@@ -963,14 +939,13 @@ function ReadingStatsTable:buildContent()
     end
 
     local session_widget = HorizontalGroup:new{
-        TextWidget:new{
-            text = "This session: ",
-            face = self.fonts.session or self.fonts.cell,
-        },
-        TextWidget:new{
-            text = formatSeconds(session_duration),
-            face = self.fonts.session_bold or self.fonts.session or self.fonts.cell,
-        },
+        TextWidget:new{ text = _("This session") .. "  ", face = fonts.session, fgcolor = COLOR_MUTED },
+        TextWidget:new{ text = formatSeconds(session_duration), face = fonts.session_bold, fgcolor = COLOR_TEXT },
+    }
+
+    local note_widget = TextWidget:new{
+        text = _("PAGES and SPEED count stable pages"),
+        face = fonts.stat_label, fgcolor = COLOR_MUTED,
     }
 
     local summary_widget = TextWidget:new{
@@ -979,10 +954,15 @@ function ReadingStatsTable:buildContent()
             formatDurationCompact(all_time),
             formatProgressTotal((all_stats[1] and all_stats[1].progress) or 0), _("total"),
             formatProgressDelta((all_stats[1] and all_stats[1].delta_progress) or 0), _("gain")),
-        face = self.fonts.summary,
+        face = fonts.summary, fgcolor = COLOR_MUTED,
     }
 
-    local summary_block = summary_widget
+    local summary_block = VerticalGroup:new{
+        align = "left",
+        summary_widget,
+        VerticalSpan:new{ height = Size.padding.tiny or 2 },
+        note_widget,
+    }
 
     local header = buildTableHeader(self.fonts, self.layout)
     local rows = buildTableRows(stats_data, self.fonts, self.layout)
@@ -1001,11 +981,11 @@ function ReadingStatsTable:buildContent()
         }
     end
 
-    local title_frame = makeFrame(title_row, Size.padding.default, Size.padding.tiny or 2)
-    local stats_frame = makeFrame(stats_widget, 0, Size.padding.tiny or 2)
-    local session_frame = makeFrame(session_widget, 0, Size.padding.small)
+    local title_frame = makeFrame(title, Size.padding.large or Size.padding.default, Size.padding.default)
+    local stats_frame = makeFrame(stats_widget, 0, Size.padding.default)
+    local session_frame = makeFrame(session_widget, Size.padding.small, Size.padding.default)
     local rows_frame = makeFrame(rows, Size.padding.small, Size.padding.small)
-    local summary_frame = makeFrame(summary_block, Size.padding.small, Size.padding.small)
+    local summary_frame = makeFrame(summary_block, Size.padding.default, Size.padding.default)
 
     table.insert(table_content, title_frame)
     table.insert(table_content, stats_frame)
@@ -1059,10 +1039,20 @@ function ReadingStatsTable:buildContent()
 end
 
 function ReadingStatsTable:onShow()
+    -- "ui" repaints only what changed, without the black flash of a full refresh
     UIManager:setDirty(self, function()
-        return "full", self.dimen
+        return "ui", self.dimen
     end)
     return true
+end
+
+-- Changes the page of the table in place (no close and reopen, so one single refresh)
+function ReadingStatsTable:goToPage(target)
+    _current_page = target
+    self:buildContent()
+    UIManager:setDirty(self, function()
+        return "ui", self.dimen
+    end)
 end
 
 function ReadingStatsTable:onTapClose(arg, ges_ev)
@@ -1077,13 +1067,7 @@ function ReadingStatsTable:onTapClose(arg, ges_ev)
             if ty >= bar_y and self._pagination_hits then
                 for _, hit in ipairs(self._pagination_hits) do
                     if hit.enabled and tx >= hit.x_min and tx <= hit.x_max then
-                        local ui_ref = self.ui
-                        local target = hit.target
-                        UIManager:close(self)
-                        UIManager:scheduleIn(0, function()
-                            _current_page = target
-                            UIManager:show(ReadingStatsTable:new{ ui = ui_ref })
-                        end)
+                        self:goToPage(hit.target)
                         return true
                     end
                 end
@@ -1103,12 +1087,12 @@ function ReadingStatsTable:onAnyKeyPressed()
 end
 
 function ReadingStatsTable:onCloseWidget()
-    UIManager:setDirty(nil, "full")
+    UIManager:setDirty(nil, "ui")
 end
 
 function ReaderUI.onShowReadingHistoryPopupTablePlusV1(this)
     _current_page = 1
-    UIManager:show(ReadingStatsTable:new{ ui = this })
+    UIManager:show(ReadingStatsTable:new{ ui = this }, "ui")
     return true
 end
 
