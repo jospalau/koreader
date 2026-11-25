@@ -1998,11 +1998,12 @@ end
 --   1 = current margins (35/50), font x-height 1.80 mm
 --   2 = a little bit wider margins, keeping the ~sqrt(2) proportion (60/42 = 1.43, same as 50/35),
 --       font x-height 1.80 mm
---   3 = bigger side margins to get a narrow text column, with a smaller font (x-height 1.50 mm)
+--   3 = big side margins (100) to get a narrow text column, minimal top/bottom (12/15),
+--       with a smaller font (x-height 1.35 mm)
 PageTextInfo.margin_presets = {
     { 35, 50, 35, 50, xheight_mm = 1.80 },
     { 42, 60, 42, 60, xheight_mm = 1.80 },
-    { 80, 50, 80, 50, xheight_mm = 1.50 },
+    { 100, 12, 100, 15, xheight_mm = 1.35 },
 }
 
 -- Sends an event while hiding any notification toast it (or the handlers it triggers) may show,
