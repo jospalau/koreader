@@ -591,11 +591,68 @@ function PageTextInfo:initGesListener()
     })
 end
 
+-- Frontlight cycle, in % of the range of the device (Kindle, Kobo... have different ranges):
+--   off -> level 1 -> level 2 -> ... -> off   (any other current value goes to off)
+-- The next step is decided from the current state, so nothing is stored.
+-- TO CHANGE THE LEVELS: edit the lists below (% of the range of the device, any number of steps, increasing).
+-- Each device family has its own list; "default" is used for any other device (emulator, Android, PocketBook...).
+PageTextInfo.frontlight_cycle_by_device = {
+    kobo   = { 5, 10 },
+    kindle = { 30, 40 },
+    default = { 5, 10 },
+}
+
+function PageTextInfo:getFrontlightCyclePercents()
+    local cfg = PageTextInfo.frontlight_cycle_by_device
+    if Device:isKobo() then return cfg.kobo or cfg.default end
+    if Device:isKindle() then return cfg.kindle or cfg.default end
+    return cfg.default
+end
+
+function PageTextInfo:cycleFrontlight()
+    if not Device:hasFrontlight() then return false end
+    local powerd = Device:getPowerDevice()
+    local fl_min = powerd.fl_min or 0
+    local fl_max = powerd.fl_max or 100
+    -- percent -> device intensity (never 0, which would be off; strictly increasing)
+    local pcts = self:getFrontlightCyclePercents()
+    local levels = {}
+    for i, pct in ipairs(pcts) do
+        local level = math.floor(fl_min + (fl_max - fl_min) * pct / 100 + 0.5)
+        level = math.max(level, fl_min + 1, (levels[i - 1] or 0) + 1)
+        level = math.min(level, fl_max)
+        levels[i] = level
+    end
+    local next_idx = nil -- nil = off
+    if not powerd:isFrontlightOn() then
+        next_idx = 1
+    else
+        local current = powerd:frontlightIntensity()
+        for i, level in ipairs(levels) do
+            if current == level and levels[i + 1] then
+                next_idx = i + 1
+                break
+            end
+        end
+    end
+    if not next_idx then
+        powerd:turnOffFrontlight()
+    else
+        powerd:setIntensity(levels[next_idx])
+    end
+    UIManager:broadcastEvent(Event:new("FrontlightStateChanged"))
+    UIManager:show(Notification:new{
+        text = next_idx and T(_("Frontlight %1% (%2)"), pcts[next_idx], levels[next_idx]) or _("Frontlight off"),
+    })
+    return true
+end
+
 function PageTextInfo:onTwoFingerSwipe(arg, ges)
     if not self.initialized then return false end
     local direction = ges and ges.direction
     if direction == "north" then
-        -- Two fingers up: nothing for the moment (the gesture is captured so no other action runs)
+        -- Two fingers up: cycle the frontlight through the levels of the device (see frontlight_cycle_by_device)
+        self:cycleFrontlight()
         return true
     elseif direction == "south" then
         -- Two fingers down: show the Reading History Popup Table Plus window (data from wpm_stat_data)
