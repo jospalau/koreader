@@ -690,17 +690,7 @@ function PageTextInfo:isDoubleTapDisabled()
     return self.ui.disable_double_tap and true or false
 end
 
--- Diagnostic: one line with the whole state. Search the log (crash.log / emulator output) for "pagetextinfo dt"
-function PageTextInfo:logDoubleTapState(where)
-    logger.warn("pagetextinfo dt:", where,
-        "ui.disable_double_tap=", tostring(self.ui.disable_double_tap),
-        "Device.input.disable_double_tap=", tostring(Device.input.disable_double_tap),
-        "vocabulary=", tostring(self.settings:readSetting("highlight_all_words_vocabulary_builder_and_notes")),
-        "ignore_hold_corners=", tostring(G_reader_settings:isTrue("ignore_hold_corners")))
-end
-
 function PageTextInfo:setDoubleTapDisabled(disabled)
-    self:logDoubleTapState("setDoubleTapDisabled(" .. tostring(disabled) .. ") before")
     if self:isDoubleTapDisabled() == disabled then return end
     self.ui.disable_double_tap = disabled
     -- We need also to change this, otherwise the toggle does not work just with self.ui.disable_double_tap
@@ -719,7 +709,6 @@ end
 PageTextInfo.vocabulary_ignores_hold_corners = true
 
 function PageTextInfo:enterVocabularyMode()
-    self:logDoubleTapState("enterVocabularyMode before")
     self.ui.disable_double_tap = false
     Device.input.disable_double_tap = false
     -- The corner mark of the top bar follows "hold corners ignored" (ignore_hold_corners):
@@ -944,10 +933,7 @@ end
 -- Taps in the bottom corners. Left: toggle the double tap detection (from vocabulary mode: double tap ON, vocabulary off).
 -- Right: shows the session time and the wpm for a moment (showSessionOverlay).
 function PageTextInfo:onBottomTap(side, ges)
-    logger.warn("pagetextinfo dt: bottom tap", side, "initialized=", tostring(self.initialized),
-        "x=", ges and ges.pos and ges.pos.x, "y=", ges and ges.pos and ges.pos.y)
     if not self.initialized then return false end
-    self:logDoubleTapState("onBottomTap " .. side .. " before")
     if side == "left" then
         -- In vocabulary mode the double tap is already on: the tap leaves the vocabulary and keeps the double tap ON
         if self.settings:readSetting("highlight_all_words_vocabulary_builder_and_notes") then
@@ -1153,17 +1139,22 @@ function PageTextInfo:_closeLocationBubble(go_to_page)
     return true
 end
 
-function PageTextInfo:onSwipe(_, ges)
+function PageTextInfo:onSwipe(arg, ges)
     if not self.initialized then return end
     local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
     if direction == "west" then
-        self:logDoubleTapState("swipe west before")
-        -- Toggle between two states only:
-        --   vocabulary mode (double tap on + vocabulary / notes highlighted)  <->  no double tap (fast page turns)
-        if self.settings:readSetting("highlight_all_words_vocabulary_builder_and_notes") then
-            self:setDoubleTapDisabled(true)
-        else
+        -- Toggle between two states: double tap OFF  <->  vocabulary mode (double tap on + vocabulary highlighted).
+        -- From vocabulary mode it goes to double tap off silently; from the plain double tap on (the tap in the bottom
+        -- left corner) it goes to double tap off and says so; from double tap off it goes to vocabulary mode.
+        local in_vocabulary = self.settings:readSetting("highlight_all_words_vocabulary_builder_and_notes")
+        if self:isDoubleTapDisabled() and not in_vocabulary then
             self:enterVocabularyMode()
+        else
+            self:setDoubleTapDisabled(true)
+            -- leaving the vocabulary mode is silent (the top bar mark changes); only the plain double tap on says it
+            if not in_vocabulary then
+                UIManager:show(Notification:new{ text = _("Double tap off") })
+            end
         end
         return true
     elseif direction == "north" then
