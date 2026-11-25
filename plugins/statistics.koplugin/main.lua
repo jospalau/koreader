@@ -3641,9 +3641,13 @@ function ReaderStatistics:onCloseDocument()
     if not ReaderStatistics.preserve then -- Not save session when adjusting configuration which forces document reopening
         self:insertDBSessionStats()
     end
-    local DataStorage = require("datastorage")
-    local path = DataStorage:getSettingsDir() .. "/wpm_session.json"
-    os.remove(path)
+    -- The file with the wpm of the session is removed with the session. When the document is only reloaded, the
+    -- session goes on (see onPreserveCurrentSession): keep it, or the card shows 0 wpm until the next page turn.
+    if not ReaderStatistics.preserve then
+        local DataStorage = require("datastorage")
+        local path = DataStorage:getSettingsDir() .. "/wpm_session.json"
+        os.remove(path)
+    end
     if self._nbwords_task then
         UIManager:unschedule(self._nbwords_task)
         self._nbwords_task = nil
@@ -3658,34 +3662,6 @@ function ReaderStatistics:onAnnotationsModified(annotations)
         if annotations.nb_notes_added then
             self.data.notes = self.data.notes + annotations.nb_notes_added
         end
-    end
-end
-
-function ReaderStatistics:updateBookAnnotationsNumber(doc_props, md5, highlights_nb, notes_nb) -- for Bookmark browser
-    if doc_props.title and doc_props.authors and md5 then
-        local conn = SQ3.open(db_location)
-        local sql_stmt = [[
-            SELECT id
-            FROM   book
-            WHERE  title = ?
-              AND  authors = ?
-              AND  md5 = ?;
-        ]]
-        local stmt = conn:prepare(sql_stmt)
-        local res = stmt:reset():bind(doc_props.title, doc_props.authors, md5):step()
-        local id_book = res[1]
-        if id_book then
-            sql_stmt = [[
-                UPDATE book
-                SET    highlights = ?,
-                       notes = ?
-                WHERE  id = ?;
-            ]]
-            stmt = conn:prepare(sql_stmt)
-            stmt:reset():bind(highlights_nb, notes_nb, id_book):step()
-        end
-        stmt:close()
-        conn:close()
     end
 end
 

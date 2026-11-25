@@ -1589,6 +1589,7 @@ end
 
 -- The list is built as widgets and painted in an off-screen buffer as tall as itself, so it is kept bounded
 local MAX_LISTED_SESSIONS = 5
+local MAX_TOP_SESSIONS = 3  -- the longest sessions listed above the newest ones
 
 local EXACT_WHERE = "words IS NOT NULL AND read_secs > 0 AND ref_pages IS NOT NULL AND start_time > 0"
 
@@ -1613,13 +1614,13 @@ end
 -- slow part): totals over all the sessions with exact data (not only the ones listed) and the newest `limit` of
 -- them. Same rules as loadReadingStats: pages/day counts only the days with at least MIN_DAY_SECONDS of reading.
 -- If the exact columns are not in the database yet, the exact figures stay at zero. Raises if it cannot be read.
-local function loadExactData(limit)
+local function loadExactData(limit, top_limit)
     local SQ3 = require("lua-ljsqlite3/init")
     local s = {
         total_sessions = 0, exact = 0, words = 0, secs = 0, ref_pages = 0, first = 0,
         wpm_min = 0, wpm_max = 0, days = 0, day_pages = 0,
     }
-    local list = {}
+    local list, top = {}, {}
     local conn = SQ3.open(getStatsDbPath())
     local ok, err = pcall(function()
         local function run(sql, each)
@@ -1668,28 +1669,33 @@ local function loadExactData(limit)
         end)
         local function col(name) return have[name] and ("w." .. name) or "NULL" end
 
-        run(string.format([[
-            SELECT w.start_time, w.duration, w.total_pages, w.words, w.read_secs, w.ref_pages, COALESCE(b.title, ''),
-                   %s, %s, %s, %s
-            FROM wpm_stat_data w
-            LEFT JOIN book b ON w.id_book = b.id
-            WHERE w.words IS NOT NULL AND w.read_secs > 0 AND w.ref_pages IS NOT NULL AND w.start_time > 0
-            ORDER BY w.start_time DESC
-            LIMIT %d
-        ]], col("ref_start"), col("ref_end"), col("pct_start"), col("pct_end"), limit), function(row)
-            list[#list + 1] = {
-                start = tonumber(row[1]) or 0, duration = tonumber(row[2]) or 0, screens = tonumber(row[3]) or 0,
-                words = tonumber(row[4]) or 0, secs = tonumber(row[5]) or 0, ref_pages = tonumber(row[6]) or 0,
-                title = tostring(row[7] or ""),
-                -- nil for the sessions saved before these columns existed
-                ref_start = tonumber(row[8]), ref_end = tonumber(row[9]),
-                pct_start = tonumber(row[10]), pct_end = tonumber(row[11]),
-            }
-        end)
+        -- The sessions with exact data in the given order: the newest, or the longest (most reading time)
+        local function fetch(order_by, n, into)
+            run(string.format([[
+                SELECT w.start_time, w.duration, w.total_pages, w.words, w.read_secs, w.ref_pages, COALESCE(b.title, ''),
+                       %s, %s, %s, %s
+                FROM wpm_stat_data w
+                LEFT JOIN book b ON w.id_book = b.id
+                WHERE w.words IS NOT NULL AND w.read_secs > 0 AND w.ref_pages IS NOT NULL AND w.start_time > 0
+                ORDER BY %s
+                LIMIT %d
+            ]], col("ref_start"), col("ref_end"), col("pct_start"), col("pct_end"), order_by, n), function(row)
+                into[#into + 1] = {
+                    start = tonumber(row[1]) or 0, duration = tonumber(row[2]) or 0, screens = tonumber(row[3]) or 0,
+                    words = tonumber(row[4]) or 0, secs = tonumber(row[5]) or 0, ref_pages = tonumber(row[6]) or 0,
+                    title = tostring(row[7] or ""),
+                    -- nil for the sessions saved before these columns existed
+                    ref_start = tonumber(row[8]), ref_end = tonumber(row[9]),
+                    pct_start = tonumber(row[10]), pct_end = tonumber(row[11]),
+                }
+            end)
+        end
+        fetch("w.start_time DESC", limit, list)
+        fetch("w.read_secs DESC, w.start_time DESC", top_limit or 0, top)
     end)
     conn:close()
     if not ok then error(err, 0) end
-    return s, list
+    return s, list, top
 end
 
 -- The summary as { title, text } items, with the real figures
@@ -1751,6 +1757,10 @@ local function buildSessionItems(list)
             string.format(_("%d wpm"), math.floor(s.words / (s.secs / 60) + 0.5)),
             pages_text,
         }
+        if s.ref_pages > 0 then
+            -- reading pace in stable (reference) pages: seconds of reading for each one
+            second[#second + 1] = string.format(_("%d s/stable page"), math.floor(s.secs / s.ref_pages + 0.5))
+        end
         if s.pct_start and s.pct_end then
             -- progress of the book where the session started and where it ended
             second[#second + 1] = string.format("%.1f%% \xE2\x86\x92 %.1f%%", s.pct_start, s.pct_end)
@@ -1821,6 +1831,10 @@ function ExplainWindow:init()
         -- the title already says "Summary" unless a legend comes first
         if self.items and #self.items > 0 then addHeader(_("Summary")) end
         for _i, item in ipairs(self.summary) do addItem(item) end
+    end
+    if self.top_sessions and #self.top_sessions > 0 then
+        addHeader(self.top_title or _("Longest sessions"))
+        for _i, item in ipairs(self.top_sessions) do addItem(item) end
     end
     if self.sessions and #self.sessions > 0 then
         addHeader(self.sessions_title or _("Sessions"))
@@ -3322,11 +3336,13 @@ function ShowLongestSessionsWindow:onHoldExplain(arg, ges)
         return true
     end
     -- the summary with the real figures and the sessions with exact data
-    local summary, sessions, sessions_title
+    local summary, sessions, sessions_title, top_sessions, top_title
     local ok_list, err_list = pcall(function()
-        local s, list = loadExactData(MAX_LISTED_SESSIONS)
+        local s, list, top = loadExactData(MAX_LISTED_SESSIONS, MAX_TOP_SESSIONS)
         summary = buildSummaryItems(s)
         sessions = buildSessionItems(list)
+        top_sessions = buildSessionItems(top)
+        top_title = string.format(_("Longest sessions (top %d)"), #top)
         if s.exact > #list then
             sessions_title = string.format(_("Sessions (last %d of %d)"), #list, s.exact)
         else
@@ -3341,6 +3357,7 @@ function ShowLongestSessionsWindow:onHoldExplain(arg, ges)
     explain_window_open = true
     UIManager:show(ExplainWindow:new{
         title = _("Summary"), summary = summary, sessions = sessions, sessions_title = sessions_title,
+        top_sessions = top_sessions, top_title = top_title,
     }, "ui")
     return true
 end
