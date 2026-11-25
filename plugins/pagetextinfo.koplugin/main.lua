@@ -734,8 +734,218 @@ function PageTextInfo:enterVocabularyMode()
     return self:toggleHighlightAllWordsVocabulary(true)
 end
 
+-- ===== Session overlay: session time (top half) and wpm (bottom half), big, grey, no background =====
+-- It is painted straight over the page text (no frame, no background) and it fades out: the text is repainted a few
+-- times with a lighter grey and then removed. Everything to tune is in this table.
+PageTextInfo.session_overlay_cfg = {
+    font_size = 100,                 -- biggest size (points); it is reduced if the text does not fit the screen width
+    min_font_size = 24,
+    width_ratio = 0.92,              -- max width of the text (ratio of the screen width)
+    font = "NotoSans-Bold.ttf",      -- fallback only, used if the font of the document cannot be loaded
+    color = 0x77,                    -- grey of the text (0x00 black ... 0xFF white)
+    hold = 0.8,                      -- seconds fully visible
+    fade_colors = { 0x99, 0xBB, 0xDD },  -- greys of the fade out steps (each one is a refresh)
+    fade_interval = 0.2,             -- seconds between fade steps
+}
+
+local SessionOverlay = WidgetContainer:extend{
+    name = "pagetextinfo_session_overlay",
+    toast = true, -- painted over everything and it does not take the events (the page below keeps working)
+}
+
+local function wpmFromJson()
+    local f = io.open(DataStorage:getSettingsDir() .. "/wpm_session.json", "r")
+    if not f then return 0 end
+    local raw = f:read("*a")
+    f:close()
+    local wpm = tonumber(raw and raw:match('"wpm"%s*:%s*(%d+)'))
+    local updated = tonumber(raw and raw:match('"updated"%s*:%s*(%d+)'))
+    if not wpm or not updated or os.time() - updated > 300 then return 0 end
+    return wpm
+end
+
+local function formatSessionTime(secs)
+    secs = math.max(0, math.floor(secs))
+    local h = math.floor(secs / 3600)
+    local m = math.floor((secs % 3600) / 60)
+    if h > 0 then
+        return string.format("%dh %02dm", h, m)
+    end
+    return string.format("%dm %02ds", m, secs % 60)
+end
+
+-- Face of the font of the document at a given size (falls back to cfg.font)
+function SessionOverlay:getFace(size)
+    local cfg = PageTextInfo.session_overlay_cfg
+    for _i, name in ipairs(self.font_candidates or {}) do
+        local ok, face = pcall(Font.getFace, Font, name, size)
+        if ok and face then return face end
+    end
+    return Font:getFace(cfg.font, size)
+end
+
+-- Three texts, one per vertical third of the screen: clock, session time, wpm
+function SessionOverlay:buildTexts(color)
+    local cfg = PageTextInfo.session_overlay_cfg
+    for _i, w in ipairs(self.widgets or {}) do w:free() end
+    self.widgets = {}
+    self.sizes = self.sizes or {}
+    local max_w = math.floor(Screen:getWidth() * cfg.width_ratio)
+    for i, text in ipairs(self.texts) do
+        local size = self.sizes[i] or cfg.font_size
+        local w
+        while true do
+            w = TextWidget:new{ text = text, face = self:getFace(size), fgcolor = color, padding = 0 }
+            if w:getSize().w <= max_w or size <= cfg.min_font_size then break end
+            w:free()
+            size = size - 6
+        end
+        self.widgets[i] = w
+        self.sizes[i] = size
+    end
+end
+
+function SessionOverlay:init()
+    local cfg = PageTextInfo.session_overlay_cfg
+    self:buildTexts(Blitbuffer.Color8(cfg.color))
+    local sw, sh = Screen:getWidth(), Screen:getHeight()
+    local n = #self.widgets
+    self.positions, self.regions = {}, {}
+    local x1, y1, x2, y2
+    for i, w in ipairs(self.widgets) do
+        local sz = w:getSize()
+        -- each text is centred in its own part of the screen (1/6, 3/6, 5/6 of the height with three texts)
+        local cy = sh * (2 * i - 1) / (2 * n)
+        local pos = { x = math.floor((sw - sz.w) / 2), y = math.floor(cy - sz.h / 2) }
+        self.positions[i] = pos
+        -- separate regions, so the e-ink does not refresh the page in between
+        self.regions[i] = Geom:new{ x = pos.x, y = pos.y, w = sz.w, h = sz.h }
+        x1 = x1 and math.min(x1, pos.x) or pos.x
+        y1 = y1 and math.min(y1, pos.y) or pos.y
+        x2 = x2 and math.max(x2, pos.x + sz.w) or (pos.x + sz.w)
+        y2 = y2 and math.max(y2, pos.y + sz.h) or (pos.y + sz.h)
+    end
+    self.dimen = Geom:new{ x = x1, y = y1, w = x2 - x1, h = y2 - y1 }
+end
+
+function SessionOverlay:setColor(grey)
+    self:buildTexts(Blitbuffer.Color8(grey))
+end
+
+function SessionOverlay:paintTo(bb, x, y)
+    for i, w in ipairs(self.widgets) do
+        w:paintTo(bb, self.positions[i].x, self.positions[i].y)
+    end
+end
+
+function SessionOverlay:handleEvent(event)
+    -- it takes no events (the page below keeps working), only frees its texts when it is closed
+    if event and event.handler == "onCloseWidget" then self:onCloseWidget() end
+    return false
+end
+
+function SessionOverlay:onCloseWidget()
+    for _i, w in ipairs(self.widgets or {}) do w:free() end
+end
+
+-- Refresh of the text areas (not of the whole screen)
+function SessionOverlay:refresh()
+    for _i, r in ipairs(self.regions) do
+        UIManager:setDirty(self, "ui", r)
+    end
+end
+
+function PageTextInfo:closeSessionOverlay()
+    self.session_overlay_token = (self.session_overlay_token or 0) + 1 -- cancels the pending fade steps
+    local overlay = self.session_overlay
+    self.session_overlay = nil
+    if overlay then
+        UIManager:close(overlay, "ui", overlay.regions[1])
+        for i = 2, #overlay.regions do
+            UIManager:setDirty(nil, "ui", overlay.regions[i])
+        end
+    end
+end
+
+-- wpm of the session in progress, the same number the statistics plugin saves: words / counted reading time. It is read
+-- from the plugin itself (always current, no 5 minutes limit); the json file is only the fallback.
+function PageTextInfo:getSessionWpm()
+    local stats = self.ui and self.ui.statistics
+    local words = stats and tonumber(stats._total_words) or 0
+    local secs = stats and tonumber(stats._total_read_time) or 0
+    -- Live part: the page being read now is counted as if it were turned at this moment
+    -- (same rules as the statistics plugin: at least min_sec, at most max_sec per page)
+    pcall(function()
+        local page_data = stats.page_stat[stats.curr_page]
+        local tuple = page_data and page_data[#page_data]
+        if tuple and tuple[1] and not stats._reading_paused_ts then
+            local elapsed = os.time() - tuple[1]
+            if elapsed >= stats.settings.min_sec then
+                secs = secs + math.min(elapsed, stats.settings.max_sec)
+                words = words + (tonumber(stats._last_nbwords) or 0)
+            end
+        end
+    end)
+    if words > 0 and secs > 0 then
+        return math.floor(words / (secs / 60))
+    end
+    return wpmFromJson()
+end
+
+function PageTextInfo:showSessionOverlay()
+    local cfg = PageTextInfo.session_overlay_cfg
+    self:closeSessionOverlay()
+
+    local topbar = self.view and self.view.topbar
+    local stats = self.ui and self.ui.statistics
+    local start = (topbar and topbar.start_session_time) or (stats and tonumber(stats.start_current_period))
+    local secs = start and (os.time() - start) or 0
+
+    -- font of the document: the plugin's own helper if it has one, else the family of the document with "-Regular"
+    local candidates = {}
+    if self.getFaceName then
+        local ok, name = pcall(self.getFaceName, self)
+        if ok and name then candidates[#candidates + 1] = name end
+    end
+    pcall(function()
+        local family = self.ui.document._document:getFontFace()
+        if family then
+            candidates[#candidates + 1] = family:gsub("%s+", "") .. "-Regular"
+            candidates[#candidates + 1] = family
+        end
+    end)
+
+    local overlay = SessionOverlay:new{
+        font_candidates = candidates,
+        texts = {
+            os.date("%H:%M"),
+            formatSessionTime(secs),
+            string.format("%d wpm", self:getSessionWpm()),
+        },
+    }
+    self.session_overlay = overlay
+    local token = self.session_overlay_token
+    UIManager:show(overlay, "ui", overlay.regions[1])
+    for i = 2, #overlay.regions do
+        UIManager:setDirty(overlay, "ui", overlay.regions[i])
+    end
+
+    local function fadeStep(i)
+        if self.session_overlay_token ~= token or self.session_overlay ~= overlay then return end
+        local grey = cfg.fade_colors[i]
+        if not grey then
+            self:closeSessionOverlay()
+            return
+        end
+        overlay:setColor(grey)
+        overlay:refresh()
+        UIManager:scheduleIn(cfg.fade_interval, function() fadeStep(i + 1) end)
+    end
+    UIManager:scheduleIn(cfg.hold, function() fadeStep(1) end)
+end
+
 -- Taps in the bottom corners. Left: toggle the double tap detection (from vocabulary mode: double tap ON, vocabulary off).
--- Right: nothing for the moment.
+-- Right: shows the session time and the wpm for a moment (showSessionOverlay).
 function PageTextInfo:onBottomTap(side, ges)
     logger.warn("pagetextinfo dt: bottom tap", side, "initialized=", tostring(self.initialized),
         "x=", ges and ges.pos and ges.pos.x, "y=", ges and ges.pos and ges.pos.y)
@@ -758,7 +968,8 @@ function PageTextInfo:onBottomTap(side, ges)
         })
         return true
     end
-    -- side == "right": captured so no other tap action runs
+    -- side == "right": session time (top half) and wpm (bottom half) over the page, fading out after a moment
+    self:showSessionOverlay()
     return true
 end
 
