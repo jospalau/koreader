@@ -574,7 +574,7 @@ local function chartBody(w_width, chart_args, summary_text)
 end
 
 -- Bar chart of the hours read in each month of the current year.
-local function buildMonthlyChartView(w_width)
+local function buildMonthlyHoursView(w_width)
     local now = os.date("*t")
     local year_start = os.time({ year = now.year, month = 1, day = 1, hour = 0 })
 
@@ -3154,6 +3154,242 @@ local function buildTodayView(w_width, parent)
     return nil, err
 end
 
+
+-- ── Books and pages per month ────────────────────────────────────────────────
+-- The second look of the "Hours per Month" window (a tap on the window switches): a line chart with the books and the
+-- pages of each month of the year, each on its own axis (books on the left, pages on the right), like a small
+-- yearly report. A book counts in a month when it has at least a minute of reading in it (every session counts).
+-- The pages are only the stable (reference) pages saved with the sessions (ref_pages): the sessions without them
+-- add no pages.
+
+local BOOK_MIN_SECONDS = 60
+
+-- First letter (UTF-8) of a month name
+local function firstLetter(text)
+    return tostring(text):match("^[%z\1-\127\194-\244][\128-\191]*") or ""
+end
+
+-- Books and pages of every month of the current year. Returns
+--   { books = { [1..12] }, pages = { [1..12] }, total_books, total_pages, month }, or nil and a message.
+local function loadBooksPagesData()
+    local now = os.date("*t")
+    local year_start = os.time({ year = now.year, month = 1, day = 1, hour = 0 })
+
+    local has_ref = false
+    local cols = queryAll("PRAGMA table_info(wpm_stat_data)", function(row) return tostring(row[2]) end)
+    for _i, name in ipairs(cols or {}) do
+        if name == "ref_pages" then has_ref = true end
+    end
+    -- only the sessions that saved stable pages add pages
+    local pages_expr = has_ref and "COALESCE(ref_pages, 0)" or "0"
+
+    local rows, err = queryAll(string.format([[
+        SELECT month, COUNT(*), COALESCE(SUM(pages), 0) FROM (
+            SELECT CAST(strftime('%%m', start_time, 'unixepoch', 'localtime') AS INTEGER) AS month,
+                   id_book, SUM(duration) AS secs, SUM(%s) AS pages
+            FROM wpm_stat_data
+            WHERE start_time >= %d
+            GROUP BY month, id_book
+            HAVING SUM(duration) >= %d
+        )
+        GROUP BY month
+    ]], pages_expr, year_start, BOOK_MIN_SECONDS), function(row)
+        return { month = tonumber(row[1]), books = tonumber(row[2]) or 0, pages = tonumber(row[3]) or 0 }
+    end)
+    if not rows then return nil, err end
+    if #rows == 0 then return nil, _("No reading data found for this year") end
+
+    local out = { books = {}, pages = {}, total_pages = 0, month = now.month }
+    for m = 1, 12 do out.books[m], out.pages[m] = 0, 0 end
+    for _i, r in ipairs(rows) do
+        if r.month and r.month >= 1 and r.month <= 12 then
+            out.books[r.month], out.pages[r.month] = r.books, r.pages
+            out.total_pages = out.total_pages + r.pages
+        end
+    end
+
+    -- books of the whole year (a book read in two months counts once)
+    local t = queryAll(string.format([[
+        SELECT COUNT(*) FROM (
+            SELECT id_book FROM wpm_stat_data WHERE start_time >= %d
+            GROUP BY id_book HAVING SUM(duration) >= %d
+        )
+    ]], year_start, BOOK_MIN_SECONDS), function(row) return tonumber(row[1]) or 0 end)
+    out.total_books = (t and t[1]) or 0
+    return out
+end
+
+-- Colors of the two lines: red and blue on a color screen, dark and light gray on black and white
+local function booksPagesColors()
+    if Screen.isColorEnabled and Screen:isColorEnabled() then
+        local ok1, red = pcall(Blitbuffer.colorFromName, "red")
+        local ok2, blue = pcall(Blitbuffer.colorFromName, "blue")
+        if ok1 and ok2 and red and blue then return red, blue end
+    end
+    return COLOR_ACCENT, COLOR_BAR
+end
+
+-- A thick line between two points (the framebuffer has no line call: small squares along it)
+local function paintThickLine(bb, x1, y1, x2, y2, thick, color)
+    local dx, dy = x2 - x1, y2 - y1
+    local steps = math.max(math.abs(dx), math.abs(dy), 1)
+    local half = math.floor(thick / 2)
+    for i = 0, steps do
+        bb:paintRect(math.floor(x1 + dx * i / steps) - half, math.floor(y1 + dy * i / steps) - half,
+            thick, thick, color)
+    end
+end
+
+-- Two lines over the months, one axis on each side. Both axes have the same four steps, so one grid serves both.
+local BooksPagesChart = Widget:extend{
+    width = 0,
+    height = 0,
+    books = nil,       -- books[1..12]
+    pages = nil,       -- pages[1..12]
+    last = 12,         -- last month drawn (the months to come have no line)
+    font_size = FONT_CAPTION,
+}
+
+function BooksPagesChart:init()
+    self.dimen = Geom:new{ w = self.width, h = self.height }
+    local face = getFace(self.font_size)
+
+    local max_b, max_p = 0, 0
+    for m = 1, 12 do
+        max_b = math.max(max_b, self.books[m])
+        max_p = math.max(max_p, self.pages[m])
+    end
+    self.b_max = math.max(4, math.ceil(max_b / 4) * 4)          -- 4, 8, 12, 16...
+    self.p_step = niceCeil(math.max(max_p, 4) / 4)               -- 250, 500, 1000...
+    self.p_max = self.p_step * 4
+
+    self.left_ticks, self.right_ticks, self.month_widgets = {}, {}, {}
+    self.left_w, self.right_w = 0, 0
+    for i = 0, 4 do
+        local l = TextWidget:new{ text = string.format("%d", self.b_max * i / 4), face = face, fgcolor = COLOR_MUTED }
+        local r = TextWidget:new{ text = groupThousands(self.p_step * i), face = face, fgcolor = COLOR_MUTED }
+        self.left_ticks[i + 1], self.right_ticks[i + 1] = l, r
+        self.left_w = math.max(self.left_w, l:getSize().w)
+        self.right_w = math.max(self.right_w, r:getSize().w)
+    end
+    self.left_w = self.left_w + SPACE.l
+    self.right_w = self.right_w + SPACE.l
+    for m = 1, 12 do
+        self.month_widgets[m] = TextWidget:new{
+            text = firstLetter(MONTH_NAMES[m]), face = face,
+            bold = (m == self.last), fgcolor = (m == self.last) and COLOR_TEXT or COLOR_MUTED,
+        }
+    end
+    self.text_h = self.left_ticks[1]:getSize().h
+    self.color_books, self.color_pages = booksPagesColors()
+end
+
+function BooksPagesChart:getSize()
+    return self.dimen
+end
+
+function BooksPagesChart:paintTo(bb, x, y)
+    self.dimen.x, self.dimen.y = x, y
+    local top = y + math.floor(self.text_h / 2) + SPACE.s
+    local plot_h = self.height - (top - y) - self.text_h - SPACE.l - SPACE.s
+    local base = top + plot_h
+    local plot_x = x + self.left_w
+    local plot_w = self.width - self.left_w - self.right_w
+    local slot = plot_w / 12
+
+    -- grid with the two axes
+    for i = 0, 4 do
+        local gy = base - math.floor(plot_h * i / 4)
+        bb:paintRect(plot_x, gy, plot_w, Size.line.thin, i == 0 and COLOR_BAR or COLOR_TRACK)
+        local lw, rw = self.left_ticks[i + 1], self.right_ticks[i + 1]
+        lw:paintTo(bb, plot_x - SPACE.l - lw:getSize().w, gy - math.floor(lw:getSize().h / 2))
+        rw:paintTo(bb, plot_x + plot_w + SPACE.l, gy - math.floor(rw:getSize().h / 2))
+    end
+
+    local function px(m) return plot_x + math.floor((m - 0.5) * slot) end
+    local function drawSeries(values, vmax, color)
+        local thick = Screen:scaleBySize(2)
+        local r = Screen:scaleBySize(4)
+        local pts = {}
+        for m = 1, self.last do
+            pts[m] = { px(m), base - math.floor(plot_h * values[m] / vmax + 0.5) }
+        end
+        for m = 2, self.last do
+            paintThickLine(bb, pts[m - 1][1], pts[m - 1][2], pts[m][1], pts[m][2], thick, color)
+        end
+        for m = 1, self.last do
+            local px_, py_ = pts[m][1], pts[m][2]
+            if m == self.last then
+                -- the current month: a bigger ring
+                bb:paintRect(px_ - r - 1, py_ - r - 1, 2 * r + 2, 2 * r + 2, color)
+                bb:paintRect(px_ - r + 1, py_ - r + 1, 2 * r - 2, 2 * r - 2, Blitbuffer.COLOR_WHITE)
+                bb:paintRect(px_ - 1, py_ - 1, 3, 3, color)
+            else
+                bb:paintRect(px_ - r + 1, py_ - r + 1, 2 * r - 1, 2 * r - 1, color)
+            end
+        end
+    end
+    drawSeries(self.pages, self.p_max, self.color_pages)
+    drawSeries(self.books, self.b_max, self.color_books)
+
+    for m = 1, 12 do
+        local mw = self.month_widgets[m]
+        local ms = mw:getSize()
+        mw:paintTo(bb, px(m) - math.floor(ms.w / 2), base + SPACE.l)
+    end
+end
+
+function BooksPagesChart:free()
+    for _i, list in ipairs({ self.left_ticks, self.right_ticks, self.month_widgets }) do
+        for _k, w in pairs(list) do w:free() end
+    end
+end
+
+-- The widgets of the look "books": the totals of the year on top (each one with the color of its line), the chart
+-- and a short line that says what is counted.
+local function buildBooksPagesView(w_width)
+    local data, err = loadBooksPagesData()
+    if not data then return nil, err end
+    local color_books, color_pages = booksPagesColors()
+
+    local function legendItem(color, text)
+        local dot = Screen:scaleBySize(12)
+        return HorizontalGroup:new{
+            align = "center",
+            PillBar:new{ width = dot, height = dot, color = color },
+            HorizontalSpan:new{ width = SPACE.m },
+            TextWidget:new{ text = text, face = getFace(FONT_SUBTITLE), bold = true, fgcolor = COLOR_TEXT },
+        }
+    end
+    local legend = HorizontalGroup:new{
+        align = "center",
+        legendItem(color_books, string.format("%d %s", data.total_books, data.total_books == 1 and _("book") or _("books"))),
+        HorizontalSpan:new{ width = SPACE.xl * 2 },
+        legendItem(color_pages, string.format("%s %s", groupThousands(data.total_pages), _("pages"))),
+    }
+    local chart = BooksPagesChart:new{
+        width = w_width,
+        height = math.min(Screen:scaleBySize(250), math.floor(Screen:getHeight() * 0.4)),
+        books = data.books,
+        pages = data.pages,
+        last = data.month,
+    }
+    return {
+        CenterContainer:new{ dimen = Geom:new{ w = w_width, h = legend:getSize().h }, legend },
+        makeVerticalSpacing(SPACE.xl),
+        chart,
+        makeVerticalSpacing(SPACE.l),
+        makeSummaryLine(w_width, _("Books and stable pages read, per month")),
+    }
+end
+
+-- The "Hours per Month" window has two looks (parent.month_mode): the hours of each month, or the books and pages.
+-- A tap on the window switches between them (see ShowLongestSessionsWindow:onTapClose).
+local function buildMonthlyChartView(w_width, parent)
+    if parent and parent.month_mode == "books" then return buildBooksPagesView(w_width) end
+    return buildMonthlyHoursView(w_width)
+end
+
 -- ── View definitions ─────────────────────────────────────────────────────────
 
 -- One line of text on the left: the item's `field`, cut with "…" if too long.
@@ -3196,7 +3432,12 @@ local VIEWS = {
     },
     {
         -- not a list: it builds its own widgets
-        title = yearTitle(_("Hours per Month")),
+        title = function(win)
+            if win and win.month_mode == "books" then
+                return string.format("%s" .. TITLE_SEPARATOR .. "%d", _("Books and Pages"), os.date("*t").year)
+            end
+            return yearTitle(_("Hours per Month"))()
+        end,
         build = buildMonthlyChartView,
     },
     {
@@ -3753,8 +3994,22 @@ function ShowLongestSessionsWindow:switchTodayMode(mode)
     UIManager:show(widget, "ui", widget.dimen)
 end
 
+-- Shows the "Hours per Month" view again in another look ("hours" or "books"), as switchTodayMode does
+function ShowLongestSessionsWindow:switchMonthMode(mode)
+    local widget = ShowLongestSessionsWindow:new{ current_view = self.current_view, month_mode = mode }
+    if widget.failed then return end
+    UIManager:close(self)
+    UIManager:show(widget, "ui", widget.dimen)
+end
+
 function ShowLongestSessionsWindow:onTapClose(arg, ges)
     self.ignore_hold = nil  -- a new touch: the opening hold is over
+    -- on the monthly chart a tap on the window changes between the hours and the books and pages of each month; a tap
+    -- outside the window closes it as always
+    if VIEWS[self.current_view].build == buildMonthlyChartView and self:isOnWindow(ges) then
+        self:switchMonthMode(self.month_mode == "books" and "hours" or "books")
+        return true
+    end
     -- on the Today view a tap on the window does not close it: it changes between today and the reading of today by
     -- hour (swipe down or Back close it). A tap outside the window closes it as always.
     if VIEWS[self.current_view].build == buildTodayView and self:isOnWindow(ges) then
