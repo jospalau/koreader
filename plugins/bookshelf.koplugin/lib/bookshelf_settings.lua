@@ -270,7 +270,9 @@ Wrap content in [if:foo]…[/if] to show it only when the token has a value. Add
                 if preview_book and item.token and not item.token:match("^%[") then
                     local ok2, val = pcall(Tokens.expand, item.token, preview_book, preview_state)
                     if ok2 and val and val ~= "" and val ~= item.token then
-                        if #val > 28 then val = val:sub(1, 27) .. "…" end
+                        if #val > 28 then
+                            val = require("lib/bookshelf_cover_label").utf8Cut(val, 27) .. "…"
+                        end
                         preview = "    \xe2\x86\x92 " .. val
                     end
                 end
@@ -475,7 +477,10 @@ function Settings:_heroSubItems(keys)
                 -- the brace modifiers are stripped before expansion.
                 local preview = Tokens.menuPreview(resolved.template, book, state)
                 if preview == "" then return label end
-                if #preview > 36 then preview = preview:sub(1, 35) .. "\xE2\x80\xA6" end
+                if #preview > 36 then
+                    local CoverLabel = require("lib/bookshelf_cover_label")
+                    preview = CoverLabel.utf8Cut(preview, 35) .. "\xE2\x80\xA6"
+                end
                 return label .. ": " .. preview
             end,
             checked_func = function()
@@ -1709,7 +1714,10 @@ function Settings:_listLineRow(index, markDirty)
             -- identical code.
             local preview = Tokens.menuPreview(line.template, book, state)
             if preview == "" then return label end
-            if #preview > 36 then preview = preview:sub(1, 35) .. "\xE2\x80\xA6" end
+            if #preview > 36 then
+                local CoverLabel = require("lib/bookshelf_cover_label")
+                preview = CoverLabel.utf8Cut(preview, 35) .. "\xE2\x80\xA6"
+            end
             return label .. ": " .. preview
         end,
         callback = function(touchmenu_instance)

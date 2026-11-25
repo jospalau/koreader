@@ -3157,9 +3157,15 @@ function Bookshelf:scanPageCounts(opts)
                         local G = require("lib/bookshelf_render_guard")
                         local ok_g, headroom, avail = pcall(G.childLimits)
                         if not ok_g then headroom, avail = nil, nil end
+                        -- And a book that never finishes ends with its child.
+                        G.childDeadline()
                         local ok_pc, pc = pcall(function()
                             local DocumentRegistry = require("document/documentregistry")
-                            local doc = DocumentRegistry:openDocument(fp)
+                            -- Without the two full collections openDocument
+                            -- forces: ~1.2 s a book here for nothing.
+                            local doc = G.withoutForcedCollect(function()
+                                return DocumentRegistry:openDocument(fp)
+                            end)
                             if not doc then return nil end
                             -- The reader's own layout, not crengine's defaults:
                             -- the count is shown as the book's page count. Its
@@ -3216,6 +3222,13 @@ function Bookshelf:scanPageCounts(opts)
                     persist(fp, pages, "user")
                     report.rendered[#report.rendered + 1] =
                         { name = nameFor(fp), pages = pages }
+                elseif Guard.timedOut(elapsed) then
+                    -- The deadline ended it. The same file would hold the
+                    -- next scan just as long, so it is not tried again.
+                    failed[#failed + 1] = fp
+                    Guard.skip(BookshelfSettings, fp)
+                    logger.warn(string.format(
+                        "bookshelf: page count render gave up after %.0fs, skipped from now on: %s", elapsed, fp))
                 else
                     failed[#failed + 1] = fp
                     logger.warn("bookshelf: page count render failed:", fp,
