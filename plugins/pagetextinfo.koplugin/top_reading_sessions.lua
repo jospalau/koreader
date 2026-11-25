@@ -2466,6 +2466,9 @@ local function getLiveSessionRow(rows, now)
     return { book = book, title = title, start = covered_until, duration = duration }
 end
 
+-- Message of loadTodayData when nothing was read today (the Today views show an empty state for it)
+local TODAY_EMPTY = _("No reading today")
+
 -- Reads today's sessions. Returns a table
 --   { total, first, last, books = { {rank, title, seconds}... }, hours = { [1..24] = { [rank] = seconds } },
 --     best_hour, best_secs, longest, longest_start }
@@ -2511,7 +2514,7 @@ local function loadTodayData()
             b.seconds = b.seconds + (f - s)
         end
     end
-    if #periods == 0 then return nil, _("No reading today") end
+    if #periods == 0 then return nil, TODAY_EMPTY end
 
     -- books ranked by time (1 = the longest)
     local books = {}
@@ -2725,7 +2728,7 @@ local function buildTodayBookRow(w_width, book, longest)
     }
 end
 
-local function buildTodayView(w_width)
+local function buildTodayDayView(w_width)
     local data, err = loadTodayData()
     if not data then return nil, err end
 
@@ -2760,9 +2763,16 @@ local function buildTodayView(w_width)
         if st and st > 0 then session = math.max(0, os.time() - st) end
     end
     if session then
-        local pages = getSessionPages(os.time() - session)
+        -- pages of the session: the stable (reference) ones, or the screens read when the book has none
+        local pages_text
+        local stable = getStablePages()
+        if stable then
+            pages_text = formatPages(stable) .. " " .. _("pages (stable)")
+        else
+            pages_text = tostring(getSessionPages(os.time() - session)) .. " " .. _("screens")
+        end
         local session_text = _("Current session") .. "  " .. secondsToShortHM(session)
-            .. SUMMARY_SEPARATOR .. tostring(pages) .. " " .. _("pages")
+            .. SUMMARY_SEPARATOR .. pages_text
         session_line = CenterContainer:new{
             dimen = Geom:new{ w = w_width, h = Screen:scaleBySize(26) },
             TextWidget:new{
@@ -2806,6 +2816,344 @@ local function buildTodayView(w_width)
     return widgets
 end
 
+-- ── Reading hours ────────────────────────────────────────────────────────────
+-- The Today view can also show the reading by hour, in the same window (see buildTodayView): the design of the
+-- Today view on its side, in green, one horizontal bar per hour with reading (the hours without it are skipped; it
+-- scrolls when long). With the reading of today, or with the time of ALL the saved sessions (wpm_stat_data).
+
+-- Longest part of a session counted (a book left open for a night would fill the whole ring)
+local HOURS_MAX_SESSION_SECONDS = 12 * 3600
+-- An hour with less reading than this is not listed in the bars look
+local HOURS_MIN_LISTED_SECONDS = 30
+
+local DAY_PERIODS = {
+    { name = _("Morning"),   from = 5,  to = 12, phrase = _("in the morning"),   sun = true },
+    { name = _("Afternoon"), from = 12, to = 17, phrase = _("in the afternoon"), sun = true },
+    { name = _("Evening"),   from = 17, to = 22, phrase = _("in the evening"),   sun = false },
+    { name = _("Night"),     from = 22, to = 5,  phrase = _("at night"),         sun = false },  -- wraps midnight
+}
+
+local function periodOfHour(hour)
+    for i, p in ipairs(DAY_PERIODS) do
+        if p.from < p.to then
+            if hour >= p.from and hour < p.to then return i end
+        elseif hour >= p.from or hour < p.to then
+            return i
+        end
+    end
+    return 1
+end
+
+-- Seconds read in each hour of the day (local time), from every saved session. A session that crosses an hour
+-- counts in each hour it touches. Returns { hours = { [1..24] = seconds }, total, sessions }, or nil and a message.
+local function loadHourlyData()
+    local rows, err = queryAll([[
+        SELECT start_time, duration FROM wpm_stat_data WHERE start_time > 0 AND duration > 0
+    ]], function(row)
+        return { tonumber(row[1]) or 0, tonumber(row[2]) or 0 }
+    end)
+    if not rows then return nil, err end
+    if #rows == 0 then return nil, _("No reading data found") end
+
+    local hours = {}
+    for h = 1, 24 do hours[h] = 0 end
+    local total = 0
+    for _i, r in ipairs(rows) do
+        local t = r[1]
+        local finish = t + math.min(r[2], HOURS_MAX_SESSION_SECONDS)
+        while t < finish do
+            local d = os.date("*t", t)
+            local left = 3600 - (d.min * 60 + d.sec)
+            local take = math.max(1, math.min(left, finish - t))
+            hours[d.hour + 1] = hours[d.hour + 1] + take
+            total = total + take
+            t = t + take
+        end
+    end
+    if total <= 0 then return nil, _("No reading data found") end
+    return { hours = hours, total = total, sessions = #rows }
+end
+
+-- Look of the bars of the hours chart: green on a color screen, dark gray on black and white
+local function hoursBarFill()
+    if Screen.isColorEnabled and Screen:isColorEnabled() then
+        local ok, c = pcall(Blitbuffer.colorFromName, "green")
+        if ok and c then return c end
+    end
+    return gray(90)
+end
+
+-- The hourly chart of the Today view turned on its side: one row per hour with reading (the hours without it are
+-- skipped), a bar as long as the time read in that hour over ALL the sessions, a light grid with its axis in hours
+-- on top, the hour on the left and the time on the right. The current hour has a soft band behind it.
+local HoursBarsChart = Widget:extend{
+    width = 0,
+    hours = nil,       -- hours[1..24] = seconds
+    current = nil,     -- hour (1..24) to highlight
+    minutes = false,   -- true: the axis is in minutes (one day); false: in hours (all the reading)
+    font_size = FONT_CAPTION,
+}
+
+function HoursBarsChart:init()
+    local face = getFace(self.font_size)
+    self.rows = {}
+    local max_secs = 0
+    for h = 1, 24 do
+        local v = self.hours[h]
+        if v >= HOURS_MIN_LISTED_SECONDS then
+            self.rows[#self.rows + 1] = { hour = h, secs = v }
+            if v > max_secs then max_secs = v end
+        end
+    end
+    if #self.rows == 0 then  -- very little reading: list every hour that has some
+        for h = 1, 24 do
+            local v = self.hours[h]
+            if v > 0 then
+                self.rows[#self.rows + 1] = { hour = h, secs = v }
+                if v > max_secs then max_secs = v end
+            end
+        end
+    end
+    self.max_secs = max_secs
+    if self.minutes then
+        -- axis maximum in minutes: 15, 30, 60, or a multiple of 60 (as the chart of the Today view)
+        local max_min = max_secs / 60
+        self.y_max = (max_min <= 15 and 15) or (max_min <= 30 and 30) or (math.ceil(max_min / 60) * 60)
+    else
+        self.y_max = niceCeil(max_secs / 3600)  -- axis maximum in hours
+    end
+    self.unit_secs = self.minutes and 60 or 3600
+
+    local peak
+    for _i, row in ipairs(self.rows) do
+        if row.secs == max_secs then peak = row.hour end
+        row.label_widget = TextWidget:new{
+            text = string.format("%02d", row.hour - 1), face = face,
+            bold = (row.hour == self.current or row.hour == peak),
+            fgcolor = (row.hour == self.current) and COLOR_TEXT or COLOR_MUTED,
+        }
+        row.value_widget = TextWidget:new{ text = secondsToShortHM(row.secs), face = face, fgcolor = COLOR_TEXT }
+    end
+    self.peak = peak
+    self.tick_widgets = {}
+    for i = 0, 2 do
+        self.tick_widgets[i + 1] = TextWidget:new{
+            text = self.minutes and string.format("%d", self.y_max * i / 2) or formatHours(self.y_max * i / 2),
+            face = face, fgcolor = COLOR_MUTED,
+        }
+    end
+
+    self.label_w, self.value_w = 0, 0
+    for _i, row in ipairs(self.rows) do
+        self.label_w = math.max(self.label_w, row.label_widget:getSize().w)
+        self.value_w = math.max(self.value_w, row.value_widget:getSize().w)
+    end
+    self.label_w = self.label_w + SPACE.l
+    self.value_w = self.value_w + SPACE.l
+    self.text_h = self.tick_widgets[1]:getSize().h
+    self.head_h = self.text_h + SPACE.s
+    self.row_h = math.max(Screen:scaleBySize(26), self.text_h + SPACE.m)
+    self.fill = hoursBarFill()
+    self.dimen = Geom:new{ w = self.width, h = self.head_h + #self.rows * self.row_h + SPACE.s }
+end
+
+function HoursBarsChart:getSize()
+    return self.dimen
+end
+
+function HoursBarsChart:paintTo(bb, x, y)
+    self.dimen.x, self.dimen.y = x, y
+    local plot_x = x + self.label_w
+    local plot_w = self.width - self.label_w - self.value_w
+    local top = y + self.head_h
+    local rows_h = #self.rows * self.row_h
+
+    -- soft band behind the current hour
+    for i, row in ipairs(self.rows) do
+        if row.hour == self.current then
+            bb:paintRect(x, top + (i - 1) * self.row_h, self.width, self.row_h, COLOR_SOFT)
+        end
+    end
+
+    -- grid: 0, half and full scale, with the axis on top
+    for i = 0, 2 do
+        local gx = plot_x + math.floor(plot_w * i / 2)
+        bb:paintRect(gx, top, Size.line.thin, rows_h, i == 0 and COLOR_BAR or COLOR_TRACK)
+        local tw = self.tick_widgets[i + 1]
+        local ts = tw:getSize()
+        local tx = gx - math.floor(ts.w / 2)
+        tx = math.max(x, math.min(tx, x + self.width - ts.w))
+        tw:paintTo(bb, tx, y)
+    end
+
+    local bar_h = math.floor(self.row_h * 0.62)
+    local border = Size.border.thin
+    for i, row in ipairs(self.rows) do
+        local ry = top + (i - 1) * self.row_h
+        local by = ry + math.floor((self.row_h - bar_h) / 2)
+        local bw = math.max(3, math.floor(plot_w * (row.secs / self.unit_secs) / self.y_max + 0.5))
+        bb:paintRect(plot_x, by, bw, bar_h, Blitbuffer.COLOR_BLACK)
+        if bw - border > 0 and bar_h - 2 * border > 0 then
+            bb:paintRect(plot_x, by + border, bw - border, bar_h - 2 * border, self.fill)
+        end
+        local ls, vs = row.label_widget:getSize(), row.value_widget:getSize()
+        row.label_widget:paintTo(bb, x + self.label_w - SPACE.l - ls.w, ry + math.floor((self.row_h - ls.h) / 2))
+        row.value_widget:paintTo(bb, x + self.width - vs.w, ry + math.floor((self.row_h - vs.h) / 2))
+    end
+end
+
+function HoursBarsChart:free()
+    for _i, row in ipairs(self.rows) do
+        row.label_widget:free()
+        row.value_widget:free()
+    end
+    for _k, w in ipairs(self.tick_widgets) do w:free() end
+end
+
+-- The widgets of the bars look: the Today view on its side, in green, with the time of ALL the sessions in each hour.
+-- Total and sessions on top (like Today), the share of morning, afternoon, evening and night, and the
+-- chart; when its rows do not fit they scroll.
+local function buildHoursBarsWidgets(w_width, data, parent)
+    local sh = Screen:getHeight()
+    local sums = { 0, 0, 0, 0 }
+    for h = 1, 24 do
+        local p = periodOfHour(h - 1)
+        sums[p] = sums[p] + data.hours[h]
+    end
+
+    local hero = HorizontalGroup:new{
+        align = "bottom",
+        TextWidget:new{ text = secondsToHM(data.total), face = getFace(FONT_HERO), bold = true, fgcolor = COLOR_TEXT },
+        HorizontalSpan:new{ width = SPACE.xl },
+        TextWidget:new{
+            text = string.format("%d %s", data.sessions, data.sessions == 1 and _("session") or _("sessions")),
+            face = getFace(FONT_SUBTITLE), bold = true, fgcolor = COLOR_MUTED,
+        },
+    }
+    -- the share of each part of the day (the busiest hour is the longest bar of the chart)
+    local cols = {}
+    for i, p in ipairs(DAY_PERIODS) do
+        cols[i] = { string.format("%d%%", math.floor(sums[i] * 100 / data.total + 0.5)), p.name }
+    end
+    local stats = buildColumns(w_width, cols, false)
+
+    local chart = HoursBarsChart:new{
+        width = w_width - ScrollableContainer:getScrollbarWidth(),
+        hours = data.hours,
+        current = (os.date("*t")).hour + 1,
+    }
+    local widgets = {
+        CenterContainer:new{ dimen = Geom:new{ w = w_width, h = hero:getSize().h }, hero },
+        makeVerticalSpacing(SPACE.l),
+        stats,
+        makeVerticalSpacing(SPACE.xl),
+    }
+    local max_h = math.floor(sh * 0.5)
+    if chart:getSize().h > max_h then
+        widgets[#widgets + 1] = SwipePassthroughScrollable:new{
+            dimen = Geom:new{ w = w_width, h = max_h },
+            show_parent = parent,
+            chart,
+        }
+    else
+        widgets[#widgets + 1] = chart
+    end
+    return widgets
+end
+
+-- The widgets of the look "today_hours": the Today view on its side, in green, with the reading of TODAY in each hour
+-- (the session in progress included). The same top as the Today view: the total and the books, and four figures.
+local function buildTodayHoursWidgets(w_width, data, parent)
+    local sh = Screen:getHeight()
+    local function clock(secs) return os.date("%H:%M", data.day_start + secs) end
+
+    local hours = {}
+    for h = 1, 24 do
+        local sum = 0
+        for _r, sec in pairs(data.hours[h]) do sum = sum + sec end
+        hours[h] = sum
+    end
+
+    local hero = HorizontalGroup:new{
+        align = "bottom",
+        TextWidget:new{
+            text = secondsToHM(data.total), face = getFace(FONT_HERO), bold = true, fgcolor = COLOR_TEXT,
+        },
+        HorizontalSpan:new{ width = SPACE.xl },
+        TextWidget:new{
+            text = string.format("%d %s", #data.books, #data.books == 1 and _("book") or _("books")),
+            face = getFace(FONT_SUBTITLE), bold = true, fgcolor = COLOR_MUTED,
+        },
+    }
+    local stats = buildColumns(w_width, {
+        { clock(data.first),                         _("Started") },
+        { clock(data.last),                          _("Last read") },
+        { secondsToShortHM(data.longest),            _("Longest") .. " " .. clock(data.longest_start) },
+        { secondsToShortHM(data.best_secs),          _("Best hour") .. string.format(" %02d", data.best_hour) },
+    }, false)
+
+    local chart = HoursBarsChart:new{
+        width = w_width - ScrollableContainer:getScrollbarWidth(),
+        hours = hours,
+        current = data.current_hour,
+        minutes = true,
+    }
+    local widgets = {
+        CenterContainer:new{ dimen = Geom:new{ w = w_width, h = hero:getSize().h }, hero },
+        makeVerticalSpacing(SPACE.l),
+        stats,
+        makeVerticalSpacing(SPACE.xl),
+    }
+    local max_h = math.floor(sh * 0.5)
+    if chart:getSize().h > max_h then
+        widgets[#widgets + 1] = SwipePassthroughScrollable:new{
+            dimen = Geom:new{ w = w_width, h = max_h },
+            show_parent = parent,
+            chart,
+        }
+    else
+        widgets[#widgets + 1] = chart
+    end
+    return widgets
+end
+
+-- The Today view. It is one window with three looks (parent.today_mode):
+--   "today"        the hours of today (the stacked chart)
+--   "today_hours"  the same design on its side, in green: the reading of today in each hour
+--   "all_hours"    the same design on its side, in green: the time of ALL the sessions in each hour
+-- A tap switches between "today" and "today_hours", a hold between "all_hours" and "today" (see
+-- ShowLongestSessionsWindow).
+local function buildTodayView(w_width, parent)
+    local mode = parent and parent.today_mode or "today"
+    if mode == "all_hours" then
+        local data, err = loadHourlyData()
+        if not data then return nil, err end
+        return buildHoursBarsWidgets(w_width, data, parent)
+    end
+    local widgets, err
+    if mode == "today" then
+        widgets, err = buildTodayDayView(w_width)
+    else
+        local data
+        data, err = loadTodayData()
+        if data then widgets, err = buildTodayHoursWidgets(w_width, data, parent) end
+    end
+    if widgets then return widgets end
+    if err == TODAY_EMPTY then
+        -- nothing read yet today: still open the window (a tap or hold can switch to the other views)
+        return {
+            CenterContainer:new{
+                dimen = Geom:new{ w = w_width, h = Screen:scaleBySize(120) },
+                TextWidget:new{
+                    text = TODAY_EMPTY, face = getFace(FONT_SUBTITLE), bold = true,
+                    fgcolor = COLOR_MUTED, max_width = w_width,
+                },
+            },
+        }
+    end
+    return nil, err
+end
+
 -- ── View definitions ─────────────────────────────────────────────────────────
 
 -- One line of text on the left: the item's `field`, cut with "…" if too long.
@@ -2837,8 +3185,13 @@ local VIEWS = {
         width_factor = 0.65,  -- narrower than the other views (they use WINDOW_WIDTH_FACTOR)
     },
     {
-        -- not a list: it builds its own widgets (hourly chart of today)
-        title = _("Today"),
+        -- not a list: it builds its own widgets (hourly chart of today, or of all the reading: see buildTodayView)
+        title = function(win)
+            local mode = win and win.today_mode or "today"
+            if mode == "today_hours" then return _("Today by hour") end
+            if mode == "all_hours" then return _("Reading by hour") end
+            return _("Today")
+        end,
         build = buildTodayView,
     },
     {
@@ -3093,7 +3446,7 @@ function ShowLongestSessionsWindow:_buildUI()
     Perf.log("view body (view " .. self.current_view .. ")", t_body)
 
     -- Title on the left, "n / total" on the right
-    local title_text = type(view_def.title) == "function" and view_def.title() or view_def.title
+    local title_text = type(view_def.title) == "function" and view_def.title(self) or view_def.title
     local counter_w = Screen:scaleBySize(56)
     local title_widget = TextWidget:new{
         text = title_text,
@@ -3315,6 +3668,13 @@ end
 function ShowLongestSessionsWindow:onHoldExplain(arg, ges)
     -- the hold that opened this window is still going on: not a hold on it
     if self.ignore_hold then return true end
+    -- a hold on the window of the Today view: the hours of all the reading (and back to today); outside it, nothing
+    if VIEWS[self.current_view].build == buildTodayView then
+        if self:isOnWindow(ges) then
+            self:switchTodayMode(self.today_mode == "all_hours" and "today" or "all_hours")
+        end
+        return true
+    end
     if VIEWS[self.current_view].build ~= buildSummaryView or not (ges and ges.pos) then
         return true
     end
@@ -3368,11 +3728,39 @@ function ShowLongestSessionsWindow:onHoldReleaseExplain(arg, ges)
         self.ignore_hold = nil
         return true
     end
+    -- on the Today view only the hold changes the look (its release must not change it again)
+    if VIEWS[self.current_view].build == buildTodayView then
+        return true
+    end
     return self:onHoldExplain(arg, ges)
+end
+
+-- true when the gesture is on the window itself (its rounded frame), not on the empty screen around it
+function ShowLongestSessionsWindow:isOnWindow(ges)
+    local frame = self[1] and self[1][1]
+    local d = frame and frame.dimen
+    local pos = ges and ges.pos
+    if not (d and d.w and d.w > 0 and pos) then return false end
+    return pos.x >= d.x and pos.x < d.x + d.w and pos.y >= d.y and pos.y < d.y + d.h
+end
+
+-- Shows the Today view again in another look ("today", "today_hours" or "all_hours"), in a new window like when swiping
+-- between views. If it cannot be built (the user has been told why) this window stays.
+function ShowLongestSessionsWindow:switchTodayMode(mode)
+    local widget = ShowLongestSessionsWindow:new{ current_view = self.current_view, today_mode = mode }
+    if widget.failed then return end
+    UIManager:close(self)
+    UIManager:show(widget, "ui", widget.dimen)
 end
 
 function ShowLongestSessionsWindow:onTapClose(arg, ges)
     self.ignore_hold = nil  -- a new touch: the opening hold is over
+    -- on the Today view a tap on the window does not close it: it changes between today and the reading of today by
+    -- hour (swipe down or Back close it). A tap outside the window closes it as always.
+    if VIEWS[self.current_view].build == buildTodayView and self:isOnWindow(ges) then
+        self:switchTodayMode(self.today_mode == "today_hours" and "today" or "today_hours")
+        return true
+    end
     -- on the summary, a tap on a zone (TBR, MBR, Finished) closes the window and then acts
     if VIEWS[self.current_view].build == buildSummaryView and ges and ges.pos then
         local zone = hitSummaryZone(ges.pos)
