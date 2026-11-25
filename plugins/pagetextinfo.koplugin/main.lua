@@ -636,8 +636,8 @@ end
 -- TO CHANGE THE LEVELS: edit the lists below (% of the range of the device, any number of steps, increasing).
 -- Each device family has its own list; "default" is used for any other device (emulator, Android, PocketBook...).
 PageTextInfo.frontlight_cycle_by_device = {
-    kobo   = { 5, 10 },
-    kindle = { 30, 40 },
+    kobo   = { 3, 10 },
+    kindle = { 25, 40 },
     default = { 5, 10 },
 }
 
@@ -680,9 +680,6 @@ function PageTextInfo:cycleFrontlight()
         powerd:setIntensity(levels[next_idx])
     end
     UIManager:broadcastEvent(Event:new("FrontlightStateChanged"))
-    UIManager:show(Notification:new{
-        text = next_idx and T(_("Frontlight %1% (%2)"), pcts[next_idx], levels[next_idx]) or _("Frontlight off"),
-    })
     return true
 end
 
