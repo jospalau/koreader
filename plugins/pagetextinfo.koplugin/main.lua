@@ -572,7 +572,40 @@ function PageTextInfo:initGesListener()
             },
             handler = function(ges) return self:onMultiSwipe(nil, ges) end,
         },
+        {
+            -- Two fingers swipe (up / down). Up: nothing for the moment. Down: Reading History Popup Table Plus.
+            id = "pagetextinfo_two_finger_swipe",
+            ges = "two_finger_swipe",
+            overrides = {
+                "rolling_swipe",
+                "paging_swipe",
+                "readerhighlight_swipe",
+                "two_finger_swipe_north",
+                "two_finger_swipe_south",
+            },
+            screen_zone = {
+                ratio_x = 0, ratio_y = 0, ratio_w = 1, ratio_h = 1,
+            },
+            handler = function(ges) return self:onTwoFingerSwipe(nil, ges) end,
+        },
     })
+end
+
+function PageTextInfo:onTwoFingerSwipe(arg, ges)
+    if not self.initialized then return false end
+    local direction = ges and ges.direction
+    if direction == "north" then
+        -- Two fingers up: nothing for the moment (the gesture is captured so no other action runs)
+        return true
+    elseif direction == "south" then
+        -- Two fingers down: show the Reading History Popup Table Plus window (data from wpm_stat_data)
+        -- The module name is the file name of the window source (without .lua)
+        pcall(require, "reading_history_popup_table_plus")
+        UIManager:broadcastEvent(Event:new("ShowReadingHistoryPopupTablePlusV1"))
+        return true
+    end
+    -- Other directions are not ours
+    return false
 end
 
 function PageTextInfo:toggleHighlightAllWordsVocabulary(toggle)

@@ -1,5 +1,6 @@
 local logger = require("logger")
 logger.info("Applying reading hours patch")
+-- Daily totals come from wpm_stat_data (stored sessions, sum of duration) instead of page_stat
 
 local Blitbuffer = require("ffi/blitbuffer")
 local CenterContainer = require("ui/widget/container/centercontainer")
@@ -104,7 +105,7 @@ function ReadingHoursWindow:init()
                 SELECT
                     strftime('%%Y-%%m-%%d', start_time, 'unixepoch', 'localtime') AS date,
                     ROUND(SUM(duration), 0) AS seconds
-                FROM page_stat
+                FROM wpm_stat_data
                 WHERE start_time > %d
                 GROUP BY date
                 ORDER BY date DESC;

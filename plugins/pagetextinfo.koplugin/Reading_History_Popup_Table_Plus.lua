@@ -1,10 +1,11 @@
 --[[
 Reading History Popup Table Plus
-Version: 2.11.1 (full title header and cleaner pace view)
+Version: 2.12.0 (data from wpm_stat_data instead of page_stat_data)
 
 Notes:
 - Keeps the visual layout of the user's preferred version
 - Uses daily view only
+- All numbers come from the table wpm_stat_data (stored sessions); '-' where a session has no data
 ]]--
 
 local Blitbuffer = require("ffi/blitbuffer")
@@ -194,21 +195,28 @@ local function formatMinutesSeconds(seconds)
 end
 
 local function formatProgressDelta(delta)
-    local value = tonumber(delta) or 0
+    local value = tonumber(delta)
+    if not value then return "-" end
     return string.format("%+.1f%%", value * 100)
 end
 
 local function formatProgressTotal(progress)
-    local value = tonumber(progress) or 0
+    local value = tonumber(progress)
+    if not value then return "-" end
     return string.format("%.1f%%", value * 100)
 end
 
-local function formatSpeed(pages, duration)
-    if not pages or pages < SPEED_MIN_PAGES or not duration or duration < SPEED_MIN_DURATION_SECONDS then
+local function formatSpeed(pages, seconds)
+    if not pages or pages < SPEED_MIN_PAGES or not seconds or seconds < SPEED_MIN_DURATION_SECONDS then
         return "-"
     end
-    local pph = (pages * 3600) / duration
+    local pph = (pages * 3600) / seconds
     return string.format("%.0f", pph)
+end
+
+local function formatPages(pages)
+    if pages == nil then return "-" end
+    return string.format("%d", math.floor(pages + 0.5))
 end
 
 local function formatRange(first_page, last_page, max_page)
@@ -239,200 +247,175 @@ local function getDB()
     return SQ3.open(stats_db_path)
 end
 
-local function getDailyStats(book_id, days, effective_total_pages)
-    if not book_id or not days or days <= 0 then return {} end
-    local conn = getDB()
-    if not conn then return {} end
-    local divisor = tonumber(effective_total_pages) or 0
-
-    local sql = string.format([[
-        SELECT
-            date(ps.start_time, 'unixepoch', 'localtime') AS dates,
-            count(DISTINCT ps.page) AS pages,
-            sum(ps.duration) AS durations,
-            (SELECT ps2.page
-             FROM page_stat_data ps2
-             WHERE ps2.id_book = ps.id_book
-               AND date(ps2.start_time, 'unixepoch', 'localtime') = date(ps.start_time, 'unixepoch', 'localtime')
-             ORDER BY ps2.start_time ASC
-             LIMIT 1) AS first_page,
-            (SELECT ps3.page
-             FROM page_stat_data ps3
-             WHERE ps3.id_book = ps.id_book
-               AND date(ps3.start_time, 'unixepoch', 'localtime') = date(ps.start_time, 'unixepoch', 'localtime')
-             ORDER BY ps3.start_time DESC
-             LIMIT 1) AS last_page,
-            (SELECT (ps4.page * 1.0 / ps4.total_pages)
-             FROM page_stat_data ps4
-             WHERE ps4.id_book = ps.id_book
-               AND date(ps4.start_time, 'unixepoch', 'localtime') = date(ps.start_time, 'unixepoch', 'localtime')
-             ORDER BY ps4.start_time DESC
-             LIMIT 1) AS total_percentage,
-            (SELECT ps5.total_pages
-             FROM page_stat_data ps5
-             WHERE ps5.id_book = ps.id_book
-               AND date(ps5.start_time, 'unixepoch', 'localtime') = date(ps.start_time, 'unixepoch', 'localtime')
-             ORDER BY ps5.start_time DESC
-             LIMIT 1) AS day_total_pages
-        FROM page_stat_data ps
-        WHERE ps.id_book = %d
-          AND date(ps.start_time, 'unixepoch', 'localtime') >= date('now', '-' || %d || ' days')
-        GROUP BY date(ps.start_time, 'unixepoch', 'localtime')
-        ORDER BY dates DESC;
-    ]], book_id, days)
-
-    local results = conn:exec(sql)
-    conn:close()
-
-    local stats = {}
-    if results and results.dates then
-        for i = 1, #results.dates do
-            local first_page = tonumber(results.first_page[i])
-            local last_page = tonumber(results.last_page[i])
-            local day_total_pages = tonumber(results.day_total_pages[i]) or 0
-            if divisor > 0 then
-                if day_total_pages > 0 then
-                    day_total_pages = math.min(day_total_pages, divisor)
-                else
-                    day_total_pages = divisor
-                end
-            end
-            local progress = tonumber(results.total_percentage[i]) or 0
-            if day_total_pages > 0 then
-                local capped_page = math.min(tonumber(last_page) or 0, day_total_pages)
-                progress = math.min(1, capped_page / day_total_pages)
-            end
-
-            table.insert(stats, {
-                date = results.dates[i],
-                pages = tonumber(results.pages[i]) or 0,
-                duration = tonumber(results.durations[i]) or 0,
-                first_page = first_page,
-                last_page = last_page,
-                total_pages = day_total_pages,
-                progress = progress,
-                delta_progress = 0,
-            })
+-- ---------------------------------------------------------------------------
+-- Data layer: everything comes from the table wpm_stat_data (one row per stored
+-- reading session). Nothing is guessed from page_stat_data anymore.
+--   duration   = wall-clock time of the session
+--   read_secs  = counted reading time of the session
+--   ref_pages  = stable (reference) pages read in the session  (NULL if none)
+--   ref_start / ref_end = reference page at the start / end of the session
+--   pct_start / pct_end = book progress in % at the start / end of the session
+-- Sessions stored before those columns existed have NULLs: they show "-".
+-- ---------------------------------------------------------------------------
+local function getTableColumns(conn, table_name)
+    local cols = {}
+    local res = conn:exec("PRAGMA table_info(" .. table_name .. ");")
+    if res and res.name then
+        for i = 1, #res.name do
+            cols[res.name[i]] = true
         end
     end
-
-    for i = 1, #stats do
-        local older = stats[i + 1]
-        if older then
-            stats[i].delta_progress = (stats[i].progress or 0) - (older.progress or 0)
-        else
-            stats[i].delta_progress = stats[i].progress or 0
-        end
-    end
-
-    return stats
+    return cols
 end
 
-local function getRawReadingRows(book_id, days)
+-- Stored sessions of the book, oldest first.
+local function loadSessions(book_id, days)
     if not book_id or not days or days <= 0 then return {} end
-    local conn = getDB()
-    if not conn then return {} end
-
-    local sql = string.format([[
-        SELECT
-            ps.start_time AS start_time,
-            date(ps.start_time, 'unixepoch', 'localtime') AS dates,
-            ps.page AS page,
-            ps.duration AS duration,
-            ps.total_pages AS total_pages
-        FROM page_stat_data ps
-        WHERE ps.id_book = %d
-          AND date(ps.start_time, 'unixepoch', 'localtime') >= date('now', '-' || %d || ' days')
-        ORDER BY ps.start_time ASC;
-    ]], book_id, days)
-
-    local results = conn:exec(sql)
-    conn:close()
-
-    local rows = {}
-    if results and results.start_time then
-        for i = 1, #results.start_time do
-            table.insert(rows, {
-                start_time = tonumber(results.start_time[i]) or 0,
-                date = results.dates[i],
-                page = tonumber(results.page[i]) or 0,
-                duration = tonumber(results.duration[i]) or 0,
-                total_pages = tonumber(results.total_pages[i]) or 0,
-            })
-        end
-    end
-    return rows
-end
-
-local function getSessionStats(book_id, days)
-    local rows = getRawReadingRows(book_id, days)
-    if #rows == 0 then return {} end
+    local ok_open, conn = pcall(getDB)
+    if not ok_open or not conn then return {} end
 
     local sessions = {}
-    local current = nil
+    local ok = pcall(function()
+        local cols = getTableColumns(conn, "wpm_stat_data")
+        if not cols.start_time then return end
 
-    local function finalizeSession(sess)
-        if not sess then return end
-        sess._pages_seen = nil
-        table.insert(sessions, sess)
-    end
-
-    for _, row in ipairs(rows) do
-        local start_new_session = false
-        if not current then
-            start_new_session = true
-        else
-            local gap = row.start_time - (current.last_time or row.start_time)
-            if row.date ~= current.date or gap > (30 * 60) then
-                start_new_session = true
+        local select_list = { "start_time", "date(start_time, 'unixepoch', 'localtime') AS dates" }
+        local optional = { "duration", "read_secs", "total_pages", "ref_pages", "ref_start", "ref_end", "pct_start", "pct_end" }
+        local present = {}
+        for _i, col in ipairs(optional) do
+            if cols[col] then
+                table.insert(select_list, col)
+                table.insert(present, col)
             end
         end
 
-        if start_new_session then
-            finalizeSession(current)
-            current = {
-                date = row.date,
-                first_page = row.page,
-                last_page = row.page,
+        local sql = string.format([[
+            SELECT %s
+            FROM wpm_stat_data
+            WHERE id_book = %d
+              AND date(start_time, 'unixepoch', 'localtime') >= date('now', '-' || %d || ' days')
+            ORDER BY start_time ASC;
+        ]], table.concat(select_list, ", "), book_id, days)
+
+        local results = conn:exec(sql)
+        if not results or not results.start_time then return end
+
+        local function num(col, i)
+            local values = results[col]
+            if not values then return nil end
+            return tonumber(values[i])
+        end
+
+        for i = 1, #results.start_time do
+            local pct_start = num("pct_start", i)
+            local pct_end = num("pct_end", i)
+            local delta
+            if pct_start and pct_end then
+                delta = (pct_end - pct_start) / 100
+            end
+            table.insert(sessions, {
+                start_time = tonumber(results.start_time[i]) or 0,
+                date = results.dates[i],
+                duration = num("duration", i) or 0,
+                read_secs = num("read_secs", i),
+                screens = num("total_pages", i),
+                pages = num("ref_pages", i),
+                first_page = num("ref_start", i),
+                last_page = num("ref_end", i),
+                progress = pct_end and (pct_end / 100) or nil,
+                delta_progress = delta,
+            })
+        end
+    end)
+    conn:close()
+    if not ok then return {} end
+    return sessions
+end
+
+-- Sessions grouped by day, newest day first.
+local function buildDailyStats(sessions)
+    local by_date, order = {}, {}
+    for _i, s in ipairs(sessions or {}) do
+        local day = by_date[s.date]
+        if not day then
+            day = {
+                date = s.date,
                 duration = 0,
-                progress = 0,
-                delta_progress = 0,
-                pages = 0,
-                last_time = row.start_time,
-                _pages_seen = {},
+                read_secs = 0,
+                pages = nil,
+                first_page = nil,
+                last_page = nil,
+                progress = nil,
+                delta_progress = nil,
+                delta_duration = 0,
+                speed_pages = 0,
+                speed_secs = 0,
+                sessions = 0,
             }
+            by_date[s.date] = day
+            table.insert(order, day)
         end
-
-        current.last_time = row.start_time
-        current.last_page = row.page
-        current.duration = current.duration + (row.duration or 0)
-        if not current._pages_seen[row.page] then
-            current._pages_seen[row.page] = true
-            current.pages = current.pages + 1
+        day.sessions = day.sessions + 1
+        day.duration = day.duration + (s.duration or 0)
+        day.read_secs = day.read_secs + (s.read_secs or 0)
+        if s.pages then
+            day.pages = (day.pages or 0) + s.pages
+            if s.read_secs and s.read_secs > 0 then
+                day.speed_pages = day.speed_pages + s.pages
+                day.speed_secs = day.speed_secs + s.read_secs
+            end
         end
-
-        if row.total_pages and row.total_pages > 0 then
-            current.progress = row.page / row.total_pages
+        if day.first_page == nil then day.first_page = s.first_page end
+        if s.last_page ~= nil then day.last_page = s.last_page end
+        if s.progress ~= nil then day.progress = s.progress end
+        if s.delta_progress ~= nil then
+            day.delta_progress = (day.delta_progress or 0) + s.delta_progress
+            day.delta_duration = day.delta_duration + (s.duration or 0)
         end
     end
-
-    finalizeSession(current)
 
     local out = {}
-    for i = #sessions, 1, -1 do
-        table.insert(out, sessions[i])
+    for i = #order, 1, -1 do
+        table.insert(out, order[i])
     end
-
-    for i = 1, #out do
-        local older = out[i + 1]
-        if older then
-            out[i].delta_progress = (out[i].progress or 0) - (older.progress or 0)
-        else
-            out[i].delta_progress = out[i].progress or 0
-        end
-    end
-
     return out
+end
+
+local function getTotalDaysRead(book_id)
+    if not book_id then return 0 end
+    local ok_open, conn = pcall(getDB)
+    if not ok_open or not conn then return 0 end
+    local value = 0
+    pcall(function()
+        local result = conn:rowexec(string.format([[
+            SELECT count(DISTINCT date(start_time, 'unixepoch', 'localtime'))
+            FROM wpm_stat_data
+            WHERE id_book = %d;
+        ]], book_id))
+        value = tonumber(result) or 0
+    end)
+    conn:close()
+    return value
+end
+
+-- Sum of the counted reading time (read_secs) of every stored session of the book.
+local function getActualReadingTotal(book_id)
+    if not book_id then return 0 end
+    local ok_open, conn = pcall(getDB)
+    if not ok_open or not conn then return 0 end
+    local value = 0
+    pcall(function()
+        local cols = getTableColumns(conn, "wpm_stat_data")
+        if not cols.read_secs then return end
+        local result = conn:rowexec(string.format([[
+            SELECT COALESCE(sum(read_secs), 0)
+            FROM wpm_stat_data
+            WHERE id_book = %d;
+        ]], book_id))
+        value = tonumber(result) or 0
+    end)
+    conn:close()
+    return value
 end
 
 local function getCurrentSessionDuration(book_id, start_current_period)
@@ -501,59 +484,10 @@ local function getEffectiveTotalPages(ui)
     return nil
 end
 
-local function getTotalDaysRead(book_id)
-    if not book_id then return 0 end
-    local conn = getDB()
-    if not conn then return 0 end
-    local sql = string.format([[
-        SELECT count(DISTINCT date(ps.start_time, 'unixepoch', 'localtime'))
-        FROM page_stat_data ps
-        WHERE ps.id_book = %d;
-    ]], book_id)
-    local result = conn:rowexec(sql)
-    conn:close()
-    return tonumber(result) or 0
-end
-
-local function getActualReadingTotal(book_id, max_seconds)
-    if not book_id then return 0 end
-    max_seconds = tonumber(max_seconds) or 120
-    local conn = getDB()
-    if not conn then return 0 end
-    local sql = string.format([[
-        SELECT count(*), COALESCE(sum(durations), 0)
-        FROM (
-            SELECT min(sum(duration), %d) AS durations
-            FROM page_stat
-            WHERE id_book = %d
-            GROUP BY page
-        );
-    ]], max_seconds, book_id)
-    local _, result = conn:rowexec(sql)
-    conn:close()
-    return tonumber(result) or 0
-end
-
 local function sumDuration(stats)
     local total = 0
     for _, row in ipairs(stats or {}) do
         total = total + (tonumber(row.duration) or 0)
-    end
-    return total
-end
-
-local function sumPages(stats)
-    local total = 0
-    for _, row in ipairs(stats or {}) do
-        total = total + (tonumber(row.pages) or 0)
-    end
-    return total
-end
-
-local function sumDelta(stats)
-    local total = 0
-    for _, row in ipairs(stats or {}) do
-        total = total + (tonumber(row.delta_progress) or 0)
     end
     return total
 end
@@ -584,34 +518,31 @@ local function getFilteredSessionStatsByDates(session_stats, daily_rows)
     return filtered
 end
 
-local function formatAvgSessionLength(stats)
-    local valid_count = 0
-    local total_seconds = 0
-    for _, row in ipairs(stats or {}) do
-        local pages = tonumber(row.pages) or 0
-        local duration = tonumber(row.duration) or 0
-        if pages > 1 and duration >= 60 then
-            valid_count = valid_count + 1
-            total_seconds = total_seconds + duration
-        end
-    end
-    if valid_count == 0 then
-        return "-"
-    end
-
-    local avg_seconds = total_seconds / valid_count
-    return formatMinutesSeconds(avg_seconds)
-end
-
-local function getMedianSessionLength(stats)
+-- Stored sessions are already valid ones (>= 3 minutes and >= 3 counted pages),
+-- so only the duration is checked here.
+local function getSessionDurations(stats)
     local durations = {}
     for _, row in ipairs(stats or {}) do
-        local pages = tonumber(row.pages) or 0
         local duration = tonumber(row.duration) or 0
-        if pages > 1 and duration >= 60 then
+        if duration >= 60 then
             table.insert(durations, duration)
         end
     end
+    return durations
+end
+
+local function formatAvgSessionLength(stats)
+    local durations = getSessionDurations(stats)
+    if #durations == 0 then
+        return "-"
+    end
+    local total = 0
+    for _, d in ipairs(durations) do total = total + d end
+    return formatMinutesSeconds(total / #durations)
+end
+
+local function getMedianSessionLength(stats)
+    local durations = getSessionDurations(stats)
     if #durations == 0 then
         return "-"
     end
@@ -626,48 +557,49 @@ local function getMedianSessionLength(stats)
     return formatMinutesSeconds(median)
 end
 
+-- Average stable pages per session (only sessions that have stored reference pages).
 local function getPagesPerSession(stats)
-    local valid_count = 0
-    local total_pages = 0
+    local count, total = 0, 0
     for _, row in ipairs(stats or {}) do
-        local pages = tonumber(row.pages) or 0
-        local duration = tonumber(row.duration) or 0
-        if pages > 1 and duration >= 60 then
-            valid_count = valid_count + 1
-            total_pages = total_pages + pages
+        if row.pages and (tonumber(row.duration) or 0) >= 60 then
+            count = count + 1
+            total = total + row.pages
         end
     end
-    if valid_count == 0 then
+    if count == 0 then
         return "-"
     end
-    local avg_pages = total_pages / valid_count
-    return string.format("%.1f", avg_pages)
+    return string.format("%.1f", total / count)
 end
 
-local function getProgressEfficiency(stats)
-    local total_delta = sumDelta(stats)
-    local total_seconds = sumDuration(stats)
+-- Stable pages per hour of counted reading time (read_secs), over the sessions that have both.
+local function getOverallSpeed(stats)
+    local pages, secs = 0, 0
+    for _, row in ipairs(stats or {}) do
+        if row.pages and row.read_secs and row.read_secs > 0 then
+            pages = pages + row.pages
+            secs = secs + row.read_secs
+        end
+    end
+    if pages < SPEED_MIN_PAGES or secs < SPEED_MIN_DURATION_SECONDS then
+        return nil
+    end
+    return (pages * 3600) / secs
+end
+
+-- Book progress gained per hour (wall-clock time of the days that have stored progress).
+local function getProgressEfficiency(days)
+    local total_delta, total_seconds = 0, 0
+    for _, day in ipairs(days or {}) do
+        if day.delta_progress ~= nil then
+            total_delta = total_delta + day.delta_progress
+            total_seconds = total_seconds + (day.delta_duration or 0)
+        end
+    end
     if total_seconds <= 0 then
         return "-"
     end
-    local per_hour = (total_delta * 100) / (total_seconds / 3600)
-    return string.format("%.2f", per_hour)
-end
-
-local function getValidSessionTotals(stats)
-    local total_pages = 0
-    local total_duration = 0
-    local valid_count = 0
-    for _, row in ipairs(stats or {}) do
-        local pages = tonumber(row.pages) or 0
-        local duration = tonumber(row.duration) or 0
-        if pages > 1 and duration >= 60 then
-            valid_count = valid_count + 1
-            total_pages = total_pages + pages
-            total_duration = total_duration + duration
-        end
-    end
-    return total_pages, total_duration, valid_count
+    return string.format("%.2f", (total_delta * 100) / (total_seconds / 3600))
 end
 
 local function fixedCol(widget, width)
@@ -741,12 +673,12 @@ local function buildTableRows(stats_data, fonts, layout)
         local value_face = (highlight_latest and idx == 1 and (fonts.cell_bold or fonts.cell)) or fonts.cell
         local date_widget = TextWidget:new{ text = formatDate(item.date), face = fonts.cell }
         local time_widget = TextWidget:new{ text = formatDurationCompact(item.duration), face = value_face }
-        local pages_widget = TextWidget:new{ text = tostring(item.pages), face = value_face }
-        local speed_widget = TextWidget:new{ text = formatSpeed(item.pages, item.duration), face = value_face }
+        local pages_widget = TextWidget:new{ text = formatPages(item.pages), face = value_face }
+        local speed_widget = TextWidget:new{ text = formatSpeed(item.speed_pages, item.speed_secs), face = value_face }
         local delta_widget = TextWidget:new{ text = formatProgressDelta(item.delta_progress), face = value_face }
         local total_widget = TextWidget:new{ text = formatProgressTotal(item.progress), face = fonts.cell }
         local range_widget = TextWidget:new{
-            text = formatRange(item.first_page, item.last_page, item.total_pages),
+            text = formatRange(item.first_page, item.last_page, nil),
             face = fonts.cell
         }
 
@@ -899,9 +831,8 @@ function ReadingStatsTable:buildContent()
     end
 
     local book_id = self.stats_plugin and self.stats_plugin.id_curr_book
-    local effective_total_pages = getEffectiveTotalPages(self.ui)
-    local daily_stats = getDailyStats(book_id, 365, effective_total_pages)
-    local session_stats = getSessionStats(book_id, 365)
+    local session_stats = loadSessions(book_id, 365)
+    local daily_stats = buildDailyStats(session_stats)
     local all_stats = daily_stats
 
     local book_title = getBookTitle(self.ui)
@@ -935,7 +866,7 @@ function ReadingStatsTable:buildContent()
     }
 
     local total_book_time = sumDuration(daily_stats)
-    local actual_book_time = getActualReadingTotal(book_id, 120)
+    local actual_book_time = getActualReadingTotal(book_id)
 
     local title_meta = TextWidget:new{
         text = string.format("%d %s   ·   %s: %s   ·   %s: %s",
@@ -957,11 +888,10 @@ function ReadingStatsTable:buildContent()
     local title_row = title
 
     local all_time = sumDuration(all_stats)
-    local valid_pages_total, valid_duration_total, valid_sessions_total = getValidSessionTotals(all_stats)
     local visible_speed = "-"
-    if valid_sessions_total > 0 and valid_duration_total > 0 then
-        local pph = (valid_pages_total * 3600) / valid_duration_total
-        visible_speed = string.format("%.0f %s", pph, _("pages/h"))
+    local overall_pph = getOverallSpeed(session_stats)
+    if overall_pph then
+        visible_speed = string.format("%.0f %s", overall_pph, _("pages/h"))
     end
     local daily_avg_seconds = getDailyAverageSeconds(all_stats)
     local visible_sessions = getFilteredSessionStatsByDates(session_stats, all_stats)
