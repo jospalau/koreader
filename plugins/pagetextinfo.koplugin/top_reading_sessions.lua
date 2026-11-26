@@ -2123,10 +2123,19 @@ function CoverBanner:paintTo(bb, x, y)
     self.image:paintTo(bb, x + math.floor((self.width - isz.w) / 2), y + math.floor((self.height - isz.h) / 2))
     local cs = self.content:getSize()
     local band_h = cs.h + 2 * self.pad
-    -- the text goes over the bottom of the cover, with no box behind it (transparent),
-    -- raised by bottom_gap so the card's border and rounded corners never cut its lower part
-    local by = y + self.height - band_h - (self.bottom_gap or 0)
-    self.content:paintTo(bb, x + math.floor((self.width - cs.w) / 2), by + self.pad)
+    -- the text goes over the TOP of the cover, moved down by bottom_gap (the same margin) so the card's
+    -- border and rounded corners never cut it
+    local by = y + (self.bottom_gap or 0)
+    local tx, ty = x + math.floor((self.width - cs.w) / 2), by + self.pad
+    -- black box behind the text (just around it), so the white text reads on any cover
+    local box_px = Screen:scaleBySize(6)
+    local box_py = Screen:scaleBySize(2)
+    bb:paintRect(tx - box_px, ty - box_py, cs.w + 2 * box_px + math.max(1, Screen:scaleBySize(1)), cs.h + 2 * box_py,
+        Blitbuffer.COLOR_BLACK)
+    -- painted twice, the second one a pixel to the right: thicker strokes than plain bold
+    local extra = math.max(1, Screen:scaleBySize(1))
+    self.content:paintTo(bb, tx, ty)
+    self.content:paintTo(bb, tx + extra, ty)
 end
 
 function CoverBanner:free()
@@ -2204,7 +2213,7 @@ local function buildBookCard(w_width, session, book)
                 -- over the cover: bigger, bold and white so it can be read on the picture
                 -- (without a cover it stays as before: gray on the white card)
                 text = table.concat(parts, SUMMARY_SEPARATOR),
-                face = getFace(cover and FONT_SUBTITLE or FONT_SUMMARY), bold = cover and true or nil,
+                face = getFace(cover and (FONT_BIG - 2) or FONT_SUMMARY), bold = cover and true or nil,
                 fgcolor = cover and Blitbuffer.COLOR_WHITE or COLOR_MUTED, max_width = text_w, ellipsis = true,
             }
         else
@@ -2219,7 +2228,7 @@ local function buildBookCard(w_width, session, book)
             local height = math.max(min_h or 0, vg:getSize().h + 2 * band_pad + 2 * margin)
             return CoverBanner:new{
                 width = inner_w, height = height, cover = cover, content = vg, pad = band_pad,
-                bottom_gap = margin,   -- the text sits this far above the bottom of the cover
+                bottom_gap = margin,   -- the text sits this far from the top edge of the cover
             }
         end
         return vg
