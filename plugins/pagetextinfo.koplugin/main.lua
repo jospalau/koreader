@@ -3140,6 +3140,25 @@ This is to be active only if the option flash buttons and menu items or the opti
                     end,
                 },
                 {
+                    text = _("Next cover text"),
+                    help_text = _([[Cover text background: change the part of the cover that is shown, for books without a title position saved by cover_title_bands.py. It tries the bands with the most text in order and remembers the one you leave for this book.]]),
+                    keep_menu_open = true,
+                    enabled_func = function() return self.ui and self.ui.doc_settings ~= nil end,
+                    callback = function()
+                        local ds = self.ui.doc_settings
+                        local key = "cover_text_rank"
+                        local max_rank = PageTextInfo._hero_sett.cover_text_candidates
+                        local rank = (tonumber(ds:readSetting(key)) or 1) + 1
+                        if rank > max_rank then rank = 1 end
+                        ds:saveSetting(key, rank)
+                        local custombg = self.ui.custombg
+                        if custombg and custombg.hasBottomImage and custombg:hasBottomImage() then
+                            self:buildBottomHero()
+                        end
+                        UIManager:show(Notification:new{ text = string.format("%d / %d", rank, max_rank) })
+                    end,
+                },
+                {
                     text = _("Show page turn time"),
                     checked_func = function() return G_reader_settings:isTrue("show_page_turn_time") end,
                     help_text = _([[Show a notification with the time (in ms) it took to turn the page. The time is also always written to the log.]]),
@@ -4417,6 +4436,8 @@ local HERO_SETT = {
     hide_regions = { "status", "rating", "metadata", "description", "tags" },
     show_progress = true,
     cover_text_height_pct = 12, -- alto maximo (% de pantalla) del recorte de la portada cuando va abajo sin hero
+    cover_bands_paths = { "/media/partition/cover_title_bands.lua" }, -- donde busca el resultado de cover_title_bands.py (ademas de la carpeta de ajustes)
+    cover_text_candidates = 5,  -- cuantas franjas de la portada se pueden ir probando (menu: next cover text)
     title_crop_pct = 24,     -- alto de la franja de la portada que se recorta como titulo en el hero de abajo (% del alto de la portada)
     background = Blitbuffer.COLOR_WHITE,  -- fondo detrás del hero: Blitbuffer.COLOR_WHITE, Blitbuffer.COLOR_GRAY_E (gris claro) o Blitbuffer.COLOR_LIGHT_GRAY
     padding = 12,        -- aire alrededor del hero (px sin escalar)
@@ -4424,6 +4445,8 @@ local HERO_SETT = {
     outer_border = 2,    -- marco exterior hueco (0 = sin marco hueco)
     outer_gap = 6,       -- separación entre el recuadro y el marco hueco
 }
+
+PageTextInfo._hero_sett = HERO_SETT -- for the menu, which is defined above this point
 
 local function buildHeroProgressRow(width, pct, book, device_state, progress_cfg)
     local Bb = require("ffi/blitbuffer")
@@ -4479,6 +4502,44 @@ local function buildHeroProgressRow(width, pct, book, device_state, progress_cfg
     return row
 end
 
+-- settings/calibre.lua: { ["Book file name.epub"] = { pages=, words=, pubdate=, grrating=, grvotes=, ...,
+-- ... } }. Also used for the metadata line of the bottom hero.
+-- Read once per session. Returns the entry of a book file name, or nil.
+local calibre_lua_cache
+local function heroCalibreEntry(name)
+    if calibre_lua_cache == nil then
+        calibre_lua_cache = false
+        pcall(function()
+            local DataStorage = require("datastorage")
+            local chunk = loadfile(DataStorage:getSettingsDir() .. "/calibre.lua")
+            local t = chunk and chunk()
+            if type(t) == "table" then calibre_lua_cache = t end
+        end)
+    end
+    return calibre_lua_cache and name and calibre_lua_cache[name] or nil
+end
+
+-- cover_title_bands.lua, written by cover_title_bands.py: { ["Book file name.epub"] = {top, bottom} or false }, the
+-- position of the title on the cover as fractions of its height. It is looked for in HERO_SETT.cover_bands_paths.
+local cover_bands_cache
+local function heroCoverBand(name)
+    if cover_bands_cache == nil then
+        cover_bands_cache = false
+        pcall(function()
+            local DataStorage = require("datastorage")
+            local paths = { DataStorage:getSettingsDir() .. "/cover_title_bands.lua" }
+            for _, p in ipairs(PageTextInfo._hero_sett.cover_bands_paths or {}) do table.insert(paths, p) end
+            for _, path in ipairs(paths) do
+                local chunk = loadfile(path)
+                local t = chunk and chunk()
+                if type(t) == "table" then cover_bands_cache = t return end
+            end
+        end)
+    end
+    local b = cover_bands_cache and name and cover_bands_cache[name]
+    if type(b) == "table" and tonumber(b[1]) and tonumber(b[2]) then return tonumber(b[1]), tonumber(b[2]) end
+end
+
 -- Metadata line "1984 - 275kw - 4.1★ (1234)" (publication year, kilowords, Goodreads rating and votes). Same data as the
 -- file dialog title; it lives in the calibre_data table of the file manager's file chooser, keyed by file name.
 -- Returns "" when there is nothing for the open book.
@@ -4495,6 +4556,7 @@ local function heroMetadataText(book)
         if fc and type(fc.calibre_data) == "table" then
             data = fc.calibre_data[name] or fc.calibre_data[(name:gsub("%.[^.]+$", ""))]
         end
+        data = data or heroCalibreEntry(name)
         -- each field comes from the calibre data first and from the bookshelf book if it is missing there
         local function field(...)
             for _, src in ipairs({ data or {}, book or {} }) do
@@ -4554,12 +4616,47 @@ local function heroTitleFromCover(max_w, max_h)
             detail[y], mean[y] = d, m / sw
         end
         pcall(function() small:free() end)
-        local band = math.max(2, math.floor(sh * frac))
-        local best_y, best = 0, -1
-        for y0 = 0, sh - band do
-            local sum = 0
-            for y = y0, y0 + band - 1 do sum = sum + detail[y] end
-            if sum > best then best, best_y = sum, y0 end
+        local best_y, band
+        -- exact position found beforehand by cover_title_bands.py (OCR against the real title)
+        local jb
+        local file_name = rui.document.file:match("([^/]+)$")
+        local entry = heroCalibreEntry(file_name) -- cover_y0 / cover_y1, put there when calibre.lua is generated
+        if type(entry) == "table" and tonumber(entry.cover_y0) and tonumber(entry.cover_y1) then
+            jb = { y0 = tonumber(entry.cover_y0), y1 = tonumber(entry.cover_y1) }
+        else
+            local top, bottom = heroCoverBand(file_name)
+            if top then jb = { y0 = top, y1 = bottom } end
+        end
+        if jb and (jb.y1 - jb.y0 > 0.6 or jb.y1 <= jb.y0) then jb = nil end -- too big to be a title: use the detail search
+        if jb then
+            best_y = math.max(0, math.min(sh - 2, math.floor(jb.y0 * sh)))
+            band = math.max(2, math.min(sh - best_y, math.ceil((jb.y1 - jb.y0) * sh)))
+        else
+            -- candidates: the best band, then the best one that does not overlap it, and so on.
+            -- Which one is the title cannot be known without reading the text, so the chosen rank is saved per book.
+            band = math.max(2, math.floor(sh * frac))
+            local taken = {}
+            local candidates = {}
+            for _ = 1, HERO_SETT.cover_text_candidates do
+                local best_y, best = nil, -1
+                for y0 = 0, sh - band do
+                    local free = true
+                    for y = y0, y0 + band - 1 do if taken[y] then free = false break end end
+                    if free then
+                        local sum = 0
+                        for y = y0, y0 + band - 1 do sum = sum + detail[y] end
+                        if sum > best then best, best_y = sum, y0 end
+                    end
+                end
+                if not best_y then break end
+                table.insert(candidates, best_y)
+                for y = best_y, best_y + band - 1 do taken[y] = true end
+            end
+            if #candidates == 0 then return nil end
+            local rank = 1
+            if rui.doc_settings then rank = tonumber(rui.doc_settings:readSetting("cover_text_rank")) or 1 end
+            rank = ((rank - 1) % #candidates) + 1
+            best_y = candidates[rank]
         end
         local avg = 0
         for y = best_y, best_y + band - 1 do avg = avg + mean[y] end
@@ -4753,12 +4850,14 @@ function PageTextInfo:buildBottomHero()
     do
         local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
         local hero
+        local plain = false  -- the cover text goes without the box (border and padding) around it
         if G_reader_settings:isTrue("bottom_cover_text_background") then
             -- the text cut out of the cover, as a plain rectangle (no hero)
             hero = heroTitleFromCover(
                 math.floor(screen_w * HERO_SETT.width_pct / 100),
                 math.floor(screen_h * HERO_SETT.cover_text_height_pct / 100)
             )
+            plain = hero ~= nil
         end
         hero = hero or buildBookshelfHero(
             math.floor(screen_w * HERO_SETT.width_pct / 100),
@@ -4770,10 +4869,10 @@ function PageTextInfo:buildBottomHero()
         local frame = FrameContainer:new{
             background = HERO_SETT.background,
             color = Blitbuffer.COLOR_BLACK,
-            bordersize = Screen:scaleBySize(HERO_SETT.border),
+            bordersize = plain and 0 or Screen:scaleBySize(HERO_SETT.border),
             radius = 0,
             margin = 0,
-            padding = Screen:scaleBySize(HERO_SETT.bottom_padding),
+            padding = plain and 0 or Screen:scaleBySize(HERO_SETT.bottom_padding),
             hero,
         }
         local size = frame:getSize()
