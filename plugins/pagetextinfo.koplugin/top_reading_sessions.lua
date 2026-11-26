@@ -2091,18 +2091,17 @@ local CoverBanner = Widget:extend{
 
 function CoverBanner:init()
     self.dimen = Geom:new{ w = self.width, h = self.height }
-    -- The cover covers the whole area, cropped at the center. KOReader's own ImageWidget does the scaling,
-    -- the cropping and the transparency (the same code that draws the covers of the file browser).
+    -- The whole cover is stretched to exactly the area (nothing cropped, so the top and bottom of the cover
+    -- stay visible). KOReader's own ImageWidget does the scaling and the transparency
+    -- (the same code that draws the covers of the file browser).
     local bw, bh = self.cover:getWidth(), self.cover:getHeight()
-    local scale = math.max(self.width / bw, self.height / bh)
+    local scale = 0 -- only shown in the debug log: the stretch has no single factor
     self.image = require("ui/widget/imagewidget"):new{
         image = self.cover,
         image_disposable = false,   -- the cached cover is not ours to free
         width = self.width,
         height = self.height,
-        scale_factor = scale,       -- fills the area; what is left over is cropped
-        center_x_ratio = 0.5,
-        center_y_ratio = 0.5,
+        scale_factor = nil,         -- nil with width + height: stretched to exactly that size
         alpha = true,               -- covers with transparency are blended, not blitted raw
     }
     if cover_cache.debug then
