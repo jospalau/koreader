@@ -1075,10 +1075,10 @@ function PageTextInfo:isCustomBgPictureOff(custombg)
 end
 
 -- Cycles the custombg picture on each tap in the bottom center:
---   image (background) -> book title (cover text) -> bookshelf hero -> off -> background settings -> image ...
+--   off -> image (background) -> book title (cover text) -> bookshelf hero -> background settings -> off ...
 -- A type that cannot be made for this book (no cover, no hero, no images) is skipped.
--- self._bg_cycle_stage remembers the steps where no picture is on: "off" (next tap: settings) and
--- "settings" (next tap: image). If the picture is turned on in another way, the cycle goes on from it.
+-- self._bg_cycle_stage = "settings" remembers that the settings were just shown (next tap: off).
+-- If the picture is changed in another way (menu, double tap), the cycle goes on from what is showing.
 function PageTextInfo:cycleCustomBgPicture()
     local custombg = self.ui and self.ui.custombg
     if not (custombg and custombg.setBottomMode and custombg.applyBackground) then return false end
@@ -1086,8 +1086,7 @@ function PageTextInfo:cycleCustomBgPicture()
     local current = mode or (custombg:getCurrentDocBg() and "image") or nil
     local picture_off = self:isCustomBgPictureOff(custombg)
     if picture_off then current = nil end
-    local stage = self._bg_cycle_stage
-    if current then stage = nil end
+    local stage = current and self._bg_cycle_stage or nil
 
     -- applyBackground / setBottomMode repaint by themselves; mute it so there is one repaint at the end
     local own_repaint = rawget(custombg, "toggleRepaint")
@@ -1107,39 +1106,31 @@ function PageTextInfo:cycleCustomBgPicture()
         custombg:setBottomMode(m)
         return custombg:getBottomMode() == m
     end
-    local function turnOff()
-        if not custombg.setPictureEnabled then return false end
-        custombg:setPictureEnabled(false)
-        return true
+    local function turnOn()
+        if picture_off and custombg.setPictureEnabled then custombg:setPictureEnabled(true) end
+        if not showImage() and not showBottom("cover") then showBottom("hero") end
     end
 
     local open_settings = false
     local new_stage = nil
     local ok, err = pcall(function()
-        local next_off = false
-        if current == "image" then
-            next_off = not showBottom("cover") and not showBottom("hero")
-        elseif current == "cover" then
-            next_off = not showBottom("hero")
-        elseif current == "hero" then
-            next_off = true
-        elseif stage == "off" then
-            open_settings = true
-            new_stage = "settings"
-        else
-            -- after the settings (or nothing on): back to the image, switching the picture on first
-            if picture_off and custombg.setPictureEnabled then custombg:setPictureEnabled(true) end
-            if not showImage() and not showBottom("cover") then showBottom("hero") end
-        end
-        if next_off then
-            if turnOff() then
-                new_stage = "off"
+        if not current then
+            turnOn()                                          -- off -> image
+        elseif stage == "settings" then
+            -- after the settings: off (older custombg without setPictureEnabled: back to the image)
+            if custombg.setPictureEnabled then
+                custombg:setPictureEnabled(false)
             else
-                -- older custombg without setPictureEnabled: settings, then image, as before
-                open_settings = true
-                new_stage = "settings"
+                turnOn()
             end
+        elseif current == "image" then
+            if not showBottom("cover") and not showBottom("hero") then open_settings = true end
+        elseif current == "cover" then
+            if not showBottom("hero") then open_settings = true end
+        else -- "hero"
+            open_settings = true
         end
+        if open_settings then new_stage = "settings" end
     end)
     custombg.toggleRepaint = own_repaint
     if not ok then
@@ -1161,38 +1152,19 @@ function PageTextInfo:cycleCustomBgPicture()
 end
 
 -- Tap in the bottom center (the zone bookends uses for its "tap on the bottom bar" action):
---   a picture on (background image, cover text or hero) -> next one: image -> book title -> hero -> off -> settings -> image
---   (also right after "off" and "settings", while the cycle goes on)
---   (otherwise, with the topbar showing and bookends off: nothing)
---   lines on                              -> settings of the ruled lines
---   bookends on alone                     -> next bookends preset
---   anything else                         -> nothing (the tap is consumed, so bookends does not act while off)
+--   bookends on  -> next bookends preset
+--   bookends off -> custombg picture (top bar on, "minimal" or "hidden", it does not matter):
+--                   off -> image -> book title (cover text) -> hero -> settings -> off ... (cycleCustomBgPicture)
+-- The tap is always consumed, so bookends does not act on its own.
 function PageTextInfo:onBottomCenterTap(ges)
     if not self.initialized then return false end
     local bookends = self.ui and self.ui.bookends
-    local bookends_on = bookends and bookends.enabled and true or false
-    local topbar = self.view and self.view.topbar
-    local topbar_on = topbar and topbar.is_enabled and true or false
-    local custombg = self.ui and self.ui.custombg
-    local lines_on = custombg and custombg.fs_enabled and true or false
-    local bg_on = custombg and custombg.getCurrentDocBg and custombg:getCurrentDocBg() ~= nil or false
-    -- a picture showing (background image, cover text or hero): cycle to the next one
-    local bottom_on = custombg and custombg.getBottomMode and custombg:getBottomMode() ~= nil or false
-    if custombg and self:isCustomBgPictureOff(custombg) then bg_on, bottom_on = false, false end
-    if bg_on or bottom_on or (custombg and self._bg_cycle_stage) then
-        return self:cycleCustomBgPicture()
+    if bookends and bookends.enabled then
+        if bookends.onCycleBookendsPreset then bookends:onCycleBookendsPreset() end
+        return true
     end
-    if not bookends_on and topbar_on then
-        return true -- topbar showing: nothing
-    end
-    if custombg then
-        if lines_on then
-            self:showCustomBgSubMenu("lines")
-            return true
-        end
-    end
-    if bookends_on and bookends.onCycleBookendsPreset then
-        bookends:onCycleBookendsPreset()
+    if self.ui and self.ui.custombg then
+        self:cycleCustomBgPicture()
     end
     return true
 end
@@ -1721,8 +1693,9 @@ function PageTextInfo:toggleFullScreenRuledLines()
     return UIManager:setDirty(self.view.dialog, "ui")
 end
 
--- Bookends on / off, nothing else: the ruled lines and the background have their own double taps in the bottom
--- corners (onBottomDoubleTap). The topbar is left as it is (active).
+-- Bookends on / off. Turning bookends on also switches the custombg picture off (background image, hero or
+-- cover text); turning them off switches it on again if it was on before (self._picture_before_bookends).
+-- The ruled lines are not touched (double tap bottom left). The topbar is left as it is (active).
 function PageTextInfo:toggleFullScreenRuledLinesNoTopbar()
     local util = require("util")
     local is_pdf = self.document and util.getFileNameSuffix(self.document.file) == "pdf"
@@ -1733,6 +1706,32 @@ function PageTextInfo:toggleFullScreenRuledLinesNoTopbar()
     if not bookends then return false end
     bookends.enabled = not bookends.enabled
     if bookends.settings then bookends.settings:saveSetting("enabled", bookends.enabled) end
+
+    local custombg = self.ui.custombg
+    local want_picture = nil   -- nil: picture not touched
+    if custombg and custombg.setPictureEnabled then
+        local picture_on = not self:isCustomBgPictureOff(custombg)
+        if bookends.enabled then
+            self._picture_before_bookends = picture_on
+            if picture_on then want_picture = false end
+        else
+            if self._picture_before_bookends and not picture_on then want_picture = true end
+            self._picture_before_bookends = nil
+        end
+    end
+    if want_picture ~= nil then
+        -- setPictureEnabled repaints by itself; mute it so there is one repaint (the one below)
+        local own_repaint = rawget(custombg, "toggleRepaint")
+        custombg.toggleRepaint = function() end
+        local ok, err = pcall(custombg.setPictureEnabled, custombg, want_picture)
+        custombg.toggleRepaint = own_repaint
+        self._bg_cycle_stage = nil
+        if not ok then logger.warn("pagetextinfo: switching the picture on / off failed:", err) end
+        if custombg.toggleRepaint then
+            custombg:toggleRepaint(self.view.dialog)
+            return true
+        end
+    end
     UIManager:setDirty(self.view.dialog, "ui")
     return true
 end
@@ -2272,17 +2271,20 @@ end
 
 -- Margin adjustment (moved here from ReaderUI:onAdjustMarginsTopbar and TopBar:onAdjustMarginsTopbar)
 
--- Presets cycled through when no bar dictates the margins (bookends enabled, or no bars at all).
+-- Presets cycled through by the margin adjustment (tap top left), whatever bars are on.
 -- Format: { left, top, right, bottom, xheight_mm = target font x-height } in configurable units (unscaled).
 --   1 = current margins (35/50), font x-height 1.80 mm
 --   2 = a little bit wider margins, keeping the ~sqrt(2) proportion (60/42 = 1.43, same as 50/35),
 --       font x-height 1.80 mm
---   3 = big side margins (100) to get a narrow text column, minimal top/bottom (12/15),
---       with a smaller font (x-height 1.35 mm)
+--   3 = big side margins (100) to get a narrow text column, top/bottom as preset 1 (50/50),
+--       with a smaller font (x-height 1.35 mm). hidden_top_bottom: top and bottom used instead when the
+--       top bar is in the "hidden" mode.
+-- With a custombg picture at the bottom (image, hero, cover text) the bottom margin is the picture one.
+-- The left and right margins are different in every preset: they are what tells which preset is on.
 PageTextInfo.margin_presets = {
     { 35, 50, 35, 50, xheight_mm = 1.80 },
     { 42, 60, 42, 60, xheight_mm = 1.80 },
-    { 100, 12, 100, 15, xheight_mm = 1.35 },
+    { 100, 50, 100, 50, xheight_mm = 1.35, hidden_top_bottom = 15 },
 }
 
 -- Sends an event while hiding any notification toast it (or the handlers it triggers) may show,
@@ -2314,26 +2316,12 @@ local function sendEventSilently(event)
     if not ok then logger.warn("pagetextinfo: sendEventSilently failed:", err) end
 end
 
--- True when the event must cycle through the presets instead of following a bar.
--- If "pagetextinfo disabled" was meant as self.is_enabled (the word count overlay), add here:
---     if not self.is_enabled then return true end
-function PageTextInfo:shouldCyclePresets()
-    local ui = self.ui
-    if not ui.rolling then return false end
-    if ui.bookends and ui.bookends.enabled then return true end
-    local topbar = ui.view and ui.view.topbar
-    local topbar_on = topbar and topbar.settings:isTrue("show_top_bar")
-    if topbar_on and not topbar.status_bar then return false end -- the top bar rules
-    if util.getFileNameSuffix(ui.document.file) ~= "epub" then return false end
-    return not ui.view.footer_visible -- no footer and no top bar
-end
-
 -- Bottom margin while custombg shows a picture (configurable units, unscaled):
 --   hero / cover text: the real height of the picture + picture_bottom_air, so the text ends just above it
 --   background image: picture_bottom_margin
 PageTextInfo.picture_bottom_margin = 60
 PageTextInfo.picture_bottom_air = 4
--- Bottom margin set by the west-north multiswipe when reading with nothing on screen (no bars, no bookends, no picture)
+-- Bottom margin set by the west-north multiswipe with the top bar "hidden" (no bookends, no picture)
 PageTextInfo.empty_bottom_margin = 15
 
 -- Smallest bottom margin (unscaled units) whose text area ends at least px pixels above the screen bottom.
@@ -2379,15 +2367,14 @@ function PageTextInfo:keepBottomMargin()
 end
 
 -- Index of the preset matching the current margins, or nil if none does.
--- With a custombg picture (or ignore_bottom) the bottom margin is not compared.
-function PageTextInfo:getCurrentPresetIndex(ignore_bottom)
+-- Only left and right are compared (they are different in every preset): top and bottom can change
+-- (custombg picture, "hidden" top bar, west-north multiswipe) and the preset must still be recognized.
+function PageTextInfo:getCurrentPresetIndex()
     local cfg = self.ui.document.configurable
     local h = cfg.h_page_margins
     if not h then return nil end
-    ignore_bottom = ignore_bottom or self:keepBottomMargin()
     for i, p in ipairs(PageTextInfo.margin_presets) do
-        if h[1] == p[1] and cfg.t_page_margin == p[2]
-            and h[2] == p[3] and (ignore_bottom or cfg.b_page_margin == p[4]) then
+        if h[1] == p[1] and h[2] == p[3] then
             return i
         end
     end
@@ -2456,122 +2443,48 @@ function PageTextInfo:setXHeightFont(target_mm)
     sendEventSilently(Event:new("SetFontSize", new_size))
 end
 
--- Applies a preset: its margins and its font x-height.
-function PageTextInfo:applyPreset(p)
-    self:applyMargins(p)
-    self:setXHeightFont(p.xheight_mm)
-end
-
--- Returns the target { left, top, right, bottom }, or nil if nothing must be touched (PDF, etc.).
-function PageTextInfo:getTargetMargins()
-    local ui = self.ui
-    -- Single guard: crengine documents only (epub, fb2, html...). Avoids the PDF error.
-    if not ui.rolling then return nil end
-
-    -- No bar dictating margins: the target is the current preset (or the first one)
-    if self:shouldCyclePresets() then
-        local p = PageTextInfo.margin_presets[self:getCurrentPresetIndex() or 1]
-        return { p[1], p[2], p[3], p[4] }
-    end
-
-    local topbar = ui.view and ui.view.topbar
-    local topbar_on = topbar and topbar.settings:isTrue("show_top_bar")
-
-    -- Own top bar without footer (formerly TopBar:onAdjustMarginsTopbar)
-    if topbar_on and not topbar.status_bar then
-        local side = Device:isAndroid() and 20 or 15
-        return {
-            side,
-            Screen:unscaleBySize(topbar:getHeight()),
-            side,
-            Screen:unscaleBySize(topbar:getBottomHeight()),
-        }
-    end
-
-    -- Formerly, ReaderUI only acted on epub in the following branches
-    if util.getFileNameSuffix(ui.document.file) ~= "epub" then return nil end
-
-    -- Footer visible (formerly ReaderUI, footer_visible branch)
-    if ui.view.footer_visible then
-        local fs = ui.view.footer.settings
-        -- Physical pixels, as in the original code
-        local footer_height = fs.container_height + fs.progress_style_thick_height
-        local top, bottom = 12, 0
-        if fs.bar_top == true then
-            top = footer_height + fs.top_padding
-        else
-            bottom = footer_height + fs.container_bottom_padding
-        end
-        return { 15, Screen:unscaleBySize(top), 15, Screen:unscaleBySize(bottom) }
-    end
-    return nil
-end
-
 -- Same event name as before, so gestures/dispatcher actions keep working.
+-- Tap top left: always the next preset (1 -> 2 -> 3 -> 1), with its font x-height. Top bar and footer are not
+-- looked at. Preset 3 with the top bar "hidden": top and bottom 15. A custombg picture at the bottom sets the
+-- bottom margin (applyMargins).
 function PageTextInfo:onAdjustMarginsTopbar()
     if not self.ui.rolling then return end
-
-    -- bookends or no bars: cycle normal -> wider -> narrow text -> normal...
-    if self:shouldCyclePresets() then
-        local presets = PageTextInfo.margin_presets
-        local idx = self:getCurrentPresetIndex()
-        self:applyPreset(presets[idx and (idx % #presets) + 1 or 1])
-        return true
+    local presets = PageTextInfo.margin_presets
+    local idx = self:getCurrentPresetIndex()
+    local p = presets[idx and (idx % #presets) + 1 or 1]
+    local t = { p[1], p[2], p[3], p[4] }
+    if p.hidden_top_bottom and self.view and self.view.topbar and self:getTopBarMode() == "hidden" then
+        t[2], t[4] = p.hidden_top_bottom, p.hidden_top_bottom
     end
-
-    -- Top bar or footer: fit the margins to the bar; if already fitted, show the book status
-    local t = self:getTargetMargins()
-    if not t then return end
-    if not self:applyMargins(t) then
-        self.ui:showBookStatus()
-    end
+    self:applyMargins(t)
+    self:setXHeightFont(p.xheight_mm)
     return true
 end
 
 -- West-north multiswipe, only the bottom margin:
 --   custombg picture on (image, hero, cover text) -> margin for the picture (as the margin adjustment)
---   nothing on screen (top bar "hidden", no bookends, no footer) -> empty_bottom_margin
---   bookends -> bottom of the first preset
---   top bar "minimal" -> bottom of the current preset
---   top bar on or footer -> what the bar needs (as the margin adjustment)
+--   bookends                                      -> bottom of the current preset
+--   top bar "hidden"                              -> empty_bottom_margin
+--   top bar "on" or "minimal"                     -> bottom of the current preset
 -- Left, top and right stay as they are; the preset and the font are not changed.
 function PageTextInfo:onAdjustBottomMargin()
     local ui = self.ui
-    local function skip(why)
-        logger.info("pagetextinfo west-north: nothing done,", why)
-        return true
-    end
-    if not ui.rolling then return skip("not a reflowable document") end
-    -- a custombg picture on (background image, hero or cover text): bottom margin for the picture,
-    -- the same as the margin adjustment does
+    if not ui.rolling then return true end
     local bottom = self:getPictureBottomMargin()
     if not bottom then
+        local bookends_on = ui.bookends and ui.bookends.enabled
         local topbar = ui.view and ui.view.topbar
-        local nothing_on = not (ui.bookends and ui.bookends.enabled)
-            and not (ui.view and ui.view.footer_visible)
-            and (not topbar or self:getTopBarMode() == "hidden")
-        if nothing_on then
-            -- nothing on screen: the text can go down to empty_bottom_margin
+        if not bookends_on and topbar and self:getTopBarMode() == "hidden" then
             bottom = PageTextInfo.empty_bottom_margin
-        elseif ui.bookends and ui.bookends.enabled then
-            -- bookends: always the bottom of the first preset
-            bottom = PageTextInfo.margin_presets[1][4]
-        elseif self:shouldCyclePresets() then
-            -- top bar "minimal": bottom of the current preset, recognized by left, top and right
-            local p = PageTextInfo.margin_presets[self:getCurrentPresetIndex(true) or 1]
-            bottom = p[4]
         else
-            -- top bar on or footer: what the bar needs (same target as the margin adjustment)
-            local t = self:getTargetMargins()
-            if not t then return skip("no target for this document") end
-            bottom = t[4]
+            -- the preset is recognized by its left and right margins
+            bottom = PageTextInfo.margin_presets[self:getCurrentPresetIndex() or 1][4]
         end
     end
 
     local cfg = ui.document.configurable
-    if cfg.b_page_margin == bottom then return skip("bottom margin already " .. tostring(bottom)) end
+    if cfg.b_page_margin == bottom then return true end
     local top = cfg.t_page_margin
-    logger.info("pagetextinfo west-north: bottom margin", cfg.b_page_margin, "->", bottom)
     cfg.b_page_margin = bottom
     -- top and bottom together: sent alone, "Sync T/B margins" would also change the top one
     local typeset = ui.typeset
