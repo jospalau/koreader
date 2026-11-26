@@ -1393,8 +1393,7 @@ function PageTextInfo:onSwipe(arg, ges)
 end
 
 -- "Picture" below = the configured one of the custombg list: a background, the bookshelf hero or the cover text
--- (custombg:isPictureOn / setPictureEnabled). Hero and cover text exclude the ruled lines, so with them the cycle has no
--- "lines + picture" step.
+-- (custombg:isPictureOn / setPictureEnabled).
 -- Same as the menu item "Enable / disable full-screen ruled lines" of the custombg plugin.
 -- custombg keeps ALL its settings (lines and background) in its own file, settings/custombg.lua. They are global,
 -- not per book: this toggle affects every book and nothing is written to the book sidecar.
@@ -1423,19 +1422,13 @@ function PageTextInfo:toggleFullScreenRuledLines()
         local lines_on = custombg.fs_enabled and true or false
         local bg_on = custombg:isPictureOn()
         local with_bg = (custombg.isToggleWithBackground == nil) or custombg:isToggleWithBackground()
-        -- the hero and the cover text exclude the lines: no "lines + picture" step for them
-        local exclusive = custombg:getToggleKind() ~= "background"
         local want_lines, want_bg
         if not with_bg then
             want_lines, want_bg = not lines_on, bg_on          -- lines only, background untouched
         elseif lines_on and not bg_on then
             want_lines, want_bg = false, true      -- background only
         elseif bg_on and not lines_on then
-            if exclusive then
-                want_lines, want_bg = false, false -- nothing (the picture excludes the lines)
-            else
-                want_lines, want_bg = true, true   -- lines + background
-            end
+            want_lines, want_bg = true, true       -- lines + picture
         elseif lines_on and bg_on then
             want_lines, want_bg = false, false     -- nothing
         else
@@ -1512,26 +1505,24 @@ function PageTextInfo:toggleFullScreenRuledLinesNoTopbar()
     local bk_on = bookendsOn()
     local want_lines, want_bg, want_bk = lines_on, bg_on, bk_on
 
+    -- bookends -> bookends + lines -> bookends + picture -> bookends + lines + picture
+    -- -> nothing (bookends OFF) -> lines + picture (bookends OFF) -> bookends alone -> ...
+    -- Same for the three pictures (background, hero, cover text).
     if bk_on or not has_bk then
         if not lines_on and not bg_on then
             want_lines, want_bg = true, false          -- lines (with bookends)
         elseif lines_on and not bg_on then
-            want_lines, want_bg = false, true          -- background (with bookends)
+            want_lines, want_bg = false, true          -- picture (with bookends)
         elseif bg_on and not lines_on then
-            if custombg:getToggleKind() ~= "background" then
-                want_lines, want_bg = true, false      -- lines only (the picture excludes the lines)
-            else
-                want_lines, want_bg = true, true       -- lines + background (with bookends)
-            end
-        elseif has_bk then
-            want_bk = false                            -- bookends OFF / topbar disabled, both stay
+            want_lines, want_bg = true, true           -- lines + picture (with bookends)
         else
-            want_lines, want_bg = false, false         -- nothing (no bookends plugin)
+            want_lines, want_bg = false, false         -- nothing
+            if has_bk then want_bk = false end         -- bookends OFF / topbar disabled
         end
     else
         -- bookends OFF
-        if lines_on and bg_on then
-            want_lines, want_bg = false, false         -- only "topbar disabled"
+        if not lines_on and not bg_on then
+            want_lines, want_bg = true, true           -- lines + picture without bookends
         else
             want_lines, want_bg, want_bk = false, false, true  -- bookends ON alone
         end

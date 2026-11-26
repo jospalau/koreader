@@ -1717,7 +1717,6 @@ end
 -- Public: switch the ruled lines on/off (used by the pagetextinfo gesture and available to any other plugin).
 -- Stored in the plugin's own settings file, so it applies to every book.
 function CustomBg:setLinesEnabled(on)
-    if on then self:_clearBottomMode() end   -- the bottom picture and the lines exclude each other
     self.fs_enabled = on and true or false
     CFG:saveSetting(FS_KEYS.enabled, self.fs_enabled)
     self:invalidateLineCache()
@@ -2438,7 +2437,7 @@ function CustomBg:refreshBottomImage()
     end
 end
 
--- Turns the bottom picture off (called when the background or the lines are turned on)
+-- Turns the bottom picture off (called when the background is turned on)
 function CustomBg:_clearBottomMode()
     if self:getBottomMode() then
         CFG:saveSetting(BOTTOM_MODE_KEY, nil)
@@ -2447,12 +2446,9 @@ function CustomBg:_clearBottomMode()
     self:_syncNoFlash()
 end
 
--- mode: nil / "hero" / "cover". A mode turns the background and the ruled lines off.
+-- mode: nil / "hero" / "cover". A mode turns the background off (the ruled lines can stay on).
 function CustomBg:setBottomMode(mode)
     if mode then
-        if self.fs_enabled then
-            self:setLinesEnabled(false)
-        end
         if self:getCurrentDocBg() then
             self:applyBackground(DOC_BG_NONE)
         end
@@ -3525,7 +3521,6 @@ function CustomBg:addToMainMenu(menu_items)
                         keep_menu_open = true,
                         callback = function(touchmenu_instance)
                             self.fs_enabled = not self.fs_enabled
-                            if self.fs_enabled then self:_clearBottomMode() end   -- excludes the bottom picture
                             self:saveDocSetting(FS_KEYS.enabled, self.fs_enabled)
                             self:refreshView(touchmenu_instance)
                         end,
