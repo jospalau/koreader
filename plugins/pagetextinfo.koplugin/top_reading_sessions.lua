@@ -2015,24 +2015,31 @@ local function getOpenBookCover()
     return copy
 end
 
+-- How much the cover under the text is washed towards white (0: not at all, 1: solid white). The cover still shows
+-- through the band, and the text on it stays legible.
+local COVER_BAND_LIGHTEN = 0.7
+
 local CoverBanner = Widget:extend{
     width = 0,
     height = 0,
     cover = nil,      -- buffer of the cover (not freed here)
-    content = nil,    -- the text widget that goes on the band
+    content = nil,    -- the text widget that goes on the band (nil: no band)
     pad = 0,          -- space between the text and the edge of the band
 }
 
 function CoverBanner:init()
     self.dimen = Geom:new{ w = self.width, h = self.height }
-    -- the cover covers the whole area, cropped at the center
+    -- the whole cover, as big as it fits in the area and centered in it (not cropped)
     local bw, bh = self.cover:getWidth(), self.cover:getHeight()
-    local scale = math.max(self.width / bw, self.height / bh)
-    local sw, sh = math.ceil(bw * scale), math.ceil(bh * scale)
-    local scaled = require("ui/renderimage"):scaleBlitBuffer(self.cover, sw, sh)
+    local scale = math.min(self.width / bw, self.height / bh)
+    local sw, sh = math.max(1, math.floor(bw * scale)), math.max(1, math.floor(bh * scale))
+    -- false: scaleBlitBuffer frees the original by default, and the original is the cached cover, which the next
+    -- showing of the window uses again
+    local scaled = require("ui/renderimage"):scaleBlitBuffer(self.cover, sw, sh, false)
     if scaled == self.cover then scaled = self.cover:copy() end  -- same size: never free the cached cover
     self.scaled = scaled
-    self.ox, self.oy = math.floor((sw - self.width) / 2), math.floor((sh - self.height) / 2)
+    self.sw, self.sh = scaled:getWidth(), scaled:getHeight()
+    self.dx, self.dy = math.floor((self.width - self.sw) / 2), math.floor((self.height - self.sh) / 2)
 end
 
 function CoverBanner:getSize()
@@ -2041,14 +2048,18 @@ end
 
 function CoverBanner:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
-    bb:blitFrom(self.scaled, x, y, self.ox, self.oy, self.width, self.height)
+    bb:paintRect(x, y, self.width, self.height, Blitbuffer.COLOR_WHITE)
+    bb:blitFrom(self.scaled, x + self.dx, y + self.dy, 0, 0, self.sw, self.sh)
+    if not self.content then return end
     local cs = self.content:getSize()
     local band_h = cs.h + 2 * self.pad
-    local by = y + math.floor((self.height - band_h) / 2)
-    bb:paintRect(x, by, self.width, band_h, Blitbuffer.COLOR_WHITE)
-    local line = Size.line.medium
-    bb:paintRect(x, by, self.width, line, Blitbuffer.COLOR_BLACK)
-    bb:paintRect(x, by + band_h - line, self.width, line, Blitbuffer.COLOR_BLACK)
+    -- the band goes at the bottom of the cover (not of the area, which may have white space under the cover)
+    local by = math.max(y, y + self.dy + self.sh - band_h)
+    -- a translucent band: the cover under the text is washed towards white, not covered
+    local ok = bb.lightenRect and pcall(bb.lightenRect, bb, x, by, self.width, band_h, COVER_BAND_LIGHTEN)
+    if not ok then
+        bb:paintRect(x, by, self.width, band_h, Blitbuffer.COLOR_WHITE)
+    end
     self.content:paintTo(bb, x + math.floor((self.width - cs.w) / 2), by + self.pad)
 end
 
@@ -2114,10 +2125,26 @@ local function buildBookCard(w_width, session, book)
         local pub = tostring(topbar.pub_date or "")
         if pub ~= "" then parts[#parts + 1] = pub end
 
-        -- with a cover the text sits on a band, a bit narrower than the card
+        -- with a cover only the words and the publication date are shown, on a band at the bottom of the cover
+        -- (the title and the series are already on the cover)
         local cover = getOpenBookCover()
         local band_pad = SPACE.l
-        local text_w = cover and (inner_w - 2 * band_pad) or inner_w
+        if cover then
+            local info
+            if #parts > 0 then
+                info = TextWidget:new{
+                    text = table.concat(parts, SUMMARY_SEPARATOR), face = getFace(FONT_SUMMARY), bold = true,
+                    fgcolor = COLOR_TEXT, max_width = inner_w - 2 * band_pad, ellipsis = true,
+                }
+            end
+            local margin = Screen:scaleBySize(16)
+            local info_h = info and (info:getSize().h + 2 * band_pad) or 0
+            local height = math.max(min_h or 0, info_h + 2 * margin)
+            return CoverBanner:new{
+                width = inner_w, height = height, cover = cover, content = info, pad = band_pad,
+            }
+        end
+        local text_w = inner_w
 
         local vg = VerticalGroup:new{ align = "center" }
         vg[#vg + 1] = TextWidget:new{
@@ -2137,14 +2164,6 @@ local function buildBookCard(w_width, session, book)
             vg[#vg + 1] = TextWidget:new{
                 text = table.concat(parts, SUMMARY_SEPARATOR), face = getFace(FONT_SUMMARY),
                 fgcolor = COLOR_MUTED, max_width = text_w, ellipsis = true,
-            }
-        end
-        if cover then
-            -- room above and below the band, so the cover shows
-            local margin = Screen:scaleBySize(16)
-            local height = math.max(min_h or 0, vg:getSize().h + 2 * band_pad + 2 * margin)
-            return CoverBanner:new{
-                width = inner_w, height = height, cover = cover, content = vg, pad = band_pad,
             }
         end
         return vg
