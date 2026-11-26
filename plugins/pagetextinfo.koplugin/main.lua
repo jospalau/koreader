@@ -1152,9 +1152,10 @@ function PageTextInfo:cycleCustomBgPicture()
 end
 
 -- Tap in the bottom center (the zone bookends uses for its "tap on the bottom bar" action):
---   bookends on  -> next bookends preset
---   bookends off -> custombg picture (top bar on, "minimal" or "hidden", it does not matter):
---                   off -> image -> book title (cover text) -> hero -> settings -> off ... (cycleCustomBgPicture)
+--   bookends on                 -> next bookends preset
+--   top bar "hidden" (or none)  -> custombg picture:
+--                                  off -> image -> book title (cover text) -> hero -> settings -> off ...
+--   top bar "on" or "minimal"   -> nothing
 -- The tap is always consumed, so bookends does not act on its own.
 function PageTextInfo:onBottomCenterTap(ges)
     if not self.initialized then return false end
@@ -1163,6 +1164,8 @@ function PageTextInfo:onBottomCenterTap(ges)
         if bookends.onCycleBookendsPreset then bookends:onCycleBookendsPreset() end
         return true
     end
+    local topbar = self.view and self.view.topbar
+    if topbar and self:getTopBarMode() ~= "hidden" then return true end
     if self.ui and self.ui.custombg then
         self:cycleCustomBgPicture()
     end
@@ -1239,10 +1242,20 @@ function PageTextInfo:installTopBarHiddenPaint()
     end
 end
 
+-- The custombg picture only goes with the "hidden" top bar: leaving "hidden" hides it, coming back to "hidden"
+-- puts it back if it was on ("picture_before_topbar" setting). Returns true if the picture changed.
+function PageTextInfo:topBarModeChanged(old_mode, new_mode)
+    if old_mode == new_mode then return false end
+    if old_mode == "hidden" then return self:hidePictureFor("picture_before_topbar") end
+    if new_mode == "hidden" then return self:restorePictureFor("picture_before_topbar") end
+    return false
+end
+
 function PageTextInfo:setTopBarMode(mode)
     local topbar = self.view and self.view.topbar
     if not topbar then return false end
     self:installTopBarHiddenPaint()
+    local old_mode = self:getTopBarMode()
     self.settings:saveSetting("topbar_hidden", mode == "hidden")
     self.settings:flush()
     local want_on = (mode == "on")
@@ -1250,37 +1263,38 @@ function PageTextInfo:setTopBarMode(mode)
     if (topbar.is_enabled and true or false) ~= want_on then
         topbar:quickToggleOnOff(want_on)
     end
-    UIManager:setDirty(self.view.dialog, "ui")
+    self:repaintAfterPictureChange(self:topBarModeChanged(old_mode, self:getTopBarMode()))
     return true
 end
 
 -- on -> minimal -> hidden -> on ...
 -- The on/off switching is exactly the original code (quickToggleOnOff by is_enabled);
 -- the hidden step is only a flag + repaint on top of "disabled", so it can never block on/off.
+-- The custombg picture is hidden when leaving "hidden" and put back when coming back to it (topBarModeChanged).
 function PageTextInfo:cycleTopBarMode()
     local topbar = self.view and self.view.topbar
     if not topbar then return false end
     pcall(self.installTopBarHiddenPaint, self)
+    local old_mode = self:getTopBarMode()
     local hidden = self.settings:isTrue("topbar_hidden")
     if topbar.is_enabled == nil or topbar.is_enabled == false then
         if not hidden then
             -- minimal -> hidden: bar stays disabled, just stop painting it
             self.settings:saveSetting("topbar_hidden", true)
             self.settings:flush()
-            UIManager:setDirty(self.view.dialog, "ui")
-            return true
+        else
+            -- hidden -> on (original enable)
+            self.settings:saveSetting("topbar_hidden", false)
+            self.settings:flush()
+            topbar:quickToggleOnOff(true)
         end
-        -- hidden -> on (original enable)
-        self.settings:saveSetting("topbar_hidden", false)
-        self.settings:flush()
-        topbar:quickToggleOnOff(true)
     else
         -- on -> minimal (original disable)
         self.settings:saveSetting("topbar_hidden", false)
         self.settings:flush()
         topbar:quickToggleOnOff(false)
     end
-    UIManager:setDirty(self.view.dialog, "ui")
+    self:repaintAfterPictureChange(self:topBarModeChanged(old_mode, self:getTopBarMode()))
     return true
 end
 
@@ -1693,9 +1707,59 @@ function PageTextInfo:toggleFullScreenRuledLines()
     return UIManager:setDirty(self.view.dialog, "ui")
 end
 
--- Bookends on / off. Turning bookends on also switches the custombg picture off (background image, hero or
--- cover text); turning them off switches it on again if it was on before (self._picture_before_bookends).
--- The ruled lines are not touched (double tap bottom left). The topbar is left as it is (active).
+-- Switches the custombg picture (background image, hero or cover text) on or off, without repainting
+-- (the caller repaints once). Returns true if it changed.
+function PageTextInfo:switchCustomBgPicture(on)
+    local custombg = self.ui and self.ui.custombg
+    if not (custombg and custombg.setPictureEnabled) then return false end
+    if (not self:isCustomBgPictureOff(custombg)) == on then return false end
+    -- setPictureEnabled repaints by itself; muted here
+    local own_repaint = rawget(custombg, "toggleRepaint")
+    custombg.toggleRepaint = function() end
+    local ok, err = pcall(custombg.setPictureEnabled, custombg, on)
+    custombg.toggleRepaint = own_repaint
+    self._bg_cycle_stage = nil
+    if not ok then
+        logger.warn("pagetextinfo: switching the picture on / off failed:", err)
+        return false
+    end
+    return true
+end
+
+-- Hides the custombg picture while something else uses the screen (bookends, the top bar out of "hidden"),
+-- remembering in this plugin's settings (key) whether it was on, so it survives closing the book or KOReader.
+-- Returns true if the picture changed.
+function PageTextInfo:hidePictureFor(key)
+    local custombg = self.ui and self.ui.custombg
+    if not (custombg and custombg.setPictureEnabled) then return false end
+    local was_on = not self:isCustomBgPictureOff(custombg)
+    self.settings:saveSetting(key, was_on)
+    self.settings:flush()
+    return was_on and self:switchCustomBgPicture(false) or false
+end
+
+-- Puts the picture back if it was on when hidePictureFor(key) hid it. Returns true if the picture changed.
+function PageTextInfo:restorePictureFor(key)
+    if self.settings:readSetting(key) == nil then return false end
+    local was_on = self.settings:isTrue(key)
+    self.settings:delSetting(key)
+    self.settings:flush()
+    return was_on and self:switchCustomBgPicture(true) or false
+end
+
+-- One repaint: custombg's own (so its paintTo runs again) when the picture changed, a plain one otherwise.
+function PageTextInfo:repaintAfterPictureChange(changed)
+    local custombg = self.ui and self.ui.custombg
+    if changed and custombg and custombg.toggleRepaint then
+        custombg:toggleRepaint(self.view.dialog)
+    else
+        UIManager:setDirty(self.view.dialog, "ui")
+    end
+end
+
+-- Bookends on / off. Turning bookends on also hides the custombg picture (background image, hero or cover text);
+-- turning them off puts it back if it was on before ("picture_before_bookends" setting).
+-- The ruled lines are not touched (double tap bottom left). The topbar is left as it is.
 function PageTextInfo:toggleFullScreenRuledLinesNoTopbar()
     local util = require("util")
     local is_pdf = self.document and util.getFileNameSuffix(self.document.file) == "pdf"
@@ -1707,32 +1771,13 @@ function PageTextInfo:toggleFullScreenRuledLinesNoTopbar()
     bookends.enabled = not bookends.enabled
     if bookends.settings then bookends.settings:saveSetting("enabled", bookends.enabled) end
 
-    local custombg = self.ui.custombg
-    local want_picture = nil   -- nil: picture not touched
-    if custombg and custombg.setPictureEnabled then
-        local picture_on = not self:isCustomBgPictureOff(custombg)
-        if bookends.enabled then
-            self._picture_before_bookends = picture_on
-            if picture_on then want_picture = false end
-        else
-            if self._picture_before_bookends and not picture_on then want_picture = true end
-            self._picture_before_bookends = nil
-        end
+    local changed
+    if bookends.enabled then
+        changed = self:hidePictureFor("picture_before_bookends")
+    else
+        changed = self:restorePictureFor("picture_before_bookends")
     end
-    if want_picture ~= nil then
-        -- setPictureEnabled repaints by itself; mute it so there is one repaint (the one below)
-        local own_repaint = rawget(custombg, "toggleRepaint")
-        custombg.toggleRepaint = function() end
-        local ok, err = pcall(custombg.setPictureEnabled, custombg, want_picture)
-        custombg.toggleRepaint = own_repaint
-        self._bg_cycle_stage = nil
-        if not ok then logger.warn("pagetextinfo: switching the picture on / off failed:", err) end
-        if custombg.toggleRepaint then
-            custombg:toggleRepaint(self.view.dialog)
-            return true
-        end
-    end
-    UIManager:setDirty(self.view.dialog, "ui")
+    self:repaintAfterPictureChange(changed)
     return true
 end
 
