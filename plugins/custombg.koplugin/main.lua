@@ -2373,10 +2373,47 @@ function CustomBg:onToggleEmbeddedFonts() self:invalidateLineCache() end
 function CustomBg:onToggleEmbeddedStyleSheet() self:invalidateLineCache() end
 function CustomBg:onRedrawCurrentView() self:invalidateLineCache() end
 
+-- ===== Bottom image =====
+-- A rectangular picture painted at the bottom of the page, centered, over the text of that area (the pagetextinfo plugin
+-- puts the bookshelf hero here with a tap on the bottom center). The plugin owns the buffer: it is freed when the picture is
+-- replaced or removed, and when the book is closed.
+-- as_mask: bb is an 8 bit buffer used as the opacity of black (255 = black, 0 = nothing), so the page shows through
+function CustomBg:setBottomImage(bb, margin, as_mask)
+    self:clearBottomImage()
+    self._bottom_image = bb
+    self._bottom_margin = margin or 0
+    self._bottom_is_mask = as_mask and true or false
+end
+
+function CustomBg:clearBottomImage()
+    if self._bottom_image then
+        pcall(function() self._bottom_image:free() end)
+    end
+    self._bottom_image = nil
+end
+
+function CustomBg:hasBottomImage()
+    return self._bottom_image ~= nil
+end
+
+function CustomBg:_paintBottomImage(bb, x, y)
+    local img = self._bottom_image
+    if not img then return end
+    local w, h = img:getWidth(), img:getHeight()
+    local dx = (x or 0) + math.floor((bb:getWidth() - w) / 2)
+    local dy = (y or 0) + bb:getHeight() - h - (self._bottom_margin or 0)
+    if self._bottom_is_mask then
+        pcall(bb.colorblitFrom, bb, img, dx, dy, 0, 0, w, h, Blitbuffer.COLOR_BLACK)
+    else
+        pcall(bb.blitFrom, bb, img, dx, dy, 0, 0, w, h)
+    end
+end
+
 function CustomBg:paintTo(bb, x, y)
     -- Self-heal on screen orientation (width/height) change: re-adapt the background automatically after portrait/landscape switching, no need to tap "Reading background" manually
     self:_checkScreenGeom()
     self:_paintOverlay(bb, x, y)   -- pieces mode (no-op otherwise); the ruled lines below are drawn on top of it
+    self:_paintBottomImage(bb, x, y)   -- the bottom picture, if there is one (see setBottomImage)
     if not self.fs_enabled or not self.ui.document then return end
     if type(self.ui.document.getTextFromPositions) ~= "function" or
        type(self.ui.document.getScreenBoxesFromPositions) ~= "function" then
@@ -3332,6 +3369,7 @@ end
 
 function CustomBg:onCloseDocument()
     self:_freeOverlay()
+    self:clearBottomImage()
     self:_releaseNoFlash()
     self:_releaseDither()
     if self._night_check_timer then

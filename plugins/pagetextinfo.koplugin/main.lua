@@ -1003,7 +1003,9 @@ function PageTextInfo:onBottomTap(side, ges)
 end
 
 -- Tap in the bottom center (the zone bookends uses for its "tap on the bottom bar" action):
---   (with bookends on, or with the topbar disabled; with the topbar showing and bookends off: nothing)
+--   bookends off and custombg (background and lines) off -> the bookshelf hero at the bottom of the page: a tap puts it,
+--                                           it stays through page turns, the next tap takes it away (see toggleBottomHero)
+--   (otherwise, with the topbar showing and bookends off: nothing)
 --   background on (with or without lines) -> settings of the background
 --   lines on                              -> settings of the ruled lines
 --   bookends on alone                     -> next bookends preset
@@ -1014,13 +1016,17 @@ function PageTextInfo:onBottomCenterTap(ges)
     local bookends_on = bookends and bookends.enabled and true or false
     local topbar = self.view and self.view.topbar
     local topbar_on = topbar and topbar.is_enabled and true or false
+    local custombg = self.ui and self.ui.custombg
+    local lines_on = custombg and custombg.fs_enabled and true or false
+    local bg_on = custombg and custombg.getCurrentDocBg and custombg:getCurrentDocBg() ~= nil or false
+    if not bookends_on and not lines_on and not bg_on then
+        self:toggleBottomHero()
+        return true
+    end
     if not bookends_on and topbar_on then
         return true -- topbar showing: nothing
     end
-    local custombg = self.ui and self.ui.custombg
     if custombg then
-        local lines_on = custombg.fs_enabled and true or false
-        local bg_on = custombg.getCurrentDocBg and custombg:getCurrentDocBg() ~= nil
         if bg_on then
             self:showCustomBgSubMenu("background")
             return true
@@ -2321,6 +2327,12 @@ end
 function PageTextInfo:onPageUpdate(pageno)
     -- Avoid double execution when loading document
     if not self.initialized then return end
+
+    -- the bottom hero (if up) is built again so its progress and time left advance with the page
+    local custombg = self.ui and self.ui.custombg
+    if custombg and custombg.hasBottomImage and custombg:hasBottomImage() then
+        self:buildBottomHero()
+    end
 
     if self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
         self:updateWordsVocabulary()
@@ -4384,6 +4396,8 @@ end
 local HERO_SETT = {
     width_pct = 85,     -- ancho del hero (% de pantalla)
     height_pct = 30,    -- alto de la tarjeta (% de pantalla)
+    bottom_height_pct = 9,   -- alto de la tarjeta cuando va abajo de la pagina (% de pantalla): achatado
+    bottom_padding = 6,      -- aire alrededor del hero cuando va abajo (px sin escalar)
     hide_regions = { "status", "rating", "metadata", "description", "tags" },
     show_progress = true,
     background = Blitbuffer.COLOR_WHITE,  -- fondo detrás del hero: Blitbuffer.COLOR_WHITE, Blitbuffer.COLOR_GRAY_E (gris claro) o Blitbuffer.COLOR_LIGHT_GRAY
@@ -4447,8 +4461,89 @@ local function buildHeroProgressRow(width, pct, book, device_state, progress_cfg
     return row
 end
 
+-- Metadata line "1984 - 275kw - 4.1★ (1234)" (publication year, kilowords, Goodreads rating and votes). Same data as the
+-- file dialog title; it lives in the calibre_data table of the file manager's file chooser, keyed by file name.
+-- Returns "" when there is nothing for the open book.
+local function heroMetadataText(book)
+    local text = ""
+    pcall(function()
+        local rui = require("apps/reader/readerui").instance
+        local file = (rui and rui.document and rui.document.file) or (book and book.file) or (book and book.path)
+        if not file then return end
+        local name = tostring(file):match("([^/]+)$")
+        local data
+        local FM = package.loaded["apps/filemanager/filemanager"]
+        local fc = FM and FM.instance and FM.instance.file_chooser
+        if fc and type(fc.calibre_data) == "table" then
+            data = fc.calibre_data[name] or fc.calibre_data[(name:gsub("%.[^.]+$", ""))]
+        end
+        -- each field comes from the calibre data first and from the bookshelf book if it is missing there
+        local function field(...)
+            for _, src in ipairs({ data or {}, book or {} }) do
+                for _, key in ipairs({ ... }) do
+                    local v = src[key]
+                    if v ~= nil and v ~= "" then return v end
+                end
+            end
+        end
+        local parts = {}
+        local pub = field("pubdate", "pub_date", "publication_date", "published", "pubyear", "pub_year", "year", "date")
+        local year = pub and tostring(pub):match("(%d%d%d%d)")
+        if year then table.insert(parts, year) end
+        local words = tonumber(field("words"))
+        if words then table.insert(parts, math.floor(words / 1000) .. "kw") end
+        local rating, votes = field("grrating"), field("grvotes")
+        if rating then
+            table.insert(parts, tostring(rating) .. "★" .. (votes and (" (" .. tostring(votes) .. ")") or ""))
+        end
+        text = table.concat(parts, " - ")
+    end)
+    return text
+end
+
+-- Right side of the narrow hero at the bottom of the page: the metadata line on top and a long progress bar under it,
+-- both centered vertically next to the card. No percentage and no time left.
+local function buildHeroProgressSide(width, pct, book, device_state, progress_cfg)
+    local Bb = require("ffi/blitbuffer")
+    local Font = require("ui/font")
+    local VerticalGroup = require("ui/widget/verticalgroup")
+    local VerticalSpan = require("ui/widget/verticalspan")
+    local CenterContainer = require("ui/widget/container/centercontainer")
+    local TextWidget = require("ui/widget/textwidget")
+    local HeroBar = require("lib/bookshelf_hero_bar")
+
+    local col = VerticalGroup:new{ align = "center" }
+    local meta = heroMetadataText(book)
+    if meta ~= "" then
+        local tw = TextWidget:new{
+            text = meta, face = Font:getFace("cfont", 15), padding = 0, fgcolor = Bb.COLOR_BLACK, max_width = width,
+        }
+        table.insert(col, CenterContainer:new{ dimen = Geom:new{ w = width, h = tw:getSize().h }, tw })
+        table.insert(col, VerticalSpan:new{ width = Screen:scaleBySize(6) })
+    end
+    local bar_colors
+    if progress_cfg.bar_style ~= "pacman" then
+        local ok_cp, CP = pcall(require, "lib/bookshelf_cover_progress")
+        if ok_cp and CP and CP.pickedBarColors then bar_colors = CP.pickedBarColors() end
+    end
+    table.insert(col, HeroBar:new{
+        width = width,
+        height = Screen:scaleBySize(8),
+        percentage = pct,
+        style = progress_cfg.bar_style or "bordered",
+        colors = bar_colors,
+    })
+    return col
+end
+
 -- Devuelve el widget del hero, o nil si bookshelf no está instalado / falla algo.
-local function buildBookshelfHero(width, height)
+-- With opts.side the progress goes to the right of the card (centered vertically) instead of under it.
+local function buildBookshelfHero(width, height, opts)
+    local side = opts and opts.side
+    local side_w = side and math.floor(width * 0.40) or 0
+    local side_gap = side and Screen:scaleBySize(8) or 0
+    local full_width = width
+    width = width - side_w - side_gap
     local logger = require("logger")
     local VerticalGroup = require("ui/widget/verticalgroup")
     local VerticalSpan = require("ui/widget/verticalspan")
@@ -4531,6 +4626,16 @@ local function buildBookshelfHero(width, height)
             end)
             pct = ok_pg and v or nil
         end
+        if side then
+            local HorizontalGroup = require("ui/widget/horizontalgroup")
+            local HorizontalSpan = require("ui/widget/horizontalspan")
+            return HorizontalGroup:new{
+                align = "center",
+                card_or_err,
+                HorizontalSpan:new{ width = side_gap },
+                buildHeroProgressSide(side_w, pct or 0, book, device_state, progress_cfg),
+            }
+        end
         local row = buildHeroProgressRow(width, pct or 0, book, device_state, progress_cfg)
         return VerticalGroup:new{
             align = "left",
@@ -4544,6 +4649,56 @@ local function buildBookshelfHero(width, height)
         return nil
     end
     return card
+end
+
+-- Tap on the bottom center with the topbar showing: the bookshelf hero as a rectangular picture at the bottom of the page.
+-- It is drawn by the custombg plugin (custombg:setBottomImage), like its background pictures. The first tap puts it, it
+-- stays through page turns (built again at each one, so its progress advances), and the next tap takes it away.
+function PageTextInfo:toggleBottomHero()
+    local custombg = self.ui and self.ui.custombg
+    if not (custombg and custombg.setBottomImage) then return false end
+    if custombg:hasBottomImage() then
+        custombg:clearBottomImage()
+    else
+        self:buildBottomHero()
+    end
+    UIManager:setDirty(self.view.dialog, "ui")
+    return true
+end
+
+-- Builds the hero picture with the current progress and hands it to the custombg plugin
+function PageTextInfo:buildBottomHero()
+    local custombg = self.ui and self.ui.custombg
+    if not (custombg and custombg.setBottomImage) then return false end
+    do
+        local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
+        local hero = buildBookshelfHero(
+            math.floor(screen_w * HERO_SETT.width_pct / 100),
+            math.floor(screen_h * HERO_SETT.bottom_height_pct / 100),
+            { side = true }
+        )
+        if not hero then return false end
+        -- square corners: the picture is a buffer, so rounded ones would show white wedges over the text
+        local frame = FrameContainer:new{
+            background = HERO_SETT.background,
+            color = Blitbuffer.COLOR_BLACK,
+            bordersize = Screen:scaleBySize(HERO_SETT.border),
+            radius = 0,
+            margin = 0,
+            padding = Screen:scaleBySize(HERO_SETT.bottom_padding),
+            hero,
+        }
+        local size = frame:getSize()
+        -- drawn in grays on white, then turned into a mask (dark = opaque, white = nothing): transparent hero
+        local bb = Blitbuffer.new(size.w, size.h, Blitbuffer.TYPE_BB8)
+        bb:fill(Blitbuffer.COLOR_WHITE)
+        frame:paintTo(bb, 0, 0)
+        pcall(function() frame:free() end)
+        bb:invert()
+        custombg:setBottomImage(bb, Screen:scaleBySize(HERO_SETT.outer_gap), true)
+    end
+    UIManager:setDirty(self.view.dialog, "ui")
+    return true
 end
 
 -- ===== Función principal =====
