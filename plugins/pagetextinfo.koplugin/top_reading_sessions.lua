@@ -1471,6 +1471,9 @@ local function buildCardRow(w_width, left_ratio, build_left, build_right)
     local lc, rc = build_left(lw), build_right(rw)
     -- the taller content sets the height of both cards
     local h = math.max(lc[1].dimen.h, rc[1].dimen.h)
+    -- free the measuring pass (it holds a scaled copy of the cover)
+    pcall(function() lc:free() end)
+    pcall(function() rc:free() end)
     lc, rc = build_left(lw, h), build_right(rw, h)
     return HorizontalGroup:new{
         align = "top",
@@ -2043,7 +2046,10 @@ end
 -- The cover of the open book fills the left card of the book card and the title, series and year go on a white band
 -- over it, so the text is readable whatever the cover looks like.
 
-local cover_cache = { file = nil, bb = nil }
+-- debug: true logs the cover's sizes and types ([LS-COVER] in crash.log) and saves the cover as KOReader
+-- gives it as ls_cover_1_raw.png in the settings folder.
+-- In this one table: the file is at Lua's limit of 200 top-level locals, so no new local can be added.
+local cover_cache = { file = nil, bb = nil, debug = false }
 
 -- The cover of the open book (a buffer kept for the next builds), or nil when there is none
 local function getOpenBookCover()
@@ -2055,9 +2061,21 @@ local function getOpenBookCover()
         return require("apps/filemanager/filemanagerbookinfo"):getCoverImage(doc)
     end)
     if not ok or not bb then return nil end
-    -- keep a private copy: the one given back can be freed or reused by whoever made it
-    local copy = bb:copy()
+    local w, h = bb:getWidth(), bb:getHeight()
+    if cover_cache.debug then
+        logger.info(string.format("[LS-COVER] %s: raw %dx%d type %s rotation %s inverse %s, screen type %s",
+            tostring(doc.file), w, h, tostring(bb:getType()), tostring(bb:getRotation()),
+            tostring(bb:getInverse()), tostring(Screen.bb:getType())))
+        pcall(function() bb:writePNG(DataStorage:getSettingsDir() .. "/ls_cover_1_raw.png") end)
+    end
+    local copy
+    local ok_copy = pcall(function()
+        if w <= 0 or h <= 0 then error("empty cover") end
+        -- a private copy: the one given back can be freed or reused by whoever made it
+        copy = bb:copy()
+    end)
     pcall(function() bb:free() end)
+    if not ok_copy or not copy then return nil end
     if cover_cache.bb then cover_cache.bb:free() end
     cover_cache.file, cover_cache.bb = doc.file, copy
     return copy
@@ -2073,14 +2091,26 @@ local CoverBanner = Widget:extend{
 
 function CoverBanner:init()
     self.dimen = Geom:new{ w = self.width, h = self.height }
-    -- the cover covers the whole area, cropped at the center
+    -- The cover covers the whole area, cropped at the center. KOReader's own ImageWidget does the scaling,
+    -- the cropping and the transparency (the same code that draws the covers of the file browser).
     local bw, bh = self.cover:getWidth(), self.cover:getHeight()
     local scale = math.max(self.width / bw, self.height / bh)
-    local sw, sh = math.ceil(bw * scale), math.ceil(bh * scale)
-    local scaled = require("ui/renderimage"):scaleBlitBuffer(self.cover, sw, sh)
-    if scaled == self.cover then scaled = self.cover:copy() end  -- same size: never free the cached cover
-    self.scaled = scaled
-    self.ox, self.oy = math.floor((sw - self.width) / 2), math.floor((sh - self.height) / 2)
+    self.image = require("ui/widget/imagewidget"):new{
+        image = self.cover,
+        image_disposable = false,   -- the cached cover is not ours to free
+        width = self.width,
+        height = self.height,
+        scale_factor = scale,       -- fills the area; what is left over is cropped
+        center_x_ratio = 0.5,
+        center_y_ratio = 0.5,
+        alpha = true,               -- covers with transparency are blended, not blitted raw
+    }
+    if cover_cache.debug then
+        local ok_sz, sz = pcall(function() return self.image:getSize() end)
+        logger.info(string.format("[LS-COVER] cached %dx%d type %s, area %dx%d, scale %.3f, image %s",
+            bw, bh, tostring(self.cover:getType()), self.width, self.height, scale,
+            ok_sz and sz and string.format("%dx%d", sz.w, sz.h) or "?"))
+    end
 end
 
 function CoverBanner:getSize()
@@ -2089,7 +2119,10 @@ end
 
 function CoverBanner:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
-    bb:blitFrom(self.scaled, x, y, self.ox, self.oy, self.width, self.height)
+    -- white first, so a cover smaller than the area never leaves what was under the window showing through
+    bb:paintRect(x, y, self.width, self.height, Blitbuffer.COLOR_WHITE)
+    local isz = self.image:getSize()
+    self.image:paintTo(bb, x + math.floor((self.width - isz.w) / 2), y + math.floor((self.height - isz.h) / 2))
     local cs = self.content:getSize()
     local band_h = cs.h + 2 * self.pad
     local by = y + math.floor((self.height - band_h) / 2)
@@ -2101,9 +2134,9 @@ function CoverBanner:paintTo(bb, x, y)
 end
 
 function CoverBanner:free()
-    if self.scaled then
-        self.scaled:free()
-        self.scaled = nil
+    if self.image then
+        self.image:free()
+        self.image = nil
     end
     if self.content and self.content.free then self.content:free() end
 end
@@ -4058,8 +4091,9 @@ function ShowLongestSessionsWindow:onSwipe(arg, ges)
 end
 
 function ShowLongestSessionsWindow:onShow()
+    -- dithered: the cover is a photo, without it e-ink shows banding
     UIManager:setDirty(self, function()
-        return "ui", self[1][1].dimen
+        return "ui", self[1][1].dimen, true
     end)
     if DEBUG_PERF and Perf.open_t0 then
         local t0 = Perf.open_t0
