@@ -1092,11 +1092,12 @@ function CustomBg:_scheduleBgReapply(delay)
     end)
 end
 
--- The bottom picture mode is global, so it comes back when a book is opened. pagetextinfo is not ready yet at that moment.
+-- The bottom picture mode is global, so it comes back when a book is opened (pagetextinfo makes it on ReaderReady).
 function CustomBg:_scheduleBottomRefresh()
     if not self:getBottomMode() then return end
-    UIManager:scheduleIn(1.5, function()
-        if self.ui and self.ui.document and self:getBottomMode() then
+    UIManager:scheduleIn(0.5, function()
+        -- pagetextinfo normally made it already when the reader was ready; this is only a safety net
+        if self.ui and self.ui.document and self:getBottomMode() and not self:hasBottomImage() then
             self:refreshBottomImage()
             UIManager:setDirty("all", "ui")
         end
@@ -1186,10 +1187,11 @@ function CustomBg:getPageRefreshMode()
 end
 
 function CustomBg:_wantsNoFlash()
-    -- NOTE: also active in pieces mode: the gray pieces would flicker with KOReader's own page-turn refresh
+    -- NOTE: also active in pieces mode: the gray pieces would flicker with KOReader's own page-turn refresh.
+    -- The same goes for the bottom picture (hero / cover text): it is a gray picture painted over the page.
     return self:isNoFlashEnabled()
        and self.ui and self.ui.document
-       and self._bg_last_name ~= nil and self._bg_last_name ~= ""
+       and ((self._bg_last_name ~= nil and self._bg_last_name ~= "") or self:getBottomMode() ~= nil)
 end
 
 -- ===== No dithering of the background =====
@@ -2427,6 +2429,7 @@ end
 -- Makes (or removes) the picture for the current mode. The picture itself is built by pagetextinfo.
 function CustomBg:refreshBottomImage()
     local mode = self:getBottomMode()
+    self:_syncNoFlash()   -- the no-flash page turns follow the bottom picture too
     local pti = self.ui and self.ui.pagetextinfo
     if mode and pti and pti.buildBottomHero and self.ui.document then
         pti:buildBottomHero(mode)
@@ -2441,6 +2444,7 @@ function CustomBg:_clearBottomMode()
         CFG:saveSetting(BOTTOM_MODE_KEY, nil)
     end
     self:clearBottomImage()
+    self:_syncNoFlash()
 end
 
 -- mode: nil / "hero" / "cover". A mode turns the background and the ruled lines off.
@@ -2458,6 +2462,11 @@ function CustomBg:setBottomMode(mode)
         CFG:saveSetting(BOTTOM_MODE_KEY, nil)
     end
     self:refreshBottomImage()
+    if mode and not self:hasBottomImage() then
+        -- the picture could not be made (no cover and no hero available): it is the same as "No background"
+        CFG:saveSetting(BOTTOM_MODE_KEY, nil)
+        self:_syncNoFlash()
+    end
 end
 
 -- ===== "The picture": the background or the bottom picture, whichever is the configured one =====
@@ -4443,7 +4452,8 @@ function CustomBg:addToMainMenu(menu_items)
                         text = _("No background"),
                         checked_func = function()
                             local v = self:readBgChoice()
-                            return (v == nil or v == DOC_BG_NONE) and self:getBottomMode() == nil
+                            -- also when a bottom mode is chosen but there is no picture to show (it could not be made)
+                            return (v == nil or v == DOC_BG_NONE) and not self:hasBottomImage()
                         end,
                         keep_menu_open = true,
                         callback = function(touchmenu_instance)

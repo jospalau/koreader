@@ -1003,8 +1003,8 @@ function PageTextInfo:onBottomTap(side, ges)
 end
 
 -- Tap in the bottom center (the zone bookends uses for its "tap on the bottom bar" action):
---   bookends off and custombg (background, lines and bottom picture) off -> nothing. The bottom picture (hero or cover
---                                           text) is chosen in the custombg menu and has no tap
+--   bottom picture on (hero or cover text of custombg) -> the list of the custombg backgrounds, where it is chosen
+--   bookends off and custombg (background, lines and bottom picture) off -> nothing
 --   (otherwise, with the topbar showing and bookends off: nothing)
 --   background on (with or without lines) -> settings of the background
 --   lines on                              -> settings of the ruled lines
@@ -1019,8 +1019,13 @@ function PageTextInfo:onBottomCenterTap(ges)
     local custombg = self.ui and self.ui.custombg
     local lines_on = custombg and custombg.fs_enabled and true or false
     local bg_on = custombg and custombg.getCurrentDocBg and custombg:getCurrentDocBg() ~= nil or false
+    -- the bottom picture of custombg (hero or cover text) opens the same list where it is chosen
+    if custombg and custombg.getBottomMode and custombg:getBottomMode() then
+        self:showCustomBgSubMenu("background")
+        return true
+    end
     if not bookends_on and not lines_on and not bg_on then
-        return true -- nothing to do (the bottom picture of custombg, if any, has no tap)
+        return true -- nothing on: nothing to do
     end
     if not bookends_on and topbar_on then
         return true -- topbar showing: nothing
@@ -2058,6 +2063,12 @@ function PageTextInfo:onReaderReady()
     -- self.ui.menu:registerToMainMenu(self)
     self.view:registerViewModule("pagetextinfo", self)
     self.initialized = true
+    -- The bottom picture chosen in custombg (hero or cover text) is made now, before the first page is painted
+    do
+        local custombg = self.ui and self.ui.custombg
+        local mode = custombg and custombg.getBottomMode and custombg:getBottomMode()
+        if mode then pcall(self.buildBottomHero, self, mode) end
+    end
     -- The bottom center tap is ours, also when bookends' own zone would be reached first
     self:takeOverBookendsFooterTap()
 
@@ -2290,10 +2301,11 @@ function PageTextInfo:onPageUpdate(pageno)
     -- Avoid double execution when loading document
     if not self.initialized then return end
 
-    -- the bottom picture (if up) is built again so its progress and time left advance with the page
+    -- the bottom picture (if chosen in custombg) is built again so its progress and time left advance with the page
     local custombg = self.ui and self.ui.custombg
-    if custombg and custombg.hasBottomImage and custombg:hasBottomImage() then
-        self:buildBottomHero(custombg:getBottomMode())
+    local bottom_mode = custombg and custombg.getBottomMode and custombg:getBottomMode()
+    if bottom_mode then
+        self:buildBottomHero(bottom_mode)
     end
 
     if self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
