@@ -764,6 +764,54 @@ local HEATMAP_YEARS = 4  -- years shown, newest first
 -- so all years show the same square size, whatever their number of weeks.
 local HEATMAP_MAX_COLS = 54
 
+-- Reading time of each day of the week over ALL the saved sessions (in days of 24 hours): which days you like to read most. The second look
+-- of the "Days Read per Year" window (a tap switches, see ShowLongestSessionsWindow:onTapClose). A session counts on
+-- the day it started.
+local function buildWeekdaysView(w_width)
+    local items, err = queryAll([[
+        SELECT CAST(strftime('%w', start_time, 'unixepoch', 'localtime') AS INTEGER), SUM(duration)
+        FROM wpm_stat_data
+        WHERE start_time > 0
+        GROUP BY 1
+    ]], function(row)
+        return { wday = tonumber(row[1]), seconds = tonumber(row[2]) or 0 }
+    end)
+    if not items then return nil, err end
+    if #items == 0 then return nil, _("No reading data found") end
+
+    -- strftime %w: 0 is Sunday. The chart starts on the first day of the week of the other views.
+    local week_start = HEATMAP_WEEK_STARTS_ON_SUNDAY and 0 or 1
+    local by_wday = {}
+    for _i, item in ipairs(items) do by_wday[item.wday] = item.seconds end
+
+    local values, labels, total, best = {}, {}, 0, 1
+    for i = 1, 7 do
+        local wday = (week_start + i - 1) % 7
+        local seconds = by_wday[wday] or 0
+        values[i] = seconds / SECONDS_PER_DAY   -- days of 24 hours, as the years look of this window
+        total = total + seconds
+        -- 2024-01-07 was a Sunday: the short name of the day, in the language of the system
+        labels[i] = os.date("%a", os.time({ year = 2024, month = 1, day = 7 + wday, hour = 12 }))
+        if values[i] > values[best] then best = i end
+    end
+    if total <= 0 then return nil, _("No reading data found") end
+
+    local summary = string.format("%s %s %.1f %s (%d%%)",
+        _("Best:"), labels[best], values[best], _("days"),
+        math.floor(values[best] * SECONDS_PER_DAY * 100 / total + 0.5))
+    return chartBody(w_width, {
+        values = values,
+        labels = labels,
+        current = best,
+    }, summary)
+end
+
+-- The "Days Read per Year" window has two looks (parent.days_mode): the days read in each year, or the days of the week.
+local function buildDaysReadChartView(w_width, parent)
+    if parent and parent.days_mode == "weekdays" then return buildWeekdaysView(w_width) end
+    return buildDaysReadPerYearView(w_width)
+end
+
 -- No reading, then 0-25%, 25-50%, 50-75% and 75-100% of the busiest day
 local HEAT_COLORS = { COLOR_SOFT, gray(200), gray(155), gray(100), COLOR_ACCENT }
 local DAY_LETTERS = { _("S"), _("M"), _("T"), _("W"), _("T"), _("F"), _("S") } -- Sunday first
@@ -2015,31 +2063,24 @@ local function getOpenBookCover()
     return copy
 end
 
--- How much the cover under the text is washed towards white (0: not at all, 1: solid white). The cover still shows
--- through the band, and the text on it stays legible.
-local COVER_BAND_LIGHTEN = 0.7
-
 local CoverBanner = Widget:extend{
     width = 0,
     height = 0,
     cover = nil,      -- buffer of the cover (not freed here)
-    content = nil,    -- the text widget that goes on the band (nil: no band)
+    content = nil,    -- the text widget that goes on the band
     pad = 0,          -- space between the text and the edge of the band
 }
 
 function CoverBanner:init()
     self.dimen = Geom:new{ w = self.width, h = self.height }
-    -- the whole cover, as big as it fits in the area and centered in it (not cropped)
+    -- the cover covers the whole area, cropped at the center
     local bw, bh = self.cover:getWidth(), self.cover:getHeight()
-    local scale = math.min(self.width / bw, self.height / bh)
-    local sw, sh = math.max(1, math.floor(bw * scale)), math.max(1, math.floor(bh * scale))
-    -- false: scaleBlitBuffer frees the original by default, and the original is the cached cover, which the next
-    -- showing of the window uses again
-    local scaled = require("ui/renderimage"):scaleBlitBuffer(self.cover, sw, sh, false)
+    local scale = math.max(self.width / bw, self.height / bh)
+    local sw, sh = math.ceil(bw * scale), math.ceil(bh * scale)
+    local scaled = require("ui/renderimage"):scaleBlitBuffer(self.cover, sw, sh)
     if scaled == self.cover then scaled = self.cover:copy() end  -- same size: never free the cached cover
     self.scaled = scaled
-    self.sw, self.sh = scaled:getWidth(), scaled:getHeight()
-    self.dx, self.dy = math.floor((self.width - self.sw) / 2), math.floor((self.height - self.sh) / 2)
+    self.ox, self.oy = math.floor((sw - self.width) / 2), math.floor((sh - self.height) / 2)
 end
 
 function CoverBanner:getSize()
@@ -2048,18 +2089,14 @@ end
 
 function CoverBanner:paintTo(bb, x, y)
     self.dimen.x, self.dimen.y = x, y
-    bb:paintRect(x, y, self.width, self.height, Blitbuffer.COLOR_WHITE)
-    bb:blitFrom(self.scaled, x + self.dx, y + self.dy, 0, 0, self.sw, self.sh)
-    if not self.content then return end
+    bb:blitFrom(self.scaled, x, y, self.ox, self.oy, self.width, self.height)
     local cs = self.content:getSize()
     local band_h = cs.h + 2 * self.pad
-    -- the band goes at the bottom of the cover (not of the area, which may have white space under the cover)
-    local by = math.max(y, y + self.dy + self.sh - band_h)
-    -- a translucent band: the cover under the text is washed towards white, not covered
-    local ok = bb.lightenRect and pcall(bb.lightenRect, bb, x, by, self.width, band_h, COVER_BAND_LIGHTEN)
-    if not ok then
-        bb:paintRect(x, by, self.width, band_h, Blitbuffer.COLOR_WHITE)
-    end
+    local by = y + math.floor((self.height - band_h) / 2)
+    bb:paintRect(x, by, self.width, band_h, Blitbuffer.COLOR_WHITE)
+    local line = Size.line.medium
+    bb:paintRect(x, by, self.width, line, Blitbuffer.COLOR_BLACK)
+    bb:paintRect(x, by + band_h - line, self.width, line, Blitbuffer.COLOR_BLACK)
     self.content:paintTo(bb, x + math.floor((self.width - cs.w) / 2), by + self.pad)
 end
 
@@ -2125,26 +2162,10 @@ local function buildBookCard(w_width, session, book)
         local pub = tostring(topbar.pub_date or "")
         if pub ~= "" then parts[#parts + 1] = pub end
 
-        -- with a cover only the words and the publication date are shown, on a band at the bottom of the cover
-        -- (the title and the series are already on the cover)
+        -- with a cover the text sits on a band, a bit narrower than the card
         local cover = getOpenBookCover()
         local band_pad = SPACE.l
-        if cover then
-            local info
-            if #parts > 0 then
-                info = TextWidget:new{
-                    text = table.concat(parts, SUMMARY_SEPARATOR), face = getFace(FONT_SUMMARY), bold = true,
-                    fgcolor = COLOR_TEXT, max_width = inner_w - 2 * band_pad, ellipsis = true,
-                }
-            end
-            local margin = Screen:scaleBySize(16)
-            local info_h = info and (info:getSize().h + 2 * band_pad) or 0
-            local height = math.max(min_h or 0, info_h + 2 * margin)
-            return CoverBanner:new{
-                width = inner_w, height = height, cover = cover, content = info, pad = band_pad,
-            }
-        end
-        local text_w = inner_w
+        local text_w = cover and (inner_w - 2 * band_pad) or inner_w
 
         local vg = VerticalGroup:new{ align = "center" }
         vg[#vg + 1] = TextWidget:new{
@@ -2164,6 +2185,14 @@ local function buildBookCard(w_width, session, book)
             vg[#vg + 1] = TextWidget:new{
                 text = table.concat(parts, SUMMARY_SEPARATOR), face = getFace(FONT_SUMMARY),
                 fgcolor = COLOR_MUTED, max_width = text_w, ellipsis = true,
+            }
+        end
+        if cover then
+            -- room above and below the band, so the cover shows
+            local margin = Screen:scaleBySize(16)
+            local height = math.max(min_h or 0, vg:getSize().h + 2 * band_pad + 2 * margin)
+            return CoverBanner:new{
+                width = inner_w, height = height, cover = cover, content = vg, pad = band_pad,
             }
         end
         return vg
@@ -3611,8 +3640,11 @@ local VIEWS = {
     },
     {
         -- not a list: it builds its own widgets
-        title = _("Days Read per Year"),
-        build = buildDaysReadPerYearView,
+        title = function(win)
+            if win and win.days_mode == "weekdays" then return _("Reading by Weekday") end
+            return _("Days Read per Year")
+        end,
+        build = buildDaysReadChartView,
     },
     {
         -- not a list: it builds its own widgets
@@ -4171,8 +4203,21 @@ function ShowLongestSessionsWindow:switchMonthMode(mode)
     UIManager:show(widget, "ui", widget.dimen)
 end
 
+-- Shows the "Days Read per Year" view again in another look ("years" or "weekdays")
+function ShowLongestSessionsWindow:switchDaysMode(mode)
+    local widget = ShowLongestSessionsWindow:new{ current_view = self.current_view, days_mode = mode }
+    if widget.failed then return end
+    UIManager:close(self)
+    UIManager:show(widget, "ui", widget.dimen)
+end
+
 function ShowLongestSessionsWindow:onTapClose(arg, ges)
     self.ignore_hold = nil  -- a new touch: the opening hold is over
+    -- on the days read per year a tap on the window changes between the years and the days of the week
+    if VIEWS[self.current_view].build == buildDaysReadChartView and self:isOnWindow(ges) then
+        self:switchDaysMode(self.days_mode == "weekdays" and "years" or "weekdays")
+        return true
+    end
     -- on the monthly chart a tap on the window changes between the hours and the books and pages of each month; a tap
     -- outside the window closes it as always
     if VIEWS[self.current_view].build == buildMonthlyChartView and self:isOnWindow(ges) then
