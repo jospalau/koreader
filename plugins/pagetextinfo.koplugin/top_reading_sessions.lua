@@ -2091,11 +2091,10 @@ local CoverBanner = Widget:extend{
 
 function CoverBanner:init()
     self.dimen = Geom:new{ w = self.width, h = self.height }
-    -- The whole cover is stretched to exactly the area (nothing cropped, so the top and bottom of the cover
-    -- stay visible). KOReader's own ImageWidget does the scaling and the transparency
-    -- (the same code that draws the covers of the file browser).
+    -- The whole cover is stretched to exactly the area: nothing is cropped (top and bottom of the cover stay visible).
+    -- KOReader's own ImageWidget does the scaling and the transparency (the same code that draws the covers of the file browser).
     local bw, bh = self.cover:getWidth(), self.cover:getHeight()
-    local scale = 0 -- only shown in the debug log: the stretch has no single factor
+    local scale = 0 -- only shown in the debug log: a stretch has no single factor
     self.image = require("ui/widget/imagewidget"):new{
         image = self.cover,
         image_disposable = false,   -- the cached cover is not ours to free
@@ -2124,11 +2123,9 @@ function CoverBanner:paintTo(bb, x, y)
     self.image:paintTo(bb, x + math.floor((self.width - isz.w) / 2), y + math.floor((self.height - isz.h) / 2))
     local cs = self.content:getSize()
     local band_h = cs.h + 2 * self.pad
-    local by = y + math.floor((self.height - band_h) / 2)
-    bb:paintRect(x, by, self.width, band_h, Blitbuffer.COLOR_WHITE)
-    local line = Size.line.medium
-    bb:paintRect(x, by, self.width, line, Blitbuffer.COLOR_BLACK)
-    bb:paintRect(x, by + band_h - line, self.width, line, Blitbuffer.COLOR_BLACK)
+    -- the text goes over the bottom of the cover, with no box behind it (transparent),
+    -- raised by bottom_gap so the card's border and rounded corners never cut its lower part
+    local by = y + self.height - band_h - (self.bottom_gap or 0)
     self.content:paintTo(bb, x + math.floor((self.width - cs.w) / 2), by + self.pad)
 end
 
@@ -2199,24 +2196,21 @@ local function buildBookCard(w_width, session, book)
         local band_pad = SPACE.l
         local text_w = cover and (inner_w - 2 * band_pad) or inner_w
 
+        -- Only the words and the publication year (no title, no series, no author).
+        -- The title is shown only when neither is known, so the card is never empty.
         local vg = VerticalGroup:new{ align = "center" }
-        vg[#vg + 1] = TextWidget:new{
-            text = cleanTopBarText(title), face = getFace(FONT_BIG - 2), bold = true,
-            fgcolor = COLOR_TEXT, max_width = text_w, ellipsis = true,
-        }
-        local series = cleanTopBarText(topbar.series)
-        if series ~= "" then
-            vg[#vg + 1] = VerticalSpan:new{ width = SPACE.s }
-            vg[#vg + 1] = TextWidget:new{
-                text = series, face = getFace(FONT_SUMMARY),
-                fgcolor = COLOR_MUTED, max_width = text_w, ellipsis = true,
-            }
-        end
         if #parts > 0 then
-            vg[#vg + 1] = VerticalSpan:new{ width = SPACE.s }
             vg[#vg + 1] = TextWidget:new{
-                text = table.concat(parts, SUMMARY_SEPARATOR), face = getFace(FONT_SUMMARY),
-                fgcolor = COLOR_MUTED, max_width = text_w, ellipsis = true,
+                -- over the cover: bigger, bold and white so it can be read on the picture
+                -- (without a cover it stays as before: gray on the white card)
+                text = table.concat(parts, SUMMARY_SEPARATOR),
+                face = getFace(cover and FONT_SUBTITLE or FONT_SUMMARY), bold = cover and true or nil,
+                fgcolor = cover and Blitbuffer.COLOR_WHITE or COLOR_MUTED, max_width = text_w, ellipsis = true,
+            }
+        else
+            vg[#vg + 1] = TextWidget:new{
+                text = cleanTopBarText(title), face = getFace(FONT_BIG - 2), bold = true,
+                fgcolor = COLOR_TEXT, max_width = text_w, ellipsis = true,
             }
         end
         if cover then
@@ -2225,6 +2219,7 @@ local function buildBookCard(w_width, session, book)
             local height = math.max(min_h or 0, vg:getSize().h + 2 * band_pad + 2 * margin)
             return CoverBanner:new{
                 width = inner_w, height = height, cover = cover, content = vg, pad = band_pad,
+                bottom_gap = margin,   -- the text sits this far above the bottom of the cover
             }
         end
         return vg
