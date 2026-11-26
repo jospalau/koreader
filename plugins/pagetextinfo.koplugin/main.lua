@@ -1064,6 +1064,16 @@ function PageTextInfo:onBottomDoubleTap(side, ges)
     return true
 end
 
+-- True only when custombg says its picture is switched off (isPictureOn() == false). Switched off,
+-- getCurrentDocBg() and getBottomMode() may still return the chosen background / mode, so they alone
+-- do not tell whether a picture is showing. Without isPictureOn (older custombg): false.
+function PageTextInfo:isCustomBgPictureOff(custombg)
+    custombg = custombg or (self.ui and self.ui.custombg)
+    if not (custombg and custombg.isPictureOn) then return false end
+    local ok, on = pcall(custombg.isPictureOn, custombg)
+    return ok and on == false
+end
+
 -- Cycles the custombg picture on each tap in the bottom center:
 --   image (background) -> book title (cover text) -> bookshelf hero -> off -> background settings -> image ...
 -- A type that cannot be made for this book (no cover, no hero, no images) is skipped.
@@ -1074,6 +1084,8 @@ function PageTextInfo:cycleCustomBgPicture()
     if not (custombg and custombg.setBottomMode and custombg.applyBackground) then return false end
     local mode = custombg:getBottomMode()                    -- "cover" / "hero" / nil
     local current = mode or (custombg:getCurrentDocBg() and "image") or nil
+    local picture_off = self:isCustomBgPictureOff(custombg)
+    if picture_off then current = nil end
     local stage = self._bg_cycle_stage
     if current then stage = nil end
 
@@ -1115,7 +1127,8 @@ function PageTextInfo:cycleCustomBgPicture()
             open_settings = true
             new_stage = "settings"
         else
-            -- after the settings (or nothing on): back to the image
+            -- after the settings (or nothing on): back to the image, switching the picture on first
+            if picture_off and custombg.setPictureEnabled then custombg:setPictureEnabled(true) end
             if not showImage() and not showBottom("cover") then showBottom("hero") end
         end
         if next_off then
@@ -1165,6 +1178,7 @@ function PageTextInfo:onBottomCenterTap(ges)
     local bg_on = custombg and custombg.getCurrentDocBg and custombg:getCurrentDocBg() ~= nil or false
     -- a picture showing (background image, cover text or hero): cycle to the next one
     local bottom_on = custombg and custombg.getBottomMode and custombg:getBottomMode() ~= nil or false
+    if custombg and self:isCustomBgPictureOff(custombg) then bg_on, bottom_on = false, false end
     if bg_on or bottom_on or (custombg and self._bg_cycle_stage) then
         return self:cycleCustomBgPicture()
     end
@@ -1210,7 +1224,7 @@ end
 
 -- With the top bar disabled, ReaderView paints it with TopBar:paintToDisabled (page number bottom center,
 -- daily time left bottom left, chapter pages left and the corner mark). In the hidden mode that function
--- paints nothing. Wrapped on this topbar instance only, so topbar.lua is not changed.
+-- paints only the corner mark (vocabulary highlight / double tap off). Wrapped on this topbar instance only, so topbar.lua is not changed.
 function PageTextInfo:installTopBarHiddenPaint()
     local topbar = self.view and self.view.topbar
     if not topbar or topbar._pagetextinfo_hidden_paint then return end
@@ -1218,18 +1232,36 @@ function PageTextInfo:installTopBarHiddenPaint()
     local function isHidden(tb)
         return not tb.is_enabled and pti.settings:isTrue("topbar_hidden")
     end
+    -- In the hidden mode only the corner mark is painted (striped triangle: vocabulary highlight, solid triangle:
+    -- double tap off, nothing: normal), at the same place as the first block of TopBar:paintToDisabled.
+    local function paintCornerMark(tb, bb, x, y)
+        local c = tb.ignore_corners_widget_container
+        if not (c and c[1]) then return end
+        local ok, err = pcall(function()
+            c[1]:setText(tb.ignore_corners or "")
+            local right = Screen:scaleBySize(Device:isAndroid() and 20 or 2)
+            local py
+            if (tb.status_bar and tb.status_bar == true and tb.view.footer.settings.bar_top) or tb.view.dogear_visible then
+                py = Screen:getHeight() - (tb.MARGIN_BOTTOM or 0)
+            else
+                py = y + Screen:scaleBySize(6)
+            end
+            c:paintTo(bb, x + Screen:getWidth() - c[1]:getSize().w - right, py)
+        end)
+        if not ok then logger.warn("pagetextinfo: corner mark in hidden top bar failed:", err) end
+    end
     topbar._pagetextinfo_hidden_paint = true
     local orig_paintToDisabled = topbar.paintToDisabled
     if orig_paintToDisabled then
         topbar.paintToDisabled = function(tb, bb, x, y)
-            if isHidden(tb) then return end
+            if isHidden(tb) then return paintCornerMark(tb, bb, x, y) end
             return orig_paintToDisabled(tb, bb, x, y)
         end
     end
     local orig_paintTo = topbar.paintTo
     if orig_paintTo then
         topbar.paintTo = function(tb, bb, x, y)
-            if isHidden(tb) then return end
+            if isHidden(tb) then return paintCornerMark(tb, bb, x, y) end
             return orig_paintTo(tb, bb, x, y)
         end
     end
@@ -1824,6 +1856,11 @@ function PageTextInfo:onMultiSwipe(arg, ges)
         self:toggleFullScreenRuledLinesNoTopbar()
         return true
     end
+    if ges and ges.multiswipe_directions == "west north" then
+        -- Bottom margin only: for the custombg picture, or empty_bottom_margin with nothing on screen
+        self:onAdjustBottomMargin()
+        return true
+    end
     -- Not our gesture: let other handlers deal with it
     return false
 end
@@ -2296,6 +2333,8 @@ end
 --   background image: picture_bottom_margin
 PageTextInfo.picture_bottom_margin = 60
 PageTextInfo.picture_bottom_air = 4
+-- Bottom margin set by the west-north multiswipe when reading with nothing on screen (no bars, no bookends, no picture)
+PageTextInfo.empty_bottom_margin = 15
 
 -- Smallest bottom margin (unscaled units) whose text area ends at least px pixels above the screen bottom.
 -- ReaderTypeset:onSetPageMargins uses Screen:scaleBySize(margin) (rounded up), plus the footer height when
@@ -2317,6 +2356,7 @@ end
 function PageTextInfo:getPictureBottomMargin()
     local custombg = self.ui and self.ui.custombg
     if not custombg then return nil end
+    if self:isCustomBgPictureOff(custombg) then return nil end   -- switched off: nothing at the bottom
     if custombg.getBottomMode then
         local ok, mode = pcall(custombg.getBottomMode, custombg)
         if ok and mode ~= nil then
@@ -2339,12 +2379,12 @@ function PageTextInfo:keepBottomMargin()
 end
 
 -- Index of the preset matching the current margins, or nil if none does.
--- With a custombg picture the bottom margin is not compared (it is given by getPictureBottomMargin).
-function PageTextInfo:getCurrentPresetIndex()
+-- With a custombg picture (or ignore_bottom) the bottom margin is not compared.
+function PageTextInfo:getCurrentPresetIndex(ignore_bottom)
     local cfg = self.ui.document.configurable
     local h = cfg.h_page_margins
     if not h then return nil end
-    local ignore_bottom = self:keepBottomMargin()
+    ignore_bottom = ignore_bottom or self:keepBottomMargin()
     for i, p in ipairs(PageTextInfo.margin_presets) do
         if h[1] == p[1] and cfg.t_page_margin == p[2]
             and h[2] == p[3] and (ignore_bottom or cfg.b_page_margin == p[4]) then
@@ -2484,6 +2524,61 @@ function PageTextInfo:onAdjustMarginsTopbar()
     if not t then return end
     if not self:applyMargins(t) then
         self.ui:showBookStatus()
+    end
+    return true
+end
+
+-- West-north multiswipe, only the bottom margin:
+--   custombg picture on (image, hero, cover text) -> margin for the picture (as the margin adjustment)
+--   nothing on screen (top bar "hidden", no bookends, no footer) -> empty_bottom_margin
+--   bookends -> bottom of the first preset
+--   top bar "minimal" -> bottom of the current preset
+--   top bar on or footer -> what the bar needs (as the margin adjustment)
+-- Left, top and right stay as they are; the preset and the font are not changed.
+function PageTextInfo:onAdjustBottomMargin()
+    local ui = self.ui
+    local function skip(why)
+        logger.info("pagetextinfo west-north: nothing done,", why)
+        return true
+    end
+    if not ui.rolling then return skip("not a reflowable document") end
+    -- a custombg picture on (background image, hero or cover text): bottom margin for the picture,
+    -- the same as the margin adjustment does
+    local bottom = self:getPictureBottomMargin()
+    if not bottom then
+        local topbar = ui.view and ui.view.topbar
+        local nothing_on = not (ui.bookends and ui.bookends.enabled)
+            and not (ui.view and ui.view.footer_visible)
+            and (not topbar or self:getTopBarMode() == "hidden")
+        if nothing_on then
+            -- nothing on screen: the text can go down to empty_bottom_margin
+            bottom = PageTextInfo.empty_bottom_margin
+        elseif ui.bookends and ui.bookends.enabled then
+            -- bookends: always the bottom of the first preset
+            bottom = PageTextInfo.margin_presets[1][4]
+        elseif self:shouldCyclePresets() then
+            -- top bar "minimal": bottom of the current preset, recognized by left, top and right
+            local p = PageTextInfo.margin_presets[self:getCurrentPresetIndex(true) or 1]
+            bottom = p[4]
+        else
+            -- top bar on or footer: what the bar needs (same target as the margin adjustment)
+            local t = self:getTargetMargins()
+            if not t then return skip("no target for this document") end
+            bottom = t[4]
+        end
+    end
+
+    local cfg = ui.document.configurable
+    if cfg.b_page_margin == bottom then return skip("bottom margin already " .. tostring(bottom)) end
+    local top = cfg.t_page_margin
+    logger.info("pagetextinfo west-north: bottom margin", cfg.b_page_margin, "->", bottom)
+    cfg.b_page_margin = bottom
+    -- top and bottom together: sent alone, "Sync T/B margins" would also change the top one
+    local typeset = ui.typeset
+    if typeset and typeset.onSetPageTopAndBottomMargin and top ~= nil then
+        UIManager:sendEvent(Event:new("SetPageTopAndBottomMargin", { top, bottom }))
+    else
+        UIManager:sendEvent(Event:new("SetPageBottomMargin", bottom))
     end
     return true
 end
