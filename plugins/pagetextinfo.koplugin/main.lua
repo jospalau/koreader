@@ -627,6 +627,21 @@ function PageTextInfo:initGesListener()
             },
             handler = function(ges) return self:onBottomTap("right", ges) end,
         },
+        {
+            -- Tap in the bottom center (same zone as the stock footer / bookends): see onBottomCenterTap
+            id = "pagetextinfo_tap_bottom_center",
+            ges = "tap",
+            screen_zone = (function()
+                local z = G_defaults:readSetting("DTAP_ZONE_MINIBAR")
+                return { ratio_x = z.x, ratio_y = z.y, ratio_w = z.w, ratio_h = z.h }
+            end)(),
+            overrides = {
+                "bookends_footer_tap",
+                "readerfooter_tap",
+                "pagetextinfo_tap",
+            },
+            handler = function(ges) return self:onBottomCenterTap(ges) end,
+        },
     })
 end
 
@@ -953,6 +968,98 @@ function PageTextInfo:onBottomTap(side, ges)
     end
     -- side == "right": session time (top half) and wpm (bottom half) over the page, fading out after a moment
     self:showSessionOverlay()
+    return true
+end
+
+-- Tap in the bottom center (the zone bookends uses for its "tap on the bottom bar" action):
+--   (with bookends on, or with the topbar disabled; with the topbar showing and bookends off: nothing)
+--   background on (with or without lines) -> settings of the background
+--   lines on                              -> settings of the ruled lines
+--   bookends on alone                     -> next bookends preset
+--   anything else                         -> nothing (the tap is consumed, so bookends does not act while off)
+function PageTextInfo:onBottomCenterTap(ges)
+    if not self.initialized then return false end
+    local bookends = self.ui and self.ui.bookends
+    local bookends_on = bookends and bookends.enabled and true or false
+    local topbar = self.view and self.view.topbar
+    local topbar_on = topbar and topbar.is_enabled and true or false
+    if not bookends_on and topbar_on then
+        return true -- topbar showing: nothing
+    end
+    local custombg = self.ui and self.ui.custombg
+    if custombg then
+        local lines_on = custombg.fs_enabled and true or false
+        local bg_on = custombg.getCurrentDocBg and custombg:getCurrentDocBg() ~= nil
+        if bg_on then
+            self:showCustomBgSubMenu("background")
+            return true
+        elseif lines_on then
+            self:showCustomBgSubMenu("lines")
+            return true
+        end
+    end
+    if bookends_on and bookends.onCycleBookendsPreset then
+        bookends:onCycleBookendsPreset()
+    end
+    return true
+end
+
+-- Bookends registers its own bottom center tap zone ("bookends_footer_tap") that toggles / cycles by itself.
+-- The override in initGesListener should already put our zone first, but to be sure, the handler of the
+-- bookends zone is replaced by ours, so that tap always goes through onBottomCenterTap.
+-- (_ordered_touch_zones keeps the same zone tables as _zones, so changing the handler here is enough.)
+function PageTextInfo:takeOverBookendsFooterTap()
+    local zones = self.ui and self.ui._zones
+    local zone = zones and zones["bookends_footer_tap"]
+    if zone and not zone._pagetextinfo then
+        zone.handler = function(ges) return self:onBottomCenterTap(ges) end
+        zone._pagetextinfo = true
+    end
+end
+
+-- Shows one submenu of the custombg plugin ("lines": Ruled lines, "background": Custom reading background)
+-- on its own, as a TouchMenu, without going through the main menu.
+-- The items are taken from custombg:addToMainMenu(), so they are always the current ones of the plugin.
+function PageTextInfo:showCustomBgSubMenu(which)
+    local custombg = self.ui and self.ui.custombg
+    if not custombg or not custombg.addToMainMenu then return false end
+    local menu_items = {}
+    local ok = pcall(custombg.addToMainMenu, custombg, menu_items)
+    local root = ok and menu_items.custombg and menu_items.custombg.sub_item_table
+    if not root then return false end
+    -- Look for the entry by its text, falling back to its position in the menu
+    local wanted = which == "lines" and _("Ruled lines (horizontal/vertical)") or _("Custom reading background")
+    local entry
+    for _i, item in ipairs(root) do
+        if item.text == wanted then entry = item break end
+    end
+    entry = entry or root[which == "lines" and 2 or 3]
+    if not entry then return false end
+    local items = entry.sub_item_table
+    if not items and entry.sub_item_table_func then
+        local ok_f, res = pcall(entry.sub_item_table_func)
+        items = ok_f and res or nil
+    end
+    if not items then return false end
+
+    local TouchMenu = require("ui/widget/touchmenu")
+    local tab = { icon = "appbar.settings" }
+    for i, item in ipairs(items) do tab[i] = item end
+    local menu_container = CenterContainer:new{
+        covers_header = true,
+        ignore = "height",
+        dimen = Screen:getSize(),
+    }
+    local touch_menu = TouchMenu:new{
+        width = Screen:getWidth(),
+        tab_item_table = { tab },
+        show_parent = menu_container,
+    }
+    touch_menu.close_callback = function()
+        UIManager:close(menu_container)
+    end
+    menu_container[1] = touch_menu
+    UIManager:show(menu_container)
     return true
 end
 
@@ -1952,6 +2059,8 @@ function PageTextInfo:onReaderReady()
     -- self.ui.menu:registerToMainMenu(self)
     self.view:registerViewModule("pagetextinfo", self)
     self.initialized = true
+    -- The bottom center tap is ours, also when bookends' own zone would be reached first
+    self:takeOverBookendsFooterTap()
 
 
     -- This is just for Android devices, at least the Boox Palma
