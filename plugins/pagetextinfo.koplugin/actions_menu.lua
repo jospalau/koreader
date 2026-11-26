@@ -94,6 +94,37 @@ return function(PageTextInfo)
         end
     end
 
+    -- Downloads only the server's lastModelSync (the name of the last device that pushed) into the
+    -- settings folder, where the menu title reads it. Returns true if it worked.
+    local function fetchLastPush()
+        if Device:isAndroid() then return false end
+        local DataStorage = require("datastorage")
+        local dest = DataStorage:getSettingsDir() .. "/lastModelSync"
+        local cmd
+        if Device:isKobo() or Device:isKindle() or Device:isPocketBook() then
+            local server = G_reader_settings:readSetting("rsync_server") or "192.168.50.252"
+            local port = G_reader_settings:readSetting("rsync_port") or ""
+            local rsync
+            if Device:isKobo() then
+                rsync = "/mnt/onboard/.niluje/usbnet/bin/rsync"
+            elseif Device:isKindle() then
+                rsync = "PATH=$PATH:/mnt/us/koreader rsync"
+            else
+                rsync = "rsync"
+            end
+            -- short timeouts: if the server is not there, give up quickly
+            cmd = string.format(
+                'RSYNC_PASSWORD="rsync1" %s -t --contimeout=5 --timeout=10 "rsync://rsync1@%s:%s/partition/lastModelSync" "%s" >/dev/null 2>&1',
+                rsync, server, port, dest)
+        else
+            -- Emulator: the partition is mounted on this computer
+            cmd = string.format('cp -p "/media/partition/lastModelSync" "%s" 2>/dev/null', dest)
+        end
+        local rc = os.execute(cmd)
+        return rc == 0 or rc == true
+    end
+    PageTextInfo.fetchLastPush = fetchLastPush
+
     -- Show a short message on the e-ink screen with fbink
     local function showFbinkMessage(paths, text)
         local f = io.popen(string.format(
@@ -831,8 +862,23 @@ return function(PageTextInfo)
         end
         local sep = "  \xC2\xB7  "
 
+        -- Last device that pushed to the server: local copy of the server's lastModelSync, saved by
+        -- pushConfig.sh (this device pushed) and pullConfig.sh (read from the server). No network here.
+        -- Content: the model only, e.g. "Kindle". If it is another device, a pull is needed.
+        -- Tap on the title bar to ask the server again (see onShowActionsMenu).
+        -- Date and time of the push: the date of the file (kept by rsync -t / cp -p from the push)
+        local push_path = DataStorage:getSettingsDir() .. "/lastModelSync"
+        local push_line = firstLine(push_path)
+        local push_text = "Last push: " .. (push_line or "?")
+        local push_mtime = push_line and lfs.attributes(push_path, "modification")
+        if push_mtime then
+            push_text = push_text .. sep .. os.date("%d/%m %H:%M", push_mtime)
+        end
+
+        -- Second line, so it is not cut by the width of the first one
         return {
             (rev or "?") .. sep .. db_text,
+            push_text,
         }
     end
 
@@ -1017,22 +1063,29 @@ return function(PageTextInfo)
         -- Title at the very top: a black bar with the version and database (white text)
         local title_lines = self:getMenuTitleLines()
         local title_w = cell_w * COLUMNS
-        table.insert(grid, FrameContainer:new{
+        -- One centred line per entry (the second one, "Push <device>", only if there is one)
+        local title_group = VerticalGroup:new{ align = "center" }
+        for __, line in ipairs(title_lines) do
+            table.insert(title_group, TextWidget:new{
+                text = line,
+                face = self:getMenuFace(FONT_SIZE - 1),
+                bold = true,
+                fgcolor = Blitbuffer.COLOR_WHITE,
+                max_width = title_w - 2 * Size.padding.small,
+            })
+        end
+        local title_h = math.max(header_h, title_group:getSize().h + 2 * Size.padding.small)
+        local title_frame = FrameContainer:new{
             bordersize = 0,
             background = Blitbuffer.COLOR_BLACK,
             margin = 0,
             padding = 0,
             CenterContainer:new{
-                dimen = Geom:new{ w = title_w, h = header_h },
-                TextWidget:new{
-                    text = title_lines[1],
-                    face = self:getMenuFace(FONT_SIZE - 1),
-                    bold = true,
-                    fgcolor = Blitbuffer.COLOR_WHITE,
-                    max_width = title_w - 2 * Size.padding.small,
-                },
+                dimen = Geom:new{ w = title_w, h = title_h },
+                title_group,
             },
-        })
+        }
+        table.insert(grid, title_frame)
 
         for _, action in ipairs(actions) do
             -- Section header (full width, above the row that starts here)
@@ -1123,6 +1176,47 @@ return function(PageTextInfo)
         }
 
         function dialog:onTap(arg, ges)
+            -- Tap on the title bar: ask the server who pushed last, then open the menu again
+            if title_frame.dimen and ges.pos:intersectWith(title_frame.dimen) then
+                local plugin = self.plugin
+                plugin:closeActionsMenu()
+                local function check()
+                    local Notification = require("ui/widget/notification")
+                    -- Same card as the sync scripts (busy_widget.lua); plain notification if it is missing
+                    local busy
+                    if BusyWidget then
+                        local where = Device:isEmulator() and "/media/partition"
+                            or string.format("%s:%s",
+                                tostring(G_reader_settings:readSetting("rsync_server") or "192.168.50.252"),
+                                tostring(G_reader_settings:readSetting("rsync_port") or ""))
+                        busy = BusyWidget:new{
+                            icon = "appbar.settings",
+                            title = _("Checking last push"),
+                            subtitle = where,
+                            animate = false,      -- the check is a blocking call: nothing could move
+                            dismissable = false,
+                        }
+                    else
+                        busy = Notification:new{ text = _("Checking last push...") }
+                    end
+                    UIManager:show(busy)
+                    UIManager:forceRePaint()
+                    local ok = fetchLastPush()
+                    UIManager:close(busy)
+                    if not ok then
+                        UIManager:show(Notification:new{ text = _("Could not reach the server") })
+                    end
+                    plugin:onShowActionsMenu()
+                end
+                local NetworkMgr = require("ui/network/manager")
+                if Device:isEmulator() or not NetworkMgr.runWhenOnline then
+                    UIManager:nextTick(check)
+                else
+                    -- turns the wifi on first if needed
+                    NetworkMgr:runWhenOnline(check)
+                end
+                return true
+            end
             -- Tap on an option: close the menu, then run the action
             for _, cell in ipairs(cells) do
                 if cell.frame.dimen and ges.pos:intersectWith(cell.frame.dimen) then
