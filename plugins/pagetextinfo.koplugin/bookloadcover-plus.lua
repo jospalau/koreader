@@ -24,7 +24,7 @@ local _ = require("gettext")
 
 local PLUGIN_NAME = "BookLoadCover Plus"
 local LOG_PREFIX = PLUGIN_NAME .. " patch:"
-local PATCH_VERSION = "v1.6.8"
+local PATCH_VERSION = "v1.6.9"
 
 local function pluginName()
 	return _("BookLoadCover Plus")
@@ -49,6 +49,7 @@ local State = {
 	coverbrowser_path_added = false,
 	suppress_closing_notice = false,
 	reload_pending = false,
+	switching_book = false,
 }
 
 local Settings = {
@@ -1565,6 +1566,16 @@ local function patchShowReader()
 		if shouldUseSeamlessOpening() then
 			seamless = true
 		end
+		-- Opening a book while another one is still open (Bookshelf parked over the reader): KOReader closes
+		-- the old reader AFTER our opening cover is up. Its closing cover would replace the one of the new
+		-- book for a moment, so it is skipped (see onClose). The flag ends when the new reader is created.
+		local current = ReaderUI.instance
+		if current and current.document and current.document.file ~= file then
+			State.switching_book = true
+			UIManager:scheduleIn(15, function()
+				State.switching_book = false
+			end)
+		end
 		return ReaderUI._original_showReader_bookloadcover(self, file, provider, seamless, ...)
 	end
 end
@@ -1641,6 +1652,7 @@ local function patchReaderInit()
 
 	ReaderUI.init = function(self, ...)
 		local ret = ReaderUI._original_init_bookloadcover(self, ...)
+		State.switching_book = false
 		registerMenuToMainMenu(self.menu)
 		scheduleCloseCover(getOpenCloseDelay())
 		return ret
@@ -1678,7 +1690,7 @@ local function patchReaderOnClose()
 
 		-- On a reload the cover is shown once, on the opening side (the end of the reload),
 		-- instead of twice (close + open).
-		if not is_reload and shouldShowClosingCover(self, full_refresh) then
+		if not is_reload and not State.switching_book and shouldShowClosingCover(self, full_refresh) then
 			local ok, result = pcall(showCover, self.document.file, {
 				reason = "close",
 				reload = is_reload,
