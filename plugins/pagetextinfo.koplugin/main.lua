@@ -2268,8 +2268,24 @@ end
 -- Bottom margin while custombg shows a picture (configurable units, unscaled):
 --   hero / cover text: the real height of the picture + picture_bottom_air, so the text ends just above it
 --   background image: picture_bottom_margin
-PageTextInfo.picture_bottom_margin = 50
-PageTextInfo.picture_bottom_air = 6
+PageTextInfo.picture_bottom_margin = 60
+PageTextInfo.picture_bottom_air = 4
+
+-- Smallest bottom margin (unscaled units) whose text area ends at least px pixels above the screen bottom.
+-- ReaderTypeset:onSetPageMargins uses Screen:scaleBySize(margin) (rounded up), plus the footer height when
+-- the footer does not overlap the text ("Overlap status bar" off), so that height is already there.
+function PageTextInfo:pxToBottomMargin(px)
+    local footer = self.view and self.view.footer
+    if footer and not footer.reclaim_height and footer.getHeight then
+        px = px - (footer:getHeight() or 0)
+    end
+    if px <= 0 then return 0 end
+    local per100 = Screen:scaleBySize(100)
+    local u = math.max(0, math.floor(px * 100 / per100) - 2)
+    while Screen:scaleBySize(u) < px do u = u + 1 end
+    while u > 0 and Screen:scaleBySize(u - 1) >= px do u = u - 1 end
+    return u
+end
 
 -- Bottom margin to use with the current custombg picture, or nil when there is no picture.
 function PageTextInfo:getPictureBottomMargin()
@@ -2280,7 +2296,7 @@ function PageTextInfo:getPictureBottomMargin()
         if ok and mode ~= nil then
             if not self.bottom_picture_px then pcall(self.buildBottomHero, self, mode) end
             if self.bottom_picture_px then
-                return math.ceil(Screen:unscaleBySize(self.bottom_picture_px)) + PageTextInfo.picture_bottom_air
+                return self:pxToBottomMargin(self.bottom_picture_px) + PageTextInfo.picture_bottom_air
             end
             return PageTextInfo.picture_bottom_margin
         end
@@ -2328,8 +2344,14 @@ function PageTextInfo:applyMargins(t)
     cfg.b_page_margin = bottom
     cfg.h_page_margins = side_margins
     UIManager:sendEvent(Event:new("SetPageHorizMargins", side_margins))
-    UIManager:sendEvent(Event:new("SetPageTopMargin", top))
-    UIManager:sendEvent(Event:new("SetPageBottomMargin", bottom))
+    -- top and bottom together: sent one by one, "Sync T/B margins" would make them equal
+    local typeset = self.ui.typeset
+    if typeset and typeset.onSetPageTopAndBottomMargin then
+        UIManager:sendEvent(Event:new("SetPageTopAndBottomMargin", { top, bottom }))
+    else
+        UIManager:sendEvent(Event:new("SetPageTopMargin", top))
+        UIManager:sendEvent(Event:new("SetPageBottomMargin", bottom))
+    end
     return true
 end
 
