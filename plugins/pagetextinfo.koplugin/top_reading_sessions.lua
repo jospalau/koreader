@@ -1246,6 +1246,41 @@ local function loadSummaryData()
             overlap:close()
             Perf.log("  loadSummaryData: 5 spans", t_span)
 
+            -- Pages read in each period, shown in brackets next to the time. Each session counts its stable
+            -- (reference) pages when it saved them, and its screens when it did not (sessions of books without
+            -- reference pages, or saved before they existed). A session belongs to the period where it started.
+            local t_pages = Perf.start()
+            pcall(function()
+                local has_ref = false
+                local info = conn:prepare("PRAGMA table_info(wpm_stat_data)")
+                local col = {}
+                while info:step(col) do
+                    if tostring(col[2]) == "ref_pages" then has_ref = true end
+                end
+                info:close()
+                local expr = has_ref
+                    and "CASE WHEN ref_pages IS NOT NULL THEN ref_pages ELSE COALESCE(total_pages, 0) END"
+                    or "COALESCE(total_pages, 0)"
+                local stmt = conn:prepare("SELECT COALESCE(SUM(" .. expr
+                    .. "), 0) FROM wpm_stat_data WHERE start_time >= ? AND start_time <= ?")
+                local function pages(from, to)
+                    local row = stmt:bind(from, to):step()
+                    local n = tonumber(row[1]) or 0
+                    stmt:clearbind():reset()
+                    return n
+                end
+                out.pages = {
+                    today     = pages(day_start, now),
+                    yesterday = pages(day_start - SECONDS_PER_DAY, day_start - 1),
+                    week      = pages(week_start, now),
+                    month     = pages(month_start, now),
+                    lmonth    = pages(lmonth_start, month_start - 1),
+                    year      = pages(year_start, now),
+                }
+                stmt:close()
+            end)
+            Perf.log("  loadSummaryData: pages", t_pages)
+
             -- Per-page statistics (reading stats module); optional
             local t_page = Perf.start()
             pcall(function()
@@ -1321,20 +1356,50 @@ local function columnWidths(w_width, left_ratio)
 end
 
 -- A column of rows: the caption on the left, the value (bold) on the right,
--- a thin line between rows. rows = { { value, caption }, ... }
+-- a thin line between rows. rows = { { value, caption, pages }, ... }
+-- `pages` (optional text) goes in brackets after the value, small and muted.
 local function buildStatRows(inner_w, rows)
     local vg = VerticalGroup:new{ align = "left" }
     local pad = SPACE.m
+    -- the values and the pages of all the rows go in two columns of the same width, so they line up
+    local values, extras = {}, {}
+    local value_w, extra_w = 0, 0
     for i, r in ipairs(rows) do
-        local value = TextWidget:new{
+        values[i] = TextWidget:new{
             text = r[1], face = getFace(FONT_BIG - 4), bold = true, fgcolor = COLOR_TEXT,
             max_width = math.floor(inner_w * 0.55),
         }
+        value_w = math.max(value_w, values[i]:getSize().w)
+        if r[3] then
+            extras[i] = TextWidget:new{
+                text = "(" .. r[3] .. ")", face = getFace(FONT_SUMMARY), fgcolor = COLOR_MUTED,
+            }
+            extra_w = math.max(extra_w, extras[i]:getSize().w)
+        end
+    end
+    local right_w = value_w + (extra_w > 0 and (SPACE.s + extra_w) or 0)
+    for i, r in ipairs(rows) do
+        local value = values[i]
+        local vh = value:getSize().h
+        local right
+        if extra_w > 0 then
+            right = HorizontalGroup:new{
+                align = "bottom",
+                RightContainer:new{ dimen = Geom:new{ w = value_w, h = vh }, value },
+                HorizontalSpan:new{ width = SPACE.s },
+                RightContainer:new{
+                    dimen = Geom:new{ w = extra_w, h = vh },
+                    extras[i] or HorizontalSpan:new{ width = 0 },
+                },
+            }
+        else
+            right = RightContainer:new{ dimen = Geom:new{ w = value_w, h = vh }, value }
+        end
         local caption = TextWidget:new{
             text = r[2], face = getFace(FONT_SUMMARY), fgcolor = COLOR_MUTED,
-            max_width = inner_w - value:getSize().w - SPACE.m, ellipsis = true,
+            max_width = inner_w - right_w - SPACE.m, ellipsis = true,
         }
-        local h = math.max(value:getSize().h, caption:getSize().h)
+        local h = math.max(vh, caption:getSize().h)
         if i > 1 then
             vg[#vg + 1] = VerticalSpan:new{ width = pad }
             vg[#vg + 1] = LineWidget:new{
@@ -1345,8 +1410,8 @@ local function buildStatRows(inner_w, rows)
         end
         vg[#vg + 1] = HorizontalGroup:new{
             align = "center",
-            LeftContainer:new{ dimen = Geom:new{ w = inner_w - value:getSize().w, h = h }, caption },
-            value,
+            LeftContainer:new{ dimen = Geom:new{ w = inner_w - right_w, h = h }, caption },
+            right,
         }
     end
     return vg
@@ -1425,16 +1490,19 @@ end
 local function buildBreakdownCard(w_width, data)
     local pace = readPace()
     local delta = math.ceil((data.year / 3600) - (data.yday * pace))
+    -- pages read in each period, in brackets (nil when they could not be read)
+    local pg = data.pages or {}
+    local function pagesText(n) return n and tostring(math.floor(n + 0.5)) or nil end
     local left_rows = {
         { (delta > 0 and "+" or "") .. tostring(delta), DELTA_L .. " " .. formatPace(pace) },
-        { secondsToShortHM(data.today),                  _("Today") },
-        { secondsToBreakdownTime(data.yesterday),        _("Yesterday") },
+        { secondsToShortHM(data.today),                  _("Today"),      pagesText(pg.today) },
+        { secondsToBreakdownTime(data.yesterday),        _("Yesterday"),  pagesText(pg.yesterday) },
     }
     local right_rows = {
-        { data.week and secondsToStatsTime(data.week) or "-", _("This week") },
-        { secondsToBreakdownTime(data.month),            _("Month") },
-        { secondsToBreakdownTime(data.lmonth),           _("Last month") },
-        { secondsToBreakdownTime(data.year),             _("Year") },
+        { data.week and secondsToStatsTime(data.week) or "-", _("This week"), pagesText(pg.week) },
+        { secondsToBreakdownTime(data.month),            _("Month"),      pagesText(pg.month) },
+        { secondsToBreakdownTime(data.lmonth),           _("Last month"), pagesText(pg.lmonth) },
+        { secondsToBreakdownTime(data.year),             _("Year"),       pagesText(pg.year) },
     }
     return buildCardRow(w_width, 0.5,
         function(w, h) return makeCard(w, buildStatRows(cardInnerWidth(w), left_rows), h) end,
@@ -1923,6 +1991,75 @@ local function getStablePagesCaption()
     return caption
 end
 
+-- ── Cover behind the title ───────────────────────────────────────────────────
+-- The cover of the open book fills the left card of the book card and the title, series and year go on a white band
+-- over it, so the text is readable whatever the cover looks like.
+
+local cover_cache = { file = nil, bb = nil }
+
+-- The cover of the open book (a buffer kept for the next builds), or nil when there is none
+local function getOpenBookCover()
+    local ui = getReaderUI()
+    local doc = ui and ui.document
+    if not doc then return nil end
+    if cover_cache.bb and cover_cache.file == doc.file then return cover_cache.bb end
+    local ok, bb = pcall(function()
+        return require("apps/filemanager/filemanagerbookinfo"):getCoverImage(doc)
+    end)
+    if not ok or not bb then return nil end
+    -- keep a private copy: the one given back can be freed or reused by whoever made it
+    local copy = bb:copy()
+    pcall(function() bb:free() end)
+    if cover_cache.bb then cover_cache.bb:free() end
+    cover_cache.file, cover_cache.bb = doc.file, copy
+    return copy
+end
+
+local CoverBanner = Widget:extend{
+    width = 0,
+    height = 0,
+    cover = nil,      -- buffer of the cover (not freed here)
+    content = nil,    -- the text widget that goes on the band
+    pad = 0,          -- space between the text and the edge of the band
+}
+
+function CoverBanner:init()
+    self.dimen = Geom:new{ w = self.width, h = self.height }
+    -- the cover covers the whole area, cropped at the center
+    local bw, bh = self.cover:getWidth(), self.cover:getHeight()
+    local scale = math.max(self.width / bw, self.height / bh)
+    local sw, sh = math.ceil(bw * scale), math.ceil(bh * scale)
+    local scaled = require("ui/renderimage"):scaleBlitBuffer(self.cover, sw, sh)
+    if scaled == self.cover then scaled = self.cover:copy() end  -- same size: never free the cached cover
+    self.scaled = scaled
+    self.ox, self.oy = math.floor((sw - self.width) / 2), math.floor((sh - self.height) / 2)
+end
+
+function CoverBanner:getSize()
+    return self.dimen
+end
+
+function CoverBanner:paintTo(bb, x, y)
+    self.dimen.x, self.dimen.y = x, y
+    bb:blitFrom(self.scaled, x, y, self.ox, self.oy, self.width, self.height)
+    local cs = self.content:getSize()
+    local band_h = cs.h + 2 * self.pad
+    local by = y + math.floor((self.height - band_h) / 2)
+    bb:paintRect(x, by, self.width, band_h, Blitbuffer.COLOR_WHITE)
+    local line = Size.line.medium
+    bb:paintRect(x, by, self.width, line, Blitbuffer.COLOR_BLACK)
+    bb:paintRect(x, by + band_h - line, self.width, line, Blitbuffer.COLOR_BLACK)
+    self.content:paintTo(bb, x + math.floor((self.width - cs.w) / 2), by + self.pad)
+end
+
+function CoverBanner:free()
+    if self.scaled then
+        self.scaled:free()
+        self.scaled = nil
+    end
+    if self.content and self.content.free then self.content:free() end
+end
+
 -- Two columns. Left: title, series, words and publication year of the open
 -- book. Right: totals and averages of all the reading: total time read, total
 -- number of sessions, wpm of the sessions and pages per day read.
@@ -1959,7 +2096,7 @@ local function buildBookCard(w_width, session, book)
         }
     end
 
-    local function leftContent(inner_w)
+    local function leftContent(inner_w, min_h)
         local ui = getReaderUI()
         local topbar = ui and ui.view and ui.view.topbar
         local title = topbar and topbar.title or ""
@@ -1977,24 +2114,37 @@ local function buildBookCard(w_width, session, book)
         local pub = tostring(topbar.pub_date or "")
         if pub ~= "" then parts[#parts + 1] = pub end
 
+        -- with a cover the text sits on a band, a bit narrower than the card
+        local cover = getOpenBookCover()
+        local band_pad = SPACE.l
+        local text_w = cover and (inner_w - 2 * band_pad) or inner_w
+
         local vg = VerticalGroup:new{ align = "center" }
         vg[#vg + 1] = TextWidget:new{
             text = cleanTopBarText(title), face = getFace(FONT_BIG - 2), bold = true,
-            fgcolor = COLOR_TEXT, max_width = inner_w, ellipsis = true,
+            fgcolor = COLOR_TEXT, max_width = text_w, ellipsis = true,
         }
         local series = cleanTopBarText(topbar.series)
         if series ~= "" then
             vg[#vg + 1] = VerticalSpan:new{ width = SPACE.s }
             vg[#vg + 1] = TextWidget:new{
                 text = series, face = getFace(FONT_SUMMARY),
-                fgcolor = COLOR_MUTED, max_width = inner_w, ellipsis = true,
+                fgcolor = COLOR_MUTED, max_width = text_w, ellipsis = true,
             }
         end
         if #parts > 0 then
             vg[#vg + 1] = VerticalSpan:new{ width = SPACE.s }
             vg[#vg + 1] = TextWidget:new{
                 text = table.concat(parts, SUMMARY_SEPARATOR), face = getFace(FONT_SUMMARY),
-                fgcolor = COLOR_MUTED, max_width = inner_w, ellipsis = true,
+                fgcolor = COLOR_MUTED, max_width = text_w, ellipsis = true,
+            }
+        end
+        if cover then
+            -- room above and below the band, so the cover shows
+            local margin = Screen:scaleBySize(16)
+            local height = math.max(min_h or 0, vg:getSize().h + 2 * band_pad + 2 * margin)
+            return CoverBanner:new{
+                width = inner_w, height = height, cover = cover, content = vg, pad = band_pad,
             }
         end
         return vg
@@ -2003,7 +2153,7 @@ local function buildBookCard(w_width, session, book)
     local row = buildCardRow(w_width, 0.5,
         function(w, h)
             local inner_w = cardInnerWidth(w)
-            local c = leftContent(inner_w)
+            local c = leftContent(inner_w, h)
             return makeCard(w, CenterContainer:new{
                 dimen = Geom:new{ w = inner_w, h = c:getSize().h }, c,
             }, h)
