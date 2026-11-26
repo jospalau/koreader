@@ -691,6 +691,9 @@ function PageTextInfo:cycleFrontlight()
     end
     if not next_idx then
         powerd:turnOffFrontlight()
+        -- "Off" big over the page, same style and fade as the bottom right tap (showSessionOverlay)
+        -- the sun is the frontlight symbol of the KOReader footer; a line is painted over it
+        self:showSessionOverlay({ "☼ " .. _("Off") }, "☼")
     else
         powerd:setIntensity(levels[next_idx])
     end
@@ -804,6 +807,13 @@ function SessionOverlay:buildTexts(color)
         self.widgets[i] = w
         self.sizes[i] = size
     end
+    self.color = color
+    -- strike_icon: the first text starts with this icon, a diagonal line is painted over it (see paintTo)
+    if self.strike_icon and self.widgets[1] then
+        local iw = TextWidget:new{ text = self.strike_icon, face = self:getFace(self.sizes[1]), fgcolor = color, padding = 0 }
+        self.strike_w = iw:getSize().w
+        iw:free()
+    end
 end
 
 function SessionOverlay:init()
@@ -836,6 +846,21 @@ end
 function SessionOverlay:paintTo(bb, x, y)
     for i, w in ipairs(self.widgets) do
         w:paintTo(bb, self.positions[i].x, self.positions[i].y)
+    end
+    -- line over the icon: from bottom left to top right, made of small squares (same grey as the text)
+    if self.strike_w and self.widgets[1] then
+        local pos = self.positions[1]
+        local h = self.widgets[1]:getSize().h
+        local bw = self.strike_w
+        local thick = math.max(2, math.floor(self.sizes[1] / 10))
+        local x0, y0 = pos.x, pos.y + math.floor(h * 0.85)
+        local x1, y1 = pos.x + bw, pos.y + math.floor(h * 0.15)
+        local steps = math.max(math.abs(x1 - x0), math.abs(y1 - y0))
+        for s = 0, steps do
+            local px = math.floor(x0 + (x1 - x0) * s / steps - thick / 2)
+            local py = math.floor(y0 + (y1 - y0) * s / steps - thick / 2)
+            bb:paintRect(px, py, thick, thick, self.color)
+        end
     end
 end
 
@@ -893,14 +918,23 @@ function PageTextInfo:getSessionWpm()
     return wpmFromJson()
 end
 
-function PageTextInfo:showSessionOverlay()
+-- texts (optional): list of texts to show, one per part of the screen. Without it: clock, session time, wpm.
+-- strike_icon (optional): icon at the start of the first text that gets a diagonal line over it.
+function PageTextInfo:showSessionOverlay(texts, strike_icon)
     local cfg = PageTextInfo.session_overlay_cfg
     self:closeSessionOverlay()
 
-    local topbar = self.view and self.view.topbar
-    local stats = self.ui and self.ui.statistics
-    local start = (topbar and topbar.start_session_time) or (stats and tonumber(stats.start_current_period))
-    local secs = start and (os.time() - start) or 0
+    if not texts then
+        local topbar = self.view and self.view.topbar
+        local stats = self.ui and self.ui.statistics
+        local start = (topbar and topbar.start_session_time) or (stats and tonumber(stats.start_current_period))
+        local secs = start and (os.time() - start) or 0
+        texts = {
+            os.date("%H:%M"),
+            formatSessionTime(secs),
+            string.format("%d wpm", self:getSessionWpm()),
+        }
+    end
 
     -- font of the document: the plugin's own helper if it has one, else the family of the document with "-Regular"
     local candidates = {}
@@ -918,11 +952,8 @@ function PageTextInfo:showSessionOverlay()
 
     local overlay = SessionOverlay:new{
         font_candidates = candidates,
-        texts = {
-            os.date("%H:%M"),
-            formatSessionTime(secs),
-            string.format("%d wpm", self:getSessionWpm()),
-        },
+        texts = texts,
+        strike_icon = strike_icon,
     }
     self.session_overlay = overlay
     local token = self.session_overlay_token
