@@ -2265,23 +2265,59 @@ function PageTextInfo:shouldCyclePresets()
     return not ui.view.footer_visible -- no footer and no top bar
 end
 
+-- Bottom margin while custombg shows a picture (configurable units, unscaled):
+--   hero / cover text: the real height of the picture + picture_bottom_air, so the text ends just above it
+--   background image: picture_bottom_margin
+PageTextInfo.picture_bottom_margin = 50
+PageTextInfo.picture_bottom_air = 6
+
+-- Bottom margin to use with the current custombg picture, or nil when there is no picture.
+function PageTextInfo:getPictureBottomMargin()
+    local custombg = self.ui and self.ui.custombg
+    if not custombg then return nil end
+    if custombg.getBottomMode then
+        local ok, mode = pcall(custombg.getBottomMode, custombg)
+        if ok and mode ~= nil then
+            if not self.bottom_picture_px then pcall(self.buildBottomHero, self, mode) end
+            if self.bottom_picture_px then
+                return math.ceil(Screen:unscaleBySize(self.bottom_picture_px)) + PageTextInfo.picture_bottom_air
+            end
+            return PageTextInfo.picture_bottom_margin
+        end
+    end
+    if custombg.getCurrentDocBg then
+        local ok, bg = pcall(custombg.getCurrentDocBg, custombg)
+        if ok and bg ~= nil then return PageTextInfo.picture_bottom_margin end
+    end
+    return nil
+end
+
+function PageTextInfo:keepBottomMargin()
+    return self:getPictureBottomMargin() ~= nil
+end
+
 -- Index of the preset matching the current margins, or nil if none does.
+-- With a custombg picture the bottom margin is not compared (it is given by getPictureBottomMargin).
 function PageTextInfo:getCurrentPresetIndex()
     local cfg = self.ui.document.configurable
     local h = cfg.h_page_margins
     if not h then return nil end
+    local ignore_bottom = self:keepBottomMargin()
     for i, p in ipairs(PageTextInfo.margin_presets) do
         if h[1] == p[1] and cfg.t_page_margin == p[2]
-            and h[2] == p[3] and cfg.b_page_margin == p[4] then
+            and h[2] == p[3] and (ignore_bottom or cfg.b_page_margin == p[4]) then
             return i
         end
     end
 end
 
 -- Applies { left, top, right, bottom }. Returns true if anything changed.
+-- With a custombg picture the bottom margin is getPictureBottomMargin(), whatever t says.
 function PageTextInfo:applyMargins(t)
     local cfg = self.ui.document.configurable
     local left, top, right, bottom = t[1], t[2], t[3], t[4]
+    local picture_bottom = self:getPictureBottomMargin()
+    if picture_bottom then bottom = picture_bottom end
     local h = cfg.h_page_margins
     if cfg.t_page_margin == top and cfg.b_page_margin == bottom
         and h and h[1] == left and h[2] == right then
@@ -4946,7 +4982,10 @@ function PageTextInfo:buildBottomHero(mode)
         pcall(function() frame:free() end)
         bb:invert()
         -- the cover text banner sits flush with the bottom edge of the screen; the hero keeps a small gap
-        custombg:setBottomImage(bb, plain and 0 or Screen:scaleBySize(HERO_SETT.outer_gap), true)
+        local gap = plain and 0 or Screen:scaleBySize(HERO_SETT.outer_gap)
+        -- height taken at the bottom of the screen (picture + gap), used for the bottom margin
+        self.bottom_picture_px = size.h + gap
+        custombg:setBottomImage(bb, gap, true)
     end
     UIManager:setDirty(self.view.dialog, "ui")
     return true
