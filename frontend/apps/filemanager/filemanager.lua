@@ -160,9 +160,21 @@ function FileManager:initGesListener()
                 "two_finger_swipe_west",
                 "filemanager_two_finger_swipe_east_gestures",
                 "filemanager_two_finger_swipe_west_gestures",
+                "two_finger_swipe_north",
+                "filemanager_two_finger_swipe_north_gestures",
             },
             handler = function(ges)
                 local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
+                -- Two fingers up: cycle the frontlight, same as in the reader
+                -- (levels in PageTextInfo.frontlight_cycle_by_device)
+                if direction == "north" then
+                    local pti = self.pagetextinfo or FileManager.pagetextinfo
+                    if pti and pti.cycleFrontlight then
+                        pti:cycleFrontlight()
+                        return true
+                    end
+                    return false
+                end
                 -- Inside a tag / genre / author of Bookshelf: step through the
                 -- Calibre sorts (east next, west previous). Elsewhere: tbr / mbr.
                 local plugin = self.bookshelf
