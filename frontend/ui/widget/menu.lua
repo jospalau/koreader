@@ -33,6 +33,35 @@ local Input = Device.input
 local Screen = Device.screen
 local T = ffiUtil.template
 
+-- PERF: Calibre metadata used to be reparsed from disk on every Menu:init()
+-- (History, search, bookmarks, TOC, every popup menu, every rotation...).
+-- Now it is loaded once per session and shared by all Menu instances.
+-- Call Menu.invalidateCalibreData() after the calibre file is updated.
+local _calibre_data_cache
+local function getCalibreData()
+    if _calibre_data_cache == nil then
+        _calibre_data_cache = (util.loadCalibreData and util.loadCalibreData()) or {}
+    end
+    return _calibre_data_cache
+end
+
+-- PERF: The stats footer (stats.lua + Topbar statistics DB queries) used to be
+-- rebuilt on every Menu:init(). It is now cached for a short time and rebuilt
+-- only when it expires or when onFooterStatsRefresh is received.
+-- The cache is also dropped as soon as the bookshelf changes:
+--   * stats.lua was rewritten (its modification time changed)
+--   * _G.history_status_changed is set (a book status was changed)
+--   * a BookshelfRefresh event is received
+local _stats_footer_cache
+local _stats_footer_time
+local _stats_footer_mtime -- modification time of stats.lua when the cache was built
+local STATS_FOOTER_TTL = 60 -- seconds
+
+local function getStatsFileMtime()
+    local lfs = require("libs/libkoreader-lfs")
+    return lfs.attributes(require("datastorage"):getSettingsDir() .. "/stats.lua", "modification")
+end
+
 --[[--
 Widget that displays a shortcut icon for menu item.
 --]]
@@ -773,7 +802,8 @@ function Menu:init()
     }
 
     self.paths = {}  -- per instance table to trace navigation path
-    self.calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
+    -- self.calibre_data = (util.loadCalibreData and util.loadCalibreData()) or {}
+    self.calibre_data = getCalibreData() -- PERF: cached, see getCalibreData()
     -----------------------------------
     -- start to set up widget layout --
     -----------------------------------
@@ -852,7 +882,10 @@ function Menu:init()
         show_parent = self.show_parent,
     }
 
+    -- FIX: pagetextinfo was assigned as a global variable, so different menus could
+    -- overwrite each other's value. It is now local to this init().
     local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
+    local pagetextinfo
     if ui ~= nil then
         pagetextinfo = ui.pagetextinfo
     else
@@ -978,18 +1011,15 @@ function Menu:init()
     -- }
 
     -- if pagetextinfo and pagetextinfo.settings:isTrue("enable_extra_tweaks") then
-    page_info_container = RightContainer:new {
+    -- FIX: was a global variable, now local
+    local page_info_container = RightContainer:new {
         dimen = page_info_geom,
         self.page_info,
     }
     -- end
 
-    local ui = require("apps/filemanager/filemanager").instance or require("apps/reader/readerui").instance
-    if ui ~= nil then
-        pagetextinfo = ui.pagetextinfo
-    else
-        pagetextinfo = require("apps/filemanager/filemanager").pagetextinfo
-    end
+    -- (The ui/pagetextinfo lookup that was repeated here is no longer needed:
+    -- the local pagetextinfo computed above is reused.)
     local pager_h = self.page_info:getSize().h
 
     local separator_controls = BottomContainer:new {
@@ -1031,7 +1061,7 @@ function Menu:init()
     }
 
     local text = self:_buildFooterText()
-    local pager_h = self.page_info:getSize().h
+    -- (pager_h is already computed above, no need to declare it again)
     local pager_w = self.page_info:getSize().w
     local no_pager = pagetextinfo and pagetextinfo.settings:isTrue("enable_no_pager")
     -- Siempre usar el mismo ancho para el footer text
@@ -2008,7 +2038,42 @@ function Menu.getMenuText(item)
     return text
 end
 
+-- PERF: label for the special views. Before, the full stats footer was computed
+-- first and then thrown away for these views.
+function Menu:_getSpecialFooterLabel()
+    -- Nombres especiales de vistas
+    if self.name == "filesearcher" then return "File searcher"
+    elseif self.name == "collections" and self.collection_name == "listall" then return "Collections"
+    elseif self.name == "collections" and self.collection_name == "series" then return "Series"
+    elseif self.name == "collections" and self.series == true then return "Series " .. self.collection_name
+    elseif self.name == "collections" then return "Collection " .. self.collection_name
+    elseif self.name == "bookmarks" then return "Bookmarks"
+    elseif self.name == "tableofcontents" then return "Table of contents"
+    elseif self.name == "wordreference" then return "Wordreference"
+    elseif self.search == true then return "Search results"
+    end
+    return nil
+end
+
 function Menu:_buildFooterText()
+    -- PERF: special views don't show stats, return their label right away
+    local label = self:_getSpecialFooterLabel()
+    if label then
+        return label
+    end
+
+    -- PERF: reuse the cached stats footer while it is still fresh
+    -- FIX: the cache is only reused if the bookshelf did not change, so status
+    -- changes (MBR, TBR, finished...) show up right away in the footer.
+    -- (We only read _G.history_status_changed, we don't reset it: other code uses it.)
+    local stats_mtime = getStatsFileMtime()
+    if _stats_footer_cache and _stats_footer_time
+            and not _G.history_status_changed
+            and stats_mtime == _stats_footer_mtime
+            and os.time() - _stats_footer_time < STATS_FOOTER_TTL then
+        return _stats_footer_cache
+    end
+
     local text = ""
 
     if ffiUtil.realpath(require("datastorage"):getSettingsDir() .. "/stats.lua") then
@@ -2038,22 +2103,40 @@ function Menu:_buildFooterText()
         end
     end
 
-    -- Nombres especiales de vistas
-    if self.name == "filesearcher" then text = "File searcher"
-    elseif self.name == "collections" and self.collection_name == "listall" then text = "Collections"
-    elseif self.name == "collections" and self.collection_name == "series" then text = "Series"
-    elseif self.name == "collections" and self.series == true then text = "Series " .. self.collection_name
-    elseif self.name == "collections" then text = "Collection " .. self.collection_name
-    elseif self.name == "bookmarks" then text = "Bookmarks"
-    elseif self.name == "tableofcontents" then text = "Table of contents"
-    elseif self.name == "wordreference" then text = "Wordreference"
-    elseif self.search == true then text = "Search results"
-    end
+    -- (Special view names are now handled at the top, in _getSpecialFooterLabel())
+
+    -- PERF: store the result so the next menus can reuse it
+    _stats_footer_cache = text
+    _stats_footer_time = os.time()
+    _stats_footer_mtime = stats_mtime
 
     return text
 end
 
+-- PERF: force the stats footer to be rebuilt the next time it is needed
+function Menu.invalidateFooterStats()
+    _stats_footer_cache = nil
+    _stats_footer_time = nil
+    _stats_footer_mtime = nil
+end
+
+-- PERF: force the calibre data to be reloaded the next time a Menu is created
+function Menu.invalidateCalibreData()
+    _calibre_data_cache = nil
+end
+
+-- FIX: when the bookshelf changes, drop the cached stats and update the footer
+-- of the menus already open. Returns false so other widgets still get the event.
+function Menu:onBookshelfRefresh()
+    self:onFooterStatsRefresh()
+    -- FIX: repaint so the new numbers (TBR, MBR, finished...) are actually shown
+    UIManager:setDirty(self.show_parent, "ui")
+    return false
+end
+
 function Menu:onFooterStatsRefresh()
+    -- PERF: this event means stats really changed, so drop the cache first
+    Menu.invalidateFooterStats()
     if self.footer_text_widget then
         self.footer_text_widget.text = self:_buildFooterText()
         self.footer_text_widget:init()
