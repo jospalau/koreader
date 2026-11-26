@@ -2046,6 +2046,7 @@ function PageTextInfo:readSettingsFile()
 end
 
 function PageTextInfo:onReaderReady()
+    PageTextInfo.closeReadingMotive()
     local _time = require("ui/time")
     local _t_ready = _time.now()
     if self.warmUpOnReady then self:warmUpOnReady() end
@@ -4834,6 +4835,18 @@ function PageTextInfo:buildBottomHero(mode)
     return true
 end
 
+-- The reading motive on screen (nil when there is none). It is closed in onReaderReady of the new reader, in the
+-- same step where the reload icon goes away (a timer would close it later than the icon).
+local reading_motive_widget = nil
+
+function PageTextInfo.closeReadingMotive()
+    local widget = reading_motive_widget
+    if not widget then return end
+    reading_motive_widget = nil
+    pcall(UIManager.close, UIManager, widget)
+end
+
+
 -- ===== Función principal =====
 function PageTextInfo:onShowReadingMotive()
     -- BookLoadCover Plus (patches/2-bookloadcover.lua) already shows its own cover on internal
@@ -4852,6 +4865,26 @@ function PageTextInfo:onShowReadingMotive()
     local Geom = require("ui/geometry")
 
     local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
+
+    -- Closes what is on top of the reader (the "reloading" notices and their icon), as BookLoadCover does before
+    -- and after its cover: the widgets above the reader / file manager / bookshelf, except `keep`.
+    local function closeOverlays(keep)
+        local stack = UIManager._window_stack
+        if not stack then return end
+        local widgets = {}
+        for i = #stack, 1, -1 do
+            local w = stack[i] and stack[i].widget
+            if w then widgets[#widgets + 1] = w end
+        end
+        for _i, w in ipairs(widgets) do
+            if w ~= keep then
+                local name = type(w.name) == "string" and w.name:lower() or nil
+                if name == "readerui" or name == "filemanager" or name == "bookshelf" then break end
+                pcall(UIManager.close, UIManager, w)
+            end
+        end
+    end
+    closeOverlays(nil)
 
     -- hero de bookshelf (nil si no hay bookshelf o falla)
     -- menu setting (Show bookshelf hero as reload motive), off by default: then the image is shown
@@ -4920,8 +4953,11 @@ function PageTextInfo:onShowReadingMotive()
     -- reloadDocument() blocks right after this event, so paint now or the popup is never seen
     UIManager:forceRePaint()
 
-    UIManager:scheduleIn(0.25, function()
-        UIManager:close(screensaver_widget)
+    -- The popup goes away in onReaderReady of the new reader. If that never happens (the reload failed) it is
+    -- closed after 10 s.
+    reading_motive_widget = screensaver_widget
+    UIManager:scheduleIn(10, function()
+        if reading_motive_widget == screensaver_widget then PageTextInfo.closeReadingMotive() end
     end)
 end
 
