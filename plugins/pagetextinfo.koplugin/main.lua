@@ -4374,7 +4374,9 @@ local HERO_SETT = {
     bottom_padding = 6,      -- aire alrededor del hero cuando va abajo (px sin escalar)
     hide_regions = { "status", "rating", "metadata", "description", "tags" },
     show_progress = true,
-    cover_text_height_pct = 12, -- alto maximo (% de pantalla) del recorte de la portada cuando va abajo sin hero
+    cover_text_height_pct = 7,  -- alto (% de pantalla) del recorte de la portada cuando va abajo
+    cover_text_width_pct = 100, -- ancho (% de pantalla) del recorte de la portada: 100 = todo el ancho
+    cover_text_stretch = true,  -- true: el recorte rellena justo ese ancho y alto (se estira); false: mantiene su proporcion
     cover_bands_paths = { "/media/partition/cover_title_bands.lua" }, -- donde busca el resultado de cover_title_bands.py (ademas de la carpeta de ajustes)
     cover_text_candidates = 5,  -- cuantas franjas de la portada se pueden ir probando (menu: next cover text)
     title_crop_pct = 24,     -- alto de la franja de la portada que se recorta como titulo en el hero de abajo (% del alto de la portada)
@@ -4480,10 +4482,10 @@ end
 -- Metadata line "1984 - 275kw - 4.1★ (1234)" (publication year, kilowords, Goodreads rating and votes). Same data as the
 -- file dialog title; it lives in the calibre_data table of the file manager's file chooser, keyed by file name.
 -- Returns "" when there is nothing for the open book.
-local function heroMetadataText(book)
+local function heroMetadataText(book, ui)
     local text = ""
     pcall(function()
-        local rui = require("apps/reader/readerui").instance
+        local rui = ui or require("apps/reader/readerui").instance
         local file = (rui and rui.document and rui.document.file) or (book and book.file) or (book and book.path)
         if not file then return end
         local name = tostring(file):match("([^/]+)$")
@@ -4521,9 +4523,11 @@ end
 -- The text taken from the cover itself (only used by the "Bottom: cover text" option of custombg): the band of the cover with the most text-like detail (many light/dark changes
 -- in a row) is cut out of the picture and scaled to fit max_w x max_h. A dark band is inverted so it is dark on light.
 -- Returns an ImageWidget, or nil when the book has no cover.
-local function heroTitleFromCover(max_w, max_h)
+-- ui: the reader (self.ui). ReaderUI.instance is not set yet while the book is opening, which made this give nothing
+-- (and the hero card appear instead of the cover text) when the picture was made at ReaderReady.
+local function heroTitleFromCover(max_w, max_h, ui)
     local ok, widget = pcall(function()
-        local rui = require("apps/reader/readerui").instance
+        local rui = ui or require("apps/reader/readerui").instance
         if not (rui and rui.document and rui.document.getCoverPageImage) then return nil end
         local cover = rui.document:getCoverPageImage()
         if not cover then return nil end
@@ -4609,6 +4613,11 @@ local function heroTitleFromCover(max_w, max_h)
         crop:blitFrom(cover, 0, 0, 0, y0, W, ch)
         pcall(function() cover:free() end)
         if avg < 128 then crop:invert() end
+        if HERO_SETT.cover_text_stretch then
+            -- fills the whole width x height asked for (the band is stretched sideways)
+            local stretched = RenderImage:scaleBlitBuffer(crop, max_w, max_h, true)
+            return ImageWidget:new{ image = stretched, image_disposable = true }
+        end
         return ImageWidget:new{
             image = crop,
             image_disposable = true,
@@ -4622,7 +4631,7 @@ end
 
 -- Right side of the narrow hero at the bottom of the page: the metadata line and a long progress bar, centered
 -- vertically next to the card. No percentage and no time left.
-local function buildHeroProgressSide(width, pct, book, device_state, progress_cfg)
+local function buildHeroProgressSide(width, pct, book, device_state, progress_cfg, ui)
     local Bb = require("ffi/blitbuffer")
     local Font = require("ui/font")
     local VerticalGroup = require("ui/widget/verticalgroup")
@@ -4632,7 +4641,7 @@ local function buildHeroProgressSide(width, pct, book, device_state, progress_cf
     local HeroBar = require("lib/bookshelf_hero_bar")
 
     local col = VerticalGroup:new{ align = "center" }
-    local meta = heroMetadataText(book)
+    local meta = heroMetadataText(book, ui)
     if meta ~= "" then
         local tw = TextWidget:new{
             text = meta, face = Font:getFace("cfont", 15), padding = 0, fgcolor = Bb.COLOR_BLACK, max_width = width,
@@ -4674,7 +4683,7 @@ local function buildBookshelfHero(width, height, opts)
         local BookshelfWidget = require("lib/bookshelf_widget")
 
         -- guardar el libro abierto para que el progreso esté en disco
-        local rui = require("apps/reader/readerui").instance
+        local rui = (opts and opts.ui) or require("apps/reader/readerui").instance
         if rui and rui.document then
             pcall(function() rui:saveSettings() end)
             local file = rui.document.file
@@ -4752,7 +4761,7 @@ local function buildBookshelfHero(width, height, opts)
                 align = "center",
                 card_or_err,
                 HorizontalSpan:new{ width = side_gap },
-                buildHeroProgressSide(side_w, pct or 0, book, device_state, progress_cfg),
+                buildHeroProgressSide(side_w, pct or 0, book, device_state, progress_cfg, rui),
             }
         end
         local row = buildHeroProgressRow(width, pct or 0, book, device_state, progress_cfg)
@@ -4798,15 +4807,16 @@ function PageTextInfo:buildBottomHero(mode)
         if mode == "cover" then
             -- the text cut out of the cover, as a plain rectangle (no hero)
             hero = heroTitleFromCover(
-                math.floor(screen_w * HERO_SETT.width_pct / 100),
-                math.floor(screen_h * HERO_SETT.cover_text_height_pct / 100)
+                math.floor(screen_w * HERO_SETT.cover_text_width_pct / 100),
+                math.floor(screen_h * HERO_SETT.cover_text_height_pct / 100),
+                self.ui
             )
             plain = hero ~= nil
         end
         hero = hero or buildBookshelfHero(
             math.floor(screen_w * HERO_SETT.width_pct / 100),
             math.floor(screen_h * HERO_SETT.bottom_height_pct / 100),
-            { side = true }
+            { side = true, ui = self.ui }
         )
         if not hero then return false end
         -- square corners: the picture is a buffer, so rounded ones would show white wedges over the text
@@ -4826,7 +4836,8 @@ function PageTextInfo:buildBottomHero(mode)
         frame:paintTo(bb, 0, 0)
         pcall(function() frame:free() end)
         bb:invert()
-        custombg:setBottomImage(bb, Screen:scaleBySize(HERO_SETT.outer_gap), true)
+        -- the cover text banner sits flush with the bottom edge of the screen; the hero keeps a small gap
+        custombg:setBottomImage(bb, plain and 0 or Screen:scaleBySize(HERO_SETT.outer_gap), true)
     end
     UIManager:setDirty(self.view.dialog, "ui")
     return true
