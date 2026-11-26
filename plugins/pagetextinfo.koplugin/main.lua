@@ -1116,6 +1116,90 @@ function PageTextInfo:takeOverBookendsFooterTap()
     end
 end
 
+-- Top bar display modes, cycled with the one-finger swipe north (when bookends is off):
+--   "on"      -> full top bar                      (topbar.is_enabled = true)
+--   "minimal" -> top bar disabled as before: page number bottom center + time left
+--   "hidden"  -> top bar disabled and nothing of it painted
+-- The hidden state is kept in this plugin's settings ("topbar_hidden"), so it survives restarts.
+function PageTextInfo:getTopBarMode()
+    local topbar = self.view and self.view.topbar
+    if topbar and topbar.is_enabled then return "on" end
+    if self.settings:isTrue("topbar_hidden") then return "hidden" end
+    return "minimal"
+end
+
+-- With the top bar disabled, ReaderView paints it with TopBar:paintToDisabled (page number bottom center,
+-- daily time left bottom left, chapter pages left and the corner mark). In the hidden mode that function
+-- paints nothing. Wrapped on this topbar instance only, so topbar.lua is not changed.
+function PageTextInfo:installTopBarHiddenPaint()
+    local topbar = self.view and self.view.topbar
+    if not topbar or topbar._pagetextinfo_hidden_paint then return end
+    local pti = self
+    local function isHidden(tb)
+        return not tb.is_enabled and pti.settings:isTrue("topbar_hidden")
+    end
+    topbar._pagetextinfo_hidden_paint = true
+    local orig_paintToDisabled = topbar.paintToDisabled
+    if orig_paintToDisabled then
+        topbar.paintToDisabled = function(tb, bb, x, y)
+            if isHidden(tb) then return end
+            return orig_paintToDisabled(tb, bb, x, y)
+        end
+    end
+    local orig_paintTo = topbar.paintTo
+    if orig_paintTo then
+        topbar.paintTo = function(tb, bb, x, y)
+            if isHidden(tb) then return end
+            return orig_paintTo(tb, bb, x, y)
+        end
+    end
+end
+
+function PageTextInfo:setTopBarMode(mode)
+    local topbar = self.view and self.view.topbar
+    if not topbar then return false end
+    self:installTopBarHiddenPaint()
+    self.settings:saveSetting("topbar_hidden", mode == "hidden")
+    self.settings:flush()
+    local want_on = (mode == "on")
+    -- Only switch the bar itself when on/off changes (minimal <-> hidden is just a repaint)
+    if (topbar.is_enabled and true or false) ~= want_on then
+        topbar:quickToggleOnOff(want_on)
+    end
+    UIManager:setDirty(self.view.dialog, "ui")
+    return true
+end
+
+-- on -> minimal -> hidden -> on ...
+-- The on/off switching is exactly the original code (quickToggleOnOff by is_enabled);
+-- the hidden step is only a flag + repaint on top of "disabled", so it can never block on/off.
+function PageTextInfo:cycleTopBarMode()
+    local topbar = self.view and self.view.topbar
+    if not topbar then return false end
+    pcall(self.installTopBarHiddenPaint, self)
+    local hidden = self.settings:isTrue("topbar_hidden")
+    if topbar.is_enabled == nil or topbar.is_enabled == false then
+        if not hidden then
+            -- minimal -> hidden: bar stays disabled, just stop painting it
+            self.settings:saveSetting("topbar_hidden", true)
+            self.settings:flush()
+            UIManager:setDirty(self.view.dialog, "ui")
+            return true
+        end
+        -- hidden -> on (original enable)
+        self.settings:saveSetting("topbar_hidden", false)
+        self.settings:flush()
+        topbar:quickToggleOnOff(true)
+    else
+        -- on -> minimal (original disable)
+        self.settings:saveSetting("topbar_hidden", false)
+        self.settings:flush()
+        topbar:quickToggleOnOff(false)
+    end
+    UIManager:setDirty(self.view.dialog, "ui")
+    return true
+end
+
 -- Shows one submenu of the custombg plugin ("lines": Ruled lines, "background": Custom reading background)
 -- on its own, as a TouchMenu, without going through the main menu.
 -- The items are taken from custombg:addToMainMenu(), so they are always the current ones of the plugin.
@@ -1390,11 +1474,8 @@ function PageTextInfo:onSwipe(arg, ges)
             -- return true
             return UIManager:sendEvent(Event:new("OpenPresetManager"))
         end
-        if self.view.topbar.is_enabled == nil or self.view.topbar.is_enabled == false then
-            self.view.topbar:quickToggleOnOff(true)
-        else
-            self.view.topbar:quickToggleOnOff(false)
-        end
+        -- Cycle the three top bar modes: full -> minimal (page + time left) -> hidden -> full ...
+        self:cycleTopBarMode()
     elseif direction == "south" then
 
         if self.settings:isTrue("enable_ruler") and
@@ -2043,6 +2124,8 @@ function PageTextInfo:onReaderReady()
     end
     -- The bottom center tap is ours, also when bookends' own zone would be reached first
     self:takeOverBookendsFooterTap()
+    -- Lets the top bar be fully hidden (third mode of cycleTopBarMode)
+    pcall(self.installTopBarHiddenPaint, self)
 
 
     -- This is just for Android devices, at least the Boox Palma
