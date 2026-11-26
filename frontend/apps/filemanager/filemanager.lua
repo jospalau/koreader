@@ -113,22 +113,6 @@ function FileManager:initGesListener()
             end,
         },
         {
-            id = "filemanager_tap",
-            ges = "tap",
-            screen_zone = {
-                ratio_x = 7/8, ratio_y = 7/8, ratio_w = 1/8, ratio_h = 1/8,
-            },
-            handler = function(ges) return self:onTapBottomRight(nil, ges) end,
-        },
-        {
-            id = "filemanager_double_tap",
-            ges = "double_tap",
-            screen_zone = {
-                ratio_x = 7/8, ratio_y = 7/8, ratio_w = 1/8, ratio_h = 1/8,
-            },
-            handler = function(ges) return self:onDoubleTapBottonRight(nil, ges) end,
-        },
-        {
             id = "filemanager_actions_multiswipe",
             ges = "multiswipe",
             screen_zone = {
@@ -175,19 +159,32 @@ function FileManager:initGesListener()
                     end
                     return false
                 end
-                -- Inside a tag / genre / author of Bookshelf: step through the
-                -- Calibre sorts (east next, west previous). Elsewhere: tbr / mbr.
                 local plugin = self.bookshelf
-                local bw = plugin and plugin._widget
-                if bw and bw._cycleCalibreSort and plugin._isShowing and plugin:_isShowing() then
-                    local step = (direction == "east" and 1) or (direction == "west" and -1) or nil
-                    if step and bw:_cycleCalibreSort(step) then return true end
+                local bookshelf_showing = plugin and plugin._isShowing and plugin:_isShowing()
+                if bookshelf_showing then
+                    -- Inside a tag / genre / author of Bookshelf: step through the
+                    -- Calibre sorts (east next, west previous). Elsewhere: tbr / mbr.
+                    local bw = plugin._widget
+                    if bw and bw._cycleCalibreSort then
+                        local step = (direction == "east" and 1) or (direction == "west" and -1) or nil
+                        if step and bw:_cycleCalibreSort(step) then return true end
+                    end
+                    if direction == "west" then
+                        self:openBookshelfOnStatus("tbr")
+                        return true
+                    elseif direction == "east" then
+                        self:openBookshelfOnStatus("mbr")
+                        return true
+                    end
+                    return false
                 end
-                if direction == "west" then
-                    self:openBookshelfOnStatus("tbr")
+                -- Bookshelf not showing: east cycles the sort mode, west reverses
+                -- the sorting (formerly tap / double tap on the bottom-right corner)
+                if direction == "east" then
+                    self:onToggleSortByMode(true)
                     return true
-                elseif direction == "east" then
-                    self:openBookshelfOnStatus("mbr")
+                elseif direction == "west" then
+                    self:onToggleReverseSorting(true)
                     return true
                 end
                 return false
@@ -2016,9 +2013,11 @@ function FileManager:onOpenNextOrPreviousFileInFolder(prev)
     return true
 end
 
-function FileManager:onToggleReverseSorting()
+-- ignore_double_tap: true when called from the two-finger swipes, which work
+-- whether double tap is enabled or not
+function FileManager:onToggleReverseSorting(ignore_double_tap)
     if self.bookshelf and self.bookshelf:_isShowing() then return end
-    if self.disable_double_tap then return end
+    if self.disable_double_tap and ignore_double_tap ~= true then return end
     local DataStorage = require("datastorage")
     if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
         self:onSetReverseSorting(not G_reader_settings:isTrue("reverse_collate"))
@@ -2031,9 +2030,11 @@ function FileManager:onToggleReverseSorting()
     return true
 end
 
-function FileManager:onToggleSortByMode()
+-- ignore_double_tap: true when called from the two-finger swipes, which work
+-- whether double tap is enabled or not
+function FileManager:onToggleSortByMode(ignore_double_tap)
     if self.bookshelf and self.bookshelf:_isShowing() then return end
-    if self.disable_double_tap then return end
+    if self.disable_double_tap and ignore_double_tap ~= true then return end
     local DataStorage = require("datastorage")
     if ffiUtil.realpath(DataStorage:getSettingsDir() .. "/calibre.lua") then
         local sort_by_mode = G_reader_settings:readSetting("collate")

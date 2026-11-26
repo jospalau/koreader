@@ -65,6 +65,34 @@ function FileManagerCollection:addToMainMenu(menu_items)
     }
 end
 
+-- Two-finger swipes on the collection widgets: east does what tapping the
+-- bottom-right corner used to do, west what double tapping it used to do.
+-- They work whether double tap is enabled or not.
+function FileManagerCollection.registerSortSwipes(menu, east_func, west_func)
+    if not Device:isTouchDevice() then return end
+    menu:registerTouchZones({
+        {
+            id = "collection_two_finger_swipe",
+            ges = "two_finger_swipe",
+            screen_zone = {
+                ratio_x = 0, ratio_y = 0,
+                ratio_w = 1, ratio_h = 1,
+            },
+            handler = function(ges)
+                local direction = BD.flipDirectionIfMirroredUILayout(ges.direction)
+                if direction == "east" and east_func then
+                    east_func(menu, nil, ges)
+                    return true
+                elseif direction == "west" and west_func then
+                    west_func(menu, nil, ges)
+                    return true
+                end
+                return false
+            end,
+        },
+    })
+end
+
 -- collection
 
 function FileManagerCollection:getCollectionTitle(collection_name)
@@ -130,8 +158,6 @@ function FileManagerCollection:onShowColl(collection_name, series)
         onMenuSelect = self.onMenuSelect,
         onMenuHold = self.onMenuHold,
         onMultiSwipe = self.onMultiSwipe,
-        onTap = self.onTapBottomRightCollection,
-        onDoubleTapBottomRight = self.onDoubleTapBottomRightCollection,
         ui = self.ui,
         _manager = self,
         _recreate_func = function() self:onShowColl(collection_name) end,
@@ -148,6 +174,7 @@ function FileManagerCollection:onShowColl(collection_name, series)
         end,
     }
     self.booklist_menu.disable_double_tap = false
+    self.registerSortSwipes(self.booklist_menu, self.onTapBottomRightCollection, self.onDoubleTapBottomRightCollection)
     table.insert(self.booklist_menu.paths, true) -- enable onReturn button
     self.booklist_menu.close_callback = function()
         util.tableSetValue(coll_settings, self.match_table, "filter", "show")
@@ -1060,7 +1087,6 @@ function FileManagerCollection:onShowCollList(file_or_selected_collections, call
         title_bar_fm_style = true,
         title_bar_left_icon = title_bar_left_icon,
         onLeftButtonTap = function() self:showCollListDialog(caller_callback, no_dialog) end,
-        onDoubleTapBottomRight = self.onDoubleTapBottomRightCollections,
         onMenuChoice = self.onCollListChoice,
         onMenuHold = self.onCollListHold,
         _manager = self,
@@ -1068,6 +1094,7 @@ function FileManagerCollection:onShowCollList(file_or_selected_collections, call
         _recreate_func = function() self:onShowCollList(file_or_selected_collections, caller_callback, no_dialog) end,
     }
     self.coll_list.disable_double_tap = false
+    self.registerSortSwipes(self.coll_list, nil, self.onDoubleTapBottomRightCollections)
 
     self.coll_list.close_callback = function(force_close)
         if force_close or self.selected_collections == nil then
@@ -1110,7 +1137,6 @@ function FileManagerCollection:onShowSeriesList(file_or_files, caller_callback, 
         title_bar_fm_style = true,
         -- title_bar_left_icon = file_or_files and "check" or "appbar.menu",
         onLeftButtonTap = function() self:showCollListDialog(caller_callback, no_dialog) end,
-        onDoubleTapBottomRight = self.onDoubleTapBottomRightCollections,
         onMenuChoice = self.onCollListChoice,
         -- onMenuHold = self.onCollListHold,
         _manager = self,
@@ -1118,6 +1144,7 @@ function FileManagerCollection:onShowSeriesList(file_or_files, caller_callback, 
         _recreate_func = function() self:onShowCollList(file_or_files, caller_callback, no_dialog) end,
     }
     self.coll_list.disable_double_tap = false
+    self.registerSortSwipes(self.coll_list, nil, self.onDoubleTapBottomRightCollections)
     self.coll_list.close_callback = function(force_close)
         if force_close or self.selected_colections == nil then
             self:refreshFileManager()
