@@ -124,6 +124,8 @@ local NOFLASH_KEY = "custombg_noflash"                       -- avoid full-scree
 local PAGE_REFRESH_KEY = "custombg_page_refresh"             -- page turns with a background: "ui" (default, no flash) / "partial" (crisper text)
 local NODITHER_KEY = "custombg_no_dither"                     -- turn KOReader's software dithering off while a background is shown (default: OFF; only has an effect while a background is shown)
 local SWIPE_ANIM_KEY = "custombg_swipe_anim"                -- Kindle page-turn animation while a background is shown: "keep" (default) / "off"
+local TOGGLE_KIND_KEY = "custombg_toggle_kind"                  -- what the toggle gesture turns on: "background" (default) / "hero" / "cover"
+local BOTTOM_MODE_KEY = "custombg_bottom_mode"                  -- bottom picture: nil / "hero" / "cover" (see getBottomMode)
 local TOGGLE_WITH_BG_KEY = "custombg_toggle_with_background"   -- the lines gesture (pagetextinfo) also switches the background: true (default) / false = lines only
 
 local FS_KEYS = {
@@ -1009,6 +1011,10 @@ function CustomBg:applyBackground(name)
     -- name: an image name, DOC_BG_NONE ("") for no background, or DOC_BG_GLOBAL to use the global default.
     -- nil also means "follow the global default" (other code, e.g. a gesture toggle, calls applyBackground(nil) for that).
     if name == nil then name = DOC_BG_GLOBAL end
+    if name ~= DOC_BG_NONE then
+        self:_clearBottomMode()                               -- the bottom picture and the background exclude each other
+        CFG:saveSetting(TOGGLE_KIND_KEY, "background")        -- the toggle gesture now brings the background back
+    end
     if name ~= nil and name ~= DOC_BG_NONE and name ~= DOC_BG_GLOBAL then
         -- An image was picked: it becomes THE global background image (for the current day/night mode),
         -- and the background is turned ON in this book (always following the global one).
@@ -1061,6 +1067,7 @@ function CustomBg:hookReaderRolling()
             -- Fallback: on some devices the rendering engine isn't ready during onReadSettings, or a later re-layout
             -- overrides the background property; force-apply once more after a delay so the background takes effect right after (re)opening a book
             plugin:_scheduleBgReapply(1.0)
+            plugin:_scheduleBottomRefresh()
         end)
     end
 end
@@ -1081,6 +1088,17 @@ function CustomBg:_scheduleBgReapply(delay)
             if self:_reapplyBackgroundImage(self.ui.document) then
                 self:_backgroundRefresh()
             end
+        end
+    end)
+end
+
+-- The bottom picture mode is global, so it comes back when a book is opened. pagetextinfo is not ready yet at that moment.
+function CustomBg:_scheduleBottomRefresh()
+    if not self:getBottomMode() then return end
+    UIManager:scheduleIn(1.5, function()
+        if self.ui and self.ui.document and self:getBottomMode() then
+            self:refreshBottomImage()
+            UIManager:setDirty("all", "ui")
         end
     end)
 end
@@ -1697,6 +1715,7 @@ end
 -- Public: switch the ruled lines on/off (used by the pagetextinfo gesture and available to any other plugin).
 -- Stored in the plugin's own settings file, so it applies to every book.
 function CustomBg:setLinesEnabled(on)
+    if on then self:_clearBottomMode() end   -- the bottom picture and the lines exclude each other
     self.fs_enabled = on and true or false
     CFG:saveSetting(FS_KEYS.enabled, self.fs_enabled)
     self:invalidateLineCache()
@@ -2375,7 +2394,7 @@ function CustomBg:onRedrawCurrentView() self:invalidateLineCache() end
 
 -- ===== Bottom image =====
 -- A rectangular picture painted at the bottom of the page, centered, over the text of that area (the pagetextinfo plugin
--- puts the bookshelf hero here with a tap on the bottom center). The plugin owns the buffer: it is freed when the picture is
+-- makes it: the bookshelf hero or the cover text, see getBottomMode). The plugin owns the buffer: it is freed when the picture is
 -- replaced or removed, and when the book is closed.
 -- as_mask: bb is an 8 bit buffer used as the opacity of black (255 = black, 0 = nothing), so the page shows through
 function CustomBg:setBottomImage(bb, margin, as_mask)
@@ -2394,6 +2413,88 @@ end
 
 function CustomBg:hasBottomImage()
     return self._bottom_image ~= nil
+end
+
+-- ===== Bottom picture mode =====
+-- What the bottom picture is (made by the pagetextinfo plugin, painted here): nil = none, "hero" = the bookshelf
+-- "currently reading" card, "cover" = the part of the cover with the title. Global (every book), and mutually exclusive
+-- with the reading background and with the ruled lines: turning one of them on turns the others off.
+function CustomBg:getBottomMode()
+    local v = CFG:readSetting(BOTTOM_MODE_KEY)
+    return (v == "hero" or v == "cover") and v or nil
+end
+
+-- Makes (or removes) the picture for the current mode. The picture itself is built by pagetextinfo.
+function CustomBg:refreshBottomImage()
+    local mode = self:getBottomMode()
+    local pti = self.ui and self.ui.pagetextinfo
+    if mode and pti and pti.buildBottomHero and self.ui.document then
+        pti:buildBottomHero(mode)
+    else
+        self:clearBottomImage()
+    end
+end
+
+-- Turns the bottom picture off (called when the background or the lines are turned on)
+function CustomBg:_clearBottomMode()
+    if self:getBottomMode() then
+        CFG:saveSetting(BOTTOM_MODE_KEY, nil)
+    end
+    self:clearBottomImage()
+end
+
+-- mode: nil / "hero" / "cover". A mode turns the background and the ruled lines off.
+function CustomBg:setBottomMode(mode)
+    if mode then
+        if self.fs_enabled then
+            self:setLinesEnabled(false)
+        end
+        if self:getCurrentDocBg() then
+            self:applyBackground(DOC_BG_NONE)
+        end
+        CFG:saveSetting(BOTTOM_MODE_KEY, mode)
+        CFG:saveSetting(TOGGLE_KIND_KEY, mode)                -- the toggle gesture now brings this picture back
+    else
+        CFG:saveSetting(BOTTOM_MODE_KEY, nil)
+    end
+    self:refreshBottomImage()
+end
+
+-- ===== "The picture": the background or the bottom picture, whichever is the configured one =====
+-- The toggle gesture of pagetextinfo (lines / picture / both / nothing) uses these, so it works with the configured one:
+-- the last thing picked in the background list (a background, the hero or the cover text).
+function CustomBg:getToggleKind()
+    local v = CFG:readSetting(TOGGLE_KIND_KEY)
+    return (v == "hero" or v == "cover") and v or "background"
+end
+
+function CustomBg:isPictureOn()
+    return self:getCurrentDocBg() ~= nil or self:getBottomMode() ~= nil
+end
+
+function CustomBg:setPictureEnabled(on)
+    if on then
+        local kind = self:getToggleKind()
+        if kind ~= "background" then
+            self:setBottomMode(kind)
+            return
+        end
+        -- Follow the global default; if there is none, pick a random one (it then becomes the global default)
+        if self:getGlobalDefaultBg() then
+            self:applyBackground(nil)
+        else
+            local names = {}
+            for name in pairs(self:getCurrentImageCache()) do names[#names + 1] = name end
+            if #names > 0 then
+                self:applyBackground(names[math.random(#names)])
+            else
+                self:applyBackground(nil)
+            end
+        end
+    else
+        self:applyBackground(DOC_BG_NONE)
+        self:setBottomMode(nil)
+    end
 end
 
 function CustomBg:_paintBottomImage(bb, x, y)
@@ -3415,6 +3516,7 @@ function CustomBg:addToMainMenu(menu_items)
                         keep_menu_open = true,
                         callback = function(touchmenu_instance)
                             self.fs_enabled = not self.fs_enabled
+                            if self.fs_enabled then self:_clearBottomMode() end   -- excludes the bottom picture
                             self:saveDocSetting(FS_KEYS.enabled, self.fs_enabled)
                             self:refreshView(touchmenu_instance)
                         end,
@@ -4341,13 +4443,55 @@ function CustomBg:addToMainMenu(menu_items)
                         text = _("No background"),
                         checked_func = function()
                             local v = self:readBgChoice()
-                            return v == nil or v == DOC_BG_NONE
+                            return (v == nil or v == DOC_BG_NONE) and self:getBottomMode() == nil
                         end,
                         keep_menu_open = true,
                         callback = function(touchmenu_instance)
                             self:applyBackground(DOC_BG_NONE)
+                            self:setBottomMode(nil)   -- nothing at all: no background and no bottom picture
                             if touchmenu_instance then touchmenu_instance:updateItems() end
                         end
+                    })
+
+                    -- Bottom pictures: they are options of this same list, so they exclude each other and the backgrounds
+                    -- (picking one turns the background off; picking a background or "No background" turns them off)
+                    table.insert(sub, {
+                        text = _("Bottom: bookshelf hero"),
+                        help_text = _(
+                            "Shows the bookshelf \"currently reading\" card (cover, author, metadata and progress bar) as a transparent " ..
+                            "picture at the bottom of the page. It is made again at every page turn so the progress advances.\n\n" ..
+                            "It replaces the background: picking it turns the background off, and picking a background turns it off."),
+                        checked_func = function() return self:getBottomMode() == "hero" end,
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
+                            self:setBottomMode("hero")
+                            self:refreshView(touchmenu_instance)
+                        end,
+                    })
+                    table.insert(sub, {
+                        text = _("Bottom: cover text"),
+                        help_text = _(
+                            "Shows the part of the book cover that has the title as a transparent picture at the bottom of the page. " ..
+                            "The position of the title comes from cover_title_bands.py (calibre.lua or cover_title_bands.lua); " ..
+                            "without it the band with the most text is used, and \"Next cover text\" tries the others.\n\n" ..
+                            "It replaces the background, like the hero does."),
+                        checked_func = function() return self:getBottomMode() == "cover" end,
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
+                            self:setBottomMode("cover")
+                            self:refreshView(touchmenu_instance)
+                        end,
+                    })
+                    table.insert(sub, {
+                        text = _("Next cover text"),
+                        help_text = _("Cover text: show the next band of the cover. The one you leave is remembered for this book."),
+                        enabled_func = function() return self:getBottomMode() == "cover" end,
+                        keep_menu_open = true,
+                        callback = function(touchmenu_instance)
+                            local pti = self.ui and self.ui.pagetextinfo
+                            if pti and pti.nextCoverText then pti:nextCoverText() end
+                            self:refreshView(touchmenu_instance)
+                        end,
                     })
 
                     -- Follow global default

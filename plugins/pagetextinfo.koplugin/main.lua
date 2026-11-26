@@ -1003,8 +1003,8 @@ function PageTextInfo:onBottomTap(side, ges)
 end
 
 -- Tap in the bottom center (the zone bookends uses for its "tap on the bottom bar" action):
---   bookends off and custombg (background and lines) off -> the bookshelf hero at the bottom of the page: a tap puts it,
---                                           it stays through page turns, the next tap takes it away (see toggleBottomHero)
+--   bookends off and custombg (background, lines and bottom picture) off -> nothing. The bottom picture (hero or cover
+--                                           text) is chosen in the custombg menu and has no tap
 --   (otherwise, with the topbar showing and bookends off: nothing)
 --   background on (with or without lines) -> settings of the background
 --   lines on                              -> settings of the ruled lines
@@ -1020,8 +1020,7 @@ function PageTextInfo:onBottomCenterTap(ges)
     local lines_on = custombg and custombg.fs_enabled and true or false
     local bg_on = custombg and custombg.getCurrentDocBg and custombg:getCurrentDocBg() ~= nil or false
     if not bookends_on and not lines_on and not bg_on then
-        self:toggleBottomHero()
-        return true
+        return true -- nothing to do (the bottom picture of custombg, if any, has no tap)
     end
     if not bookends_on and topbar_on then
         return true -- topbar showing: nothing
@@ -1388,6 +1387,9 @@ function PageTextInfo:onSwipe(arg, ges)
     return false
 end
 
+-- "Picture" below = the configured one of the custombg list: a background, the bookshelf hero or the cover text
+-- (custombg:isPictureOn / setPictureEnabled). Hero and cover text exclude the ruled lines, so with them the cycle has no
+-- "lines + picture" step.
 -- Same as the menu item "Enable / disable full-screen ruled lines" of the custombg plugin.
 -- custombg keeps ALL its settings (lines and background) in its own file, settings/custombg.lua. They are global,
 -- not per book: this toggle affects every book and nothing is written to the book sidecar.
@@ -1414,15 +1416,21 @@ function PageTextInfo:toggleFullScreenRuledLines()
         --   (from "nothing on" it goes to lines only)
         -- With it OFF: only the ruled lines are toggled, the background is left as it is.
         local lines_on = custombg.fs_enabled and true or false
-        local bg_on = custombg:getCurrentDocBg() ~= nil
+        local bg_on = custombg:isPictureOn()
         local with_bg = (custombg.isToggleWithBackground == nil) or custombg:isToggleWithBackground()
+        -- the hero and the cover text exclude the lines: no "lines + picture" step for them
+        local exclusive = custombg:getToggleKind() ~= "background"
         local want_lines, want_bg
         if not with_bg then
             want_lines, want_bg = not lines_on, bg_on          -- lines only, background untouched
         elseif lines_on and not bg_on then
             want_lines, want_bg = false, true      -- background only
         elseif bg_on and not lines_on then
-            want_lines, want_bg = true, true       -- lines + background
+            if exclusive then
+                want_lines, want_bg = false, false -- nothing (the picture excludes the lines)
+            else
+                want_lines, want_bg = true, true   -- lines + background
+            end
         elseif lines_on and bg_on then
             want_lines, want_bg = false, false     -- nothing
         else
@@ -1439,24 +1447,7 @@ function PageTextInfo:toggleFullScreenRuledLines()
         end
         if want_bg ~= bg_on then
             local function applyBg()
-                if want_bg then
-                    -- Follow the global default; if there is none, pick a random one (it then becomes the global default)
-                    if custombg:getGlobalDefaultBg() then
-                        custombg:applyBackground(nil)
-                    else
-                        local names = {}
-                        for name in pairs(custombg:getCurrentImageCache()) do
-                            names[#names + 1] = name
-                        end
-                        if #names > 0 then
-                            custombg:applyBackground(names[math.random(#names)])
-                        else
-                            custombg:applyBackground(nil)
-                        end
-                    end
-                else
-                    custombg:applyBackground("")        -- No background
-                end
+                custombg:setPictureEnabled(want_bg)   -- the configured one: background, hero or cover text
             end
             -- applyBackground() repaints by itself (loadBackgroundByName -> toggleRepaint("all"))
             -- and the repaint of the reader below follows right after it: two repaints of the whole screen for ONE
@@ -1511,7 +1502,7 @@ function PageTextInfo:toggleFullScreenRuledLinesNoTopbar()
     end
 
     local lines_on = custombg.fs_enabled and true or false
-    local bg_on = custombg:getCurrentDocBg() ~= nil
+    local bg_on = custombg:isPictureOn()
     local has_bk = bookends ~= nil
     local bk_on = bookendsOn()
     local want_lines, want_bg, want_bk = lines_on, bg_on, bk_on
@@ -1522,7 +1513,11 @@ function PageTextInfo:toggleFullScreenRuledLinesNoTopbar()
         elseif lines_on and not bg_on then
             want_lines, want_bg = false, true          -- background (with bookends)
         elseif bg_on and not lines_on then
-            want_lines, want_bg = true, true           -- lines + background (with bookends)
+            if custombg:getToggleKind() ~= "background" then
+                want_lines, want_bg = true, false      -- lines only (the picture excludes the lines)
+            else
+                want_lines, want_bg = true, true       -- lines + background (with bookends)
+            end
         elseif has_bk then
             want_bk = false                            -- bookends OFF / topbar disabled, both stay
         else
@@ -1550,23 +1545,7 @@ function PageTextInfo:toggleFullScreenRuledLinesNoTopbar()
 
     if want_bg ~= bg_on then
         local function applyBg()
-            if want_bg then
-                if custombg:getGlobalDefaultBg() then
-                    custombg:applyBackground(nil)
-                else
-                    local names = {}
-                    for name in pairs(custombg:getCurrentImageCache()) do
-                        names[#names + 1] = name
-                    end
-                    if #names > 0 then
-                        custombg:applyBackground(names[math.random(#names)])
-                    else
-                        custombg:applyBackground(nil)
-                    end
-                end
-            else
-                custombg:applyBackground("")        -- No background
-            end
+                custombg:setPictureEnabled(want_bg)   -- the configured one: background, hero or cover text
         end
         -- Mute the inner repaint: one repaint for the whole toggle (below)
         local own_repaint = rawget(custombg, "toggleRepaint")
@@ -1638,7 +1617,7 @@ function PageTextInfo:toggleDotsAndBackground()
     end
 
     local dots_on = dotsOn()
-    local bg_on = custombg ~= nil and custombg:getCurrentDocBg() ~= nil
+    local bg_on = custombg ~= nil and custombg:isPictureOn()
     local bk_on = bookendsOn()
     local want_dots, want_bg, want_bk = dots_on, bg_on, bk_on
     if bookends and not bk_on then
@@ -1666,24 +1645,7 @@ function PageTextInfo:toggleDotsAndBackground()
 
     if custombg and want_bg ~= bg_on then
         local function applyBg()
-            if want_bg then
-                -- Follow the global default; if there is none, pick a random one (it then becomes the global default)
-                if custombg:getGlobalDefaultBg() then
-                    custombg:applyBackground(nil)
-                else
-                    local names = {}
-                    for name in pairs(custombg:getCurrentImageCache()) do
-                        names[#names + 1] = name
-                    end
-                    if #names > 0 then
-                        custombg:applyBackground(names[math.random(#names)])
-                    else
-                        custombg:applyBackground(nil)
-                    end
-                end
-            else
-                custombg:applyBackground("")        -- No background
-            end
+                custombg:setPictureEnabled(want_bg)   -- the configured one: background, hero or cover text
         end
         -- applyBackground() repaints by itself; mute it so there is ONE repaint for the whole toggle (see below)
         local own_repaint = rawget(custombg, "toggleRepaint")
@@ -2328,10 +2290,10 @@ function PageTextInfo:onPageUpdate(pageno)
     -- Avoid double execution when loading document
     if not self.initialized then return end
 
-    -- the bottom hero (if up) is built again so its progress and time left advance with the page
+    -- the bottom picture (if up) is built again so its progress and time left advance with the page
     local custombg = self.ui and self.ui.custombg
     if custombg and custombg.hasBottomImage and custombg:hasBottomImage() then
-        self:buildBottomHero()
+        self:buildBottomHero(custombg:getBottomMode())
     end
 
     if self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
@@ -3121,41 +3083,6 @@ This is to be active only if the option flash buttons and menu items or the opti
                         G_reader_settings:flush()
 
                         return true
-                    end,
-                },
-                {
-                    text = _("Use cover text as background"),
-                    checked_func = function() return G_reader_settings:isTrue("bottom_cover_text_background") end,
-                    help_text = _([[Bottom center tap (bookends and custom background off): on, it shows the part of the cover with the text as a rectangle at the bottom of the page. Off: it shows the bookshelf hero.]]),
-                    callback = function()
-                        local on = not G_reader_settings:isTrue("bottom_cover_text_background")
-                        G_reader_settings:saveSetting("bottom_cover_text_background", on)
-                        G_reader_settings:flush()
-                        local custombg = self.ui and self.ui.custombg
-                        if custombg and custombg.hasBottomImage and custombg:hasBottomImage() then
-                            self:buildBottomHero()
-                        end
-
-                        return true
-                    end,
-                },
-                {
-                    text = _("Next cover text"),
-                    help_text = _([[Cover text background: change the part of the cover that is shown, for books without a title position saved by cover_title_bands.py. It tries the bands with the most text in order and remembers the one you leave for this book.]]),
-                    keep_menu_open = true,
-                    enabled_func = function() return self.ui and self.ui.doc_settings ~= nil end,
-                    callback = function()
-                        local ds = self.ui.doc_settings
-                        local key = "cover_text_rank"
-                        local max_rank = PageTextInfo._hero_sett.cover_text_candidates
-                        local rank = (tonumber(ds:readSetting(key)) or 1) + 1
-                        if rank > max_rank then rank = 1 end
-                        ds:saveSetting(key, rank)
-                        local custombg = self.ui.custombg
-                        if custombg and custombg.hasBottomImage and custombg:hasBottomImage() then
-                            self:buildBottomHero()
-                        end
-                        UIManager:show(Notification:new{ text = string.format("%d / %d", rank, max_rank) })
                     end,
                 },
                 {
@@ -4446,8 +4373,6 @@ local HERO_SETT = {
     outer_gap = 6,       -- separación entre el recuadro y el marco hueco
 }
 
-PageTextInfo._hero_sett = HERO_SETT -- for the menu, which is defined above this point
-
 local function buildHeroProgressRow(width, pct, book, device_state, progress_cfg)
     local Bb = require("ffi/blitbuffer")
     local Font = require("ui/font")
@@ -4528,7 +4453,7 @@ local function heroCoverBand(name)
         pcall(function()
             local DataStorage = require("datastorage")
             local paths = { DataStorage:getSettingsDir() .. "/cover_title_bands.lua" }
-            for _, p in ipairs(PageTextInfo._hero_sett.cover_bands_paths or {}) do table.insert(paths, p) end
+            for _, p in ipairs(HERO_SETT.cover_bands_paths or {}) do table.insert(paths, p) end
             for _, path in ipairs(paths) do
                 local chunk = loadfile(path)
                 local t = chunk and chunk()
@@ -4581,7 +4506,7 @@ local function heroMetadataText(book)
     return text
 end
 
--- The text taken from the cover itself (only used by the "Use cover text as background" option): the band of the cover with the most text-like detail (many light/dark changes
+-- The text taken from the cover itself (only used by the "Bottom: cover text" option of custombg): the band of the cover with the most text-like detail (many light/dark changes
 -- in a row) is cut out of the picture and scaled to fit max_w x max_h. A dark band is inverted so it is dark on light.
 -- Returns an ImageWidget, or nil when the book has no cover.
 local function heroTitleFromCover(max_w, max_h)
@@ -4663,6 +4588,11 @@ local function heroTitleFromCover(max_w, max_h)
         avg = avg / band
         local y0 = math.floor(best_y * H / sh)
         local ch = math.min(H - y0, math.floor(band * H / sh))
+        if jb then
+            -- exact rows from the saved position (the small copy used above is rounded to about 15 rows of the cover)
+            y0 = math.max(0, math.floor(jb.y0 * H))
+            ch = math.max(2, math.min(H - y0, math.ceil((jb.y1 - jb.y0) * H)))
+        end
         local crop = Blitbuffer.new(W, ch, cover:getType())
         crop:blitFrom(cover, 0, 0, 0, y0, W, ch)
         pcall(function() cover:free() end)
@@ -4828,30 +4758,32 @@ local function buildBookshelfHero(width, height, opts)
     return card
 end
 
--- Tap on the bottom center with the topbar showing: the bookshelf hero as a rectangular picture at the bottom of the page.
--- It is drawn by the custombg plugin (custombg:setBottomImage), like its background pictures. The first tap puts it, it
--- stays through page turns (built again at each one, so its progress advances), and the next tap takes it away.
-function PageTextInfo:toggleBottomHero()
-    local custombg = self.ui and self.ui.custombg
-    if not (custombg and custombg.setBottomImage) then return false end
-    if custombg:hasBottomImage() then
-        custombg:clearBottomImage()
-    else
-        self:buildBottomHero()
-    end
-    UIManager:setDirty(self.view.dialog, "ui")
+-- The bottom picture is chosen in the custombg menu ("Bottom: bookshelf hero" / "Bottom: cover text", never both and
+-- never together with the background or the ruled lines). custombg paints it (custombg:setBottomImage) and calls
+-- buildBottomHero(mode) to make it; it is made again at every page turn (see onPageUpdate) so its progress advances.
+
+-- Cover text: the next band of the cover, for books that have no title position saved by cover_title_bands.py
+function PageTextInfo:nextCoverText()
+    local ds = self.ui and self.ui.doc_settings
+    if not ds then return false end
+    local max_rank = HERO_SETT.cover_text_candidates
+    local rank = (tonumber(ds:readSetting("cover_text_rank")) or 1) + 1
+    if rank > max_rank then rank = 1 end
+    ds:saveSetting("cover_text_rank", rank)
+    self:buildBottomHero("cover")
+    UIManager:show(Notification:new{ text = string.format("%d / %d", rank, max_rank) })
     return true
 end
 
 -- Builds the hero picture with the current progress and hands it to the custombg plugin
-function PageTextInfo:buildBottomHero()
+function PageTextInfo:buildBottomHero(mode)
     local custombg = self.ui and self.ui.custombg
-    if not (custombg and custombg.setBottomImage) then return false end
+    if not (custombg and custombg.setBottomImage) or not mode then return false end
     do
         local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
         local hero
         local plain = false  -- the cover text goes without the box (border and padding) around it
-        if G_reader_settings:isTrue("bottom_cover_text_background") then
+        if mode == "cover" then
             -- the text cut out of the cover, as a plain rectangle (no hero)
             hero = heroTitleFromCover(
                 math.floor(screen_w * HERO_SETT.width_pct / 100),
