@@ -1064,10 +1064,67 @@ function PageTextInfo:onBottomDoubleTap(side, ges)
     return true
 end
 
+-- Cycles the custombg picture on each tap in the bottom center:
+--   image (background) -> book title (cover text) -> bookshelf hero -> background settings -> image ...
+-- A type that cannot be made for this book (no cover, no hero, no images) is skipped.
+function PageTextInfo:cycleCustomBgPicture()
+    local custombg = self.ui and self.ui.custombg
+    if not (custombg and custombg.setBottomMode and custombg.applyBackground) then return false end
+    local mode = custombg:getBottomMode()                    -- "cover" / "hero" / nil
+    local current = mode or (custombg:getCurrentDocBg() and "image") or nil
+
+    -- applyBackground / setBottomMode repaint by themselves; mute it so there is one repaint at the end
+    local own_repaint = rawget(custombg, "toggleRepaint")
+    custombg.toggleRepaint = function() end
+
+    local function showImage()
+        if custombg:getGlobalDefaultBg() then
+            custombg:applyBackground(nil)
+        else
+            local names = {}
+            for name in pairs(custombg:getCurrentImageCache()) do names[#names + 1] = name end
+            custombg:applyBackground(#names > 0 and names[math.random(#names)] or nil)
+        end
+        return custombg:getCurrentDocBg() ~= nil and custombg:getBottomMode() == nil
+    end
+    local function showBottom(m)
+        custombg:setBottomMode(m)
+        return custombg:getBottomMode() == m
+    end
+
+    local open_settings = false
+    local ok, err = pcall(function()
+        if current == "image" then
+            if not showBottom("cover") and not showBottom("hero") then open_settings = true end
+        elseif current == "cover" then
+            if not showBottom("hero") then open_settings = true end
+        elseif current == "hero" and not self._bg_cycle_settings_shown then
+            open_settings = true
+        else
+            -- after the settings (or nothing on): back to the image
+            if not showImage() and not showBottom("cover") then showBottom("hero") end
+        end
+    end)
+    custombg.toggleRepaint = own_repaint
+    if not ok then error(err, 0) end
+
+    if open_settings then
+        self._bg_cycle_settings_shown = true
+        self:showCustomBgSubMenu("background")
+        return true
+    end
+    self._bg_cycle_settings_shown = false
+    if custombg.toggleRepaint then
+        custombg:toggleRepaint(self.view.dialog)
+    else
+        UIManager:setDirty(self.view.dialog, "ui")
+    end
+    return true
+end
+
 -- Tap in the bottom center (the zone bookends uses for its "tap on the bottom bar" action):
---   bottom picture on (hero or cover text of custombg) -> the list of the custombg backgrounds, where it is chosen
+--   a picture on (background image, cover text or hero) -> next one: image -> book title -> hero -> settings -> image ...
 --   (otherwise, with the topbar showing and bookends off: nothing)
---   background on (with or without lines) -> settings of the background
 --   lines on                              -> settings of the ruled lines
 --   bookends on alone                     -> next bookends preset
 --   anything else                         -> nothing (the tap is consumed, so bookends does not act while off)
@@ -1080,19 +1137,16 @@ function PageTextInfo:onBottomCenterTap(ges)
     local custombg = self.ui and self.ui.custombg
     local lines_on = custombg and custombg.fs_enabled and true or false
     local bg_on = custombg and custombg.getCurrentDocBg and custombg:getCurrentDocBg() ~= nil or false
-    -- the bottom picture of custombg (hero or cover text) opens the same list where it is chosen
-    if custombg and custombg.getBottomMode and custombg:getBottomMode() then
-        self:showCustomBgSubMenu("background")
-        return true
+    -- a picture showing (background image, cover text or hero): cycle to the next one
+    local bottom_on = custombg and custombg.getBottomMode and custombg:getBottomMode() ~= nil or false
+    if bg_on or bottom_on then
+        return self:cycleCustomBgPicture()
     end
     if not bookends_on and topbar_on then
         return true -- topbar showing: nothing
     end
     if custombg then
-        if bg_on then
-            self:showCustomBgSubMenu("background")
-            return true
-        elseif lines_on then
+        if lines_on then
             self:showCustomBgSubMenu("lines")
             return true
         end
