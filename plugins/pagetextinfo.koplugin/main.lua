@@ -3124,6 +3124,22 @@ This is to be active only if the option flash buttons and menu items or the opti
                     end,
                 },
                 {
+                    text = _("Use cover text as background"),
+                    checked_func = function() return G_reader_settings:isTrue("bottom_cover_text_background") end,
+                    help_text = _([[Bottom center tap (bookends and custom background off): on, it shows the part of the cover with the text as a rectangle at the bottom of the page. Off: it shows the bookshelf hero.]]),
+                    callback = function()
+                        local on = not G_reader_settings:isTrue("bottom_cover_text_background")
+                        G_reader_settings:saveSetting("bottom_cover_text_background", on)
+                        G_reader_settings:flush()
+                        local custombg = self.ui and self.ui.custombg
+                        if custombg and custombg.hasBottomImage and custombg:hasBottomImage() then
+                            self:buildBottomHero()
+                        end
+
+                        return true
+                    end,
+                },
+                {
                     text = _("Show page turn time"),
                     checked_func = function() return G_reader_settings:isTrue("show_page_turn_time") end,
                     help_text = _([[Show a notification with the time (in ms) it took to turn the page. The time is also always written to the log.]]),
@@ -4400,6 +4416,8 @@ local HERO_SETT = {
     bottom_padding = 6,      -- aire alrededor del hero cuando va abajo (px sin escalar)
     hide_regions = { "status", "rating", "metadata", "description", "tags" },
     show_progress = true,
+    cover_text_height_pct = 12, -- alto maximo (% de pantalla) del recorte de la portada cuando va abajo sin hero
+    title_crop_pct = 24,     -- alto de la franja de la portada que se recorta como titulo en el hero de abajo (% del alto de la portada)
     background = Blitbuffer.COLOR_WHITE,  -- fondo detrás del hero: Blitbuffer.COLOR_WHITE, Blitbuffer.COLOR_GRAY_E (gris claro) o Blitbuffer.COLOR_LIGHT_GRAY
     padding = 12,        -- aire alrededor del hero (px sin escalar)
     border = 2,          -- grosor del borde (0 = sin borde)
@@ -4501,8 +4519,70 @@ local function heroMetadataText(book)
     return text
 end
 
--- Right side of the narrow hero at the bottom of the page: the metadata line on top and a long progress bar under it,
--- both centered vertically next to the card. No percentage and no time left.
+-- The text taken from the cover itself (only used by the "Use cover text as background" option): the band of the cover with the most text-like detail (many light/dark changes
+-- in a row) is cut out of the picture and scaled to fit max_w x max_h. A dark band is inverted so it is dark on light.
+-- Returns an ImageWidget, or nil when the book has no cover.
+local function heroTitleFromCover(max_w, max_h)
+    local ok, widget = pcall(function()
+        local rui = require("apps/reader/readerui").instance
+        if not (rui and rui.document and rui.document.getCoverPageImage) then return nil end
+        local cover = rui.document:getCoverPageImage()
+        if not cover then return nil end
+        local ImageWidget = require("ui/widget/imagewidget")
+        local RenderImage = require("ui/renderimage")
+        local W, H = cover:getWidth(), cover:getHeight()
+        local frac = math.max(5, math.min(60, HERO_SETT.title_crop_pct or 24)) / 100
+        -- small gray copy to measure detail per row
+        local sw = 64
+        local sh = math.max(8, math.floor(H * sw / W))
+        local small = RenderImage:scaleBlitBuffer(cover, sw, sh, false)
+        local lum = {}
+        for y = 0, sh - 1 do
+            local row = {}
+            for x = 0, sw - 1 do row[x] = small:getPixel(x, y):getColor8().a end
+            lum[y] = row
+        end
+        local detail, mean = {}, {}
+        for y = 0, sh - 1 do
+            local d, m = 0, 0
+            for x = 0, sw - 1 do
+                local v = lum[y][x]
+                m = m + v
+                if x > 0 then d = d + math.abs(v - lum[y][x - 1]) end
+                if y > 0 then d = d + math.abs(v - lum[y - 1][x]) end
+            end
+            detail[y], mean[y] = d, m / sw
+        end
+        pcall(function() small:free() end)
+        local band = math.max(2, math.floor(sh * frac))
+        local best_y, best = 0, -1
+        for y0 = 0, sh - band do
+            local sum = 0
+            for y = y0, y0 + band - 1 do sum = sum + detail[y] end
+            if sum > best then best, best_y = sum, y0 end
+        end
+        local avg = 0
+        for y = best_y, best_y + band - 1 do avg = avg + mean[y] end
+        avg = avg / band
+        local y0 = math.floor(best_y * H / sh)
+        local ch = math.min(H - y0, math.floor(band * H / sh))
+        local crop = Blitbuffer.new(W, ch, cover:getType())
+        crop:blitFrom(cover, 0, 0, 0, y0, W, ch)
+        pcall(function() cover:free() end)
+        if avg < 128 then crop:invert() end
+        return ImageWidget:new{
+            image = crop,
+            image_disposable = true,
+            width = max_w,
+            height = max_h,
+            scale_factor = 0,
+        }
+    end)
+    return ok and widget or nil
+end
+
+-- Right side of the narrow hero at the bottom of the page: the metadata line and a long progress bar, centered
+-- vertically next to the card. No percentage and no time left.
 local function buildHeroProgressSide(width, pct, book, device_state, progress_cfg)
     local Bb = require("ffi/blitbuffer")
     local Font = require("ui/font")
@@ -4672,7 +4752,15 @@ function PageTextInfo:buildBottomHero()
     if not (custombg and custombg.setBottomImage) then return false end
     do
         local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
-        local hero = buildBookshelfHero(
+        local hero
+        if G_reader_settings:isTrue("bottom_cover_text_background") then
+            -- the text cut out of the cover, as a plain rectangle (no hero)
+            hero = heroTitleFromCover(
+                math.floor(screen_w * HERO_SETT.width_pct / 100),
+                math.floor(screen_h * HERO_SETT.cover_text_height_pct / 100)
+            )
+        end
+        hero = hero or buildBookshelfHero(
             math.floor(screen_w * HERO_SETT.width_pct / 100),
             math.floor(screen_h * HERO_SETT.bottom_height_pct / 100),
             { side = true }
