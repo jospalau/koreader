@@ -628,6 +628,36 @@ function PageTextInfo:initGesListener()
             handler = function(ges) return self:onBottomTap("right", ges) end,
         },
         {
+            -- Double tap in the bottom left corner: lines on / off (see onBottomDoubleTap)
+            id = "pagetextinfo_double_tap_bottom_left",
+            ges = "double_tap",
+            screen_zone = {
+                ratio_x = 0, ratio_y = 1 - PageTextInfo.bottom_tap_zone.ratio_h,
+                ratio_w = PageTextInfo.bottom_tap_zone.ratio_w, ratio_h = PageTextInfo.bottom_tap_zone.ratio_h,
+            },
+            overrides = {
+                "pagetextinfo_double_tap",
+                "double_tap_left_side",
+                "double_tap_bottom_left_corner",
+            },
+            handler = function(ges) return self:onBottomDoubleTap("left", ges) end,
+        },
+        {
+            -- Double tap in the bottom right corner: background (picture) on / off (see onBottomDoubleTap)
+            id = "pagetextinfo_double_tap_bottom_right",
+            ges = "double_tap",
+            screen_zone = {
+                ratio_x = 1 - PageTextInfo.bottom_tap_zone.ratio_w, ratio_y = 1 - PageTextInfo.bottom_tap_zone.ratio_h,
+                ratio_w = PageTextInfo.bottom_tap_zone.ratio_w, ratio_h = PageTextInfo.bottom_tap_zone.ratio_h,
+            },
+            overrides = {
+                "pagetextinfo_double_tap",
+                "double_tap_right_side",
+                "double_tap_bottom_right_corner",
+            },
+            handler = function(ges) return self:onBottomDoubleTap("right", ges) end,
+        },
+        {
             -- Tap in the bottom center (same zone as the stock footer / bookends): see onBottomCenterTap
             id = "pagetextinfo_tap_bottom_center",
             ges = "tap",
@@ -1002,9 +1032,40 @@ function PageTextInfo:onBottomTap(side, ges)
     return true
 end
 
+-- Double tap in the bottom corners. Left: ruled lines on / off. Right: background (the configured picture) on / off.
+-- Each one toggles only its own thing: bookends, the topbar and the other custombg part are left as they are.
+function PageTextInfo:onBottomDoubleTap(side, ges)
+    if not self.initialized then return false end
+    if self.view.footer_visible then return false end
+    local custombg = self.ui and self.ui.custombg
+    if not custombg then return false end
+    if side == "left" then
+        local on = custombg.fs_enabled and true or false
+        if custombg.setLinesEnabled then
+            custombg:setLinesEnabled(not on)
+        else
+            custombg.fs_enabled = not on
+            custombg:saveDocSetting("fs_lines_enabled", not on)
+        end
+    else
+        local on = custombg:isPictureOn()
+        -- applyBackground() repaints by itself; mute it so there is one repaint (the one below)
+        local own_repaint = rawget(custombg, "toggleRepaint")
+        custombg.toggleRepaint = function() end
+        local ok, err = pcall(custombg.setPictureEnabled, custombg, not on)
+        custombg.toggleRepaint = own_repaint
+        if not ok then error(err, 0) end
+    end
+    if custombg.toggleRepaint then
+        custombg:toggleRepaint(self.view.dialog)
+    else
+        UIManager:setDirty(self.view.dialog, "ui")
+    end
+    return true
+end
+
 -- Tap in the bottom center (the zone bookends uses for its "tap on the bottom bar" action):
 --   bottom picture on (hero or cover text of custombg) -> the list of the custombg backgrounds, where it is chosen
---   bookends off and custombg (background, lines and bottom picture) off -> nothing
 --   (otherwise, with the topbar showing and bookends off: nothing)
 --   background on (with or without lines) -> settings of the background
 --   lines on                              -> settings of the ruled lines
@@ -1023,9 +1084,6 @@ function PageTextInfo:onBottomCenterTap(ges)
     if custombg and custombg.getBottomMode and custombg:getBottomMode() then
         self:showCustomBgSubMenu("background")
         return true
-    end
-    if not bookends_on and not lines_on and not bg_on then
-        return true -- nothing on: nothing to do
     end
     if not bookends_on and topbar_on then
         return true -- topbar showing: nothing
@@ -1470,91 +1528,18 @@ function PageTextInfo:toggleFullScreenRuledLines()
     return UIManager:setDirty(self.view.dialog, "ui")
 end
 
--- Cycle: bookends -> +lines -> +background (lines off) -> +lines and background
---        -> bookends OFF / topbar disabled (lines + background kept)
---        -> lines and background OFF (bookends OFF / topbar disabled)
---        -> bookends ON alone -> ...
--- Without the bookends plugin: lines -> background -> both -> nothing -> lines ...
+-- Bookends on / off, nothing else: the ruled lines and the background have their own double taps in the bottom
+-- corners (onBottomDoubleTap). The topbar is left as it is (active).
 function PageTextInfo:toggleFullScreenRuledLinesNoTopbar()
     local util = require("util")
     local is_pdf = self.document and util.getFileNameSuffix(self.document.file) == "pdf"
     if is_pdf then return end
     if self.view.footer_visible then return end
 
-    local custombg = self.ui and self.ui.custombg
-    if not custombg then return false end
     local bookends = self.ui and self.ui.bookends
-
-    local function bookendsOn()
-        return bookends ~= nil and bookends.enabled and true or false
-    end
-    local function setBookends(on)
-        if not bookends or bookendsOn() == on then return end
-        bookends.enabled = on
-        if bookends.settings then bookends.settings:saveSetting("enabled", on) end
-        -- Topbar disabled in both directions (with bookends off it would show up by itself)
-        local topbar = self.view and self.view.topbar
-        if topbar and topbar.is_enabled and topbar.quickToggleOnOff then
-            topbar:quickToggleOnOff(false)
-        end
-    end
-
-    local lines_on = custombg.fs_enabled and true or false
-    local bg_on = custombg:isPictureOn()
-    local has_bk = bookends ~= nil
-    local bk_on = bookendsOn()
-    local want_lines, want_bg, want_bk = lines_on, bg_on, bk_on
-
-    -- bookends -> bookends + lines -> bookends + picture -> bookends + lines + picture
-    -- -> nothing (bookends OFF) -> lines + picture (bookends OFF) -> bookends alone -> ...
-    -- Same for the three pictures (background, hero, cover text).
-    if bk_on or not has_bk then
-        if not lines_on and not bg_on then
-            want_lines, want_bg = true, false          -- lines (with bookends)
-        elseif lines_on and not bg_on then
-            want_lines, want_bg = false, true          -- picture (with bookends)
-        elseif bg_on and not lines_on then
-            want_lines, want_bg = true, true           -- lines + picture (with bookends)
-        else
-            want_lines, want_bg = false, false         -- nothing
-            if has_bk then want_bk = false end         -- bookends OFF / topbar disabled
-        end
-    else
-        -- bookends OFF
-        if not lines_on and not bg_on then
-            want_lines, want_bg = true, true           -- lines + picture without bookends
-        else
-            want_lines, want_bg, want_bk = false, false, true  -- bookends ON alone
-        end
-    end
-
-    setBookends(want_bk)
-
-    if want_lines ~= lines_on then
-        if custombg.setLinesEnabled then
-            custombg:setLinesEnabled(want_lines)
-        else
-            custombg.fs_enabled = want_lines
-            custombg:saveDocSetting("fs_lines_enabled", want_lines)
-        end
-    end
-
-    if want_bg ~= bg_on then
-        local function applyBg()
-                custombg:setPictureEnabled(want_bg)   -- the configured one: background, hero or cover text
-        end
-        -- Mute the inner repaint: one repaint for the whole toggle (below)
-        local own_repaint = rawget(custombg, "toggleRepaint")
-        custombg.toggleRepaint = function() end
-        local ok, err = pcall(applyBg)
-        custombg.toggleRepaint = own_repaint
-        if not ok then error(err, 0) end
-    end
-
-    if custombg.toggleRepaint then
-        custombg:toggleRepaint(self.view.dialog)
-        return true
-    end
+    if not bookends then return false end
+    bookends.enabled = not bookends.enabled
+    if bookends.settings then bookends.settings:saveSetting("enabled", bookends.enabled) end
     UIManager:setDirty(self.view.dialog, "ui")
     return true
 end
@@ -1582,12 +1567,7 @@ function PageTextInfo:toggleDotsAndBackground()
         if not bookends or (bookends.enabled and true or false) == on then return end
         bookends.enabled = on
         if bookends.settings then bookends.settings:saveSetting("enabled", on) end
-        -- With bookends off the topbar would show up by itself (it only hides its bars while bookends is on):
-        -- keep it hidden, in both directions.
-        local topbar = self.view and self.view.topbar
-        if topbar and topbar.is_enabled and topbar.quickToggleOnOff then
-            topbar:quickToggleOnOff(false)
-        end
+        -- The topbar is left as it is (active): only bookends is switched
     end
 
     local function dotsOn()
