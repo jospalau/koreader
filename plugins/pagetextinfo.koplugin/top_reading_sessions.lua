@@ -870,7 +870,7 @@ function HeatmapGrid:init()
             local seconds = self.daily[os.date("%Y-%m-%d", ts)] or 0
             local col = math.floor(index / 7)
             self.cells[#self.cells + 1] = {
-                col = col, row = index % 7, seconds = seconds,
+                col = col, row = index % 7, seconds = seconds, month = d.month,
                 future = self.today_t ~= nil and ts > self.today_t,
             }
             if seconds > 0 then
@@ -881,7 +881,7 @@ function HeatmapGrid:init()
             -- a month name over the column where the month starts
             if d.day == 1 then
                 self.month_widgets[#self.month_widgets + 1] = {
-                    col = col,
+                    col = col, month = d.month,
                     widget = TextWidget:new{ text = MONTH_NAMES[d.month], face = face, fgcolor = COLOR_MUTED },
                 }
             end
@@ -957,6 +957,32 @@ function HeatmapGrid:paintTo(bb, x, y)
         self.less_widget, self.more_widget, self.text_h)
 end
 
+-- The month under a tap (on a day square or on a month name), or nil. Months still to come give nil.
+function HeatmapGrid:monthAt(pos)
+    if not (pos and self.dimen and self.dimen.x) then return nil end
+    local grid_x = self.dimen.x + self.label_w
+    local grid_y = self.dimen.y + self.head_h
+    if pos.y < self.dimen.y or pos.y >= grid_y + 7 * self.cell then return nil end
+    local col = math.floor((pos.x - grid_x) / self.cell)
+    if col < 0 or col >= self.cols then return nil end
+    local month
+    if pos.y < grid_y then
+        -- on the row of month names: the month whose name starts at or before this column
+        for _i, mark in ipairs(self.month_widgets) do
+            if mark.col <= col then month = mark.month end
+        end
+    else
+        local row = math.floor((pos.y - grid_y) / self.cell)
+        for _i, cell in ipairs(self.cells) do
+            if cell.col == col and cell.row == row then month = cell.month break end
+        end
+    end
+    if not month then return nil end
+    local now = os.date("*t")
+    if self.year and (self.year > now.year or (self.year == now.year and month > now.month)) then return nil end
+    return month
+end
+
 function HeatmapGrid:free()
     for _i, mark in ipairs(self.month_widgets) do mark.widget:free() end
     for _r, w in pairs(self.day_widgets) do w:free() end
@@ -1004,6 +1030,7 @@ local function buildHeatmapYear(w_width, year, daily_map, max_seconds, show_lege
         max_seconds = max_seconds,
         layout_cols = HEATMAP_MAX_COLS,
         show_legend = show_legend,
+        year = year,
     }
 
     local year_widget = TextWidget:new{
@@ -1031,7 +1058,7 @@ local function buildHeatmapYear(w_width, year, daily_map, max_seconds, show_lege
 end
 
 -- The widgets of the heatmap view (the window puts them under its title).
-local function buildHeatmapView(w_width)
+local function buildHeatmapView(w_width, parent)
     local now = os.date("*t")
     local first_year = now.year - HEATMAP_YEARS + 1
     -- the period starts on January 1st of the first year shown
@@ -1040,10 +1067,15 @@ local function buildHeatmapView(w_width)
     local daily_map, max_seconds = queryDailySeconds(start_t)
     if not daily_map then return nil, max_seconds end
 
+    if parent then parent._heat_grids = {} end
     -- newest year first; only the last grid carries the legend
     local widgets, total, active = {}, 0, 0
     for year = now.year, first_year, -1 do
         local grid, head = buildHeatmapYear(w_width, year, daily_map, max_seconds, year == first_year)
+        -- a tap on a month opens it in the month view (see onTapClose)
+        if parent then
+            table.insert(parent._heat_grids, grid)
+        end
         total, active = total + grid.total, active + grid.active
         widgets[#widgets + 1] = head
         widgets[#widgets + 1] = grid
@@ -1141,6 +1173,23 @@ function MonthGrid:init()
     }
 end
 
+-- The day under a screen position (only days already lived), or nil. Uses the position of the last paint.
+function MonthGrid:dayAt(pos)
+    if not (pos and self.dimen and self.dimen.x) then return nil end
+    local grid_x = self.dimen.x + math.floor((self.width - 7 * self.cell) / 2)
+    local grid_y = self.dimen.y + self.head_h
+    local col = math.floor((pos.x - grid_x) / self.cell)
+    local row = math.floor((pos.y - grid_y) / self.cell)
+    if col < 0 or col > 6 or row < 0 or row >= self.rows then return nil end
+    for _i, cell in ipairs(self.cells) do
+        if cell.col == col and cell.row == row then
+            if cell.future then return nil end
+            return cell.day
+        end
+    end
+    return nil
+end
+
 function MonthGrid:getSize()
     return self.dimen
 end
@@ -1190,25 +1239,31 @@ function MonthGrid:free()
 end
 
 -- The widgets of the month view (the window puts them under its title).
-local function buildMonthView(w_width)
+local function buildMonthView(w_width, parent)
     local now = os.date("*t")
-    local start_t = os.time({ year = now.year, month = now.month, day = 1, hour = 12 })
+    -- the month shown: picked with a two-finger swipe (see onMonthSwipe), or the current one
+    local year = parent and parent.month_y or now.year
+    local month = parent and parent.month_m or now.month
+    local start_t = os.time({ year = year, month = month, day = 1, hour = 12 })
     local daily_map, err = queryDailySeconds(start_t)
     if not daily_map then return nil, err end
 
+    local current = (year == now.year and month == now.month)
+    local days_in_month = os.date("*t", os.time({ year = year, month = month + 1, day = 0, hour = 12 })).day
     local grid = MonthGrid:new{
         width = w_width,
         daily = daily_map,
-        year = now.year,
-        month = now.month,
-        today = now.day,
+        year = year,
+        month = month,
+        today = current and now.day or 99,   -- a past month: every day lived, none marked as today
     }
+    if parent then parent._month_grid = grid end   -- for the tap on a day (see onTapClose)
     return {
         grid,
         makeVerticalSpacing(SPACE.l),
         makeSummaryLine(w_width, string.format("%s %s" .. SUMMARY_SEPARATOR .. "%d %s" .. SUMMARY_SEPARATOR .. "%s %s",
             _("Total"), secondsToHM(grid.total), grid.active, _("active days"),
-            secondsToShortHM(grid.total / now.day), _("a day"))),
+            secondsToShortHM(grid.total / (current and now.day or days_in_month)), _("a day"))),
     }
 end
 
@@ -2707,9 +2762,10 @@ local TODAY_EMPTY = _("No reading today")
 --   { total, first, last, books = { {rank, title, seconds}... }, hours = { [1..24] = { [rank] = seconds } },
 --     best_hour, best_secs, longest, longest_start }
 -- (times in seconds from midnight), or nil and a message.
-local function loadTodayData()
+local function loadTodayData(day_t)
+    -- day_t: any moment of the day to read (nil = today)
     local now = os.time()
-    local t = os.date("*t", now)
+    local t = os.date("*t", day_t or now)
     local day_start = os.time{ year = t.year, month = t.month, day = t.day, hour = 0, min = 0, sec = 0 }
     local day_end = os.time{ year = t.year, month = t.month, day = t.day + 1, hour = 0, min = 0, sec = 0 }
 
@@ -2727,7 +2783,9 @@ local function loadTodayData()
     end)
     if not rows then return nil, err end
 
-    local live = getLiveSessionRow(rows, now)
+    -- the session in progress only belongs to today
+    local is_today = day_start <= now and now < day_end
+    local live = is_today and getLiveSessionRow(rows, now) or nil
     if live then
         rows[#rows + 1] = live
         table.sort(rows, function(x, y) return x.start < y.start end)
@@ -2798,7 +2856,7 @@ local function loadTodayData()
         if sec > out.best_secs then out.best_hour, out.best_secs = h, sec end
     end
     out.day_start = day_start
-    out.current_hour = (os.date("*t", now)).hour + 1
+    out.current_hour = is_today and (os.date("*t", now)).hour + 1 or nil   -- no "now" on another day
 
     -- the stretches read inside each hour (seconds from the start of the hour), readings that touch merged
     out.hour_segments = {}
@@ -2992,8 +3050,8 @@ local function buildTodayBookRow(w_width, book, longest)
     }
 end
 
-local function buildTodayDayView(w_width)
-    local data, err = loadTodayData()
+local function buildTodayDayView(w_width, day_t)
+    local data, err = loadTodayData(day_t)
     if not data then return nil, err end
 
     local function clock(secs) return os.date("%H:%M", data.day_start + secs) end
@@ -3020,8 +3078,8 @@ local function buildTodayDayView(w_width)
 
     -- time of the session in progress (nil outside the reader)
     local session_line
-    local session = getSessionInfo()
-    if not session then
+    local session = (not day_t) and getSessionInfo() or nil   -- another day: no session in progress
+    if not session and not day_t then
         local ui = getReaderUI()
         local st = ui and ui.statistics and tonumber(ui.statistics.start_current_period)
         if st and st > 0 then session = math.max(0, os.time() - st) end
@@ -3407,6 +3465,7 @@ end
 -- ShowLongestSessionsWindow).
 local function buildTodayView(w_width, parent)
     local mode = parent and parent.today_mode or "today"
+    local day_t = parent and parent.day_t   -- a day picked in the month view (nil = today)
     if mode == "all_hours" then
         local data, err = loadHourlyData()
         if not data then return nil, err end
@@ -3414,10 +3473,10 @@ local function buildTodayView(w_width, parent)
     end
     local widgets, err
     if mode == "today" then
-        widgets, err = buildTodayDayView(w_width)
+        widgets, err = buildTodayDayView(w_width, day_t)
     else
         local data
-        data, err = loadTodayData()
+        data, err = loadTodayData(day_t)
         if data then widgets, err = buildTodayHoursWidgets(w_width, data, parent) end
     end
     if widgets then return widgets end
@@ -3427,7 +3486,7 @@ local function buildTodayView(w_width, parent)
             CenterContainer:new{
                 dimen = Geom:new{ w = w_width, h = Screen:scaleBySize(120) },
                 TextWidget:new{
-                    text = TODAY_EMPTY, face = getFace(FONT_SUBTITLE), bold = true,
+                    text = day_t and _("No reading this day") or TODAY_EMPTY, face = getFace(FONT_SUBTITLE), bold = true,
                     fgcolor = COLOR_MUTED, max_width = w_width,
                 },
             },
@@ -3706,11 +3765,26 @@ local VIEWS = {
         -- not a list: it builds its own widgets (hourly chart of today, or of all the reading: see buildTodayView)
         title = function(win)
             local mode = win and win.today_mode or "today"
+            if win and win.day_t and mode ~= "all_hours" then
+                local day = os.date("%d %B %Y", win.day_t)
+                return mode == "today_hours" and (day .. TITLE_SEPARATOR .. _("by hour")) or day
+            end
             if mode == "today_hours" then return _("Today by hour") end
             if mode == "all_hours" then return _("Reading by hour") end
             return _("Today")
         end,
         build = buildTodayView,
+    },
+    {
+        -- not a list: it builds its own widgets (a tap on a day shows that day as the Today view)
+        title = function(win)
+            local now = os.date("*t")
+            local y = win and win.month_y or now.year
+            local m = win and win.month_m or now.month
+            return string.format("%s" .. TITLE_SEPARATOR .. "%s %d", _("Reading Days"),
+                os.date("%B", os.time({ year = y, month = m, day = 1, hour = 12 })), y)
+        end,
+        build = buildMonthView,
     },
     {
         -- not a list: it builds its own widgets
@@ -3742,13 +3816,6 @@ local VIEWS = {
             return string.format("%s" .. TITLE_SEPARATOR .. "%d-%d", _("Reading Heatmap"), year - HEATMAP_YEARS + 1, year)
         end,
         build = buildHeatmapView,
-    },
-    {
-        -- not a list: it builds its own widgets
-        title = function()
-            return string.format("%s" .. TITLE_SEPARATOR .. "%s %d", _("Reading Days"), os.date("%B"), os.date("*t").year)
-        end,
-        build = buildMonthView,
     },
     {
         -- finished books read this year, most time first
@@ -4044,6 +4111,10 @@ function ShowLongestSessionsWindow:_buildUI()
         self.ges_events.HoldExplain = {
             GestureRange:new{ ges = "hold", range = self.dimen },
         }
+        -- month view: two-finger swipe left = previous month, right = next month
+        self.ges_events.MonthSwipe = {
+            GestureRange:new{ ges = "two_finger_swipe", range = self.dimen },
+        }
         -- some devices only report the hold when the finger is lifted
         self.ges_events.HoldReleaseExplain = {
             GestureRange:new{ ges = "hold_release", range = self.dimen },
@@ -4274,7 +4345,8 @@ end
 -- Shows the Today view again in another look ("today", "today_hours" or "all_hours"), in a new window like when swiping
 -- between views. If it cannot be built (the user has been told why) this window stays.
 function ShowLongestSessionsWindow:switchTodayMode(mode)
-    local widget = ShowLongestSessionsWindow:new{ current_view = self.current_view, today_mode = mode }
+    local widget = ShowLongestSessionsWindow:new{ current_view = self.current_view, today_mode = mode,
+        day_t = self.day_t, back = self.back }
     if widget.failed then return end
     UIManager:close(self)
     UIManager:show(widget, "ui", widget.dimen)
@@ -4296,8 +4368,91 @@ function ShowLongestSessionsWindow:switchDaysMode(mode)
     UIManager:show(widget, "ui", widget.dimen)
 end
 
+-- Replaces this window with another view (fields = what to give ShowLongestSessionsWindow:new). If the new one
+-- cannot be built (the user has been told why) this window stays.
+function ShowLongestSessionsWindow:replaceWith(fields)
+    local widget = ShowLongestSessionsWindow:new(fields)
+    if widget.failed then return end
+    UIManager:close(self)
+    UIManager:show(widget, "ui", widget.dimen)
+end
+
+-- Two-finger swipe left / right: in the Month view, previous / next month (not past the current month);
+-- in the Today view (a day or its hours), previous / next day (not past today)
+function ShowLongestSessionsWindow:onMonthSwipe(arg, ges)
+    self.ignore_hold = nil
+    local build = VIEWS[self.current_view].build
+    if build ~= buildMonthView and build ~= buildTodayView then return false end
+    local BD = require("ui/bidi")
+    local direction = BD.flipDirectionIfMirroredUILayout(ges and ges.direction)
+    local step = (direction == "west" and -1) or (direction == "east" and 1) or nil
+    if not step then return true end
+    local now = os.date("*t")
+    if build == buildTodayView then
+        if self.today_mode == "all_hours" then return true end   -- all the reading: no day to move
+        local d = os.date("*t", self.day_t or os.time())
+        local t = os.time{ year = d.year, month = d.month, day = d.day + step, hour = 12 }
+        local nd = os.date("*t", t)
+        if nd.year > now.year or (nd.year == now.year and nd.yday > now.yday) then return true end   -- no days to come
+        local is_today = (nd.year == now.year and nd.yday == now.yday)
+        self:replaceWith{ current_view = self.current_view, today_mode = self.today_mode,
+            day_t = (not is_today) and t or nil, back = self.back }
+        return true
+    end
+    local y = self.month_y or now.year
+    local m = (self.month_m or now.month) + step
+    if m < 1 then y, m = y - 1, 12 elseif m > 12 then y, m = y + 1, 1 end
+    if y > now.year or (y == now.year and m > now.month) then return true end   -- no months to come
+    self:replaceWith{ current_view = self.current_view, month_y = y, month_m = m }
+    return true
+end
+
 function ShowLongestSessionsWindow:onTapClose(arg, ges)
     self.ignore_hold = nil  -- a new touch: the opening hold is over
+    -- on the month view a tap on a day shows that day as the Today view (screen 2) does for today
+    if VIEWS[self.current_view].build == buildMonthView and self:isOnWindow(ges) then
+        local grid = self._month_grid
+        local day = grid and grid:dayAt(ges.pos)
+        if day then
+            local today_view
+            for i, v in ipairs(VIEWS) do
+                if v.build == buildTodayView then today_view = i break end
+            end
+            if today_view then
+                self:replaceWith{
+                    current_view = today_view, today_mode = "today",
+                    day_t = os.time{ year = grid.year, month = grid.month, day = day, hour = 12 },
+                    -- where a tap outside goes back to: this month (and from it, where the month came from)
+                    back = { current_view = self.current_view, month_y = grid.year, month_m = grid.month,
+                        back = self.back },
+                }
+                return true
+            end
+        end
+    end
+    -- on the heatmap a tap on a month opens that month in the month view (screen 3); a tap outside it goes back
+    if VIEWS[self.current_view].build == buildHeatmapView and self:isOnWindow(ges) then
+        for _i, grid in ipairs(self._heat_grids or {}) do
+            local month = grid:monthAt(ges.pos)
+            if month then
+                local month_view
+                for i, v in ipairs(VIEWS) do
+                    if v.build == buildMonthView then month_view = i break end
+                end
+                if month_view then
+                    self:replaceWith{ current_view = month_view, month_y = grid.year, month_m = month,
+                        back = { current_view = self.current_view } }
+                    return true
+                end
+            end
+        end
+    end
+    -- a day picked in the month view (or a month picked in the heatmap): a tap outside the window goes back
+    -- to where it was picked instead of closing
+    if self.back and not self:isOnWindow(ges) then
+        self:replaceWith(self.back)
+        return true
+    end
     -- on the days read per year a tap on the window changes between the years and the days of the week
     if VIEWS[self.current_view].build == buildDaysReadChartView and self:isOnWindow(ges) then
         self:switchDaysMode(self.days_mode == "weekdays" and "years" or "weekdays")
