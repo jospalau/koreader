@@ -2763,6 +2763,36 @@ local function loadTodayData()
     end
     out.day_start = day_start
     out.current_hour = (os.date("*t", now)).hour + 1
+
+    -- the stretches read inside each hour (seconds from the start of the hour), readings that touch merged
+    out.hour_segments = {}
+    for h = 1, 24 do out.hour_segments[h] = {} end
+    for _i, p in ipairs(periods) do
+        for h = math.floor(p.s / 3600), math.floor((p.f - 1) / 3600) do
+            if h >= 0 and h < 24 then
+                local a = math.max(p.s, h * 3600) - h * 3600
+                local b = math.min(p.f, (h + 1) * 3600) - h * 3600
+                if b > a then
+                    local list = out.hour_segments[h + 1]
+                    list[#list + 1] = { a, b }
+                end
+            end
+        end
+    end
+    for h = 1, 24 do
+        local list = out.hour_segments[h]
+        table.sort(list, function(x, y) return x[1] < y[1] end)
+        local merged = {}
+        for _i, seg in ipairs(list) do
+            local last = merged[#merged]
+            if last and seg[1] <= last[2] + TODAY_SESSION_GAP / 4 then
+                last[2] = math.max(last[2], seg[2])
+            else
+                merged[#merged + 1] = { seg[1], seg[2] }
+            end
+        end
+        out.hour_segments[h] = merged
+    end
     return out
 end
 
@@ -3089,6 +3119,7 @@ local HoursBarsChart = Widget:extend{
     hours = nil,       -- hours[1..24] = seconds
     current = nil,     -- hour (1..24) to highlight
     minutes = false,   -- true: the axis is in minutes (one day); false: in hours (all the reading)
+    segments = nil,    -- segments[1..24] = { { from, to }, ... } seconds inside the hour: draws each stretch read
     font_size = FONT_CAPTION,
 }
 
@@ -3113,7 +3144,9 @@ function HoursBarsChart:init()
         end
     end
     self.max_secs = max_secs
-    if self.minutes then
+    if self.segments then
+        self.y_max = 60  -- the bar is the hour itself, in minutes
+    elseif self.minutes then
         -- axis maximum in minutes: 15, 30, 60, or a multiple of 60 (as the chart of the Today view)
         local max_min = max_secs / 60
         self.y_max = (max_min <= 15 and 15) or (max_min <= 30 and 30) or (math.ceil(max_min / 60) * 60)
@@ -3189,10 +3222,24 @@ function HoursBarsChart:paintTo(bb, x, y)
     for i, row in ipairs(self.rows) do
         local ry = top + (i - 1) * self.row_h
         local by = ry + math.floor((self.row_h - bar_h) / 2)
-        local bw = math.max(3, math.floor(plot_w * (row.secs / self.unit_secs) / self.y_max + 0.5))
-        bb:paintRect(plot_x, by, bw, bar_h, Blitbuffer.COLOR_BLACK)
-        if bw - border > 0 and bar_h - 2 * border > 0 then
-            bb:paintRect(plot_x, by + border, bw - border, bar_h - 2 * border, self.fill)
+        if self.segments then
+            -- the hour as a light track, with each stretch read where it happened inside the hour
+            bb:paintRect(plot_x, by, plot_w, bar_h, COLOR_TRACK)
+            for _k, seg in ipairs(self.segments[row.hour] or {}) do
+                local sx = plot_x + math.floor(plot_w * seg[1] / 3600)
+                local sw = math.max(3, math.floor(plot_w * (seg[2] - seg[1]) / 3600 + 0.5))
+                sw = math.min(sw, plot_x + plot_w - sx)
+                bb:paintRect(sx, by, sw, bar_h, Blitbuffer.COLOR_BLACK)
+                if sw - 2 * border > 0 and bar_h - 2 * border > 0 then
+                    bb:paintRect(sx + border, by + border, sw - 2 * border, bar_h - 2 * border, self.fill)
+                end
+            end
+        else
+            local bw = math.max(3, math.floor(plot_w * (row.secs / self.unit_secs) / self.y_max + 0.5))
+            bb:paintRect(plot_x, by, bw, bar_h, Blitbuffer.COLOR_BLACK)
+            if bw - border > 0 and bar_h - 2 * border > 0 then
+                bb:paintRect(plot_x, by + border, bw - border, bar_h - 2 * border, self.fill)
+            end
         end
         local ls, vs = row.label_widget:getSize(), row.value_widget:getSize()
         row.label_widget:paintTo(bb, x + self.label_w - SPACE.l - ls.w, ry + math.floor((self.row_h - ls.h) / 2))
@@ -3295,6 +3342,7 @@ local function buildTodayHoursWidgets(w_width, data, parent)
         hours = hours,
         current = data.current_hour,
         minutes = true,
+        segments = data.hour_segments,
     }
     local widgets = {
         CenterContainer:new{ dimen = Geom:new{ w = w_width, h = hero:getSize().h }, hero },
