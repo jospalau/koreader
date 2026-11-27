@@ -3154,6 +3154,54 @@ function PageTextInfo:addToMainMenu(menu_items)
                     end,
                 },
                 {
+                    text_func = function()
+                        local cur = self:getOverlayColor()
+                        for _i, c in ipairs(PageTextInfo.session_overlay_colors) do
+                            if c[2] == cur then return T(_("Big texts color: %1"), c[1]) end
+                        end
+                        return _("Big texts color")
+                    end,
+                    help_text = _([[Color of the big texts over the page (frontlight "Off", margin preset, background of the bottom tap, clock / session time / wpm). The fade out goes from this color to a light grey.]]),
+                    sub_item_table_func = function()
+                        local items = {}
+                        for _i, c in ipairs(PageTextInfo.session_overlay_colors) do
+                            items[#items + 1] = {
+                                text = c[1],
+                                radio = true,
+                                checked_func = function() return self:getOverlayColor() == c[2] end,
+                                callback = function()
+                                    self.settings:saveSetting("overlay_color", c[2])
+                                    self.settings:flush()
+                                    self:showSessionOverlay({ c[1] }) -- preview
+                                end,
+                            }
+                        end
+                        return items
+                    end,
+                },
+                {
+                    text_func = function()
+                        return T(_("Big texts duration: %1 s"), self:getOverlayHold())
+                    end,
+                    help_text = _([[Seconds the big texts over the page (frontlight "Off", profiles / margin preset, double tap on/off, clock / session time / wpm) stay fully visible before the fade out starts (or before they go away, if the fade out is unchecked).]]),
+                    sub_item_table_func = function()
+                        local items = {}
+                        for _i, h in ipairs(PageTextInfo.session_overlay_holds) do
+                            items[#items + 1] = {
+                                text = T(_("%1 s"), h) .. (h == PageTextInfo.session_overlay_cfg.hold and " (" .. _("default") .. ")" or ""),
+                                radio = true,
+                                checked_func = function() return self:getOverlayHold() == h end,
+                                callback = function()
+                                    self.settings:saveSetting("overlay_hold", h)
+                                    self.settings:flush()
+                                    self:showSessionOverlay({ T(_("%1 s"), h) }) -- preview
+                                end,
+                            }
+                        end
+                        return items
+                    end,
+                },
+                {
                     text = _("Diagnostic timing"),
                     checked_func = function() return G_reader_settings:isTrue("diagtiming_enabled") end,
                     help_text = _([[Log (as warnings) any require(), scheduled callback, event dispatch or screen refresh slower than 15 ms.]]),
