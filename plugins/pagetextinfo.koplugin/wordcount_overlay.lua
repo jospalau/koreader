@@ -29,6 +29,18 @@ local PANEL_MARGIN = Screen:scaleBySize(6) -- distance from the screen's edge
 local SEP = "  \194\183  "                  -- "  ·  "
 local SHOW_CFL = true                      -- characters on the first line
 local SHOW_CML = true                      -- characters on the page's longest line
+local SHOW_RATING = true                   -- next to CML: how good that line length is for reading
+-- Rating of the page's longest line, in characters. The longest line sits a few characters above the average, so the
+-- comfortable range of print typography (45 to 75 characters, ideal 66) is read a little higher. Each entry holds up to
+-- (and including) its limit; the first one that fits gives the label.
+local RATING = {
+    { 37, "Short" },
+    { 49, "Comfortable" },
+    { 75, "Excellent" },
+    { 80, "Comfortable" },
+    { 90, "Still readable" },
+    { math.huge, "Too long" },
+}
 local MIN_WPM_MINUTES = 0.1                -- only for the fallback wpm (stock statistics plugin)
 
 local HYPHEN_FIX = true   -- a word split by a hyphen at the end of a line counts once
@@ -91,6 +103,14 @@ local function countChars(text)
     if not text then return 0 end
     text = text:gsub("^%s+", ""):gsub("%s+$", "")
     return select(2, text:gsub("[^\128-\191]", ""))
+end
+
+-- The label for a line of this many characters (nil for an empty page).
+local function rateLine(chars)
+    if not chars or chars <= 0 then return nil end
+    for _, level in ipairs(RATING) do
+        if chars <= level[1] then return level[2] end
+    end
 end
 
 -- ─── the lines on the page ───────────────────────────────────────────────────
@@ -275,7 +295,9 @@ local function updateInfoPanels(self)
     end
     if SHOW_CML then
         -- worked out by paintLineCounts with the line counts (cached per layout)
-        parts[#parts + 1] = "CML " .. tostring(self._wc_max_chars or 0)
+        local cml = self._wc_max_chars or 0
+        local rating = SHOW_RATING and rateLine(cml)
+        parts[#parts + 1] = "CML " .. tostring(cml) .. (rating and (" " .. rating) or "")
     end
     setLine(panel, 1, table.concat(parts, SEP))
 
