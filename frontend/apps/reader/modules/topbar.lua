@@ -1537,7 +1537,7 @@ end
 
 -- Horizontal margin the book needs with the top bar (unscaled, as stored in the settings)
 TopBar.EXPECTED_SIDE_MARGIN = 15
-TopBar.EXPECTED_SIDE_MARGIN_ANDROID = 20
+-- TopBar.EXPECTED_SIDE_MARGIN_ANDROID = 20 -- no Android special case in the indicators any more
 -- Pixels of rounding allowed between the stored margin and what the bar measures
 TopBar.MARGIN_TOLERANCE_PX = 1
 
@@ -1597,7 +1597,8 @@ function TopBar:marginsMatchTopBar()
 
     -- Fallback without the page text info plugin
 
-    local side = Device:isAndroid() and TopBar.EXPECTED_SIDE_MARGIN_ANDROID or TopBar.EXPECTED_SIDE_MARGIN
+    -- local side = Device:isAndroid() and TopBar.EXPECTED_SIDE_MARGIN_ANDROID or TopBar.EXPECTED_SIDE_MARGIN
+    local side = TopBar.EXPECTED_SIDE_MARGIN
 
     -- getHeight() reads the title _height: make sure it is up to date with the current font/text
     local title_widget = self.title_and_series_widget_container[1][1]
@@ -1643,29 +1644,281 @@ function TopBar:updateLightAndMarginIndicator(light_on)
             self.frontlight = ""
         end
     end
+    -- Warm frontlight, next to the sun: "☼ ◐" = the light is warm (any warmth above 0).
+    -- Only with the light on (the warmth does nothing with it off) and above 0
+    -- The warm mark is not a character any more: ◐ came from a fallback font, with other metrics, and it was
+    -- not aligned with ● and ☼. It is drawn by paintWarmMark(), centered on the lowercase line of the text.
+    -- local warmth = ""
+    -- if self.frontlight ~= "" then
+    --     warmth = self:getWarmthText()
+    -- end
+    self.warm_on = self.frontlight ~= "" and self:getWarmthText() ~= ""
+    -- Number of the current margin preset of page text info (1-4) next to the margins symbol: "● 2 ☼".
+    -- The preset is recognized by the left and right margins, as the plugin does, so with "○ 2" the side
+    -- margins are the ones of preset 2 but top or bottom are not. No number: the margins are no preset.
+    local preset = self:getCurrentPresetText()
+    -- The leading space is gone so the indicator sits closer to the left edge
+    -- if self:marginsMatchTopBar() then
+    --     self.test_light_text:setText(" ● " .. self.frontlight)
+    -- else
+    --     self.test_light_text:setText(" ○ " .. self.frontlight)
+    -- end
+    -- Frontlight level right after the sun ("☼12"), only with the light on
+    local level = ""
+    if self.frontlight ~= "" then
+        level = self:getLightLevelText()
+    end
     if self:marginsMatchTopBar() then
-        self.test_light_text:setText(" ● " .. self.frontlight)
+        self.test_light_text:setText("●" .. preset .. self.frontlight .. level) -- frontlight already starts with a space
     else
-        self.test_light_text:setText(" ○ " .. self.frontlight)
+        self.test_light_text:setText("○" .. preset .. self.frontlight .. level) -- frontlight already starts with a space
     end
 end
+
+-- Current frontlight level (the step of the light dialog), or "" when it cannot be read or the
+-- setting "Show frontlight level" is off. Not called with the light off
+-- Not the intensity any more, but the step of the frontlight cycle of page text info (two fingers up:
+-- off -> 1 -> 2 -> off), so "☼1" / "☼2". Off: no sun at all. Light on at a level that is not a step
+-- (changed with the slider): just "☼". Previous version (raw intensity):
+-- local level
+-- if powerd.frontlightIntensity then
+--     local ok, v = pcall(powerd.frontlightIntensity, powerd)
+--     if ok and type(v) == "number" then level = v end
+-- end
+-- if level == nil and type(powerd.fl_intensity) == "number" then level = powerd.fl_intensity end
+-- if level == nil then return "" end
+-- return tostring(math.floor(level + 0.5))
+function TopBar:getLightLevelText()
+    if self.settings and not self.settings:nilOrTrue("show_light_level") then return "" end
+    local pti = self.ui and self.ui.pagetextinfo
+    if not (pti and pti.getCurrentFrontlightStep) then return "" end
+    local ok, step = pcall(pti.getCurrentFrontlightStep, pti)
+    if ok and type(step) == "number" and step > 0 then return tostring(step) end
+    return ""
+end
+
+-- " N" with the number of the current margin preset of the page text info plugin, "" when there is no
+-- plugin or the side margins are not any preset
+function TopBar:getCurrentPresetText()
+    local pti = self.ui and self.ui.pagetextinfo
+    if not (pti and pti.getCurrentPresetIndex) then return "" end
+    local ok, idx = pcall(pti.getCurrentPresetIndex, pti)
+    if ok and idx then return " " .. idx end
+    return ""
+end
+
+-- The warm mark copies the ● of the indicator: same size and same height on screen.
+-- Before, it was centered on the x-height of the font (baseline - x-height / 2), but ● (and ☼) can come
+-- from a fallback font with other metrics, so it was not aligned. Now the ● is rendered once off screen and
+-- its real ink (the dark pixels) is measured, so the mark lands exactly where the ● is, whatever the fonts.
+-- Previous version kept for reference:
+-- TopBar.WARM_MARK_SCALE = 1.1
+-- local xh = face.ftsize:getXHeight() or 0
+-- local xh_px = (xh < 1) and (xh * face.size) or xh
+-- local r = math.max(2, math.floor(xh_px * TopBar.WARM_MARK_SCALE / 2 + 0.5))
+-- local cy = text_top + tw:getBaseline() - math.floor(xh_px / 2 + 0.5)
+
+-- Vertical ink of "●" in the indicator face: top and bottom rows (from the top of the text widget) and
+-- its width. Cached per face, it is measured only when the font changes.
+function TopBar:getDotInk()
+    local face = self.test_light_text.face
+    if self._dot_ink and self._dot_ink.face == face then return self._dot_ink end
+    local w = TextWidget:new{ text = "●", face = face, fgcolor = Blitbuffer.COLOR_BLACK }
+    local size = w:getSize()
+    local ink = { face = face }
+    if size.w > 0 and size.h > 0 then
+        local bb = Blitbuffer.new(size.w, size.h, Blitbuffer.TYPE_BB8)
+        bb:fill(Blitbuffer.COLOR_WHITE)
+        w:paintTo(bb, 0, 0)
+        local top, bottom, left, right
+        for yy = 0, size.h - 1 do
+            for xx = 0, size.w - 1 do
+                if bb:getPixel(xx, yy):getColor8().a < 0x80 then
+                    top = top or yy
+                    bottom = yy
+                    if not left or xx < left then left = xx end
+                    if not right or xx > right then right = xx end
+                end
+            end
+        end
+        bb:free()
+        if top then
+            ink.top, ink.bottom = top, bottom
+            ink.w = right - left + 1
+        end
+    end
+    w:free()
+    if not ink.top then
+        -- nothing measured: middle of the widget, half its height
+        local h = math.max(size.h, 2)
+        ink.top = math.floor(h / 4)
+        ink.bottom = ink.top + math.floor(h / 2)
+        ink.w = ink.bottom - ink.top + 1
+    end
+    self._dot_ink = ink
+    return ink
+end
+
+-- Radius of the mark: the same size as the ●
+function TopBar:getWarmMarkRadius()
+    local ink = self:getDotInk()
+    local d = math.min(ink.bottom - ink.top + 1, ink.w)
+    return math.max(2, math.floor((d - 1) / 2))
+end
+
+-- Width the warm mark takes after the text (gap + circle), 0 when it is not shown.
+-- Used to keep the centered title away from it
+function TopBar:getWarmMarkWidth()
+    if not self.warm_on then return 0 end
+    return Screen:scaleBySize(3) + 2 * self:getWarmMarkRadius() + 1
+end
+
+-- Draws ◐ (left half filled, right half only the outline) right after the indicator text.
+-- text_x, text_top: where the text widget was painted (top left corner). Centered on the ink of the ●.
+-- Only black pixels are painted, so a custombg background below is kept.
+function TopBar:paintWarmMark(bb, text_x, text_top)
+    local tw = self.test_light_text
+    local ink = self:getDotInk()
+    local r = self:getWarmMarkRadius()
+    local cx = text_x + tw:getSize().w + Screen:scaleBySize(3) + r
+    local cy = text_top + math.floor((ink.top + ink.bottom) / 2 + 0.5)
+    local t = math.max(1, Screen:scaleBySize(1)) -- outline thickness
+    local ri = r - t
+    local black = Blitbuffer.COLOR_BLACK
+    for dy = -r, r do
+        local hw = math.floor(math.sqrt(r * r - dy * dy) + 0.5)
+        local row = cy + dy
+        if math.abs(dy) >= ri then
+            -- top and bottom of the outline: the whole row
+            bb:paintRect(cx - hw, row, 2 * hw + 1, 1, black)
+        else
+            local ihw = math.floor(math.sqrt(ri * ri - dy * dy) + 0.5)
+            -- left half filled, up to the middle line included
+            bb:paintRect(cx - hw, row, hw + 1, 1, black)
+            -- right half: only the outline
+            if hw > ihw then
+                bb:paintRect(cx + ihw + 1, row, hw - ihw, 1, black)
+            end
+        end
+    end
+end
+
+-- " wNN" with the current frontlight warmth (0-100), or "" when the device has no warm light,
+-- the warmth is 0 or the setting "Show frontlight warmth" is off
+-- First version: only with hasNaturalLight() and frontlightWarmth(), and nothing at warmth 0.
+-- It did not show on some devices (hasNaturalLight() false or no frontlightWarmth() even with warm light),
+-- and at 0 it looked missing. Now the warmth is looked for in several places and 0 is shown too (w0)
+-- if self.settings and not self.settings:nilOrTrue("show_warmth_indicator") then return "" end
+-- if not (Device.hasNaturalLight and Device:hasNaturalLight()) then return "" end
+-- local powerd = Device:getPowerDevice()
+-- if not (powerd and powerd.frontlightWarmth) then return "" end
+-- local ok, warmth = pcall(powerd.frontlightWarmth, powerd)
+-- if not ok or not warmth or warmth <= 0 then return "" end
+-- return " w" .. math.floor(warmth + 0.5)
+function TopBar:getWarmth()
+    local powerd = Device:getPowerDevice()
+    if not powerd then return nil end
+    -- 1. the getter of BasePowerD
+    if powerd.frontlightWarmth then
+        local ok, w = pcall(powerd.frontlightWarmth, powerd)
+        if ok and type(w) == "number" then return w end
+    end
+    -- 2. other getters some platforms have
+    for _, name in ipairs({ "getWarmth", "frontlightWarmthHW" }) do
+        if type(powerd[name]) == "function" then
+            local ok, w = pcall(powerd[name], powerd)
+            if ok and type(w) == "number" then return w end
+        end
+    end
+    -- 3. the field kept by powerd
+    if type(powerd.fl_warmth) == "number" then return powerd.fl_warmth end
+    return nil
+end
+
+-- Symbol shown next to the sun when the light is warm (warmth above 0). Change it here if the font
+-- does not have it (it is in the same block as ● ○ ◎, which the indicator already uses)
+TopBar.WARM_SYMBOL = "◐"
+
+-- Only whether the light is warm or not, not the level: WARM_SYMBOL when warmth > 0, nothing otherwise
+-- Before it showed the level:
+-- if not has_natural and warmth <= 0 then return "" end
+-- return " w" .. math.floor(warmth + 0.5)
+function TopBar:getWarmthText()
+    if self.settings and not self.settings:nilOrTrue("show_warmth_indicator") then return "" end
+    local has_natural = Device.hasNaturalLight and Device:hasNaturalLight()
+    local warmth = self:getWarmth()
+    local logger = require("logger")
+    logger.dbg("TopBar warmth indicator: hasNaturalLight =", has_natural, "warmth =", warmth)
+    if warmth == nil or warmth <= 0 then return "" end
+    return " " .. TopBar.WARM_SYMBOL
+end
+
+-- Repaint the indicator when the warmth changes from a gesture or the dispatcher (DeviceListener
+-- handles these events, so the new value is read on the next tick). They return nothing so the
+-- event keeps going. Changing it with the frontlight dialog slider is picked up on the next page turn
+function TopBar:refreshWarmthIndicator()
+    UIManager:nextTick(function()
+        if not (self.ui and self.ui.document) then return end
+        self:toggleBar()
+        UIManager:setDirty(self.view.dialog, function()
+            return "ui", Geom:new{ w = Screen:getWidth(), h = self:getHeight(), y = 0 }
+        end)
+    end)
+end
+
+function TopBar:onIncreaseFlWarmth() self:refreshWarmthIndicator() end
+-- Same for the frontlight level (gestures / dispatcher actions)
+function TopBar:onIncreaseFlIntensity() self:refreshWarmthIndicator() end
+function TopBar:onDecreaseFlIntensity() self:refreshWarmthIndicator() end
+function TopBar:onSetFlIntensity() self:refreshWarmthIndicator() end
+function TopBar:onDecreaseFlWarmth() self:refreshWarmthIndicator() end
+function TopBar:onSetFlWarmth() self:refreshWarmthIndicator() end
+function TopBar:onFrontlightWarmthChanged() self:refreshWarmthIndicator() end
 
 -- Paints the indicator top left. With the bar enabled it goes on the title line (MARGIN_TOP, as
 -- before); in minimal and hidden there is no title, so it goes at the base top margin (9)
 -- Called from paintTo(), paintToDisabled() and the "hidden" paint of the page text info plugin
+-- Position of the indicator (dp, unscaled). INDICATOR_LEFT: distance from the left edge of the screen, the
+-- same on every device (it does not follow MARGIN_SIDES, which is bigger on Android). INDICATOR_TOP: distance
+-- from the top of the screen to the top of the ● with the bar in minimal or hidden mode (with the bar enabled
+-- it stays on the title line)
+-- TopBar.INDICATOR_SHIFT_LEFT = 4 -- before: MARGIN_SIDES - 4, so 6 dp, or 16 dp on Android
+TopBar.INDICATOR_LEFT = 6
+TopBar.INDICATOR_TOP = 3
+
 function TopBar:paintLightAndMarginIndicator(bb, x, y)
     if not (self.light_widget_container and self.test_light_text) then return end
     -- Setting "Show light and margins indicator" (Top bar menu), on by default
     if self.settings and not self.settings:nilOrTrue("show_light_margin_indicator") then return end
     -- Not shown with bookends on: it paints its own texts in that area
     if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
-    local py
+    -- local py
+    -- if TopBar.is_enabled then
+    --     py = y + TopBar.MARGIN_TOP
+    -- else
+    --     py = y + Screen:scaleBySize(9)
+    -- end
+    -- self.light_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, py)
+    -- The text is painted here directly, so the exact top of the text is known and the warm mark can be put
+    -- at the same height as the ●.
+    -- Left: INDICATOR_LEFT from the edge, in every mode and on every device (no Android case).
+    -- Top:
+    --   bar enabled -> as before, centered on MARGIN_TOP, the line of the title
+    --   minimal / hidden -> the ● starts INDICATOR_TOP from the top of the screen (measured on its ink,
+    --                       so it does not depend on the font)
+    -- local text_x = x + math.max(0, TopBar.MARGIN_SIDES - Screen:scaleBySize(TopBar.INDICATOR_SHIFT_LEFT))
+    local text_x = x + Screen:scaleBySize(TopBar.INDICATOR_LEFT)
+    local text_top
     if TopBar.is_enabled then
-        py = y + TopBar.MARGIN_TOP
+        local py = y + TopBar.MARGIN_TOP
+        text_top = py + math.floor((0 - self.test_light_text:getSize().h) / 2)
     else
-        py = y + Screen:scaleBySize(9)
+        text_top = y + Screen:scaleBySize(TopBar.INDICATOR_TOP) - self:getDotInk().top
     end
-    self.light_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, py)
+    self.test_light_text:paintTo(bb, text_x, text_top)
+    if self.warm_on then
+        self:paintWarmMark(bb, text_x, text_top)
+    end
 end
 
 function TopBar:onSetPageMargins() self:refreshMarginIndicator() end
@@ -2137,7 +2390,7 @@ function TopBar:toggleBar(light_on)
         -- progress (top right). The title is centered, so it gets the same room on both sides, sized
         -- by the wider of the two side widgets. Long titles are cut with an ellipsis instead of
         -- being drawn over them
-        local side_w = math.max(self.test_light_text:getSize().w, self.progress_book_text:getSize().w)
+        local side_w = math.max(self.test_light_text:getSize().w + self:getWarmMarkWidth(), self.progress_book_text:getSize().w)
         local title_max_w = self.width - 2 * (TopBar.MARGIN_SIDES + side_w + Screen:scaleBySize(8))
             - self.series_text:getSize().w
         title_max_w = math.max(title_max_w, Screen:scaleBySize(40))
@@ -3024,10 +3277,44 @@ function TopBar:addToMainMenu(menu_items)
                 checked_func = function() return self.settings:nilOrTrue("show_light_margin_indicator") end,
                 help_text = _([[Top left indicator, in every top bar mode (on, minimal and hidden), not shown with bookends on:
 ● the margins are the ones of the current margin preset, ○ they are not
-☼ the frontlight is on]]),
+1-4 next to it: the current margin preset of page text info (none: the margins are no preset)
+☼ the frontlight is on, with the step of the frontlight cycle next to it (☼1, ☼2)
+◐ the frontlight is warm (warmth above 0)]]),
                 callback = function()
                     local show = self.settings:nilOrTrue("show_light_margin_indicator")
                     self.settings:saveSetting("show_light_margin_indicator", not show)
+                    self.settings:flush()
+                    self:toggleBar()
+                    UIManager:setDirty("all", "ui")
+                    return true
+                end,
+            },
+            {
+                text = _("Show frontlight step"),
+                checked_func = function() return self.settings:nilOrTrue("show_light_level") end,
+                enabled_func = function()
+                    return self.settings:nilOrTrue("show_light_margin_indicator")
+                end,
+                help_text = _([[Show the step of the frontlight cycle of page text info (two fingers up: off, 1, 2) right after the sun of the light indicator (☼1, ☼2). Nothing with the light off, only the sun when the light is at another level.]]),
+                callback = function()
+                    local show = self.settings:nilOrTrue("show_light_level")
+                    self.settings:saveSetting("show_light_level", not show)
+                    self.settings:flush()
+                    self:toggleBar()
+                    UIManager:setDirty("all", "ui")
+                    return true
+                end,
+            },
+            {
+                text = _("Show frontlight warmth"),
+                checked_func = function() return self.settings:nilOrTrue("show_warmth_indicator") end,
+                enabled_func = function()
+                    return self.settings:nilOrTrue("show_light_margin_indicator")
+                end,
+                help_text = _([[Show ◐ next to the sun of the light indicator when the frontlight is warm (warmth above 0). Only with the light on.]]),
+                callback = function()
+                    local show = self.settings:nilOrTrue("show_warmth_indicator")
+                    self.settings:saveSetting("show_warmth_indicator", not show)
                     self.settings:flush()
                     self:toggleBar()
                     UIManager:setDirty("all", "ui")

@@ -693,12 +693,12 @@ function PageTextInfo:getFrontlightCyclePercents()
     return cfg.default
 end
 
-function PageTextInfo:cycleFrontlight()
-    if not Device:hasFrontlight() then return false end
+-- Device intensities of the steps of the cycle (percent -> device intensity, never 0, which would be off;
+-- strictly increasing). Shared by cycleFrontlight() and getCurrentFrontlightStep()
+function PageTextInfo:getFrontlightCycleLevels()
     local powerd = Device:getPowerDevice()
     local fl_min = powerd.fl_min or 0
     local fl_max = powerd.fl_max or 100
-    -- percent -> device intensity (never 0, which would be off; strictly increasing)
     local pcts = self:getFrontlightCyclePercents()
     local levels = {}
     for i, pct in ipairs(pcts) do
@@ -707,6 +707,38 @@ function PageTextInfo:cycleFrontlight()
         level = math.min(level, fl_max)
         levels[i] = level
     end
+    return levels
+end
+
+-- Step of the frontlight cycle the light is on now: 1, 2... ; 0 = off; nil = on but at a level that is
+-- not any step (changed with the slider, for instance). Shown by the top bar light indicator (☼1, ☼2)
+function PageTextInfo:getCurrentFrontlightStep()
+    if not Device:hasFrontlight() then return nil end
+    local powerd = Device:getPowerDevice()
+    if not powerd:isFrontlightOn() then return 0 end
+    local current = powerd:frontlightIntensity()
+    for i, level in ipairs(self:getFrontlightCycleLevels()) do
+        if current == level then return i end
+    end
+    return nil
+end
+
+function PageTextInfo:cycleFrontlight()
+    if not Device:hasFrontlight() then return false end
+    local powerd = Device:getPowerDevice()
+    -- local fl_min = powerd.fl_min or 0
+    -- local fl_max = powerd.fl_max or 100
+    -- -- percent -> device intensity (never 0, which would be off; strictly increasing)
+    -- local pcts = self:getFrontlightCyclePercents()
+    -- local levels = {}
+    -- for i, pct in ipairs(pcts) do
+    --     local level = math.floor(fl_min + (fl_max - fl_min) * pct / 100 + 0.5)
+    --     level = math.max(level, fl_min + 1, (levels[i - 1] or 0) + 1)
+    --     level = math.min(level, fl_max)
+    --     levels[i] = level
+    -- end
+    -- Moved to getFrontlightCycleLevels(), also used by getCurrentFrontlightStep() for the top bar
+    local levels = self:getFrontlightCycleLevels()
     local next_idx = nil -- nil = off
     if not powerd:isFrontlightOn() then
         next_idx = 1
@@ -780,7 +812,33 @@ PageTextInfo.session_overlay_cfg = {
     hold = 0.8,                      -- seconds fully visible
     fade_colors = { 0x99, 0xBB, 0xDD },  -- greys of the fade out steps (each one is a refresh)
     fade_interval = 0.2,             -- seconds between fade steps
+    fade_end = 0xDD,                 -- last grey of the fade out (used when the color is chosen in the menu)
 }
+
+-- Colors to choose in the menu ("Big texts color"); setting "overlay_color", without it cfg.color
+PageTextInfo.session_overlay_colors = {
+    { _("Black"), 0x00 },
+    { _("Dark grey"), 0x44 },
+    { _("Grey"), 0x77 },
+    { _("Light grey"), 0xAA },
+}
+
+function PageTextInfo:getOverlayColor()
+    local c = tonumber(self.settings and self.settings:readSetting("overlay_color"))
+    return c or PageTextInfo.session_overlay_cfg.color
+end
+
+-- Fade greys from the chosen color to cfg.fade_end (with the default color: cfg.fade_colors as before)
+function PageTextInfo:getOverlayFadeColors(color)
+    local cfg = PageTextInfo.session_overlay_cfg
+    if color == cfg.color then return cfg.fade_colors end
+    local n = #cfg.fade_colors
+    local steps = {}
+    for i = 1, n do
+        steps[i] = math.floor(color + (cfg.fade_end - color) * i / n + 0.5)
+    end
+    return steps
+end
 
 local SessionOverlay = WidgetContainer:extend{
     name = "pagetextinfo_session_overlay",
@@ -848,7 +906,8 @@ end
 
 function SessionOverlay:init()
     local cfg = PageTextInfo.session_overlay_cfg
-    self:buildTexts(Blitbuffer.Color8(cfg.color))
+    -- self:buildTexts(Blitbuffer.Color8(cfg.color))
+    self:buildTexts(Blitbuffer.Color8(self.text_color or cfg.color))
     local sw, sh = Screen:getWidth(), Screen:getHeight()
     local n = #self.widgets
     self.positions, self.regions = {}, {}
@@ -980,10 +1039,13 @@ function PageTextInfo:showSessionOverlay(texts, strike_icon)
         end
     end)
 
+    local color = self:getOverlayColor()
+    local fade_colors = self:getOverlayFadeColors(color)
     local overlay = SessionOverlay:new{
         font_candidates = candidates,
         texts = texts,
         strike_icon = strike_icon,
+        text_color = color,
     }
     self.session_overlay = overlay
     local token = self.session_overlay_token
@@ -994,7 +1056,8 @@ function PageTextInfo:showSessionOverlay(texts, strike_icon)
 
     -- "Fade out big texts" off (menu): no fade steps, the text goes at once after the same total time
     if self.settings:isTrue("no_overlay_fade") then
-        UIManager:scheduleIn(cfg.hold + #cfg.fade_colors * cfg.fade_interval, function()
+        -- UIManager:scheduleIn(cfg.hold + #cfg.fade_colors * cfg.fade_interval, function()
+        UIManager:scheduleIn(cfg.hold + #fade_colors * cfg.fade_interval, function()
             if self.session_overlay_token ~= token or self.session_overlay ~= overlay then return end
             self:closeSessionOverlay()
         end)
@@ -1003,7 +1066,8 @@ function PageTextInfo:showSessionOverlay(texts, strike_icon)
 
     local function fadeStep(i)
         if self.session_overlay_token ~= token or self.session_overlay ~= overlay then return end
-        local grey = cfg.fade_colors[i]
+        -- local grey = cfg.fade_colors[i]
+        local grey = fade_colors[i]
         if not grey then
             self:closeSessionOverlay()
             return
@@ -1026,14 +1090,18 @@ function PageTextInfo:onBottomTap(side, ges)
             Device.input.disable_double_tap = false
             if self.ui.gestures then self.ui.gestures:onIgnoreHoldCorners(false) end
             self:toggleHighlightAllWordsVocabulary(false) -- highlight off and top bar refreshed
-            UIManager:show(Notification:new{ text = _("Double tap on") })
+            -- UIManager:show(Notification:new{ text = _("Double tap on") })
+            -- big over the page, same style and fade as the frontlight "Off" (showSessionOverlay)
+            self:showSessionOverlay({ _("Double tap on") })
             return true
         end
         local disable = not self:isDoubleTapDisabled()
         self:setDoubleTapDisabled(disable)
-        UIManager:show(Notification:new{
-            text = disable and _("Double tap off") or _("Double tap on"),
-        })
+        -- UIManager:show(Notification:new{
+        --     text = disable and _("Double tap off") or _("Double tap on"),
+        -- })
+        -- big over the page, same style and fade as the frontlight "Off" (showSessionOverlay)
+        self:showSessionOverlay({ disable and _("Double tap off") or _("Double tap on") })
         return true
     end
     -- side == "right": session time (top half) and wpm (bottom half) over the page, fading out after a moment
@@ -1157,6 +1225,24 @@ function PageTextInfo:cycleCustomBgPicture()
     else
         UIManager:setDirty(self.view.dialog, "ui")
     end
+    -- -- the new state big over the page, same style and fade as the frontlight "Off" (showSessionOverlay);
+    -- -- on the next tick, so it is painted over the repaint of the background
+    -- local label
+    -- if self:isCustomBgPictureOff(custombg) then
+    --     label = _("Off")
+    -- else
+    --     local new_mode = custombg:getBottomMode()
+    --     if new_mode == "cover" then
+    --         label = _("Cover")
+    --     elseif new_mode == "hero" then
+    --         label = _("Hero")
+    --     elseif custombg:getCurrentDocBg() then
+    --         label = _("Image")
+    --     end
+    -- end
+    -- if label then
+    --     UIManager:nextTick(function() self:showSessionOverlay({ label }) end)
+    -- end
     return true
 end
 
@@ -1320,6 +1406,38 @@ function PageTextInfo:cycleTopBarMode()
     self:refreshTopBarIndicators(topbar)
     self:repaintAfterPictureChange(picture_changed)
     return true
+end
+
+-- Every repaint of custombg (picture changed with the bottom center tap, settings, on / off...) also computes the
+-- top bar indicators again. The picture changes the bottom margin the preset expects (getPictureBottomMargin) and
+-- custombg repaints the reader by itself, so without this the indicators kept the old state (or were not painted)
+-- until the next page turn / reload.
+-- toggleRepaint is wrapped on this custombg instance only. The places that mute it for a moment
+-- (rawget + no-op + restore) get the wrapper back with rawget, so they keep working.
+-- After the repaint, on the next tick, they are computed once more and the top of the screen is repainted: custombg
+-- can still be changing the margins at that point.
+function PageTextInfo:installCustomBgIndicatorRefresh()
+    local custombg = self.ui and self.ui.custombg
+    if not custombg or rawget(custombg, "_pti_indicator_refresh") then return end
+    local orig = custombg.toggleRepaint
+    if type(orig) ~= "function" then return end
+    custombg._pti_indicator_refresh = true
+    local pti = self
+    custombg.toggleRepaint = function(cb, ...)
+        pti:refreshTopBarIndicators()
+        UIManager:nextTick(function()
+            if not (pti.ui and pti.ui.document and pti.view) then return end
+            pti:refreshTopBarIndicators()
+            local topbar = pti.view.topbar
+            local h = Screen:scaleBySize(40)
+            if topbar and topbar.getHeight then
+                local ok, th = pcall(topbar.getHeight, topbar)
+                if ok and type(th) == "number" and th > h then h = th end
+            end
+            UIManager:setDirty(pti.view.dialog, "ui", Geom:new{ x = 0, y = 0, w = Screen:getWidth(), h = h })
+        end)
+        return orig(cb, ...)
+    end
 end
 
 -- Computes the top bar texts again (light and margins indicator included) for the current mode
@@ -2325,6 +2443,8 @@ function PageTextInfo:onReaderReady()
     self:takeOverBookendsFooterTap()
     -- Lets the top bar be fully hidden (third mode of cycleTopBarMode)
     pcall(self.installTopBarHiddenPaint, self)
+    -- Top bar indicators computed again every time custombg repaints (picture changed with the tap, etc.)
+    pcall(self.installCustomBgIndicatorRefresh, self)
 
 
     -- This is just for Android devices, at least the Boox Palma
@@ -3356,6 +3476,32 @@ This is to be active only if the option flash buttons and menu items or the opti
                         self.settings:saveSetting("no_overlay_fade", not self.settings:isTrue("no_overlay_fade"))
                         self.settings:flush()
                         return true
+                    end,
+                },
+                {
+                    text_func = function()
+                        local cur = self:getOverlayColor()
+                        for _i, c in ipairs(PageTextInfo.session_overlay_colors) do
+                            if c[2] == cur then return T(_("Big texts color: %1"), c[1]) end
+                        end
+                        return _("Big texts color")
+                    end,
+                    help_text = _([[Color of the big texts over the page (frontlight "Off", margin preset, background of the bottom tap, clock / session time / wpm). The fade out goes from this color to a light grey.]]),
+                    sub_item_table_func = function()
+                        local items = {}
+                        for _i, c in ipairs(PageTextInfo.session_overlay_colors) do
+                            items[#items + 1] = {
+                                text = c[1],
+                                radio = true,
+                                checked_func = function() return self:getOverlayColor() == c[2] end,
+                                callback = function()
+                                    self.settings:saveSetting("overlay_color", c[2])
+                                    self.settings:flush()
+                                    self:showSessionOverlay({ c[1] }) -- preview
+                                end,
+                            }
+                        end
+                        return items
                     end,
                 },
                 {
