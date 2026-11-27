@@ -1233,6 +1233,11 @@ function PageTextInfo:installTopBarHiddenPaint()
             c:paintTo(bb, x + Screen:getWidth() - c[1]:getSize().w - right, py)
         end)
         if not ok then logger.warn("pagetextinfo: corner mark in hidden top bar failed:", err) end
+        -- The light (☼) and margins (● / ○) indicator is shown in the hidden mode too
+        if tb.paintLightAndMarginIndicator then
+            local ok_ind, err_ind = pcall(tb.paintLightAndMarginIndicator, tb, bb, x, y)
+            if not ok_ind then logger.warn("pagetextinfo: light/margins indicator in hidden top bar failed:", err_ind) end
+        end
     end
     topbar._pagetextinfo_hidden_paint = true
     local orig_paintToDisabled = topbar.paintToDisabled
@@ -1272,7 +1277,11 @@ function PageTextInfo:setTopBarMode(mode)
     if (topbar.is_enabled and true or false) ~= want_on then
         topbar:quickToggleOnOff(want_on)
     end
-    self:repaintAfterPictureChange(self:topBarModeChanged(old_mode, self:getTopBarMode()))
+    -- self:repaintAfterPictureChange(self:topBarModeChanged(old_mode, self:getTopBarMode()))
+    -- Same as cycleTopBarMode(): indicators computed again with the new mode before the repaint
+    local picture_changed = self:topBarModeChanged(old_mode, self:getTopBarMode())
+    self:refreshTopBarIndicators(topbar)
+    self:repaintAfterPictureChange(picture_changed)
     return true
 end
 
@@ -1303,8 +1312,22 @@ function PageTextInfo:cycleTopBarMode()
         self.settings:flush()
         topbar:quickToggleOnOff(false)
     end
-    self:repaintAfterPictureChange(self:topBarModeChanged(old_mode, self:getTopBarMode()))
+    -- minimal -> hidden does not go through quickToggleOnOff, so the top bar texts (light and margins
+    -- indicator) were not computed again. The expected margins also depend on the mode (preset 4 with
+    -- "hidden": 15/15), so the indicator is computed again with the new mode before the repaint
+    -- After topBarModeChanged(): the custombg picture (shown or hidden there) changes the expected bottom margin
+    local picture_changed = self:topBarModeChanged(old_mode, self:getTopBarMode())
+    self:refreshTopBarIndicators(topbar)
+    self:repaintAfterPictureChange(picture_changed)
     return true
+end
+
+-- Computes the top bar texts again (light and margins indicator included) for the current mode
+function PageTextInfo:refreshTopBarIndicators(topbar)
+    topbar = topbar or (self.view and self.view.topbar)
+    if not (topbar and topbar.toggleBar) then return end
+    local ok, err = pcall(topbar.toggleBar, topbar)
+    if not ok then logger.warn("pagetextinfo: refreshing the top bar indicators failed:", err) end
 end
 
 -- Shows one submenu of the custombg plugin ("lines": Ruled lines, "background": Custom reading background)
@@ -1910,7 +1933,7 @@ function PageTextInfo:onMultiSwipe(arg, ges)
         return true
     end
     if ges and ges.multiswipe_directions == "west north" then
-        -- Bottom margin only: for the custombg picture, or empty_bottom_margin with nothing on screen
+        -- Bottom margin only, the same as the margin adjustment gives (picture, preset, narrow preset "hidden")
         self:onAdjustBottomMargin()
         return true
     end
@@ -2327,15 +2350,18 @@ end
 
 -- Presets cycled through by the margin adjustment (tap top left), whatever bars are on.
 -- Format: { left, top, right, bottom, xheight_mm = target font x-height } in configurable units (unscaled).
---   1 = current margins (35/50), font x-height 1.80 mm
---   2 = a little bit wider margins, keeping the ~sqrt(2) proportion (60/42 = 1.43, same as 50/35),
+--   1 = minimal margins, 15 everywhere, font x-height 1.80 mm
+--   2 = normal margins (35/50), font x-height 1.80 mm
+--   3 = a little bit wider margins, keeping the ~sqrt(2) proportion (60/42 = 1.43, same as 50/35),
 --       font x-height 1.80 mm
---   3 = big side margins (100) to get a narrow text column, top/bottom as preset 1 (50/50),
+--   4 = big side margins (100) to get a narrow text column, top/bottom as preset 2 (50/50),
 --       with a smaller font (x-height 1.35 mm). hidden_top_bottom: top and bottom used instead when the
 --       top bar is in the "hidden" mode.
 -- With a custombg picture at the bottom (image, hero, cover text) the bottom margin is the picture one.
--- The left and right margins are different in every preset: they are what tells which preset is on.
+-- The left and right margins are different in every preset: they are what tells which preset is on
+-- (margins not matching any preset: the next tap goes to preset 1).
 PageTextInfo.margin_presets = {
+    { 15, 15, 15, 15, xheight_mm = 1.80 },
     { 35, 50, 35, 50, xheight_mm = 1.80 },
     { 42, 60, 42, 60, xheight_mm = 1.80 },
     { 100, 50, 100, 50, xheight_mm = 1.35, hidden_top_bottom = 15 },
@@ -2375,17 +2401,16 @@ end
 --   background image: picture_bottom_margin
 PageTextInfo.picture_bottom_margin = 60
 PageTextInfo.picture_bottom_air = 4
--- Bottom margin set by the west-north multiswipe with the top bar "hidden" (no bookends, no picture)
-PageTextInfo.empty_bottom_margin = 15
 
 -- Smallest bottom margin (unscaled units) whose text area ends at least px pixels above the screen bottom.
--- ReaderTypeset:onSetPageMargins uses Screen:scaleBySize(margin) (rounded up), plus the footer height when
--- the footer does not overlap the text ("Overlap status bar" off), so that height is already there.
+-- ReaderTypeset:onSetPageMargins uses Screen:scaleBySize(margin) (rounded up).
+-- The footer is not taken into account: the margin depends only on the picture.
+-- Before, the footer height was subtracted when the footer did not overlap the text ("Overlap status bar" off):
+-- local footer = self.view and self.view.footer
+-- if footer and not footer.reclaim_height and footer.getHeight then
+--     px = px - (footer:getHeight() or 0)
+-- end
 function PageTextInfo:pxToBottomMargin(px)
-    local footer = self.view and self.view.footer
-    if footer and not footer.reclaim_height and footer.getHeight then
-        px = px - (footer:getHeight() or 0)
-    end
     if px <= 0 then return 0 end
     local per100 = Screen:scaleBySize(100)
     local u = math.max(0, math.floor(px * 100 / per100) - 2)
@@ -2498,9 +2523,9 @@ function PageTextInfo:setXHeightFont(target_mm)
 end
 
 -- Same event name as before, so gestures/dispatcher actions keep working.
--- Tap top left: always the next preset (1 -> 2 -> 3 -> 1), with its font x-height; its number is shown big over
--- the page for a moment. Top bar and footer are not looked at. Preset 3 with the top bar "hidden": top and
--- bottom 15. A custombg picture at the bottom sets the
+-- Tap top left: always the next preset (1 -> 2 -> 3 -> 4 -> 1), with its font x-height; its number is shown big
+-- over the page for a moment. Top bar and footer are not looked at. Preset 4 (narrow column) with the top bar
+-- "hidden": top and bottom 15. A custombg picture at the bottom sets the
 -- bottom margin (applyMargins).
 function PageTextInfo:onAdjustMarginsTopbar()
     if not self.ui.rolling then return end
@@ -2519,24 +2544,21 @@ function PageTextInfo:onAdjustMarginsTopbar()
     return true
 end
 
--- West-north multiswipe, only the bottom margin:
---   custombg picture on (image, hero, cover text) -> margin for the picture (as the margin adjustment)
---   bookends                                      -> bottom of the current preset
---   top bar "hidden"                              -> empty_bottom_margin
---   top bar "on" or "minimal"                     -> bottom of the current preset
+-- West-north multiswipe, only the bottom margin, the same one the margin adjustment (tap top left) gives:
+--   custombg picture on (image, hero, cover text) -> margin for the picture
+--   top bar "hidden" and a preset with hidden_top_bottom (preset 4, narrow column) -> that value
+--   otherwise -> bottom of the current preset
 -- Left, top and right stay as they are; the preset and the font are not changed.
 function PageTextInfo:onAdjustBottomMargin()
     local ui = self.ui
     if not ui.rolling then return true end
     local bottom = self:getPictureBottomMargin()
     if not bottom then
-        local bookends_on = ui.bookends and ui.bookends.enabled
-        local topbar = ui.view and ui.view.topbar
-        if not bookends_on and topbar and self:getTopBarMode() == "hidden" then
-            bottom = PageTextInfo.empty_bottom_margin
-        else
-            -- the preset is recognized by its left and right margins
-            bottom = PageTextInfo.margin_presets[self:getCurrentPresetIndex() or 1][4]
+        -- the preset is recognized by its left and right margins
+        local p = PageTextInfo.margin_presets[self:getCurrentPresetIndex() or 1]
+        bottom = p[4]
+        if p.hidden_top_bottom and self.view and self.view.topbar and self:getTopBarMode() == "hidden" then
+            bottom = p.hidden_top_bottom
         end
     end
 

@@ -1532,6 +1532,150 @@ function TopBar:getBottomHeight()
 end
 
 -- ==========================================================================
+-- Margin indicator (● correct margins / ○ wrong margins)
+-- ==========================================================================
+
+-- Horizontal margin the book needs with the top bar (unscaled, as stored in the settings)
+TopBar.EXPECTED_SIDE_MARGIN = 15
+TopBar.EXPECTED_SIDE_MARGIN_ANDROID = 20
+-- Pixels of rounding allowed between the stored margin and what the bar measures
+TopBar.MARGIN_TOLERANCE_PX = 1
+
+-- True when the current page margins leave exactly the room the top bar uses:
+-- left/right = the expected side margin, top = top bar height, bottom = chapter line height.
+-- Margins are saved unscaled and applied with Screen:scaleBySize() (see onSetPageMargins() in
+-- readertypeset.lua), so the comparison is done in screen pixels: the saved value is scaled
+-- and compared with what the bar really measures, allowing a pixel of rounding.
+-- Before it did unscaleBySize(height) == saved margin, which failed by rounding with the
+-- right margins on many DPIs
+-- Margins the current preset of the page text info plugin wants (PageTextInfo.margin_presets,
+-- cycled with the tap top left), or nil when there is no plugin or the margins match no preset.
+-- Uses the plugin's own rules, so both always agree:
+--   - the preset is recognized by its left and right margins (getCurrentPresetIndex)
+--   - top bar "hidden" and a preset with hidden_top_bottom (preset 4): that value top and bottom
+--   - custombg picture at the bottom: the bottom margin is the picture one (getPictureBottomMargin)
+-- Presets (left, top, right, bottom, font x-height), unscaled:
+--   1 = 15/15/15/15, 1.80mm   2 = 35/50/35/50, 1.80mm   3 = 42/60/42/60, 1.80mm
+--   4 = 100/50/100/50, 1.35mm (15/15 top/bottom with the top bar "hidden")
+function TopBar:getExpectedPresetMargins()
+    local pti = self.ui and self.ui.pagetextinfo
+    if not (pti and pti.getCurrentPresetIndex and pti.margin_presets) then return nil end
+    local ok, idx = pcall(pti.getCurrentPresetIndex, pti)
+    if not ok or not idx then return nil end
+    local p = pti.margin_presets[idx]
+    local t = { p[1], p[2], p[3], p[4] }
+    if p.hidden_top_bottom and pti.getTopBarMode and pti:getTopBarMode() == "hidden" then
+        t[2], t[4] = p.hidden_top_bottom, p.hidden_top_bottom
+    end
+    if pti.getPictureBottomMargin then
+        local ok_pic, picture_bottom = pcall(pti.getPictureBottomMargin, pti)
+        if ok_pic and picture_bottom then t[4] = picture_bottom end
+    end
+    return t, idx
+end
+
+-- ● when the current margins are exactly the ones of the current preset (see above).
+-- Values are compared as saved (unscaled), the same way applyMargins() in the plugin does, so
+-- no tolerance is needed here.
+-- Without the plugin, the old check is used (side margins 15/20, top = bar height,
+-- bottom = chapter line height), compared in pixels with a little tolerance
+function TopBar:marginsMatchTopBar()
+    local configurable = self.ui and self.ui.document and self.ui.document.configurable
+    if not configurable or not configurable.h_page_margins then return false end
+
+    local expected = self:getExpectedPresetMargins()
+    if expected then
+        return configurable.h_page_margins[1] == expected[1]
+            and configurable.t_page_margin == expected[2]
+            and configurable.h_page_margins[2] == expected[3]
+            and configurable.b_page_margin == expected[4]
+    end
+    if self.ui and self.ui.pagetextinfo and self.ui.pagetextinfo.margin_presets then
+        -- plugin present but the margins are not any preset
+        return false
+    end
+
+    -- Fallback without the page text info plugin
+
+    local side = Device:isAndroid() and TopBar.EXPECTED_SIDE_MARGIN_ANDROID or TopBar.EXPECTED_SIDE_MARGIN
+
+    -- getHeight() reads the title _height: make sure it is up to date with the current font/text
+    local title_widget = self.title_and_series_widget_container[1][1]
+    if title_widget.updateSize then title_widget:updateSize() end
+
+    local function close(saved, needed_px)
+        if saved == nil or needed_px == nil then return false end
+        return math.abs(Screen:scaleBySize(saved) - needed_px) <= TopBar.MARGIN_TOLERANCE_PX
+    end
+
+    return configurable.h_page_margins[1] == side
+        and configurable.h_page_margins[2] == side
+        and close(configurable.t_page_margin, self:getHeight())
+        and close(configurable.b_page_margin, self:getBottomHeight())
+end
+
+-- Repaint the indicator when the margins change. The value in configurable is updated by the
+-- config dialog/ReaderTypeset while the event is going around, so it is read on the next tick.
+-- These handlers return nothing so the event keeps going to ReaderTypeset
+function TopBar:refreshMarginIndicator()
+    -- if not TopBar.is_enabled then return end
+    -- The indicator is shown in every top bar mode, so it is refreshed in all of them
+    UIManager:nextTick(function()
+        if not (self.ui and self.ui.document) then return end
+        self:toggleBar()
+        UIManager:setDirty(self.view.dialog, function()
+            return "ui", Geom:new{ w = Screen:getWidth(), h = self:getHeight(), y = 0 }
+        end)
+    end)
+end
+
+-- Light (☼) and margins (● / ○) indicator text. The same in every top bar mode
+-- (enabled, minimal and hidden), called from both branches of toggleBar()
+function TopBar:updateLightAndMarginIndicator(light_on)
+    local powerd = Device:getPowerDevice()
+    if self.last_frontlight ~= nil then
+        self.frontlight = self.last_frontlight
+        self.last_frontlight = nil
+    else
+        if light_on or powerd:isFrontlightOn() then
+            self.frontlight = " ☼"
+        else
+            self.frontlight = ""
+        end
+    end
+    if self:marginsMatchTopBar() then
+        self.test_light_text:setText(" ● " .. self.frontlight)
+    else
+        self.test_light_text:setText(" ○ " .. self.frontlight)
+    end
+end
+
+-- Paints the indicator top left. With the bar enabled it goes on the title line (MARGIN_TOP, as
+-- before); in minimal and hidden there is no title, so it goes at the base top margin (9)
+-- Called from paintTo(), paintToDisabled() and the "hidden" paint of the page text info plugin
+function TopBar:paintLightAndMarginIndicator(bb, x, y)
+    if not (self.light_widget_container and self.test_light_text) then return end
+    -- Setting "Show light and margins indicator" (Top bar menu), on by default
+    if self.settings and not self.settings:nilOrTrue("show_light_margin_indicator") then return end
+    -- Not shown with bookends on: it paints its own texts in that area
+    if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
+    local py
+    if TopBar.is_enabled then
+        py = y + TopBar.MARGIN_TOP
+    else
+        py = y + Screen:scaleBySize(9)
+    end
+    self.light_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, py)
+end
+
+function TopBar:onSetPageMargins() self:refreshMarginIndicator() end
+function TopBar:onSetPageHorizMargins() self:refreshMarginIndicator() end
+function TopBar:onSetPageTopMargin() self:refreshMarginIndicator() end
+function TopBar:onSetPageBottomMargin() self:refreshMarginIndicator() end
+-- Sent by the plugin's applyMargins()/onAdjustBottomMargin() when it changes top and bottom together
+function TopBar:onSetPageTopAndBottomMargin() self:refreshMarginIndicator() end
+
+-- ==========================================================================
 -- Refresh events
 -- ==========================================================================
 
@@ -1581,7 +1725,10 @@ function TopBar:toggleBar(light_on)
 
     if TopBar.is_enabled then
         local user_duration_format = "modern"
-        local session_time = datetime.secondsToClockDuration(user_duration_format, os.time() - self.start_session_time, false)
+        -- A single "now" for the whole refresh, so every counter is computed against the same instant
+        local now = os.time()
+        local elapsed = now - self.start_session_time
+        local session_time = datetime.secondsToClockDuration(user_duration_format, elapsed, false)
 
         local function toHoursOrDays(seconds)
             if seconds >= 86400 then
@@ -1593,17 +1740,18 @@ function TopBar:toggleBar(light_on)
             end
         end
 
-        local duration_raw = math.floor((os.time() - self.start_session_time))
-        if self.ui.statistics and self.ui.statistics._total_words then
+        local duration_raw = math.floor(elapsed)
+        -- duration_raw is 0 right after opening or resuming: skip the division (it would give inf/nan wpm)
+        if self.ui.statistics and self.ui.statistics._total_words and duration_raw > 0 then
             self.wpm_session = math.floor(self.ui.statistics._total_words / duration_raw)
         end
         self.wpm_text:setText(self.wpm_session .. "wpm")
 
-        local read_today_s  = self.initial_read_today + (os.time() - self.start_session_time)
-        local read_month_s  = self.initial_read_month + (os.time() - self.start_session_time)
+        local read_today_s  = self.initial_read_today + elapsed
+        local read_month_s  = self.initial_read_month + elapsed
         local read_lmonth_s = self.initial_read_last_month
-        local read_year_s   = self.initial_read_year + (os.time() - self.start_session_time)
-        local read_book_s   = self.initial_total_time_book + (os.time() - self.start_session_time)
+        local read_year_s   = self.initial_read_year + elapsed
+        local read_book_s   = self.initial_total_time_book + elapsed
 
         local read_today      = toHoursOrDays(read_today_s)
         local read_month      = toHoursOrDays(read_month_s)
@@ -1611,38 +1759,36 @@ function TopBar:toggleBar(light_on)
         local read_year       = toHoursOrDays(read_year_s)
         local read_book       = toHoursOrDays(read_book_s)
 
-        self.session_time_text:setText(datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock")))
+        self.session_time_text:setText(datetime.secondsToHour(now, G_reader_settings:isTrue("twelve_hour_clock")))
 
+        -- Page labels (stable page numbers) when the book has them, rendered screen pages otherwise.
+        -- Resolved once here and reused by the progress text, the current page and the session pages
+        local current_page, last_page, init_page
         if self.ui.pagemap:wantsPageLabels() then
-            self.progress_book_text:setText(("%d de %d"):format(self.ui.pagemap:getCurrentPageLabel(true), self.ui.pagemap:getLastPageLabel(true)))
-            self.current_page_text:setText(("%d"):format(self.ui.pagemap:getCurrentPageLabel(true)))
+            current_page = self.ui.pagemap:getCurrentPageLabel(true)
+            last_page    = self.ui.pagemap:getLastPageLabel(true)
+            init_page    = self.init_page
         else
-            self.progress_book_text:setText(("%d de %d"):format(self.view.footer.pageno, self.view.footer.pages))
-            self.current_page_text:setText(("%d"):format(self.view.footer.pageno))
+            current_page = self.view.footer.pageno
+            last_page    = self.view.footer.pages
+            init_page    = self.init_page_screens
         end
 
-        local init_page = 0
-        local pages_session = 0
+        self.progress_book_text:setText(("%d de %d"):format(current_page, last_page))
+        self.current_page_text:setText(("%d"):format(current_page))
+
+        local pages_session = current_page - init_page
         local sep = "·"
 
-        if self.ui.pagemap:wantsPageLabels() then
-            init_page = self.init_page
-            pages_session = self.ui.pagemap:getCurrentPageLabel(true) - init_page
-            self.times_text:setText(toHoursOrDays(duration_raw) .. "(" .. pages_session .. "p)" .. sep .. read_today .. sep .. read_month .. sep .. read_last_month .. sep .. read_year)
-            self.times_text_text = toHoursOrDays(duration_raw) .. "(" .. pages_session .. "p)" .. sep .. read_today .. sep .. read_month .. sep .. read_last_month .. sep .. read_year
-        else
-            init_page = self.init_page_screens
-            pages_session = self.view.footer.pageno - init_page
-            self.times_text:setText(toHoursOrDays(duration_raw) .. "(" .. pages_session .. "p)" .. sep .. read_today .. sep .. read_month .. sep .. read_last_month .. sep .. read_year)
-            self.times_text_text = toHoursOrDays(duration_raw) .. "(" .. pages_session .. "p)" .. sep .. read_today .. sep .. read_month .. sep .. read_last_month .. sep .. read_year
-        end
+        self.times_text_text = toHoursOrDays(duration_raw) .. "(" .. pages_session .. "p)" .. sep .. read_today .. sep .. read_month .. sep .. read_last_month .. sep .. read_year
+        self.times_text:setText(self.times_text_text)
 
 
         local powerd = Device:getPowerDevice()
         local batt_lvl = tostring(powerd:getCapacity())
 
 
-        local time = datetime.secondsToHour(os.time(), G_reader_settings:isTrue("twelve_hour_clock"))
+        local time = datetime.secondsToHour(now, G_reader_settings:isTrue("twelve_hour_clock"))
         self.time_battery_text_text = time .. "|" .. batt_lvl .. "%"
 
         local words = "?w"
@@ -1735,8 +1881,10 @@ function TopBar:toggleBar(light_on)
         self.series_text:setText(self.series)
 
 
-        local chapter = self.ui.toc:getTocTitleByPage(self.view.footer.pageno) ~= ""
-        and TextWidget.PTF_BOLD_START .. self.ui.toc:getTocTitleByPage(self.view.footer.pageno) .. TextWidget.PTF_BOLD_END or ""
+        -- One TOC lookup instead of two
+        local toc_title = self.ui.toc:getTocTitleByPage(self.view.footer.pageno)
+        local chapter = toc_title ~= ""
+        and TextWidget.PTF_BOLD_START .. toc_title .. TextWidget.PTF_BOLD_END or ""
 
 
         -- self.separator_line.dimen.w = self.main_progress_bar.width
@@ -1766,11 +1914,18 @@ function TopBar:toggleBar(light_on)
         -- end
         self.chapter_text:setText(chapter)
         if self.option == 1 then
+            -- authors - pub date [- origin] - book stats - typography
+            -- pub_date is nil for non-epub files (getPublicationDateBook), so fall back to ""
+            local author_parts = {
+                self.ui.document._document:getDocumentProps().authors or "",
+                self.pub_date or "",
+            }
             if self.origin_book and  self.origin_book ~= "" then
-                self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date .. " - "  ..  self.origin_book .. " - " .. self.book_stats_text.text .. " - " .. self.typography_text.text)
-            else
-                self.author_text:setText(self.ui.document._document:getDocumentProps().authors .. " - " ..  self.pub_date .. " - " .. self.book_stats_text.text .. " - " .. self.typography_text.text)
+                table.insert(author_parts, self.origin_book)
             end
+            table.insert(author_parts, self.book_stats_text.text)
+            table.insert(author_parts, self.typography_text.text)
+            self.author_text:setText(table.concat(author_parts, " - "))
         else
             self.author_text:setText("")
         end
@@ -1781,11 +1936,29 @@ function TopBar:toggleBar(light_on)
 
         self.progress_chapter = self.view.footer:getChapterProgress(false)
         self.progress_chapter_text:setText(self.progress_chapter) -- .. " " .. left_time)
+
+        -- Title font settings, read once: used to fit the chapter text and later to align title and series
+        local title_font = self.settings:readSetting("font_title") or "Consolas-Regular.ttf"
+        local title_font_size = self.settings:readSetting("font_size_title") or 14
+
+        -- Room for the chapter at the bottom. paintTo() starts it at the screen center, or right after
+        -- the times text when that one goes past the center, so it has to end before the chapter
+        -- progress text on the right. Still capped at 40% of the screen as before
+        local screen_w = Screen:getWidth()
+        local times_w = self.stats_times_widget_container[1]:getSize().w
+        local chapter_start
+        if times_w + TopBar.MARGIN_SIDES > math.floor(screen_w / 2) then
+            chapter_start = times_w + TopBar.MARGIN_SIDES + 3
+        else
+            chapter_start = math.floor(screen_w / 2)
+        end
+        local chapter_end = screen_w - TopBar.MARGIN_SIDES - self.progress_chapter_text:getSize().w - Screen:scaleBySize(6)
+        local chapter_max_w = math.max(math.min(screen_w * 40 * (1/100), chapter_end - chapter_start), Screen:scaleBySize(20))
+
         local text_widget_container = TextWidget:new{
             text = self.chapter_widget_container[1].text:gsub(" ", "\u{00A0}"), -- no-break-space
-            max_width = Screen:getWidth() * 40 * (1/100),
-            face = Font:getFace(self.settings:readSetting("font_title") and self.settings:readSetting("font_title") or "Consolas-Regular.ttf",
-            self.settings:readSetting("font_size_title") and self.settings:readSetting("font_size_title") or 14),
+            max_width = chapter_max_w,
+            face = Font:getFace(title_font, title_font_size),
 
             bold = true,
         }
@@ -1932,58 +2105,90 @@ function TopBar:toggleBar(light_on)
 
         -- ○ ◎ ● ◐ ◑ ◒ ◓
         local configurable = self.ui.document.configurable
-        local powerd = Device:getPowerDevice()
+        -- powerd already obtained above for the battery level
 
-        if self.last_frontlight ~= nil then
-            self.frontlight = self.last_frontlight
-            self.last_frontlight = nil
-        else
-            if light_on or powerd:isFrontlightOn() then
-                self.frontlight = " ☼"
-            else
-                self.frontlight = ""
-            end
+        -- if self.last_frontlight ~= nil then
+        --     self.frontlight = self.last_frontlight
+        --     self.last_frontlight = nil
+        -- else
+        --     if light_on or powerd:isFrontlightOn() then
+        --         self.frontlight = " ☼"
+        --     else
+        --         self.frontlight = ""
+        --     end
+        -- end
+        -- local side_margins = 15
+        -- if Device:isAndroid() then
+        --     side_margins = 20
+        -- end
+        -- if configurable.h_page_margins[1] == side_margins and configurable.t_page_margin == Screen:unscaleBySize(self:getHeight())
+        --     and configurable.h_page_margins[2] == side_margins and configurable.b_page_margin == Screen:unscaleBySize(self:getBottomHeight()) then
+        -- Moved to marginsMatchTopBar(): ● when the margins are the ones of the current preset of the
+        -- page text info plugin (margin_presets 1-4); without the plugin, the old check in pixels
+        -- if self:marginsMatchTopBar() then
+        --     self.test_light_text:setText(" ● " .. self.frontlight)
+        -- else
+        --     self.test_light_text:setText(" ○ " .. self.frontlight)
+        -- end
+        -- Frontlight and margins now in updateLightAndMarginIndicator(), shared by every top bar mode
+        self:updateLightAndMarginIndicator(light_on)
+
+        -- Keep the centered title + series between the light indicator (top left) and the page
+        -- progress (top right). The title is centered, so it gets the same room on both sides, sized
+        -- by the wider of the two side widgets. Long titles are cut with an ellipsis instead of
+        -- being drawn over them
+        local side_w = math.max(self.test_light_text:getSize().w, self.progress_book_text:getSize().w)
+        local title_max_w = self.width - 2 * (TopBar.MARGIN_SIDES + side_w + Screen:scaleBySize(8))
+            - self.series_text:getSize().w
+        title_max_w = math.max(title_max_w, Screen:scaleBySize(40))
+        if self.title_text.max_width ~= title_max_w then
+            self.title_text.max_width = title_max_w
+            self.title_text:free() -- the text did not change, so force the size to be computed again
         end
-        local side_margins = 15
-        if Device:isAndroid() then
-            side_margins = 20
-        end
-        if configurable.h_page_margins[1] == side_margins and configurable.t_page_margin == Screen:unscaleBySize(self:getHeight())
-            and configurable.h_page_margins[2] == side_margins and configurable.b_page_margin == Screen:unscaleBySize(self:getBottomHeight()) then
-            self.test_light_text:setText(" ● " .. self.frontlight)
-        else
-            self.test_light_text:setText(" ○ " .. self.frontlight)
-        end
 
 
-        local face_big = Font:getFace(
-            self.settings:readSetting("font_title") or "Consolas-Regular.ttf",
-            self.settings:readSetting("font_size_title") or 14
-        )
-
-        local face_small = Font:getFace(
-            self.settings:readSetting("font_title") or "Consolas-Regular.ttf",
-            (self.settings:readSetting("font_size_title") or 14) - 8
-        )
+        -- Title/series alignment: the imaginary line through the middle of the lowercase letters
+        -- (half the x-height above the baseline) has to be the same for both texts.
+        --
+        -- Faces: taken from the widgets themselves. Rebuilding them from font_title/Consolas did not
+        -- match when "Use system font" is on (cfont) or when no font_title is set (myfont3)
+        -- local size_big = title_font_size
+        -- local size_small = size_big - 8
+        -- local face_big = Font:getFace(title_font, size_big)
+        -- local face_small = Font:getFace(title_font, size_small)
+        local face_big = self.title_text.face
+        local face_small = self.series_text.face
 
         -- BIG
-        local w = TextWidget:new{ text = "A", face = face_big }  -- usa una letra que tenga ascender
+        local w = TextWidget:new{ text = "x", face = face_big, bold = true }  -- same bold as the real widget
         local baseline_big = w:getBaseline()
         local height_big = w:getSize().h
         w:free()
 
         -- SMALL  ← AQUÍ ESTABA TU ERROR
-        w = TextWidget:new{ text = "A", face = face_small }
+        w = TextWidget:new{ text = "x", face = face_small, bold = true }
         local baseline_small = w:getBaseline()
         local height_small = w:getSize().h
         w:free()
 
-        local size_big = self.settings:readSetting("font_size_title") or 14
-        local size_small = size_big - 8
+        -- x-height in real pixels. getXHeight() can be a ratio (< 1) or already px (see the
+        -- typography block above), and the ratio must be multiplied by face.size (px, screen-scaled),
+        -- not by the font size setting (pt), which is what was used before
+        local function xHeightPx(face)
+            local xh = face.ftsize:getXHeight() or 0
+            return (xh < 1) and (xh * face.size) or xh
+        end
+        local x_height_big = xHeightPx(face_big)
+        local x_height_small = xHeightPx(face_small)
 
-        local x_height_big = face_big.ftsize:getXHeight() * size_big
-        local x_height_small = face_small.ftsize:getXHeight() * size_small
-        local baseline_diff = baseline_big - baseline_small - math.floor(x_height_big - x_height_small + 0.5) -- Same baseline for both texts and then center x-heights
+        -- Middle of the lowercase letters, measured from the top of each widget
+        local x_center_big = baseline_big - x_height_big / 2
+        local x_center_small = baseline_small - x_height_small / 2
+        -- How much lower than the title the series widget has to start so both middles match.
+        -- Before it subtracted the whole x-height difference, which aligned the tops of the
+        -- lowercase letters (series a bit too high), not their middles
+        local baseline_diff = math.floor(x_center_big - x_center_small + 0.5)
+        -- local baseline_diff = baseline_big - baseline_small - math.floor(x_height_big - x_height_small + 0.5) -- Same baseline for both texts and then center x-heights
         -- local baseline_diff = baseline_big - baseline_small - math.floor(x_height_big)
         if TopBar.show_bar_in_top_bar then
             TopBar.MARGIN_TOP = Screen:scaleBySize(9) + Screen:scaleBySize(self.space_after_alt_bar)
@@ -2010,7 +2215,9 @@ function TopBar:toggleBar(light_on)
         self.book_stats_text:setText("")
         self.typography_text:setText("")
         self.author_text:setText("")
-        self.test_light_text:setText("")
+        -- self.test_light_text:setText("")
+        -- The light and margins indicator is kept in every mode (minimal and hidden too)
+        self:updateLightAndMarginIndicator(light_on)
         self.progress_bar_book.width = 0
         self.main_progress_bar.width = 0
         self.progress_chapter_bar.width = 0
@@ -2081,6 +2288,8 @@ end
 function TopBar:paintTo(bb, x, y)
     -- if self.ui and self.ui.bookends and self.ui.bookends.enabled then return end
     if self.status_bar and self.status_bar == true then
+        -- Light and margins indicator, also in this mode
+        if not self.fm then self:paintLightAndMarginIndicator(bb, x, y) end
         -- self.battery_widget_container[1]:setText(self.time_battery_text_text:reverse())
         -- self.battery_widget_container:paintTo(bb, x - self.battery_widget_container[1]:getSize().w - TopBar.MARGIN_BOTTOM - Screen:scaleBySize(12), y + TopBar.MARGIN_SIDES/2 + Screen:scaleBySize(3))
         -- self.stats_times_widget_container[1]:setText(self.times_text_text:reverse())
@@ -2217,7 +2426,8 @@ function TopBar:paintTo(bb, x, y)
                 -- self.progress_bar_widget_container:paintTo(bb, x, Screen:getHeight() - Screen:scaleBySize(12))
             end
         end
-        self.light_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+        -- self.light_widget_container:paintTo(bb, x + TopBar.MARGIN_SIDES, y + TopBar.MARGIN_TOP)
+        self:paintLightAndMarginIndicator(bb, x, y) -- same place (MARGIN_TOP) with the bar enabled
 
         -- self[21].dimen = Geom:new{ w = self[21][1]:getSize().w, self[21][1]:getSize().h }
         self.author_information_widget_container:paintTo(bb, x + self.author_information_widget_container[1]:getSize().w/2 + Screen:scaleBySize(4), y + self.author_information_widget_container[1]._height)
@@ -2265,8 +2475,10 @@ function TopBar:paintTo(bb, x, y)
 
         self.progress_widget_container.dimen = Geom:new{ w = self.progress_widget_container[1]:getSize().w, self.progress_widget_container[1]:getSize().h } -- The text width change and we need to adjust the container dimensions to be able to align it on the right
 
+        -- Same space as the title below the alternative bar (it was a fixed 12, the default of
+        -- space_after_alt_bar, so it drifted from the title when that setting was changed)
         if self.option == 1 or self.option == 2 or self.option == 3 then
-            self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES, y +  self.progress_widget_container[1]._height + Screen:scaleBySize(12))
+            self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES, y +  self.progress_widget_container[1]._height + Screen:scaleBySize(self.space_after_alt_bar))
         else
             self.progress_widget_container:paintTo(bb, Screen:getWidth() - self.progress_widget_container:getSize().w - TopBar.MARGIN_SIDES, y +  self.progress_widget_container[1]._height)
         end
@@ -2575,6 +2787,8 @@ function TopBar:paintTo(bb, x, y)
 end
 
 function TopBar:paintToDisabled(bb, x, y)
+    -- Light and margins indicator, also with the bar disabled (minimal)
+    self:paintLightAndMarginIndicator(bb, x, y)
     self.ignore_corners_widget_container[1]:setText(self.ignore_corners)
     if (self.status_bar and self.status_bar == true and self.view.footer.settings.bar_top) or self.view.dogear_visible then
         if Device:isAndroid() then
@@ -2802,6 +3016,21 @@ function TopBar:addToMainMenu(menu_items)
                     self:changeAllWidgetFaces()
                     UIManager:setDirty("all", "ui")
                     self.settings:flush()
+                    return true
+                end,
+            },
+            {
+                text = _("Show light and margins indicator"),
+                checked_func = function() return self.settings:nilOrTrue("show_light_margin_indicator") end,
+                help_text = _([[Top left indicator, in every top bar mode (on, minimal and hidden), not shown with bookends on:
+● the margins are the ones of the current margin preset, ○ they are not
+☼ the frontlight is on]]),
+                callback = function()
+                    local show = self.settings:nilOrTrue("show_light_margin_indicator")
+                    self.settings:saveSetting("show_light_margin_indicator", not show)
+                    self.settings:flush()
+                    self:toggleBar()
+                    UIManager:setDirty("all", "ui")
                     return true
                 end,
             },
