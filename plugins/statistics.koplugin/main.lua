@@ -302,14 +302,6 @@ function ReaderStatistics:init()
             self._session_start_pct = nil
             self._pending_start_pct = nil
             self._ref_mode = nil
-            -- the session starts again at 0: so does the wpm shown, or the previous one is shown until the next page turn
-            pcall(function()
-                local f = io.open(DataStorage:getSettingsDir() .. "/wpm_session.json", "w")
-                if f then
-                    f:write(string.format('{"wpm":0,"words":0,"pages":0,"updated":%d}', os.time()))
-                    f:close()
-                end
-            end)
             local res = nil
             local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
             self._last_nbwords = nbwords
@@ -3491,26 +3483,6 @@ function ReaderStatistics:onPageUpdate(pageno)
             self._total_pages = self._total_pages + 1
             self:markSessionStartRef()
             self._total_read_time = self._total_read_time + diff_time
-            -- local duration_raw = math.floor(((os.time() - self.start_current_period) / 60) * 100) / 100
-            local read_mins = self._total_read_time / 60
-            local wpm = 0
-            if self._total_words > 0 and read_mins > 0 then
-                wpm = math.floor(self._total_words / read_mins)
-            end
-            local words  = self._total_words
-            local pages  = self._total_pages
-            local ts     = os.time()
-            local UIManager = require("ui/uimanager")
-            UIManager:scheduleIn(0, function()
-                local DataStorage = require("datastorage")
-                local path = DataStorage:getSettingsDir() .. "/wpm_session.json"
-                local f = io.open(path, "w")
-                if f then
-                    f:write(string.format('{"wpm":%d,"words":%d,"pages":%d,"updated":%d}',
-                        wpm, words, pages, ts))
-                    f:close()
-                end
-            end)
         end
     elseif diff_time > self.settings.max_sec then
         self.mem_read_time = self.mem_read_time + self.settings.max_sec
@@ -3526,26 +3498,6 @@ function ReaderStatistics:onPageUpdate(pageno)
             self._total_pages = self._total_pages + 1
             self:markSessionStartRef()
             self._total_read_time = self._total_read_time + self.settings.max_sec
-            -- local duration_raw = math.floor(((os.time() - self.start_current_period) / 60) * 100) / 100
-            local read_mins = self._total_read_time / 60
-            local wpm = 0
-            if self._total_words > 0 and read_mins > 0 then
-                wpm = math.floor(self._total_words / read_mins)
-            end
-            local words  = self._total_words
-            local pages  = self._total_pages
-            local ts     = os.time()
-            local UIManager = require("ui/uimanager")
-            UIManager:scheduleIn(0, function()
-                local DataStorage = require("datastorage")
-                local path = DataStorage:getSettingsDir() .. "/wpm_session.json"
-                local f = io.open(path, "w")
-                if f then
-                    f:write(string.format('{"wpm":%d,"words":%d,"pages":%d,"updated":%d}',
-                        wpm, words, pages, ts))
-                    f:close()
-                end
-            end)
         end
     end
 
@@ -3669,13 +3621,8 @@ function ReaderStatistics:onCloseDocument()
     if not ReaderStatistics.preserve then -- Not save session when adjusting configuration which forces document reopening
         self:insertDBSessionStats()
     end
-    -- The file with the wpm of the session is removed with the session. When the document is only reloaded, the
-    -- session goes on (see onPreserveCurrentSession): keep it, or the card shows 0 wpm until the next page turn.
-    if not ReaderStatistics.preserve then
-        local DataStorage = require("datastorage")
-        local path = DataStorage:getSettingsDir() .. "/wpm_session.json"
-        os.remove(path)
-    end
+    -- The wpm is no longer written to a file (it is read live from this plugin): delete the one older versions left
+    pcall(function() os.remove(DataStorage:getSettingsDir() .. "/wpm_session.json") end)
     if self._nbwords_task then
         UIManager:unschedule(self._nbwords_task)
         self._nbwords_task = nil
@@ -3725,14 +3672,6 @@ function ReaderStatistics:onResume()
         self._pending_start_pct = nil
         self._ref_mode = nil
         self._skip_first_turn = true
-        -- New session: clear the wpm of the previous one, or it is shown until the next page turn
-        pcall(function()
-            local f = io.open(DataStorage:getSettingsDir() .. "/wpm_session.json", "w")
-            if f then
-                f:write(string.format('{"wpm":0,"words":0,"pages":0,"updated":%d}', os.time()))
-                f:close()
-            end
-        end)
         self._prev_ref = self:getCurrentRefPage()
         self._prev_pct, self._prev_page = self:getCurrentProgress()
         local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())

@@ -1615,43 +1615,25 @@ local function buildBreakdownCard(w_width, data)
         function(w, h) return makeCard(w, buildStatRows(cardInnerWidth(w), right_rows), h) end)
 end
 
--- Reading speed: words per minute and pages of the current session. Read from
--- the JSON the statistics plugin writes on every page turn; 0 and 0 when the
--- file is missing, invalid or older than 5 minutes (as the wpm_session module).
-local WPM_STALE_S = 300
-
+-- Reading speed of the current session: the wpm the statistics plugin works out live, the same number as the tap in the
+-- bottom right corner of the reader (PageTextInfo:getSessionWpm), so the card and the tap agree. There is no file: 0 when
+-- the plugin cannot be reached or has nothing counted yet. Returns wpm and 0 pages (the pages come from getSessionPages).
 local function readWpmSession()
-    -- wpm: calculated live by the plugin, the same number as the tap in the bottom right corner of the reader
-    -- (PageTextInfo:getSessionWpm), so the card and the tap agree and the card does not fall to 0 when the last page turn
-    -- was more than 5 minutes ago. The json file is the fallback (no reader or no plugin).
-    -- pages: always from the json (0 when it is stale).
-    local live
+    local live = 0
     pcall(function()
         local ReaderUI = require("apps/reader/readerui")
         local plugin = ReaderUI.instance and ReaderUI.instance.pagetextinfo
         if plugin and plugin.getSessionWpm then
-            live = tonumber(plugin:getSessionWpm())
+            live = tonumber(plugin:getSessionWpm()) or 0
         end
     end)
-    if live and live <= 0 then live = nil end
-
-    local f = io.open(DataStorage:getSettingsDir() .. "/wpm_session.json", "r")
-    if not f then return live or 0, 0 end
-    local raw = f:read("*a")
-    f:close()
-    if not raw or raw == "" then return live or 0, 0 end
-    local wpm     = tonumber(raw:match('"wpm"%s*:%s*(%d+)'))
-    local pages   = tonumber(raw:lower():match('"pages[%w_]*"%s*:%s*(%d+)'))
-    local updated = tonumber(raw:match('"updated"%s*:%s*(%d+)'))
-    if not wpm or not updated then return live or 0, 0 end
-    if os.time() - updated > WPM_STALE_S then return live or 0, 0 end
-    return live or wpm, pages or 0
+    return math.max(0, live), 0
 end
 
 -- Pages read in the session in progress: the distinct pages of
 -- page_stat_data since the session started (the window already saved the
--- session, see onShowLongestSessions). If that gives nothing, the pages of
--- wpm_session.json are used (only valid while that file is recent).
+-- session, see onShowLongestSessions), or the pages still in the statistics
+-- plugin's memory, whichever is higher.
 local function getSessionPages(session_start)
     local ui = getReaderUI()
     local stats = ui and ui.statistics
@@ -1681,11 +1663,9 @@ local function getSessionPages(session_start)
         end
     end
 
-    -- 3. the json of the wpm module
-    local _wpm, json_pages = readWpmSession()
-    local pages = math.max(db_pages, mem_pages, json_pages or 0)
-    logger.info(string.format("longest sessions: session pages db=%d mem=%d json=%s from=%d",
-        db_pages, mem_pages, tostring(json_pages), from))
+    local pages = math.max(db_pages, mem_pages)
+    logger.info(string.format("longest sessions: session pages db=%d mem=%d from=%d",
+        db_pages, mem_pages, from))
     return pages
 end
 
@@ -2372,9 +2352,8 @@ local function buildBookCard(w_width, session, book)
     summary_book_reading = session ~= nil
     if session then
         -- reading: this book, the session in progress, its wpm and its pages
-        local wpm, pages = readWpmSession()
-        -- the json may be stale or lack the pages: count them in the database
-        pages = math.max(pages, getSessionPages(os.time() - session))
+        local wpm = readWpmSession()
+        local pages = getSessionPages(os.time() - session)
         right_rows = {
             { book and secondsToShortHM(book) or "-",       _("This book") },
             { secondsToShortHM(session),                    _("Session") },
@@ -4492,11 +4471,11 @@ local function buildReadingExplainItems()
     }
     items[#items + 1] = {
         _("wpm"),
-        _("Words per minute of the session: the words of the pages counted as read, divided by the minutes of reading time. A page counts when you stay on it at least the minimum seconds and at most the maximum seconds set in the statistics settings (if you stay longer, it counts as the maximum). The reading time is the sum of those times, not the clock time, so a pause does not lower it. It is updated at every counted page turn, and it shows 0 if no page has been counted for 5 minutes. This is worked out as before."),
+        _("Words per minute of the session: the words of the pages counted as read, divided by the minutes of reading time. A page counts when you stay on it at least the minimum seconds and at most the maximum seconds set in the statistics settings (if you stay longer, it counts as the maximum). The reading time is the sum of those times, not the clock time, so a pause does not lower it. It is worked out live, and the page you are on counts as if you turned it now. After the device wakes up or the book is reloaded, the page you are on is left out, because you had already read part of it."),
     }
     items[#items + 1] = {
         _("pages (screen)"),
-        _("The screens (pages of the current layout) read in the session, so it changes with the font size and margins. It is the highest of three counts: the different pages saved in the statistics since the session started, the pages still in memory that are not saved yet, and the pages counted by the statistics plugin in this session. This is worked out as before."),
+        _("The screens (pages of the current layout) read in the session, so it changes with the font size and margins. It is the higher of two counts: the different pages saved in the statistics since the session started, and the pages still in memory that are not saved yet. This is worked out as before."),
     }
     items[#items + 1] = {
         _("pages (stable)"),

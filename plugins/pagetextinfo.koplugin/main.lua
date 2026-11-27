@@ -857,17 +857,6 @@ local SessionOverlay = WidgetContainer:extend{
     toast = true, -- painted over everything and it does not take the events (the page below keeps working)
 }
 
-local function wpmFromJson()
-    local f = io.open(DataStorage:getSettingsDir() .. "/wpm_session.json", "r")
-    if not f then return 0 end
-    local raw = f:read("*a")
-    f:close()
-    local wpm = tonumber(raw and raw:match('"wpm"%s*:%s*(%d+)'))
-    local updated = tonumber(raw and raw:match('"updated"%s*:%s*(%d+)'))
-    if not wpm or not updated or os.time() - updated > 300 then return 0 end
-    return wpm
-end
-
 local function formatSessionTime(secs)
     secs = math.max(0, math.floor(secs))
     local h = math.floor(secs / 3600)
@@ -998,7 +987,7 @@ function PageTextInfo:closeSessionOverlay()
 end
 
 -- wpm of the session in progress, the same number the statistics plugin saves: words / counted reading time. It is read
--- from the plugin itself (always current, no 5 minutes limit); the json file is only the fallback.
+-- from the plugin itself (always current, no 5 minutes limit). 0 when nothing is counted yet.
 function PageTextInfo:getSessionWpm()
     local stats = self.ui and self.ui.statistics
     local words = stats and tonumber(stats._total_words) or 0
@@ -1019,7 +1008,7 @@ function PageTextInfo:getSessionWpm()
     if words > 0 and secs > 0 then
         return math.floor(words / (secs / 60))
     end
-    return wpmFromJson()
+    return 0
 end
 
 -- texts (optional): list of texts to show, one per part of the screen. Without it: clock, session time, wpm.
