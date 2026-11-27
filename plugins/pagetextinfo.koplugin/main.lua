@@ -828,6 +828,14 @@ function PageTextInfo:getOverlayColor()
     return c or PageTextInfo.session_overlay_cfg.color
 end
 
+-- Seconds fully visible to choose in the menu ("Big texts duration"); setting "overlay_hold", without it cfg.hold
+PageTextInfo.session_overlay_holds = { 0.3, 0.5, 0.8, 1.2, 1.5, 2, 3, 5 }
+
+function PageTextInfo:getOverlayHold()
+    local h = tonumber(self.settings and self.settings:readSetting("overlay_hold"))
+    return h or PageTextInfo.session_overlay_cfg.hold
+end
+
 -- Fade greys from the chosen color to cfg.fade_end (with the default color: cfg.fade_colors as before)
 function PageTextInfo:getOverlayFadeColors(color)
     local cfg = PageTextInfo.session_overlay_cfg
@@ -1057,7 +1065,7 @@ function PageTextInfo:showSessionOverlay(texts, strike_icon)
     -- "Fade out big texts" off (menu): no fade steps, the text goes at once after the same total time
     if self.settings:isTrue("no_overlay_fade") then
         -- UIManager:scheduleIn(cfg.hold + #cfg.fade_colors * cfg.fade_interval, function()
-        UIManager:scheduleIn(cfg.hold + #fade_colors * cfg.fade_interval, function()
+        UIManager:scheduleIn(self:getOverlayHold() + #fade_colors * cfg.fade_interval, function()
             if self.session_overlay_token ~= token or self.session_overlay ~= overlay then return end
             self:closeSessionOverlay()
         end)
@@ -1076,7 +1084,7 @@ function PageTextInfo:showSessionOverlay(texts, strike_icon)
         overlay:refresh()
         UIManager:scheduleIn(cfg.fade_interval, function() fadeStep(i + 1) end)
     end
-    UIManager:scheduleIn(cfg.hold, function() fadeStep(1) end)
+    UIManager:scheduleIn(self:getOverlayHold(), function() fadeStep(1) end)
 end
 
 -- Taps in the bottom corners. Left: toggle the double tap detection (from vocabulary mode: double tap ON, vocabulary off).
@@ -3615,6 +3623,28 @@ This is to be active only if the option flash buttons and menu items or the opti
                                     self.settings:saveSetting("overlay_color", c[2])
                                     self.settings:flush()
                                     self:showSessionOverlay({ c[1] }) -- preview
+                                end,
+                            }
+                        end
+                        return items
+                    end,
+                },
+                {
+                    text_func = function()
+                        return T(_("Big texts duration: %1 s"), self:getOverlayHold())
+                    end,
+                    help_text = _([[Seconds the big texts over the page (frontlight "Off", profiles / margin preset, double tap on/off, clock / session time / wpm) stay fully visible before the fade out starts (or before they go away, if the fade out is unchecked).]]),
+                    sub_item_table_func = function()
+                        local items = {}
+                        for _i, h in ipairs(PageTextInfo.session_overlay_holds) do
+                            items[#items + 1] = {
+                                text = T(_("%1 s"), h) .. (h == PageTextInfo.session_overlay_cfg.hold and " (" .. _("default") .. ")" or ""),
+                                radio = true,
+                                checked_func = function() return self:getOverlayHold() == h end,
+                                callback = function()
+                                    self.settings:saveSetting("overlay_hold", h)
+                                    self.settings:flush()
+                                    self:showSessionOverlay({ T(_("%1 s"), h) }) -- preview
                                 end,
                             }
                         end
