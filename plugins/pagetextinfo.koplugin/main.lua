@@ -2926,6 +2926,123 @@ function PageTextInfo:getDogearIconMenu()
     return items
 end
 
+-- ===== Note mark icon picker =====
+-- Icon drawn by this plugin over words that have a note (drawXPointerSavedHighlightNotes).
+-- Stored in G_reader_settings "highlight_note_mark_text" / "highlight_note_mark_size".
+-- nil or "@stock" = the plugin's own default icon.
+function PageTextInfo:getNoteMarkMenu()
+    local DEFAULT_SIZE = 14
+    local signs = {
+        { "\u{F040}", _("Pencil") },
+        { "\u{F02E}", _("Bookmark") },
+        { "\u{F075}", _("Speech bubble") },
+        { "\u{F005}", _("Star") },
+        { "✎", "✎" }, { "✍", "✍" }, { "※", "※" }, { "¶", "¶" },
+        { "†", "†" }, { "★", "★" }, { "◆", "◆" }, { "•", "•" }, { "*", "*" },
+    }
+
+    local function current()
+        return G_reader_settings:readSetting("highlight_note_mark_text")
+    end
+    local function currentSize()
+        return G_reader_settings:readSetting("highlight_note_mark_size") or DEFAULT_SIZE
+    end
+    -- Repaint the page so the change shows at once.
+    local function refresh(touchmenu_instance)
+        G_reader_settings:flush()
+        if touchmenu_instance then touchmenu_instance:updateItems() end
+        UIManager:setDirty("all", "ui")
+    end
+    local function choose(value, touchmenu_instance)
+        G_reader_settings:saveSetting("highlight_note_mark_text", value)
+        refresh(touchmenu_instance)
+    end
+
+    local items = {
+        {
+            text = _("Default icon"),
+            checked_func = function() local sel = current(); return sel == nil or sel == "@stock" end,
+            keep_menu_open = true,
+            separator = true,
+            callback = function(touchmenu_instance) choose("@stock", touchmenu_instance) end,
+        },
+    }
+    local known = {}
+    for __, s in ipairs(signs) do
+        local sign, label = s[1], s[2]
+        known[sign] = true
+        table.insert(items, {
+            text = sign == label and sign or (sign .. "  " .. label),
+            checked_func = function()
+                local sel = current()
+                return sel == sign
+            end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance) choose(sign, touchmenu_instance) end,
+        })
+    end
+    table.insert(items, {
+        text_func = function()
+            local sel = current()
+            if sel and sel ~= "@stock" and not known[sel] then
+                return T(_("Custom: %1"), sel)
+            end
+            return _("Custom…")
+        end,
+        checked_func = function()
+            local sel = current()
+            return sel ~= nil and sel ~= "@stock" and not known[sel]
+        end,
+        keep_menu_open = true,
+        separator = true,
+        callback = function(touchmenu_instance)
+            local InputDialog = require("ui/widget/inputdialog")
+            local dialog
+            dialog = InputDialog:new{
+                title = _("Note mark: any character or short text"),
+                input = (current() ~= "@stock" and current()) or "",
+                buttons = {{
+                    {
+                        text = _("Cancel"),
+                        id = "close",
+                        callback = function() UIManager:close(dialog) end,
+                    },
+                    {
+                        text = _("Save"),
+                        is_enter_default = true,
+                        callback = function()
+                            local value = dialog:getInputText()
+                            UIManager:close(dialog)
+                            if value and value:match("%S") then
+                                choose(value, touchmenu_instance)
+                            end
+                        end,
+                    },
+                }},
+            }
+            UIManager:show(dialog)
+            dialog:onShowKeyboard()
+        end,
+    })
+    local size_items = {}
+    for __, size in ipairs({ 10, 12, 14, 16, 18, 20, 24, 28 }) do
+        table.insert(size_items, {
+            text = size == DEFAULT_SIZE and T(_("%1 (default)"), size) or tostring(size),
+            checked_func = function() return currentSize() == size end,
+            keep_menu_open = true,
+            callback = function(touchmenu_instance)
+                G_reader_settings:saveSetting("highlight_note_mark_size", size)
+                refresh(touchmenu_instance)
+            end,
+        })
+    end
+    table.insert(items, {
+        text_func = function() return T(_("Size: %1"), currentSize()) end,
+        sub_item_table = size_items,
+    })
+    return items
+end
+
 function PageTextInfo:addToMainMenu(menu_items)
     -- If we don't want this being called for the filemanager, better to call self.ui.menu:registerToMainMenu(self) in the onReaderReady() event handler function
     -- Although we can set in the init() function and skip it like this:
@@ -3774,6 +3891,10 @@ This is to be active only if the option flash buttons and menu items or the opti
                             end,
                         },
                         {
+                            text = _("Note mark icon"),
+                            sub_item_table_func = function() return self:getNoteMarkMenu() end,
+                        },
+                        {
                             text = _("Show definitions"),
                             checked_func = function() return self.settings:isTrue("show_definitions") end,
                             -- enabled_func = function()
@@ -3853,12 +3974,13 @@ end
 function PageTextInfo:paintTo(bb, x, y)
 
     if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
-    if self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap") or self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
-        self:drawXPointerSavedHighlightNotes(bb, x, y)
-    end
-
+    -- Vocabulary first, notes after: the note icon goes on top of the dictionary gloss
     if self.words and self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
         self:drawXPointerVocabulary(bb, x, y)
+    end
+
+    if self.settings:isTrue("highlight_all_notes_and_allow_to_edit_them_on_tap") or self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") then
+        self:drawXPointerSavedHighlightNotes(bb, x, y)
     end
 
     local total_words = 0

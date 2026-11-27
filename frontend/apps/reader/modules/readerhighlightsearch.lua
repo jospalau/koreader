@@ -76,6 +76,127 @@ local function buildContext(r, text)
     return table.concat(parts)
 end
 
+-- Same as buildContext, but plain text (for notes).
+local function plainContext(r, text)
+    local parts = {}
+    if r.prev_text and r.prev_text ~= "" then
+        table.insert(parts, r.prev_text)
+        if not r.prev_text:find("%s$") then table.insert(parts, " ") end
+    end
+    table.insert(parts, (r.matched_word_prefix or "") .. (r.matched_text or text) .. (r.matched_word_suffix or ""))
+    if r.next_text and r.next_text ~= "" then
+        if not r.next_text:find("^[%s%p]") then table.insert(parts, " ") end
+        table.insert(parts, r.next_text)
+    end
+    return table.concat(parts)
+end
+
+-- Normalised form of a word, to compare a highlight's text with the searched word.
+local function normWord(s)
+    if type(s) ~= "string" then return "" end
+    s = util.stripPunctuation(util.cleanupSelectedText(s))
+    return (s:gsub("^%s+", ""):gsub("%s+$", ""):lower())
+end
+
+-- Add `note` to the note of the searched word, so that all passages build up in ONE note:
+--   1. a highlight on this spot (exactly this word, or a sentence containing it) that has a note;
+--   2. otherwise, any highlight of the same word elsewhere in the book that has a note;
+--   3. otherwise, a highlight on this spot without a note;
+--   4. otherwise, a new highlight on the long-pressed word.
+-- Existing note text is kept; the new passage is appended. Returns true, or false and a message.
+local function addNoteToSelection(hl, selection, note, word)
+    local ui = hl.ui
+    if not selection or not selection.pos0 or not selection.pos1 then
+        return false, "No word selected"
+    end
+    local annotation = ui.annotation
+    if not annotation or type(annotation.annotations) ~= "table" then
+        return false, "Annotations not available"
+    end
+    -- Highlight on this spot: exactly this word, otherwise one containing it
+    -- (preferring one with a note); a containing one without a note is kept as `fallback`.
+    local index
+    for i, a in ipairs(annotation.annotations) do
+        if a.pos0 == selection.pos0 and a.pos1 == selection.pos1 then
+            index = i
+            break
+        end
+    end
+    local document = ui.document
+    local fallback
+    if not index and type(selection.pos0) == "string" and type(document.compareXPointers) == "function" then
+        -- compareXPointers(a, b): 1 if b follows a, 0 if equal, -1 if a follows b
+        local function notAfter(a, b)
+            local ok, c = pcall(document.compareXPointers, document, a, b)
+            return ok and type(c) == "number" and c >= 0
+        end
+        for i, a in ipairs(annotation.annotations) do
+            if type(a.pos0) == "string" and type(a.pos1) == "string"
+                    and notAfter(a.pos0, selection.pos0) and notAfter(selection.pos1, a.pos1) then
+                if a.note and a.note ~= "" then
+                    index = i
+                    break
+                end
+                fallback = fallback or i
+            end
+        end
+    end
+    local has_note = function(i)
+        local a = i and annotation.annotations[i]
+        return a and a.note and a.note ~= ""
+    end
+    if not has_note(index) then
+        local spot = index or fallback
+        index = nil
+        -- Same word elsewhere in the book that already has a note (first in reading order).
+        local target = normWord(word)
+        if target ~= "" then
+            for i, a in ipairs(annotation.annotations) do
+                if has_note(i) and normWord(a.text) == target then
+                    index = i
+                    break
+                end
+            end
+        end
+        index = index or spot
+    end
+    local created = false
+    if not index then
+        -- saveHighlight() works on hl.selected_text: lend it a copy of the saved selection
+        -- (it may modify it). Recent KOReader also takes the note from selected_text.note.
+        local sel = {}
+        for k, v in pairs(selection) do sel[k] = v end
+        sel.note = note
+        local prev = hl.selected_text
+        hl.selected_text = sel
+        local ok, res = pcall(hl.saveHighlight, hl)
+        hl.selected_text = prev
+        if not ok then return false, tostring(res) end
+        if type(res) ~= "number" then return false, "Could not create the highlight" end
+        index = res
+        created = true
+    end
+    local item = annotation.annotations[index]
+    if not item then return false, "Highlight not found" end
+    -- Events as KOReader's own note editing (ReaderBookmark:setBookmarkNote) sends them.
+    -- Never pass index_modified here: it means "an annotation was inserted at this index" and makes
+    -- ReaderView shift the cached highlight indexes (taps would then open the wrong one, or crash).
+    if not created and item.note and item.note ~= "" then
+        -- Note already there: append. The note mark does not change, only the modification date.
+        item.note = item.note .. "\n\n" .. note
+        if type(annotation.onAnnotationsModified) == "function" then
+            pcall(annotation.onAnnotationsModified, annotation, { item })
+        end
+    else
+        -- Highlight becomes a note (also right after saveHighlight, which counted it as a highlight).
+        item.note = note
+        ui:handleEvent(Event:new("AnnotationsModified",
+            { item, nb_highlights_added = -1, nb_notes_added = 1 }))
+    end
+    UIManager:setDirty(hl.dialog, "ui")
+    return true
+end
+
 -- Returns the font file (and face index) used by the book, or nil to keep the UI font.
 -- The face name -> file lookup lives in the cre library, not in the document object.
 local function getBookFontFile(ui)
@@ -219,6 +340,9 @@ function ReaderHighlightSearch:search(hl)
     local text = util.stripPunctuation(util.cleanupSelectedText(hl.selected_text.text))
     -- Save the position BEFORE clear(), which resets it.
     local selected_position = hl.selected_text.pos0 or hl.selected_text_start_xpointer
+    -- Copy of the selection, so a note can be attached to this word later (hold on a list row).
+    local saved_selection = {}
+    for k, v in pairs(hl.selected_text) do saved_selection[k] = v end
     hl:clear()
     if text == "" then return end
 
@@ -315,6 +439,7 @@ function ReaderHighlightSearch:search(hl)
                 -- Page number shown on the right of each row.
                 mandatory = r.page and tostring(r.page) or nil,
                 result = r,
+                short = short,
                 n = i,
             })
         end
@@ -340,6 +465,21 @@ function ReaderHighlightSearch:search(hl)
                 -- Close the list before opening another interactive window.
                 UIManager:close(this_menu)
                 UIManager:nextTick(function() showPreview(item.result, item.n, data) end)
+            end,
+            -- Hold on a row: save that passage as a note on the searched word.
+            onMenuHold = function(this_menu, item)
+                if not item or not item.result then return true end
+                local note = plainContext(item.short or item.result, text)
+                if item.result.page then
+                    note = string.format("p. %s: %s", tostring(item.result.page), note)
+                end
+                local ok, err = addNoteToSelection(hl, saved_selection, note, text)
+                UIManager:show(InfoMessage:new{
+                    text = ok and ("Added as a note to “" .. text .. "”")
+                              or ("Could not add the note" .. (err and ("\n" .. err) or "")),
+                    timeout = ok and 2 or nil,
+                })
+                return true
             end,
         }
         UIManager:show(menu)

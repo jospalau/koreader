@@ -861,10 +861,44 @@ end
 local NOTE_MARK_STYLE = "page"
 local NOTE_MARK_RADIUS = 3   -- only for "dot": radius (scaled to the screen)
 
+-- Icon chosen in the menu (Highlight > Note mark icon of main.lua): any character, stored in
+-- G_reader_settings "highlight_note_mark_text" (nil or "@stock" = the NOTE_MARK_STYLE drawing)
+-- and "highlight_note_mark_size". The widget is kept while the choice does not change.
+local custom_mark_widget, custom_mark_key
+local function customNoteMark()
+    local text = G_reader_settings:readSetting("highlight_note_mark_text")
+    if type(text) ~= "string" or text == "" or text == "@stock" then return nil end
+    local size = tonumber(G_reader_settings:readSetting("highlight_note_mark_size")) or 14
+    local key = text .. "\0" .. size
+    if custom_mark_key ~= key then
+        if custom_mark_widget then pcall(custom_mark_widget.free, custom_mark_widget) end
+        local ok, widget = pcall(TextWidget.new, TextWidget, {
+            text = text,
+            face = Font:getFace("cfont", size),   -- the symbol fallback fonts give the icons
+            fgcolor = Blitbuffer.COLOR_BLACK,
+            padding = 0,
+        })
+        custom_mark_widget = ok and widget or nil
+        custom_mark_key = key
+    end
+    return custom_mark_widget
+end
+
 local function paintNoteMark(bb, box)
     local sc = Screen.scaleBySize
     local black, white = Blitbuffer.COLOR_BLACK, Blitbuffer.COLOR_WHITE
     local W = Screen:getWidth()
+    local mark = customNoteMark()
+    if mark then
+        -- same place as the "page" icon: top right corner of the word
+        local size = mark:getSize()
+        local w, h = size.w, size.h
+        local x = math.min(box.x + box.w - math.floor(w * 0.5), W - w - 1)
+        local y = math.max(0, box.y - math.floor(h * 0.6))
+        -- no background: only the icon is drawn, the text under it stays visible
+        mark:paintTo(bb, x, y)
+        return
+    end
     if NOTE_MARK_STYLE == "bubble" then
         local w, h = sc(Screen, 13), sc(Screen, 9)
         local x = math.min(box.x + box.w - math.floor(w * 0.6), W - w - 1)
