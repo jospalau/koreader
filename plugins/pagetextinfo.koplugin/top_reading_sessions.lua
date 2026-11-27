@@ -3925,8 +3925,10 @@ local VIEWS = {
     {
         -- Books finished in a year, the most recently read first. A tap on the window changes the year (see
         -- onTapClose): it opens on the current year, then goes from the oldest year in the database onwards and
-        -- round again. Each book shows its wpm and its stable (reference) pages per hour when its sessions saved
-        -- the exact figures (words, read_secs, ref_pages).
+        -- round again. Each book shows its wpm and its stable (reference) pages per hour. The wpm uses the sessions that
+        -- saved words and read_secs (reference pages are not needed); a book whose sessions have none of them falls back to
+        -- the wpm column of the table (weighted by the duration of the sessions). The stable pages per hour only use
+        -- the sessions that saved reference pages.
         finished_years = true,
         title = function(win)
             return string.format("%s" .. TITLE_SEPARATOR .. "%d", _("Books Finished"),
@@ -3947,19 +3949,22 @@ local VIEWS = {
                     local year_start = os.time({ year = year, month = 1, day = 1, hour = 0 })
                     local year_end = os.time({ year = year + 1, month = 1, day = 1, hour = 0 })
                     local filter = getFinishedBooksFilter(year)
-                    -- the exact columns may not be in the database yet: then no wpm and no pages per hour
+                    -- the columns may not be in the database yet: then that figure is left out
                     local have = {}
                     for _i, name in ipairs(queryAll("PRAGMA table_info(wpm_stat_data)",
                             function(row) return tostring(row[2]) end) or {}) do
                         have[name] = true
                     end
-                    local exact_sums = "NULL, NULL, NULL"
-                    if have.words and have.read_secs and have.ref_pages then
-                        local c = "w.words IS NOT NULL AND w.read_secs > 0 AND w.ref_pages IS NOT NULL"
-                        exact_sums = string.format(
-                            "SUM(CASE WHEN %s THEN w.words END), SUM(CASE WHEN %s THEN w.read_secs END), "
-                            .. "SUM(CASE WHEN %s THEN w.ref_pages END)", c, c, c)
-                    end
+                    -- sessions with words and reading time (wpm), and sessions with reference pages (stable p/h)
+                    local cw = (have.words and have.read_secs) and "w.words IS NOT NULL AND w.read_secs > 0" or "0"
+                    local cr = (have.ref_pages and have.read_secs) and "w.ref_pages IS NOT NULL AND w.read_secs > 0" or "0"
+                    -- last two: the wpm column of the table times the duration, and the duration, of the sessions that
+                    -- have a wpm: the fallback for books without words and reading time
+                    local sums = string.format(
+                        "SUM(CASE WHEN %s THEN w.words END), SUM(CASE WHEN %s THEN w.read_secs END), "
+                        .. "SUM(CASE WHEN %s THEN w.ref_pages END), SUM(CASE WHEN %s THEN w.read_secs END), "
+                        .. "SUM(CASE WHEN w.wpm > 0 THEN w.wpm * w.duration END), "
+                        .. "SUM(CASE WHEN w.wpm > 0 THEN w.duration END)", cw, cw, cr, cr)
                     -- books with less than a minute are accidental openings
                     return string.format([[
                         SELECT book.title, SUM(w.duration), COUNT(*), MAX(w.start_time), %s
@@ -3970,18 +3975,26 @@ local VIEWS = {
                         HAVING SUM(w.duration) >= 60
                         ORDER BY MAX(w.start_time) DESC
                         LIMIT 100
-                    ]], exact_sums, year_start, year_end, filter)
+                    ]], sums, year_start, year_end, filter)
                 end,
                 map = function(row, n)
+                    local words, secs = tonumber(row[5]) or 0, tonumber(row[6]) or 0
+                    if secs <= 0 then
+                        -- no words and reading time saved: the wpm column of the table, as the words and the time
+                        -- that give that same wpm (so the books can still be added up)
+                        local num, den = tonumber(row[9]) or 0, tonumber(row[10]) or 0
+                        if den > 0 then words, secs = num / 60, den end
+                    end
                     return {
                         rank = n,
                         title = row[1] or _("Unknown"),
                         duration = tonumber(row[2]),
                         sessions = tonumber(row[3]) or 0,
                         last = tonumber(row[4]) or 0,
-                        words = tonumber(row[5]) or 0,
-                        read_secs = tonumber(row[6]) or 0,
+                        words = words,
+                        read_secs = secs,
                         ref_pages = tonumber(row[7]) or 0,
+                        ref_secs = tonumber(row[8]) or 0,
                     }
                 end,
                 -- rank number, then the title and "sessions · last read · wpm · stable pages per hour"
@@ -3993,8 +4006,10 @@ local VIEWS = {
                     if item.read_secs > 0 then
                         parts[#parts + 1] = string.format("%d %s",
                             math.floor(item.words / (item.read_secs / 60) + 0.5), _("wpm"))
+                    end
+                    if item.ref_secs > 0 then
                         parts[#parts + 1] = string.format("%s %s",
-                            formatAverage(item.ref_pages * 3600 / item.read_secs), _("stable p/h"))
+                            formatAverage(item.ref_pages * 3600 / item.ref_secs), _("stable p/h"))
                     end
                     return HorizontalGroup:new{
                         align = "top",
@@ -4049,17 +4064,21 @@ local VIEWS = {
             local rows_fit = math.max(1, math.floor(Screen:getHeight() * 0.7 / effective_row_height))
             local scrollable_height = math.min(num_items, rows_fit, 12) * effective_row_height
 
-            -- number of books, the time spent on them, and wpm and pages per hour of their exact sessions
-            local total, words, secs, pages = 0, 0, 0, 0
+            -- number of books, the time spent on them, and their wpm and stable pages per hour
+            local total, words, secs, pages, ref_secs = 0, 0, 0, 0, 0
             for _i, item in ipairs(items) do
                 total = total + (item.duration or 0)
-                words, secs, pages = words + item.words, secs + item.read_secs, pages + item.ref_pages
+                words, secs = words + item.words, secs + item.read_secs
+                pages, ref_secs = pages + item.ref_pages, ref_secs + item.ref_secs
             end
             local summary = string.format("%s %d %s" .. SUMMARY_SEPARATOR .. "%s",
                 _("Total"), #items, #items == 1 and _("book") or _("books"), secondsToDH(total))
             if secs > 0 then
                 summary = summary .. SUMMARY_SEPARATOR .. string.format("%d %s", math.floor(words / (secs / 60) + 0.5),
-                    _("wpm")) .. SUMMARY_SEPARATOR .. formatAverage(pages * 3600 / secs) .. " " .. _("stable p/h")
+                    _("wpm"))
+            end
+            if ref_secs > 0 then
+                summary = summary .. SUMMARY_SEPARATOR .. formatAverage(pages * 3600 / ref_secs) .. " " .. _("stable p/h")
             end
             return {
                 SwipePassthroughScrollable:new{
