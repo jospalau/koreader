@@ -992,6 +992,15 @@ function PageTextInfo:showSessionOverlay(texts, strike_icon)
         UIManager:setDirty(overlay, "ui", overlay.regions[i])
     end
 
+    -- "Fade out big texts" off (menu): no fade steps, the text goes at once after the same total time
+    if self.settings:isTrue("no_overlay_fade") then
+        UIManager:scheduleIn(cfg.hold + #cfg.fade_colors * cfg.fade_interval, function()
+            if self.session_overlay_token ~= token or self.session_overlay ~= overlay then return end
+            self:closeSessionOverlay()
+        end)
+        return
+    end
+
     local function fadeStep(i)
         if self.session_overlay_token ~= token or self.session_overlay ~= overlay then return end
         local grey = cfg.fade_colors[i]
@@ -2489,20 +2498,24 @@ function PageTextInfo:setXHeightFont(target_mm)
 end
 
 -- Same event name as before, so gestures/dispatcher actions keep working.
--- Tap top left: always the next preset (1 -> 2 -> 3 -> 1), with its font x-height. Top bar and footer are not
--- looked at. Preset 3 with the top bar "hidden": top and bottom 15. A custombg picture at the bottom sets the
+-- Tap top left: always the next preset (1 -> 2 -> 3 -> 1), with its font x-height; its number is shown big over
+-- the page for a moment. Top bar and footer are not looked at. Preset 3 with the top bar "hidden": top and
+-- bottom 15. A custombg picture at the bottom sets the
 -- bottom margin (applyMargins).
 function PageTextInfo:onAdjustMarginsTopbar()
     if not self.ui.rolling then return end
     local presets = PageTextInfo.margin_presets
     local idx = self:getCurrentPresetIndex()
-    local p = presets[idx and (idx % #presets) + 1 or 1]
+    local next_idx = idx and (idx % #presets) + 1 or 1
+    local p = presets[next_idx]
     local t = { p[1], p[2], p[3], p[4] }
     if p.hidden_top_bottom and self.view and self.view.topbar and self:getTopBarMode() == "hidden" then
         t[2], t[4] = p.hidden_top_bottom, p.hidden_top_bottom
     end
     self:applyMargins(t)
     self:setXHeightFont(p.xheight_mm)
+    -- the number of the preset big over the page, same style and fade as the frontlight "Off" (showSessionOverlay)
+    self:showSessionOverlay({ tostring(next_idx) })
     return true
 end
 
@@ -3307,6 +3320,16 @@ This is to be active only if the option flash buttons and menu items or the opti
                 --         return true
                 --     end,
                 -- },
+                {
+                    text = _("Fade out big texts"),
+                    checked_func = function() return not self.settings:isTrue("no_overlay_fade") end,
+                    help_text = _([[The big texts over the page (frontlight "Off", the number of the margin preset and the clock / session time / wpm of the bottom right tap) fade out in some steps. Each step is a refresh of the screen. Unchecked, they go away at once.]]),
+                    callback = function()
+                        self.settings:saveSetting("no_overlay_fade", not self.settings:isTrue("no_overlay_fade"))
+                        self.settings:flush()
+                        return true
+                    end,
+                },
                 {
                     text = _("Enable ruler"),
                     checked_func = function() return self.settings:isTrue("enable_ruler") end,
