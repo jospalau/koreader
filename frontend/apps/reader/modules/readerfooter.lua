@@ -908,7 +908,7 @@ function ReaderFooter:rescheduleFooterAutoRefreshIfNeeded()
                 end
                 --self:onUpdateFooter(self:shouldBeRepainted())
                 if self:shouldBeRepainted() then
-                    self:refresh()
+                    self:refresh(true) -- automatic: the top strip is only refreshed when the top bar is on
                 end
             end
             self:rescheduleFooterAutoRefreshIfNeeded() -- schedule (or not) next refresh
@@ -2841,7 +2841,7 @@ function ReaderFooter:onToggleFooterMode()
     return self:refresh()
 end
 
-function ReaderFooter:refresh()
+function ReaderFooter:refresh(automatic)
     if util.getFileNameSuffix(self.ui.document.file) ~= "epub" then return end
     -- With the following two calls we will have fast or ui (depending if we are scrolling or not) refreshes when toggling the footer mode
     -- We can do the refreshes manually like in the previous commented block but the problem is that if we hide the footer toggling it, turn a page and show it toggling it
@@ -2849,10 +2849,12 @@ function ReaderFooter:refresh()
     -- There is a function updateFooterText() which will be doing it as a result of calling self:onUpdateFooter(true)
     -- This function will perform afterwards the other refresh needed
     self:onUpdateFooter(false)
-    UIManager:setDirty(self.view.dialog, function()
-        return self.view.currently_scrolling and "fast" or "ui",
-        Geom:new{ w = Screen:getWidth(), h = self.ui.view.topbar:getHeight(), y = 0}
-    end)
+    if not automatic or self.view.topbar.settings:isTrue("show_top_bar") then
+        UIManager:setDirty(self.view.dialog, function()
+            return self.view.currently_scrolling and "fast" or "ui",
+            Geom:new{ w = Screen:getWidth(), h = self.ui.view.topbar:getHeight(), y = 0}
+        end)
+    end
     local footer_height = self:getHeight2()
     local bottom_height = self.ui.view.topbar:getBottomHeight() > footer_height
     and self.ui.view.topbar:getBottomHeight()
