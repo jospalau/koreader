@@ -28,6 +28,7 @@ local PANEL_PADDING = Size.padding.small
 local PANEL_MARGIN = Screen:scaleBySize(6) -- distance from the screen's edge
 local SEP = "  \194\183  "                  -- "  ·  "
 local SHOW_CFL = true                      -- characters on the first line
+local SHOW_CML = true                      -- characters on the page's longest line
 local MIN_WPM_MINUTES = 0.1                -- only for the fallback wpm (stock statistics plugin)
 
 local HYPHEN_FIX = true   -- a word split by a hyphen at the end of a line counts once
@@ -82,6 +83,14 @@ end
 
 local function countWords(text)
     return (scanLine(text))
+end
+
+-- Characters, not bytes: every byte that is not a UTF-8 continuation byte.
+-- Leading/trailing spaces and the paragraph's final newline are not counted.
+local function countChars(text)
+    if not text then return 0 end
+    text = text:gsub("^%s+", ""):gsub("%s+$", "")
+    return select(2, text:gsub("[^\128-\191]", ""))
 end
 
 -- ─── the lines on the page ───────────────────────────────────────────────────
@@ -142,10 +151,11 @@ local function getLineCounts(self, boxes)
     local lines = groupLines(boxes)
     local engine = self.ui.document._document
     local width = Screen:getWidth()
-    local counts, total, prev = {}, 0, nil
+    local counts, total, prev, max_chars = {}, 0, nil, 0
     for i, line in ipairs(lines) do
         local res = engine:getTextFromPositions(line.x, line.y, width, line.y, false, false)
         local n, first, last, hyphenated = scanLine(res and res.text)
+        max_chars = math.max(max_chars, countChars(res and res.text))
         if HYPHEN_FIX and prev and n > 0 then
             if prev.last and first == prev.last and #first >= 4 then
                 n = n - 1 -- the engine returned the whole word on both lines
@@ -160,7 +170,7 @@ local function getLineCounts(self, boxes)
         total = total + n
         prev = { last = last, hyphenated = hyphenated }
     end
-    cache = { sig = sig, lines = lines, counts = counts, total = total }
+    cache = { sig = sig, lines = lines, counts = counts, total = total, max_chars = max_chars }
     self._wc_cache = sig and cache or nil
     return cache, true
 end
@@ -184,6 +194,7 @@ local function paintLineCounts(self, bb, x, y)
     local right_edge = x + Screen:getWidth()
     local data, fresh = getLineCounts(self, boxes)
     self._wc_total = data.total
+    self._wc_max_chars = data.max_chars
 
     if DEBUG and fresh then
         local _, engine_words = self.ui.view:getCurrentPageLineWordCounts()
@@ -260,12 +271,11 @@ local function updateInfoPanels(self)
     local parts = { "Lines " .. tostring(nblines or 0), "Words " .. tostring(words_page or 0) }
     if SHOW_CFL then
         local first = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), 1, false, true)
-        local chars = 0
-        if first and first.text then
-            -- characters, not bytes: count every byte that is not a UTF-8 continuation byte
-            chars = select(2, first.text:gsub("[^\128-\191]", ""))
-        end
-        parts[#parts + 1] = "CFL " .. chars
+        parts[#parts + 1] = "CFL " .. countChars(first and first.text)
+    end
+    if SHOW_CML then
+        -- worked out by paintLineCounts with the line counts (cached per layout)
+        parts[#parts + 1] = "CML " .. tostring(self._wc_max_chars or 0)
     end
     setLine(panel, 1, table.concat(parts, SEP))
 
