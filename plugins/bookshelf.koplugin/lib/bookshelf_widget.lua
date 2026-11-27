@@ -1145,7 +1145,12 @@ function BookshelfWidget:_rebuild()
         if self._chip_sort and self._chip_sort.chip ~= self.chip then self._chip_sort = nil end
         local o = t and t.payload and t.payload._sort_override
         if not t then o = self._chip_sort end
-        require("lib/bookshelf_tokens").sort_label = o and BookshelfWidget._sortLabel(o) or ""
+        local tokens = require("lib/bookshelf_tokens")
+        local label = o and BookshelfWidget._sortLabel(o) or ""
+        -- the status line is not always rebuilt with the shelf (a book card kept for a shelf switch keeps its own),
+        -- so a label that changed is repainted at the end of this rebuild
+        if (tokens.sort_label or "") ~= label then self._sort_label_stale = true end
+        tokens.sort_label = label
     end
     local switching = self:_rebuildPrepare()
     local _perf_t0   = _gettime()
@@ -1859,6 +1864,10 @@ function BookshelfWidget:_rebuild()
         -- trigger has to run on this branch too, or a fresh catalog chip
         -- dead-ends on "No books yet" and nothing ever fetches it.
         self:_opdsAfterPage(self._page_items)
+        if self._sort_label_stale then
+            self._sort_label_stale = nil
+            pcall(self.refreshStatusLine, self)
+        end
         return
     end
 
@@ -2410,6 +2419,11 @@ function BookshelfWidget:_rebuild()
     -- onCloseDocument); softRefresh has nothing to bring up to date while
     -- it holds.
     self._tree_fresh = true
+    -- %sort_label in the status line follows the sort of the shelf now on screen (a new chip or a group left clears it)
+    if self._sort_label_stale then
+        self._sort_label_stale = nil
+        pcall(self.refreshStatusLine, self)
+    end
 end
 
 -- _buildChipBar(L) -> ChipBar, or false when the shelf menu is hidden
