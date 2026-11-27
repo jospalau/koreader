@@ -2608,8 +2608,9 @@ local function getFinishedFilesFromAllFiles(year)
     return files
 end
 
--- Returns the SQL condition that selects the finished books, or "0" if none
-local function getFinishedBooksFilter()
+-- Returns the SQL condition that selects the books finished in `year` (nil: the current one), or "0" if none
+local function getFinishedBooksFilter(year)
+    year = year or os.date("*t").year
     local t0 = Perf.start()
     local DocSettings = require("docsettings")
     local ReadHistory = require("readhistory")
@@ -2623,8 +2624,8 @@ local function getFinishedBooksFilter()
         end
     end
 
-    -- Fast path: the books finished this year, straight from _G.all_files
-    local files = getFinishedFilesFromAllFiles(os.date("*t").year)
+    -- Fast path: the books finished in that year, straight from _G.all_files
+    local files = getFinishedFilesFromAllFiles(year)
     local from_all_files = files ~= nil
 
     if not files then
@@ -3818,77 +3819,6 @@ local VIEWS = {
         build = buildHeatmapView,
     },
     {
-        -- finished books read this year, most time first
-        title = yearTitle(_("Books Finished")),
-        -- says what was found, to tell if the problem is detecting finished books
-        empty = function()
-            return string.format(_("No finished books read this year (%s)"), finished_info)
-        end,
-        row_height = ROW_HEIGHT_TALL,
-        bar_indent = BOOK_RANK_W,
-        -- number of books and the time spent on them
-        summary = function(items)
-            local total = 0
-            for _i, item in ipairs(items) do total = total + (item.duration or 0) end
-            return string.format("%s %d %s" .. SUMMARY_SEPARATOR .. "%s",
-                _("Total"), #items, _("books"), secondsToDH(total))
-        end,
-        sql = function()
-            local year_start = os.time({ year = os.date("*t").year, month = 1, day = 1, hour = 0 })
-            local filter = getFinishedBooksFilter()
-            -- books with less than a minute are accidental openings
-            return string.format([[
-                SELECT book.title, SUM(wpm_stat_data.duration), COUNT(*), MAX(wpm_stat_data.start_time)
-                FROM wpm_stat_data
-                INNER JOIN book ON wpm_stat_data.id_book = book.id
-                WHERE wpm_stat_data.start_time >= %d AND %s
-                GROUP BY book.id
-                HAVING SUM(wpm_stat_data.duration) >= 60
-                ORDER BY SUM(wpm_stat_data.duration) DESC
-                LIMIT 100
-            ]], year_start, filter)
-        end,
-        map = function(row, n)
-            return {
-                rank = n,
-                title = row[1] or _("Unknown"),
-                duration = tonumber(row[2]),
-                sessions = tonumber(row[3]) or 0,
-                last = tonumber(row[4]) or 0,
-            }
-        end,
-        -- rank number, then the title and "sessions · last read"
-        left = function(item, ctx)
-            return HorizontalGroup:new{
-                align = "top",
-                LeftContainer:new{
-                    dimen = Geom:new{ w = BOOK_RANK_W, h = Screen:scaleBySize(22) },
-                    TextWidget:new{
-                        text = tostring(item.rank),
-                        face = getFace(FONT_TEXT),
-                        bold = true,
-                        fgcolor = item.rank <= 3 and COLOR_TEXT or COLOR_MUTED,
-                    },
-                },
-                VerticalGroup:new{
-                    align = "left",
-                    TextWidget:new{
-                        text = item.title,
-                        face = getFace(FONT_TEXT),
-                        max_width = ctx.max_width - BOOK_RANK_W,
-                        ellipsis = true,
-                    },
-                    TextWidget:new{
-                        text = string.format("%d %s" .. SUMMARY_SEPARATOR .. "%s %s",
-                            item.sessions, _("sessions"), _("last"), os.date("%d/%m", item.last)),
-                        face = getFace(FONT_CAPTION),
-                        fgcolor = COLOR_MUTED,
-                    },
-                },
-            }
-        end,
-    },
-    {
         title = _("Time per Month"),
         empty = _("No monthly data found"),
         row_height = ROW_HEIGHT_NORMAL,
@@ -3977,6 +3907,156 @@ local VIEWS = {
             return { name = row[1], duration = tonumber(row[2]) }
         end,
         left = textLabel("name"),
+    },
+    {
+        -- Books finished in a year, the most recently read first. A tap on the window changes the year (see
+        -- onTapClose): it opens on the current year, then goes from the oldest year in the database onwards and
+        -- round again. Each book shows its wpm and its stable (reference) pages per hour when its sessions saved
+        -- the exact figures (words, read_secs, ref_pages).
+        finished_years = true,
+        title = function(win)
+            return string.format("%s" .. TITLE_SEPARATOR .. "%d", _("Books Finished"),
+                (win and win.finished_year) or os.date("*t").year)
+        end,
+        build = function(w_width, parent)
+            local year = (parent and parent.finished_year) or os.date("*t").year
+            local empty_msg
+            local def = {
+                row_height = ROW_HEIGHT_TALL,
+                bar_indent = BOOK_RANK_W,
+                -- says what was found, to tell if the problem is detecting finished books
+                empty = function()
+                    empty_msg = string.format(_("No finished books read in %d (%s)"), year, finished_info)
+                    return empty_msg
+                end,
+                sql = function()
+                    local year_start = os.time({ year = year, month = 1, day = 1, hour = 0 })
+                    local year_end = os.time({ year = year + 1, month = 1, day = 1, hour = 0 })
+                    local filter = getFinishedBooksFilter(year)
+                    -- the exact columns may not be in the database yet: then no wpm and no pages per hour
+                    local have = {}
+                    for _i, name in ipairs(queryAll("PRAGMA table_info(wpm_stat_data)",
+                            function(row) return tostring(row[2]) end) or {}) do
+                        have[name] = true
+                    end
+                    local exact_sums = "NULL, NULL, NULL"
+                    if have.words and have.read_secs and have.ref_pages then
+                        local c = "w.words IS NOT NULL AND w.read_secs > 0 AND w.ref_pages IS NOT NULL"
+                        exact_sums = string.format(
+                            "SUM(CASE WHEN %s THEN w.words END), SUM(CASE WHEN %s THEN w.read_secs END), "
+                            .. "SUM(CASE WHEN %s THEN w.ref_pages END)", c, c, c)
+                    end
+                    -- books with less than a minute are accidental openings
+                    return string.format([[
+                        SELECT book.title, SUM(w.duration), COUNT(*), MAX(w.start_time), %s
+                        FROM wpm_stat_data w
+                        INNER JOIN book ON w.id_book = book.id
+                        WHERE w.start_time >= %d AND w.start_time < %d AND %s
+                        GROUP BY book.id
+                        HAVING SUM(w.duration) >= 60
+                        ORDER BY MAX(w.start_time) DESC
+                        LIMIT 100
+                    ]], exact_sums, year_start, year_end, filter)
+                end,
+                map = function(row, n)
+                    return {
+                        rank = n,
+                        title = row[1] or _("Unknown"),
+                        duration = tonumber(row[2]),
+                        sessions = tonumber(row[3]) or 0,
+                        last = tonumber(row[4]) or 0,
+                        words = tonumber(row[5]) or 0,
+                        read_secs = tonumber(row[6]) or 0,
+                        ref_pages = tonumber(row[7]) or 0,
+                    }
+                end,
+                -- rank number, then the title and "sessions · last read · wpm · stable pages per hour"
+                left = function(item, ctx)
+                    local parts = {
+                        string.format("%d %s", item.sessions, _("sessions")),
+                        string.format("%s %s", _("last"), os.date("%d/%m", item.last)),
+                    }
+                    if item.read_secs > 0 then
+                        parts[#parts + 1] = string.format("%d %s",
+                            math.floor(item.words / (item.read_secs / 60) + 0.5), _("wpm"))
+                        parts[#parts + 1] = string.format("%s %s",
+                            formatAverage(item.ref_pages * 3600 / item.read_secs), _("stable p/h"))
+                    end
+                    return HorizontalGroup:new{
+                        align = "top",
+                        LeftContainer:new{
+                            dimen = Geom:new{ w = BOOK_RANK_W, h = Screen:scaleBySize(22) },
+                            TextWidget:new{
+                                text = tostring(item.rank),
+                                face = getFace(FONT_TEXT),
+                                bold = true,
+                                fgcolor = item.rank <= 3 and COLOR_TEXT or COLOR_MUTED,
+                            },
+                        },
+                        VerticalGroup:new{
+                            align = "left",
+                            TextWidget:new{
+                                text = item.title,
+                                face = getFace(FONT_TEXT),
+                                max_width = ctx.max_width - BOOK_RANK_W,
+                                ellipsis = true,
+                            },
+                            TextWidget:new{
+                                text = table.concat(parts, SUMMARY_SEPARATOR),
+                                face = getFace(FONT_CAPTION),
+                                fgcolor = COLOR_MUTED,
+                                max_width = ctx.max_width - BOOK_RANK_W,
+                                ellipsis = true,
+                            },
+                        },
+                    }
+                end,
+            }
+
+            local rows, num_items, row_height, items = buildRows(def, w_width)
+            if not rows then
+                -- a year without finished books still shows the window, so a tap can go on to the next year
+                if empty_msg and num_items == empty_msg then
+                    return {
+                        CenterContainer:new{
+                            dimen = Geom:new{ w = w_width, h = Screen:scaleBySize(120) },
+                            TextBoxWidget:new{
+                                text = empty_msg, face = getFace(FONT_SUBTITLE), bold = true,
+                                fgcolor = COLOR_MUTED, width = w_width, alignment = "center",
+                            },
+                        },
+                    }
+                end
+                return nil, num_items
+            end
+
+            -- as many rows as fit in 70% of the screen, up to 12
+            local effective_row_height = row_height + Size.line.thin
+            local rows_fit = math.max(1, math.floor(Screen:getHeight() * 0.7 / effective_row_height))
+            local scrollable_height = math.min(num_items, rows_fit, 12) * effective_row_height
+
+            -- number of books, the time spent on them, and wpm and pages per hour of their exact sessions
+            local total, words, secs, pages = 0, 0, 0, 0
+            for _i, item in ipairs(items) do
+                total = total + (item.duration or 0)
+                words, secs, pages = words + item.words, secs + item.read_secs, pages + item.ref_pages
+            end
+            local summary = string.format("%s %d %s" .. SUMMARY_SEPARATOR .. "%s",
+                _("Total"), #items, #items == 1 and _("book") or _("books"), secondsToDH(total))
+            if secs > 0 then
+                summary = summary .. SUMMARY_SEPARATOR .. string.format("%d %s", math.floor(words / (secs / 60) + 0.5),
+                    _("wpm")) .. SUMMARY_SEPARATOR .. formatAverage(pages * 3600 / secs) .. " " .. _("stable p/h")
+            end
+            return {
+                SwipePassthroughScrollable:new{
+                    dimen = Geom:new{ w = w_width, h = scrollable_height },
+                    show_parent = parent,
+                    rows,
+                },
+                makeVerticalSpacing(SPACE.xl, 0.8),
+                makeSummaryLine(w_width, summary),
+            }
+        end,
     },
 }
 
@@ -4451,6 +4531,28 @@ function ShowLongestSessionsWindow:onTapClose(arg, ges)
     -- to where it was picked instead of closing
     if self.back and not self:isOnWindow(ges) then
         self:replaceWith(self.back)
+        return true
+    end
+    -- on the finished books a tap on the window changes the year: the current one first, then from the oldest year
+    -- in the database onwards, and round again (2026 -> 2020 -> 2021 ... -> 2025 -> 2026)
+    if VIEWS[self.current_view].finished_years and self:isOnWindow(ges) then
+        local now_year = os.date("*t").year
+        local years = {}
+        for _i, y in ipairs(queryAll([[
+            SELECT DISTINCT CAST(strftime('%Y', start_time, 'unixepoch', 'localtime') AS INTEGER)
+            FROM wpm_stat_data WHERE start_time > 0 ORDER BY 1
+        ]], function(row) return tonumber(row[1]) end) or {}) do
+            if y and y <= now_year then years[#years + 1] = y end
+        end
+        local cur = self.finished_year or now_year
+        local next_year
+        for _i, y in ipairs(years) do
+            if y > cur then next_year = y break end
+        end
+        next_year = next_year or years[1] or now_year   -- past the last year: back to the oldest
+        if next_year ~= cur then
+            self:replaceWith{ current_view = self.current_view, finished_year = next_year }
+        end
         return true
     end
     -- on the days read per year a tap on the window changes between the years and the days of the week
