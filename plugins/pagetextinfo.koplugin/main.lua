@@ -1233,11 +1233,6 @@ function PageTextInfo:installTopBarHiddenPaint()
             c:paintTo(bb, x + Screen:getWidth() - c[1]:getSize().w - right, py)
         end)
         if not ok then logger.warn("pagetextinfo: corner mark in hidden top bar failed:", err) end
-        -- The light (☼) and margins (● / ○) indicator is shown in the hidden mode too
-        if tb.paintLightAndMarginIndicator then
-            local ok_ind, err_ind = pcall(tb.paintLightAndMarginIndicator, tb, bb, x, y)
-            if not ok_ind then logger.warn("pagetextinfo: light/margins indicator in hidden top bar failed:", err_ind) end
-        end
     end
     topbar._pagetextinfo_hidden_paint = true
     local orig_paintToDisabled = topbar.paintToDisabled
@@ -1277,11 +1272,7 @@ function PageTextInfo:setTopBarMode(mode)
     if (topbar.is_enabled and true or false) ~= want_on then
         topbar:quickToggleOnOff(want_on)
     end
-    -- self:repaintAfterPictureChange(self:topBarModeChanged(old_mode, self:getTopBarMode()))
-    -- Same as cycleTopBarMode(): indicators computed again with the new mode before the repaint
-    local picture_changed = self:topBarModeChanged(old_mode, self:getTopBarMode())
-    self:refreshTopBarIndicators(topbar)
-    self:repaintAfterPictureChange(picture_changed)
+    self:repaintAfterPictureChange(self:topBarModeChanged(old_mode, self:getTopBarMode()))
     return true
 end
 
@@ -1312,22 +1303,8 @@ function PageTextInfo:cycleTopBarMode()
         self.settings:flush()
         topbar:quickToggleOnOff(false)
     end
-    -- minimal -> hidden does not go through quickToggleOnOff, so the top bar texts (light and margins
-    -- indicator) were not computed again. The expected margins also depend on the mode (preset 4 with
-    -- "hidden": 15/15), so the indicator is computed again with the new mode before the repaint
-    -- After topBarModeChanged(): the custombg picture (shown or hidden there) changes the expected bottom margin
-    local picture_changed = self:topBarModeChanged(old_mode, self:getTopBarMode())
-    self:refreshTopBarIndicators(topbar)
-    self:repaintAfterPictureChange(picture_changed)
+    self:repaintAfterPictureChange(self:topBarModeChanged(old_mode, self:getTopBarMode()))
     return true
-end
-
--- Computes the top bar texts again (light and margins indicator included) for the current mode
-function PageTextInfo:refreshTopBarIndicators(topbar)
-    topbar = topbar or (self.view and self.view.topbar)
-    if not (topbar and topbar.toggleBar) then return end
-    local ok, err = pcall(topbar.toggleBar, topbar)
-    if not ok then logger.warn("pagetextinfo: refreshing the top bar indicators failed:", err) end
 end
 
 -- Shows one submenu of the custombg plugin ("lines": Ruled lines, "background": Custom reading background)
@@ -1937,6 +1914,12 @@ function PageTextInfo:onMultiSwipe(arg, ges)
         self:onAdjustBottomMargin()
         return true
     end
+    if ges and ges.multiswipe_directions == "north south" then
+        -- Ruled lines of custombg on / off, the same as the double tap bottom left, but it does not need the
+        -- double tap detection to be on
+        self:onBottomDoubleTap("left", ges)
+        return true
+    end
     -- Not our gesture: let other handlers deal with it
     return false
 end
@@ -2403,14 +2386,13 @@ PageTextInfo.picture_bottom_margin = 60
 PageTextInfo.picture_bottom_air = 4
 
 -- Smallest bottom margin (unscaled units) whose text area ends at least px pixels above the screen bottom.
--- ReaderTypeset:onSetPageMargins uses Screen:scaleBySize(margin) (rounded up).
--- The footer is not taken into account: the margin depends only on the picture.
--- Before, the footer height was subtracted when the footer did not overlap the text ("Overlap status bar" off):
--- local footer = self.view and self.view.footer
--- if footer and not footer.reclaim_height and footer.getHeight then
---     px = px - (footer:getHeight() or 0)
--- end
+-- ReaderTypeset:onSetPageMargins uses Screen:scaleBySize(margin) (rounded up), plus the footer height when
+-- the footer does not overlap the text ("Overlap status bar" off), so that height is already there.
 function PageTextInfo:pxToBottomMargin(px)
+    local footer = self.view and self.view.footer
+    if footer and not footer.reclaim_height and footer.getHeight then
+        px = px - (footer:getHeight() or 0)
+    end
     if px <= 0 then return 0 end
     local per100 = Screen:scaleBySize(100)
     local u = math.max(0, math.floor(px * 100 / per100) - 2)
@@ -4676,6 +4658,19 @@ local HERO_SETT = {
     border = 2,          -- grosor del borde (0 = sin borde)
     outer_border = 2,    -- marco exterior hueco (0 = sin marco hueco)
     outer_gap = 6,       -- separación entre el recuadro y el marco hueco
+    -- adorno del hero de abajo en lugar del recuadro:
+    --   "rule"    = filete encima que se aclara hacia los lados, con un rombo en el centro (separador de libro)
+    --   "corners" = solo las cuatro esquinas, como un marco de foto
+    --   "box"     = el recuadro de antes (borde + padding)
+    frame_style = "rule",
+    rule_height = 14,            -- alto de la franja del filete (px sin escalar)
+    rule_diamond = 4,            -- medio lado del rombo central (px sin escalar)
+    rule_gap = 6,                -- hueco a cada lado del rombo (px sin escalar)
+    rule_dark = 0x22,            -- gris del filete en el centro (0x00 negro)
+    rule_light = 0xDD,           -- gris del filete en los extremos (casi blanco = se desvanece)
+    corner_length = 16,          -- largo de cada brazo de las esquinas (px sin escalar)
+    chapter_bar_scale = 0.8,     -- barra del capitulo encima de la del libro: fraccion de su ancho y alto
+    chapter_bar_gap = 4,         -- hueco entre la barra del capitulo y la del libro (px sin escalar)
 }
 
 local function buildHeroProgressRow(width, pct, book, device_state, progress_cfg)
@@ -4920,6 +4915,24 @@ local function heroTitleFromCover(max_w, max_h, ui)
     return ok and widget or nil
 end
 
+-- Progress inside the current chapter (0..1), counting the page on screen as read like the book bar.
+-- nil when the book has no table of contents.
+local function heroChapterPct(ui)
+    local ok, v = pcall(function()
+        local rui = ui or require("apps/reader/readerui").instance
+        if not (rui and rui.toc and rui.document) then return nil end
+        local page = (rui.view and rui.view.state and rui.view.state.page) or rui.document:getCurrentPage()
+        if not page then return nil end
+        local done = rui.toc:getChapterPagesDone(page)
+        local left = rui.toc:getChapterPagesLeft(page)
+        if not done or not left then return nil end
+        local total = done + left + 1
+        if total <= 0 then return nil end
+        return math.max(0, math.min(1, (done + 1) / total))
+    end)
+    return ok and v or nil
+end
+
 -- Right side of the narrow hero at the bottom of the page: the metadata line and a long progress bar, centered
 -- vertically next to the card. No percentage and no time left.
 local function buildHeroProgressSide(width, pct, book, device_state, progress_cfg, ui)
@@ -4944,6 +4957,26 @@ local function buildHeroProgressSide(width, pct, book, device_state, progress_cf
     if progress_cfg.bar_style ~= "pacman" then
         local ok_cp, CP = pcall(require, "lib/bookshelf_cover_progress")
         if ok_cp and CP and CP.pickedBarColors then bar_colors = CP.pickedBarColors() end
+    end
+    -- chapter bar above the book bar, at chapter_bar_scale of its size (width and height), centered
+    local ch_pct = heroChapterPct(ui)
+    if ch_pct then
+        local k = HERO_SETT.chapter_bar_scale or 0.8
+        local ch_w = math.max(40, math.floor(width * k))
+        -- at least 10 px high: the drawn styles of 2-bookshelf-bar-styles.lua need w >= 40 and h >= 10,
+        -- below that they fall back to "rounded"
+        local ch_h = math.max(10, math.floor(Screen:scaleBySize(8) * k + 0.5))
+        table.insert(col, CenterContainer:new{
+            dimen = Geom:new{ w = width, h = ch_h },
+            HeroBar:new{
+                width = ch_w,
+                height = ch_h,
+                percentage = ch_pct,
+                style = progress_cfg.bar_style or "bordered",
+                colors = bar_colors,
+            },
+        })
+        table.insert(col, VerticalSpan:new{ width = Screen:scaleBySize(HERO_SETT.chapter_bar_gap or 4) })
     end
     table.insert(col, HeroBar:new{
         width = width,
@@ -5087,6 +5120,48 @@ function PageTextInfo:nextCoverText()
     return true
 end
 
+-- Ornament of the bottom hero, "rule" style: a thin line across the width that fades out towards the ends
+-- (rule_dark in the middle, rule_light at the ends) with a small diamond in the middle, like the separators
+-- between sections in printed books. Painted in the band of height band_h at the top of bb.
+local function paintHeroRule(bb, w, band_h)
+    local Bb = Blitbuffer
+    local cy = math.floor(band_h / 2)
+    local cx = math.floor(w / 2)
+    local r = Screen:scaleBySize(HERO_SETT.rule_diamond)
+    local hole = r + Screen:scaleBySize(HERO_SETT.rule_gap)
+    local th = math.max(1, Screen:scaleBySize(1))
+    local dark, light = HERO_SETT.rule_dark, HERO_SETT.rule_light
+    local step = math.max(2, Screen:scaleBySize(3))
+    local half = math.max(1, cx - hole)
+    -- the line, in short segments, lighter the farther from the middle
+    for x = 0, w - 1, step do
+        local d = math.abs(x + step / 2 - cx)
+        if d > hole then
+            local t = math.min(1, (d - hole) / half)
+            local grey = math.floor(dark + (light - dark) * t ^ 0.6)
+            bb:paintRect(x, cy - math.floor(th / 2), math.min(step, w - x), th, Bb.Color8(grey))
+        end
+    end
+    -- the diamond
+    for dy = -r, r do
+        local hw = r - math.abs(dy)
+        bb:paintRect(cx - hw, cy + dy, 2 * hw + 1, 1, Bb.Color8(dark))
+    end
+end
+
+-- Ornament of the bottom hero, "corners" style: only the four corners of the frame, like photo corners.
+local function paintHeroCorners(bb, w, h)
+    local Bb = Blitbuffer
+    local len = math.min(Screen:scaleBySize(HERO_SETT.corner_length), math.floor(w / 3), math.floor(h / 3))
+    local th = math.max(1, Screen:scaleBySize(HERO_SETT.border))
+    local c = Bb.COLOR_BLACK
+    -- top left, top right, bottom left, bottom right: one horizontal and one vertical arm each
+    bb:paintRect(0, 0, len, th, c)              bb:paintRect(0, 0, th, len, c)
+    bb:paintRect(w - len, 0, len, th, c)        bb:paintRect(w - th, 0, th, len, c)
+    bb:paintRect(0, h - th, len, th, c)         bb:paintRect(0, h - len, th, len, c)
+    bb:paintRect(w - len, h - th, len, th, c)   bb:paintRect(w - th, h - len, th, len, c)
+end
+
 -- Builds the hero picture with the current progress and hands it to the custombg plugin
 function PageTextInfo:buildBottomHero(mode)
     local custombg = self.ui and self.ui.custombg
@@ -5110,22 +5185,31 @@ function PageTextInfo:buildBottomHero(mode)
             { side = true, ui = self.ui }
         )
         if not hero then return false end
+        local style = plain and "plain" or (HERO_SETT.frame_style or "rule")
         -- square corners: the picture is a buffer, so rounded ones would show white wedges over the text
         local frame = FrameContainer:new{
             background = HERO_SETT.background,
             color = Blitbuffer.COLOR_BLACK,
-            bordersize = plain and 0 or Screen:scaleBySize(HERO_SETT.border),
+            bordersize = style == "box" and Screen:scaleBySize(HERO_SETT.border) or 0,
             radius = 0,
             margin = 0,
-            padding = plain and 0 or Screen:scaleBySize(HERO_SETT.bottom_padding),
+            padding = style == "plain" and 0 or Screen:scaleBySize(HERO_SETT.bottom_padding),
             hero,
         }
-        local size = frame:getSize()
+        local fsize = frame:getSize()
+        -- "rule": a band above the hero for the ornament
+        local top = style == "rule" and Screen:scaleBySize(HERO_SETT.rule_height) or 0
+        local size = { w = fsize.w, h = fsize.h + top }
         -- drawn in grays on white, then turned into a mask (dark = opaque, white = nothing): transparent hero
         local bb = Blitbuffer.new(size.w, size.h, Blitbuffer.TYPE_BB8)
         bb:fill(Blitbuffer.COLOR_WHITE)
-        frame:paintTo(bb, 0, 0)
+        frame:paintTo(bb, 0, top)
         pcall(function() frame:free() end)
+        if style == "rule" then
+            paintHeroRule(bb, size.w, top)
+        elseif style == "corners" then
+            paintHeroCorners(bb, size.w, size.h)
+        end
         bb:invert()
         -- the cover text banner sits flush with the bottom edge of the screen; the hero keeps a small gap
         local gap = plain and 0 or Screen:scaleBySize(HERO_SETT.outer_gap)
