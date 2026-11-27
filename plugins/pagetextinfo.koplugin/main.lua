@@ -1233,6 +1233,11 @@ function PageTextInfo:installTopBarHiddenPaint()
             c:paintTo(bb, x + Screen:getWidth() - c[1]:getSize().w - right, py)
         end)
         if not ok then logger.warn("pagetextinfo: corner mark in hidden top bar failed:", err) end
+        -- The light (☼) and margins (● / ○) indicator is shown in the hidden mode too
+        if tb.paintLightAndMarginIndicator then
+            local ok_ind, err_ind = pcall(tb.paintLightAndMarginIndicator, tb, bb, x, y)
+            if not ok_ind then logger.warn("pagetextinfo: light/margins indicator in hidden top bar failed:", err_ind) end
+        end
     end
     topbar._pagetextinfo_hidden_paint = true
     local orig_paintToDisabled = topbar.paintToDisabled
@@ -1272,7 +1277,11 @@ function PageTextInfo:setTopBarMode(mode)
     if (topbar.is_enabled and true or false) ~= want_on then
         topbar:quickToggleOnOff(want_on)
     end
-    self:repaintAfterPictureChange(self:topBarModeChanged(old_mode, self:getTopBarMode()))
+    -- self:repaintAfterPictureChange(self:topBarModeChanged(old_mode, self:getTopBarMode()))
+    -- Same as cycleTopBarMode(): indicators computed again with the new mode before the repaint
+    local picture_changed = self:topBarModeChanged(old_mode, self:getTopBarMode())
+    self:refreshTopBarIndicators(topbar)
+    self:repaintAfterPictureChange(picture_changed)
     return true
 end
 
@@ -1303,8 +1312,22 @@ function PageTextInfo:cycleTopBarMode()
         self.settings:flush()
         topbar:quickToggleOnOff(false)
     end
-    self:repaintAfterPictureChange(self:topBarModeChanged(old_mode, self:getTopBarMode()))
+    -- minimal -> hidden does not go through quickToggleOnOff, so the top bar texts (light and margins
+    -- indicator) were not computed again. The expected margins also depend on the mode (preset 4 with
+    -- "hidden": 15/15), so the indicator is computed again with the new mode before the repaint
+    -- After topBarModeChanged(): the custombg picture (shown or hidden there) changes the expected bottom margin
+    local picture_changed = self:topBarModeChanged(old_mode, self:getTopBarMode())
+    self:refreshTopBarIndicators(topbar)
+    self:repaintAfterPictureChange(picture_changed)
     return true
+end
+
+-- Computes the top bar texts again (light and margins indicator included) for the current mode
+function PageTextInfo:refreshTopBarIndicators(topbar)
+    topbar = topbar or (self.view and self.view.topbar)
+    if not (topbar and topbar.toggleBar) then return end
+    local ok, err = pcall(topbar.toggleBar, topbar)
+    if not ok then logger.warn("pagetextinfo: refreshing the top bar indicators failed:", err) end
 end
 
 -- Shows one submenu of the custombg plugin ("lines": Ruled lines, "background": Custom reading background)
@@ -2386,13 +2409,14 @@ PageTextInfo.picture_bottom_margin = 60
 PageTextInfo.picture_bottom_air = 4
 
 -- Smallest bottom margin (unscaled units) whose text area ends at least px pixels above the screen bottom.
--- ReaderTypeset:onSetPageMargins uses Screen:scaleBySize(margin) (rounded up), plus the footer height when
--- the footer does not overlap the text ("Overlap status bar" off), so that height is already there.
+-- ReaderTypeset:onSetPageMargins uses Screen:scaleBySize(margin) (rounded up).
+-- The footer is not taken into account: the margin depends only on the picture.
+-- Before, the footer height was subtracted when the footer did not overlap the text ("Overlap status bar" off):
+-- local footer = self.view and self.view.footer
+-- if footer and not footer.reclaim_height and footer.getHeight then
+--     px = px - (footer:getHeight() or 0)
+-- end
 function PageTextInfo:pxToBottomMargin(px)
-    local footer = self.view and self.view.footer
-    if footer and not footer.reclaim_height and footer.getHeight then
-        px = px - (footer:getHeight() or 0)
-    end
     if px <= 0 then return 0 end
     local per100 = Screen:scaleBySize(100)
     local u = math.max(0, math.floor(px * 100 / per100) - 2)
