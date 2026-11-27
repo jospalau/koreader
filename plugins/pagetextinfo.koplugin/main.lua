@@ -815,6 +815,10 @@ PageTextInfo.session_overlay_cfg = {
     fade_end = 0xDD,                 -- last grey of the fade out (used when the color is chosen in the menu)
 }
 
+-- Kindle: the fade steps are skipped (its slow refresh showed the last grey instead of the chosen color) and the text
+-- appears with "partial"
+PageTextInfo.session_overlay_kindle = Device:isKindle()
+
 -- Colors to choose in the menu ("Big texts color"); setting "overlay_color", without it cfg.color
 PageTextInfo.session_overlay_colors = {
     { _("Black"), 0x00 },
@@ -927,7 +931,10 @@ function SessionOverlay:init()
         local pos = { x = math.floor((sw - sz.w) / 2), y = math.floor(cy - sz.h / 2) }
         self.positions[i] = pos
         -- separate regions, so the e-ink does not refresh the page in between
-        self.regions[i] = Geom:new{ x = pos.x, y = pos.y, w = sz.w, h = sz.h }
+        -- a little wider than the text: glyphs like the f overhang their box and left a ghost outside the refreshed area
+        local pad = math.ceil((self.sizes[i] or cfg.font_size) * 0.2)
+        self.regions[i] = Geom:new{ x = math.max(0, pos.x - pad), y = math.max(0, pos.y - pad),
+            w = math.min(sw, sz.w + 2 * pad), h = sz.h + 2 * pad }
         x1 = x1 and math.min(x1, pos.x) or pos.x
         y1 = y1 and math.min(y1, pos.y) or pos.y
         x2 = x2 and math.max(x2, pos.x + sz.w) or (pos.x + sz.w)
@@ -1057,13 +1064,13 @@ function PageTextInfo:showSessionOverlay(texts, strike_icon)
     }
     self.session_overlay = overlay
     local token = self.session_overlay_token
-    UIManager:show(overlay, "ui", overlay.regions[1])
+    UIManager:show(overlay, PageTextInfo.session_overlay_kindle and "partial" or "ui", overlay.regions[1])
     for i = 2, #overlay.regions do
-        UIManager:setDirty(overlay, "ui", overlay.regions[i])
+        UIManager:setDirty(overlay, PageTextInfo.session_overlay_kindle and "partial" or "ui", overlay.regions[i])
     end
 
     -- "Fade out big texts" off (menu): no fade steps, the text goes at once after the same total time
-    if self.settings:isTrue("no_overlay_fade") then
+    if self.settings:isTrue("no_overlay_fade") or PageTextInfo.session_overlay_kindle then
         -- UIManager:scheduleIn(cfg.hold + #cfg.fade_colors * cfg.fade_interval, function()
         UIManager:scheduleIn(self:getOverlayHold() + #fade_colors * cfg.fade_interval, function()
             if self.session_overlay_token ~= token or self.session_overlay ~= overlay then return end
