@@ -2720,7 +2720,7 @@ function PageTextInfo:onPageUpdate(pageno)
     local custombg = self.ui and self.ui.custombg
     local bottom_mode = custombg and custombg.getBottomMode and custombg:getBottomMode()
     if bottom_mode then
-        self:buildBottomHero(bottom_mode)
+        self:buildBottomHero(bottom_mode, { page_turn = true })
     end
 
     if self.settings:isTrue("highlight_all_words_vocabulary_builder_and_notes") and not self.ui.searching and util.getFileNameSuffix(self.ui.document.file) == "epub" then
@@ -5310,8 +5310,41 @@ local function buildHeroProgressSide(width, pct, book, device_state, progress_cf
     return col
 end
 
+-- Book progress (0..1) read live from the reader, without going to disk.
+local function heroCurrentPct(rui, book)
+    local pct
+    if rui and rui.document then
+        local ok, v = pcall(function()
+            local page = (rui.view and rui.view.state and rui.view.state.page) or rui.document:getCurrentPage()
+            return page / rui.document:getPageCount()
+        end)
+        if ok and type(v) == "number" and v == v then pct = math.max(0, math.min(1, v)) end
+    end
+    pct = pct or tonumber(book and book.book_pct)
+    if not pct and rui and rui.doc_settings then
+        pct = tonumber(rui.doc_settings:readSetting("percent_finished"))
+    end
+    return pct
+end
+
+-- Cache of the card of the bottom hero (cover + regions): it does not change from one page to the next, so it is
+-- made once per book and size, and only the progress column on its right is made again at each page turn.
+-- { key, card, book, device_state, progress_cfg }
+local hero_card_cache = nil
+
+local function freeHeroCardCache()
+    if hero_card_cache and hero_card_cache.card then
+        pcall(function() hero_card_cache.card:free() end)
+    end
+    hero_card_cache = nil
+end
+
 -- Devuelve el widget del hero, o nil si bookshelf no está instalado / falla algo.
 -- With opts.side the progress goes to the right of the card (centered vertically) instead of under it.
+-- With opts.side the card is kept in hero_card_cache, and two more values are returned: true (the card is cached:
+-- do not free it) and the progress column (the only part that may be freed).
+-- With opts.page_turn and a cached card for this book and size, nothing is saved or read from disk: the cached card
+-- is reused and only the progress column is made, with the progress read live from the reader.
 local function buildBookshelfHero(width, height, opts)
     local side = opts and opts.side
     local side_w = side and math.floor(width * 0.40) or 0
@@ -5322,6 +5355,29 @@ local function buildBookshelfHero(width, height, opts)
     local VerticalGroup = require("ui/widget/verticalgroup")
     local VerticalSpan = require("ui/widget/verticalspan")
 
+    -- fast path: page turn with the card already made
+    if side and opts.page_turn and hero_card_cache then
+        local rui = opts.ui or require("apps/reader/readerui").instance
+        local file = rui and rui.document and rui.document.file
+        local key = table.concat({ tostring(file), width, height }, "|")
+        if file and hero_card_cache.key == key then
+            local ok_fast, hero, side_col = pcall(function()
+                local c = hero_card_cache
+                local pct = heroCurrentPct(rui, c.book) or 0
+                local col = buildHeroProgressSide(side_w, pct, c.book, c.device_state, c.progress_cfg, rui)
+                return HorizontalGroup:new{
+                    align = "center",
+                    c.card,
+                    HorizontalSpan:new{ width = side_gap },
+                    col,
+                }, col
+            end)
+            if ok_fast and hero then return hero, true, side_col end
+            logger.warn("[reading-motive] hero rápido falló, se reconstruye entero:", hero)
+        end
+    end
+
+    local cached_side_col = nil
     local ok, card = pcall(function()
         local HeroCard = require("lib/bookshelf_hero_card")
         local Repo = require("lib/bookshelf_book_repository")
@@ -5401,13 +5457,25 @@ local function buildBookshelfHero(width, height, opts)
             pct = ok_pg and v or nil
         end
         if side then
-            local HorizontalGroup = require("ui/widget/horizontalgroup")
-            local HorizontalSpan = require("ui/widget/horizontalspan")
+            -- keep the card for the next page turns (the previous one, of another book or size, is freed)
+            freeHeroCardCache()
+            local file = rui and rui.document and rui.document.file
+            if file then
+                hero_card_cache = {
+                    key = table.concat({ tostring(file), width, height }, "|"),
+                    card = card_or_err,
+                    book = book,
+                    device_state = device_state,
+                    progress_cfg = progress_cfg,
+                }
+            end
+            local col = buildHeroProgressSide(side_w, pct or 0, book, device_state, progress_cfg, rui)
+            if hero_card_cache then cached_side_col = col end
             return HorizontalGroup:new{
                 align = "center",
                 card_or_err,
                 HorizontalSpan:new{ width = side_gap },
-                buildHeroProgressSide(side_w, pct or 0, book, device_state, progress_cfg, rui),
+                col,
             }
         end
         local row = buildHeroProgressRow(width, pct or 0, book, device_state, progress_cfg)
@@ -5422,7 +5490,28 @@ local function buildBookshelfHero(width, height, opts)
         logger.warn("[reading-motive] no se pudo construir el hero de bookshelf:", card)
         return nil
     end
+    if cached_side_col then return card, true, cached_side_col end
     return card
+end
+
+-- What the bottom picture shows that can change from one page to the next: if it is the same as the last one painted,
+-- the page turn does not make the picture again. For the hero: the pixel the book bar and the chapter bar reach.
+-- For the cover text: nothing (only the book and the screen size).
+local function bottomHeroSignature(ui, mode, plain)
+    if not (ui and ui.document) then return nil end
+    local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
+    local file = tostring(ui.document.file)
+    if plain then return table.concat({ mode, "plain", file, screen_w, screen_h }, "|") end
+    local width = math.floor(screen_w * HERO_SETT.width_pct / 100)
+    local side_w = math.floor(width * 0.40)
+    local ch_w = math.max(40, math.floor(side_w * (HERO_SETT.chapter_bar_scale or 0.8)))
+    local pct = heroCurrentPct(ui) or 0
+    local ch = heroChapterPct(ui)
+    return table.concat({
+        mode, file, screen_w, screen_h,
+        math.floor(pct * side_w),
+        ch and math.floor(ch * ch_w) or -1,
+    }, "|")
 end
 
 -- The bottom picture is chosen in the custombg menu ("Bottom: bookshelf hero" / "Bottom: cover text", never both and
@@ -5485,12 +5574,19 @@ local function paintHeroCorners(bb, w, h)
 end
 
 -- Builds the hero picture with the current progress and hands it to the custombg plugin
-function PageTextInfo:buildBottomHero(mode)
+-- opts.page_turn (from onPageUpdate): nothing is made when the picture would look the same as the one on screen,
+-- the cached hero card is reused, and no repaint is asked for (the page turn already repaints the reader).
+function PageTextInfo:buildBottomHero(mode, opts)
     local custombg = self.ui and self.ui.custombg
     if not (custombg and custombg.setBottomImage) or not mode then return false end
+    local page_turn = opts and opts.page_turn
+    if page_turn and self._bottom_hero_sig and self.bottom_picture_px then
+        local ok_sig, sig = pcall(bottomHeroSignature, self.ui, mode, self._bottom_hero_plain)
+        if ok_sig and sig and sig == self._bottom_hero_sig then return true end
+    end
     do
         local screen_w, screen_h = Screen:getWidth(), Screen:getHeight()
-        local hero
+        local hero, keep_card, side_part
         local plain = false  -- the cover text goes without the box (border and padding) around it
         if mode == "cover" then
             -- the text cut out of the cover, as a plain rectangle (no hero)
@@ -5501,11 +5597,13 @@ function PageTextInfo:buildBottomHero(mode)
             )
             plain = hero ~= nil
         end
-        hero = hero or buildBookshelfHero(
-            math.floor(screen_w * HERO_SETT.width_pct / 100),
-            math.floor(screen_h * HERO_SETT.bottom_height_pct / 100),
-            { side = true, ui = self.ui }
-        )
+        if not hero then
+            hero, keep_card, side_part = buildBookshelfHero(
+                math.floor(screen_w * HERO_SETT.width_pct / 100),
+                math.floor(screen_h * HERO_SETT.bottom_height_pct / 100),
+                { side = true, ui = self.ui, page_turn = page_turn }
+            )
+        end
         if not hero then return false end
         local style = plain and "plain" or (HERO_SETT.frame_style or "rule")
         -- square corners: the picture is a buffer, so rounded ones would show white wedges over the text
@@ -5526,7 +5624,12 @@ function PageTextInfo:buildBottomHero(mode)
         local bb = Blitbuffer.new(size.w, size.h, Blitbuffer.TYPE_BB8)
         bb:fill(Blitbuffer.COLOR_WHITE)
         frame:paintTo(bb, 0, top)
-        pcall(function() frame:free() end)
+        if keep_card then
+            -- the card stays in the cache for the next page: only the progress column is freed
+            if side_part then pcall(function() side_part:free() end) end
+        else
+            pcall(function() frame:free() end)
+        end
         if style == "rule" then
             paintHeroRule(bb, size.w, top)
         elseif style == "corners" then
@@ -5538,8 +5641,13 @@ function PageTextInfo:buildBottomHero(mode)
         -- height taken at the bottom of the screen (picture + gap), used for the bottom margin
         self.bottom_picture_px = size.h + gap
         custombg:setBottomImage(bb, gap, true)
+        self._bottom_hero_plain = plain
+        local ok_sig, sig = pcall(bottomHeroSignature, self.ui, mode, plain)
+        self._bottom_hero_sig = ok_sig and sig or nil
     end
-    UIManager:setDirty(self.view.dialog, "ui")
+    if not page_turn then
+        UIManager:setDirty(self.view.dialog, "ui")
+    end
     return true
 end
 
