@@ -298,6 +298,9 @@ end
 -- back to a blocking io.popen() anyway when called outside Trapper:wrap().
 -- This runs while painting, so it cannot be wrapped (or deferred): going straight
 -- to io.popen gives the same blocking behaviour, without the warning.
+-- On Android "./sdcv" cannot be run this way: then startSdcv() is used (see below).
+-- nil: not known yet; true: the direct call works; false: it does not (use startSdcv)
+local direct_sdcv_works = nil
 local function sdcvLookup(dictionary, word, dict_names, fuzzy_search)
     local dict_dirs = { dictionary.data_dir }
     local dict_ext = dictionary.data_dir .. "_ext"
@@ -306,6 +309,7 @@ local function sdcvLookup(dictionary, word, dict_names, fuzzy_search)
     end
 
     local entries = {}
+    local sdcv_ran = false   -- true when sdcv answered with JSON (even "[]": no results)
     for _, dict_dir in ipairs(dict_dirs) do
         local args = {
             "./sdcv", "--utf8-input", "--utf8-output", "--json-output",
@@ -323,20 +327,51 @@ local function sdcvLookup(dictionary, word, dict_names, fuzzy_search)
         table.insert(args, "--")   -- a word starting with "-" is not an option
         table.insert(args, word)
 
-        local cmd = util.shell_escape(args) .. "; echo"   -- the echo guarantees some output
-        local pipe = io.popen(cmd, "r")
-        if pipe then
-            local out = pipe:read("*a")
-            pipe:close()
-            local line = out and out:match("[^\n]+")
-            if line then
-                local ok, decoded = pcall(JSON.decode, line)
-                if ok and type(decoded) == "table" then
-                    for _, entry in ipairs(decoded) do
-                        table.insert(entries, entry)
+        if direct_sdcv_works ~= false then
+            local cmd = util.shell_escape(args) .. "; echo"   -- the echo guarantees some output
+            local pipe = io.popen(cmd, "r")
+            if pipe then
+                local out = pipe:read("*a")
+                pipe:close()
+                local line = out and out:match("[^\n]+")
+                if line then
+                    local ok, decoded = pcall(JSON.decode, line)
+                    if ok and type(decoded) == "table" then
+                        sdcv_ran = true
+                        for _, entry in ipairs(decoded) do
+                            table.insert(entries, entry)
+                        end
                     end
                 end
             end
+        end
+    end
+
+    if sdcv_ran then
+        direct_sdcv_works = true
+        return entries
+    end
+
+    -- "./sdcv" gave no JSON at all (not even "[]"): it did not run. This happens on
+    -- Android, where the binary can't be started this way. KOReader's own launcher
+    -- (the one the dictionary window uses, and that works there) is used instead.
+    -- After the first failure the direct call is not tried again in this session.
+    if direct_sdcv_works == nil then
+        require("logger").info("[PTI] ./sdcv did not run, using ReaderDictionary:startSdcv(). cwd:",
+            lfs.currentdir and lfs.currentdir())
+    end
+    direct_sdcv_works = false
+    if dictionary.startSdcv then
+        local ok, res = pcall(dictionary.startSdcv, dictionary, word, dict_names, fuzzy_search)
+        if ok and type(res) == "table" then
+            for _, r in ipairs(res) do
+                -- drop the dummy "No results." entry
+                if r.definition and r.dict and r.dict ~= "" and not r.no_result then
+                    table.insert(entries, r)
+                end
+            end
+        else
+            require("logger").warn("[PTI] startSdcv failed:", res)
         end
     end
     return entries

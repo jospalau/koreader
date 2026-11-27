@@ -52,6 +52,12 @@ local SQ3 = require("lua-ljsqlite3/init")
 -- no fonts or image files, and it keeps the small part of the TextWidget
 -- interface the top bar uses (setText, getSize, paintTo, free).
 local CORNER_MARK_SIZE = 28 -- in dp, change it to make the mark bigger or smaller
+-- Android (curved screen): the edges are hidden by the curve, so the mark is bigger to stay visible
+local CORNER_MARK_SIZE_ANDROID = 44
+
+local function cornerMarkSize()
+    return Screen:scaleBySize(Device:isAndroid() and CORNER_MARK_SIZE_ANDROID or CORNER_MARK_SIZE)
+end
 
 local CornerIcon = Widget:extend{
     kind = "",
@@ -67,13 +73,13 @@ end
 
 function CornerIcon:getSize()
     if self.kind == "" then return Geom:new{ w = 0, h = 0 } end
-    local size = Screen:scaleBySize(CORNER_MARK_SIZE)
+    local size = cornerMarkSize()
     return Geom:new{ w = size, h = size }
 end
 
 function CornerIcon:paintTo(bb, x, y)
     if self.kind == "" then return end
-    local size = Screen:scaleBySize(CORNER_MARK_SIZE)
+    local size = cornerMarkSize()
     local width, height = Screen:getWidth(), Screen:getHeight()
     local top = y < height / 2
     local stripe = math.max(2, math.floor(size * 0.25)) -- width of the stripe and of the gap
@@ -1951,6 +1957,8 @@ function TopBar:onFrontlightWarmthChanged() self:refreshWarmthIndicator() end
 -- it stays on the title line)
 -- TopBar.INDICATOR_SHIFT_LEFT = 4 -- before: MARGIN_SIDES - 4, so 6 dp, or 16 dp on Android
 TopBar.INDICATOR_LEFT = 6
+-- Android (curved screen): a bit further right so the curve does not hide the indicator
+TopBar.INDICATOR_LEFT_ANDROID = 16
 TopBar.INDICATOR_TOP = 6 -- was 3, too close to the top edge
 -- With the bar enabled the indicator sits on the title line; this lowers it a little from there (dp)
 TopBar.INDICATOR_ENABLED_DOWN = 3
@@ -1976,7 +1984,8 @@ function TopBar:paintLightAndMarginIndicator(bb, x, y)
     --   minimal / hidden -> the ● starts INDICATOR_TOP from the top of the screen (measured on its ink,
     --                       so it does not depend on the font)
     -- local text_x = x + math.max(0, TopBar.MARGIN_SIDES - Screen:scaleBySize(TopBar.INDICATOR_SHIFT_LEFT))
-    local text_x = x + Screen:scaleBySize(TopBar.INDICATOR_LEFT)
+    local indicator_left = Device:isAndroid() and TopBar.INDICATOR_LEFT_ANDROID or TopBar.INDICATOR_LEFT
+    local text_x = x + Screen:scaleBySize(indicator_left)
     local dot = self:getDotInk()
     -- The center line of the indicator: the ●/○, the sun, the number and the warm mark are all centered on it.
     -- It is where the middle of the ● was before (the position did not change, only the pieces that were off it)
