@@ -2410,17 +2410,11 @@ local function buildBookCard(w_width, session, book)
             words = tonumber(topbar.total_words) or 0
             pub = tostring(topbar.pub_date or "")
         else
-            -- not reading (file manager): the last read book, with its words from book_complexity.lua
-            file = ShowLongestSessionsWindow.lastReadFile()
-            if not file then
-                return TextWidget:new{
-                    text = _("Not reading"), face = getFace(FONT_BIG),
-                    fgcolor = COLOR_MUTED, max_width = inner_w,
-                }
-            end
-            words, pub = 0, ""
-            local _path, name = require("util").splitFilePathName(file)
-            title = (name:gsub("%.%w+$", ""))
+            -- not reading (file manager): no book, no numbers
+            return TextWidget:new{
+                text = _("Not reading"), face = getFace(FONT_BIG),
+                fgcolor = COLOR_MUTED, max_width = inner_w,
+            }
         end
         cover_cache.card_file = file
         -- what calibre.lua knows about the book fills what the reader does not give (the file manager gives nothing)
@@ -2442,7 +2436,8 @@ local function buildBookCard(w_width, session, book)
         if score then parts[#parts + 1] = tostring(math.floor(score + 0.5)) end
 
         -- with a cover the text sits on a band, a bit narrower than the card
-        local cover = getOpenBookCover(file)
+        -- no cover in the file manager (decoding it from the epub was slow); only with a book open
+        local cover = (ui and ui.document) and getOpenBookCover(file) or nil
         local band_pad = SPACE.l
         local text_w = cover and (inner_w - 2 * band_pad) or inner_w
 
