@@ -284,6 +284,17 @@ function ReaderStatistics:init()
         self._session_start_pct = ReaderStatistics.preserved_session_start_pct
         ReaderStatistics.preserved_session_start_pct = nil
     end
+    -- Provisional starts (the session start is not frozen yet, before 3 minutes): without them a session reloaded
+    -- (font, margins...) before being frozen lost its start and was saved with ref_start and pct_start NULL.
+    -- If the session is not valid yet, the reset block below clears them as before
+    if ReaderStatistics.preserved_pending_start_ref then
+        self._pending_start_ref = ReaderStatistics.preserved_pending_start_ref
+        ReaderStatistics.preserved_pending_start_ref = nil
+    end
+    if ReaderStatistics.preserved_pending_start_pct then
+        self._pending_start_pct = ReaderStatistics.preserved_pending_start_pct
+        ReaderStatistics.preserved_pending_start_pct = nil
+    end
     if ReaderStatistics.preserved_ref_mode ~= nil then
         self._ref_mode = ReaderStatistics.preserved_ref_mode
         ReaderStatistics.preserved_ref_mode = nil
@@ -428,6 +439,8 @@ function ReaderStatistics:onPreserveCurrentSession()
     ReaderStatistics.preserved_session_start_ref = self._session_start_ref
     ReaderStatistics.preserved_ref_mode = self._ref_mode
     ReaderStatistics.preserved_session_start_pct = self._session_start_pct
+    ReaderStatistics.preserved_pending_start_ref = self._pending_start_ref
+    ReaderStatistics.preserved_pending_start_pct = self._pending_start_pct
 end
 
 function ReaderStatistics:resetVolatileStats(now_ts)
