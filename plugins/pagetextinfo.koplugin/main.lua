@@ -1061,6 +1061,9 @@ function PageTextInfo:showSessionOverlay(texts, strike_icon)
         texts = texts,
         strike_icon = strike_icon,
         text_color = color,
+        -- UIManager:show() sets Input.disable_double_tap from the shown widget (nil = disabled), so without this the
+        -- double tap stayed off while the overlay was on screen. It keeps the reader's current state instead.
+        disable_double_tap = self:isDoubleTapDisabled(),
     }
     self.session_overlay = overlay
     local token = self.session_overlay_token
