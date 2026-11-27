@@ -857,6 +857,21 @@ function TopBar:onReaderReady()
         fgcolor = Blitbuffer.COLOR_BLACK,
     }
 
+    -- The indicator is painted in two pieces so the ● / ○ can sit on the same center line as the sun and the warm
+    -- mark: the margin symbol, and the rest ("2 ☼1"). test_light_text keeps the whole text (its width is used to
+    -- keep the title away from the indicator)
+    self.margin_mark_text = TextWidget:new{
+        text = "",
+        face = Font:getFace("myfont3"),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+
+    self.light_rest_text = TextWidget:new{
+        text = "",
+        face = Font:getFace("myfont3"),
+        fgcolor = Blitbuffer.COLOR_BLACK,
+    }
+
 
     local font = "cfont"
     if self.settings:nilOrFalse("use_system_font") then
@@ -1668,11 +1683,10 @@ function TopBar:updateLightAndMarginIndicator(light_on)
     if self.frontlight ~= "" then
         level = self:getLightLevelText()
     end
-    if self:marginsMatchTopBar() then
-        self.test_light_text:setText("●" .. preset .. self.frontlight .. level) -- frontlight already starts with a space
-    else
-        self.test_light_text:setText("○" .. preset .. self.frontlight .. level) -- frontlight already starts with a space
-    end
+    local mark = self:marginsMatchTopBar() and "●" or "○"
+    self.test_light_text:setText(mark .. preset .. self.frontlight .. level) -- frontlight already starts with a space
+    self.margin_mark_text:setText(mark)
+    self.light_rest_text:setText(preset .. self.frontlight .. level)
 end
 
 -- Current frontlight level (the step of the light dialog), or "" when it cannot be read or the
@@ -1774,14 +1788,13 @@ function TopBar:getWarmMarkWidth()
 end
 
 -- Draws ◐ (left half filled, right half only the outline) right after the indicator text.
--- text_x, text_top: where the text widget was painted (top left corner). Centered on the ink of the ●.
+-- text_right: where the text ends (x). center_y: the center line of the indicator, the same one the ● and the sun
+-- are centered on.
 -- Only black pixels are painted, so a custombg background below is kept.
-function TopBar:paintWarmMark(bb, text_x, text_top)
-    local tw = self.test_light_text
-    local ink = self:getDotInk()
+function TopBar:paintWarmMark(bb, text_right, center_y)
     local r = self:getWarmMarkRadius()
-    local cx = text_x + tw:getSize().w + Screen:scaleBySize(3) + r
-    local cy = text_top + math.floor((ink.top + ink.bottom) / 2 + 0.5)
+    local cx = text_right + Screen:scaleBySize(3) + r
+    local cy = center_y
     local t = math.max(1, Screen:scaleBySize(1)) -- outline thickness
     local ri = r - t
     local black = Blitbuffer.COLOR_BLACK
@@ -1801,6 +1814,60 @@ function TopBar:paintWarmMark(bb, text_x, text_top)
             end
         end
     end
+end
+
+-- Top and bottom rows of the dark pixels of a text widget, between the columns x0 and x1 (from the top of the widget)
+function TopBar:getInkRows(widget, x0, x1)
+    local size = widget:getSize()
+    if size.w <= 0 or size.h <= 0 then return nil end
+    local bb = Blitbuffer.new(size.w, size.h, Blitbuffer.TYPE_BB8)
+    bb:fill(Blitbuffer.COLOR_WHITE)
+    widget:paintTo(bb, 0, 0)
+    local top, bottom
+    for yy = 0, size.h - 1 do
+        for xx = math.max(0, x0), math.min(size.w, x1) - 1 do
+            if bb:getPixel(xx, yy):getColor8().a < 0x80 then
+                top = top or yy
+                bottom = yy
+            end
+        end
+    end
+    bb:free()
+    return top, bottom
+end
+
+-- Where the ink of each piece of the indicator is, measured on what is really drawn, so it does not depend on the
+-- fonts (● and ☼ can come from fallback fonts with other metrics): the middle row of the margin symbol and of
+-- the sun, or of the whole rest when the light is off, from the top of its own widget. Cached until the texts or the
+-- face change.
+function TopBar:getIndicatorCenters()
+    local mark, rest = self.margin_mark_text, self.light_rest_text
+    local cache = self._indicator_centers
+    if cache and cache.face == mark.face and cache.mark == mark.text and cache.rest == rest.text then
+        return cache
+    end
+    cache = { face = mark.face, mark = mark.text, rest = rest.text }
+    local top, bottom = self:getInkRows(mark, 0, mark:getSize().w)
+    if top then cache.mark_c = (top + bottom) / 2 end
+    if rest.text ~= "" then
+        local x0, x1 = 0, rest:getSize().w
+        local sun_at = rest.text:find("☼", 1, true)
+        if sun_at then
+            local prefix = rest.text:sub(1, sun_at - 1)
+            if prefix ~= "" then
+                local p = TextWidget:new{ text = prefix, face = rest.face, fgcolor = Blitbuffer.COLOR_BLACK }
+                x0 = p:getSize().w
+                p:free()
+            end
+            local sun = TextWidget:new{ text = "☼", face = rest.face, fgcolor = Blitbuffer.COLOR_BLACK }
+            x1 = x0 + sun:getSize().w
+            sun:free()
+        end
+        top, bottom = self:getInkRows(rest, x0, x1)
+        if top then cache.rest_c = (top + bottom) / 2 end
+    end
+    self._indicator_centers = cache
+    return cache
 end
 
 -- " wNN" with the current frontlight warmth (0-100), or "" when the device has no warm light,
@@ -1884,10 +1951,12 @@ function TopBar:onFrontlightWarmthChanged() self:refreshWarmthIndicator() end
 -- it stays on the title line)
 -- TopBar.INDICATOR_SHIFT_LEFT = 4 -- before: MARGIN_SIDES - 4, so 6 dp, or 16 dp on Android
 TopBar.INDICATOR_LEFT = 6
-TopBar.INDICATOR_TOP = 3
+TopBar.INDICATOR_TOP = 6 -- was 3, too close to the top edge
+-- With the bar enabled the indicator sits on the title line; this lowers it a little from there (dp)
+TopBar.INDICATOR_ENABLED_DOWN = 3
 
 function TopBar:paintLightAndMarginIndicator(bb, x, y)
-    if not (self.light_widget_container and self.test_light_text) then return end
+    if not (self.light_widget_container and self.test_light_text and self.margin_mark_text and self.light_rest_text) then return end
     -- Setting "Show light and margins indicator" (Top bar menu), on by default
     if self.settings and not self.settings:nilOrTrue("show_light_margin_indicator") then return end
     -- Not shown with bookends on: it paints its own texts in that area
@@ -1908,16 +1977,26 @@ function TopBar:paintLightAndMarginIndicator(bb, x, y)
     --                       so it does not depend on the font)
     -- local text_x = x + math.max(0, TopBar.MARGIN_SIDES - Screen:scaleBySize(TopBar.INDICATOR_SHIFT_LEFT))
     local text_x = x + Screen:scaleBySize(TopBar.INDICATOR_LEFT)
-    local text_top
+    local dot = self:getDotInk()
+    -- The center line of the indicator: the ●/○, the sun, the number and the warm mark are all centered on it.
+    -- It is where the middle of the ● was before (the position did not change, only the pieces that were off it)
+    local center_y
     if TopBar.is_enabled then
-        local py = y + TopBar.MARGIN_TOP
-        text_top = py + math.floor((0 - self.test_light_text:getSize().h) / 2)
+        local py = y + TopBar.MARGIN_TOP + Screen:scaleBySize(TopBar.INDICATOR_ENABLED_DOWN)
+        center_y = py + math.floor((0 - self.test_light_text:getSize().h) / 2) + math.floor((dot.top + dot.bottom) / 2 + 0.5)
     else
-        text_top = y + Screen:scaleBySize(TopBar.INDICATOR_TOP) - self:getDotInk().top
+        center_y = y + Screen:scaleBySize(TopBar.INDICATOR_TOP) + math.floor((dot.bottom - dot.top) / 2 + 0.5)
     end
-    self.test_light_text:paintTo(bb, text_x, text_top)
+    local centers = self:getIndicatorCenters()
+    local mark_w = self.margin_mark_text:getSize().w
+    local rest_w = self.light_rest_text:getSize().w
+    self.margin_mark_text:paintTo(bb, text_x, center_y - math.floor((centers.mark_c or ((dot.top + dot.bottom) / 2)) + 0.5))
+    if self.light_rest_text.text ~= "" then
+        local rest_c = centers.rest_c or centers.mark_c or ((dot.top + dot.bottom) / 2)
+        self.light_rest_text:paintTo(bb, text_x + mark_w, center_y - math.floor(rest_c + 0.5))
+    end
     if self.warm_on then
-        self:paintWarmMark(bb, text_x, text_top)
+        self:paintWarmMark(bb, text_x + mark_w + rest_w, center_y)
     end
 end
 
