@@ -1543,6 +1543,7 @@ function Repo.buildBookMeta(filepath, opts)
     local words = Repo._calibreField(filepath, "words")
     local grrating = Repo._calibreField(filepath, "grrating")
     local grvotes = Repo._calibreField(filepath, "grvotes")
+    local complexity_score = Repo._calibreField(filepath, "complexity_score")
 
 
     local book = {
@@ -1608,6 +1609,7 @@ function Repo.buildBookMeta(filepath, opts)
         words       = words or nil,
         grrating    = grrating or nil,
         grvotes     = grvotes or nil,
+        complexity_score = complexity_score or nil,
     }
     -- Cache fresh records whose text metadata is present, with the
     -- cover_bb stripped. ImageWidget marks the cover_bb's
@@ -1768,6 +1770,7 @@ local function _buildLightMetaFromInfo(fp, info)
     local words = Repo._calibreField(fp, "words")
     local grrating = Repo._calibreField(fp, "grrating")
     local grvotes = Repo._calibreField(fp, "grvotes")
+    local complexity_score = Repo._calibreField(fp, "complexity_score")
 
     -- filename is also returned so callers like searchBooks can include
     -- it in their search haystack without paying for the heavy
@@ -1833,6 +1836,7 @@ local function _buildLightMetaFromInfo(fp, info)
         words       = words or nil,
         grrating    = grrating or nil,
         grvotes     = grvotes or nil,
+        complexity_score = complexity_score or nil,
     }
     -- Apply the global "Use Hardcover metadata" override here too, so the
     -- genre / author / series chips (built from these light records) switch
@@ -1878,7 +1882,7 @@ local _progress_cache, PROGRESS_CACHE_TTL
 -- it had just been working on. The comment above buildBook's seed already
 -- demanded the two mirror each other; this makes it structural rather than a
 -- promise.
-local function _writeProgressCache(filepath, pct, status, rating, page_count, page_num, page_src, pub_date, modified_date, words, grrating, grvotes)
+local function _writeProgressCache(filepath, pct, status, rating, page_count, page_num, page_src, pub_date, modified_date, words, grrating, grvotes, complexity_score)
     _progress_cache[filepath] = {
         pct        = pct,
         status     = status,
@@ -1891,6 +1895,7 @@ local function _writeProgressCache(filepath, pct, status, rating, page_count, pa
         words       = words,
         grrating    = grrating,
         grvotes     = grvotes,
+        complexity_score = complexity_score,
         expires_at = os.time() + PROGRESS_CACHE_TTL,
     }
 end
@@ -2203,7 +2208,7 @@ function Repo.buildBook(filepath, opts)
         ds_page_src = _scannedPageCount(filepath) and "store" or "filename"
     end
     _writeProgressCache(filepath, tonumber(book.book_pct), book.status,
-                        book.rating, fallback_page_count, book.page_num, ds_page_src, book.pub_date, book.modified_date, book.words, book.grrating, book.grvotes)
+                        book.rating, fallback_page_count, book.page_num, ds_page_src, book.pub_date, book.modified_date, book.words, book.grrating, book.grvotes, book.complexity_score)
     return book
 end
 
@@ -3239,12 +3244,12 @@ function Repo.readProgress(filepath)
     if cached then
         return cached.pct, cached.status, cached.rating, cached.page_count,
         cached.page_num, cached.page_src, cached.pub_date, cached.modified_date,
-        cached.words, cached.grrating, cached.grvotes
+        cached.words, cached.grrating, cached.grvotes, cached.complexity_score
     end
     -- page_src: which rung answered the page count -- "stable", "render",
     -- "store" or "filename". The sixth return; the spine's thickness needs
     -- to know (issue 387, SpineShelf.thicknessPages).
-    local pct, status, rating, page_count, page_num, page_src, pub_date, modified_date, words, grrating, grvotes
+    local pct, status, rating, page_count, page_num, page_src, pub_date, modified_date, words, grrating, grvotes, complexity_score
     -- What the sidecar said, kept in the book facts store with the sidecar's
     -- mtime (Repo._progressFromFacts): one stat while it is unchanged,
     -- instead of a full parse on the first visit of every session (a page of
@@ -3335,6 +3340,7 @@ function Repo.readProgress(filepath)
     words = Repo._calibreField(filepath, "words")
     grrating = Repo._calibreField(filepath, "grrating")
     grvotes = Repo._calibreField(filepath, "grvotes")
+    complexity_score = Repo._calibreField(filepath, "complexity_score")
 
     -- Normalise to bookshelf canonical status values. KOReader's End-of-book
     -- dialog and Book Status widget store 'complete' / 'abandoned' in
@@ -3363,8 +3369,8 @@ function Repo.readProgress(filepath)
         if n < 1 then n = 1 end
         page_num = n
     end
-    _writeProgressCache(filepath, pct, status, rating, page_count, page_num, page_src, pub_date, modified_date, words, grrating, grvotes)
-    return pct, status, rating, page_count, page_num, page_src, pub_date, modified_date, words, grrating, grvotes
+    _writeProgressCache(filepath, pct, status, rating, page_count, page_num, page_src, pub_date, modified_date, words, grrating, grvotes, complexity_score)
+    return pct, status, rating, page_count, page_num, page_src, pub_date, modified_date, words, grrating, grvotes, complexity_score
 end
 
 -- Repo.finishedOn(filepath) -> the sidecar's summary.modified (the date its
@@ -5206,6 +5212,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
         if k == "words"        then needs.words    = true end
         if k == "grrating"     then needs.grrating    = true end
         if k == "grvotes"      then needs.grvotes    = true end
+        if k == "complexity"   then needs.complexity = true end
         -- Folder cards carry no book_count until we count their contents
         -- (issue 90: "sort folders by number of files").
         if k == "book_count"   then needs.book_count = true end
@@ -5339,7 +5346,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
             end
         end
     end
-    if needs.percent or needs.status or needs.rating or needs.page_count or needs.pub_date or needs.modified_date or needs.words or needs.grrating or needs.grvotes then
+    if needs.percent or needs.status or needs.rating or needs.page_count or needs.pub_date or needs.modified_date or needs.words or needs.grrating or needs.grvotes or needs.complexity then
         -- Route through Repo.readProgress so steady-state re-runs of this
         -- prefetch (cache TTL expired, but progress cache still warm) skip
         -- the per-file DocSettings:open() cost. readProgress also handles
@@ -5357,7 +5364,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
         -- actually reorders. Only written when that key is in the priority.
         for _i, e in ipairs(entries) do
             if e.attr and e.attr.mode == "file" then
-                local pct, status, rating, page_count, _page_num, _page_src, pub_date, modified_date, words, grrating, grvotes = Repo.readProgress(e.fp)
+                local pct, status, rating, page_count, _page_num, _page_src, pub_date, modified_date, words, grrating, grvotes, complexity_score = Repo.readProgress(e.fp)
                 e._pct    = pct
                 e._status = status
                 if needs.rating     then e.rating     = Repo.effectiveRating(e.fp, rating) end
@@ -5367,6 +5374,7 @@ function Repo.getAll(path, limit, offset, sort_priority, filter, opts)
                 if needs.words then e.words = words end
                 if needs.grrating then e.grrating = grrating end
                 if needs.grvotes then e.grvotes = grvotes end
+                if needs.complexity then e.complexity_score = complexity_score end
             end
         end
     end
@@ -5825,13 +5833,13 @@ local function _groupShapeCmp(priority_or_key)
         priority = priority_or_key
     end
     local cmp = SortEngine.chainedComparator(priority)
-    -- Group shapes carry no words / pub_date / grrating / grvotes, so those
+    -- Group shapes carry no words / pub_date / grrating / grvotes / complexity, so those
     -- sorts saw every group as unknown. Fill them lazily from the members.
     local want = false
     if type(priority) == "table" then
         for _i, lv in ipairs(priority) do
             local k = lv.key
-            if k == "words" or k == "pub_date" or k == "modified_date" or k == "grrating" or k == "grvotes" then
+            if k == "words" or k == "pub_date" or k == "modified_date" or k == "grrating" or k == "grvotes" or k == "complexity" then
                 want = true
             end
         end
@@ -5842,11 +5850,13 @@ local function _groupShapeCmp(priority_or_key)
         if done[g] then return end
         done[g] = true
         local words, votes, rsum, rn, pub, mod = 0, 0, 0, 0, nil, nil
+        local csum, cn = 0, 0
         local hw, hv = false, false
         local function add(fp)
             if not fp then return end
-            local _a, _b, _c, _d, _e, _f, pd, md, w, gr, gv = Repo.readProgress(fp)
-            w, gv, gr = tonumber(w), tonumber(gv), tonumber(gr)
+            local _a, _b, _c, _d, _e, _f, pd, md, w, gr, gv, cx = Repo.readProgress(fp)
+            w, gv, gr, cx = tonumber(w), tonumber(gv), tonumber(gr), tonumber(cx)
+            if cx then csum = csum + cx; cn = cn + 1 end
             if w  then words = words + w;  hw = true end
             if gv then votes = votes + gv; hv = true end
             if gr then rsum = rsum + gr; rn = rn + 1 end
@@ -5869,6 +5879,7 @@ local function _groupShapeCmp(priority_or_key)
         g.words    = hw and words or nil
         g.grvotes  = hv and votes or nil
         g.grrating = rn > 0 and (rsum / rn) or nil
+        g.complexity_score = cn > 0 and (csum / cn) or nil  -- mean of the members
         g.pub_date = pub  -- earliest member date
         g.modified_date = mod  -- latest member date
     end
@@ -6759,19 +6770,20 @@ local function _hydrateGroupShape(shape, within_priority, filter, light_only)
         for _i, lv in ipairs(within_priority) do
             local k = lv.key
             if k == "pub_date" or k == "page_count" or k == "words" or k == "grrating"
-                    or k == "grvotes" or k == "modified_date" then w_cal = true end
+                    or k == "grvotes" or k == "modified_date" or k == "complexity" then w_cal = true end
         end
         for i = 1, #meta do
             local m = meta[i]
             if w_cal and m.filepath then
                 local c = {}
                 for k, v in pairs(m) do c[k] = v end
-                local _a, _b, _c, pc, _e, _f, pd, md, w, gr, gv = Repo.readProgress(c.filepath)
+                local _a, _b, _c, pc, _e, _f, pd, md, w, gr, gv, cx = Repo.readProgress(c.filepath)
                 if c.pub_date == nil      then c.pub_date = pd end
                 if c.page_count == nil    then c.page_count = pc end
                 if c.words == nil         then c.words = w end
                 if c.grrating == nil      then c.grrating = gr end
                 if c.grvotes == nil       then c.grvotes = gv end
+                if c.complexity_score == nil then c.complexity_score = cx end
                 if c.modified_date == nil then c.modified_date = md end
                 m = c
             end

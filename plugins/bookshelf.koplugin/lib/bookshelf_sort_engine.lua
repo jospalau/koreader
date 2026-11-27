@@ -836,6 +836,11 @@ SortEngine.KEYS = {
                  comparator = function(a, b)
                      return cmp(a.grvotes, b.grvotes)
                  end },
+    -- Book record: a.complexity_score (0-100 prose complexity from bookComplexity.py; nil = unknown)
+    complexity = { label = tr("Prose complexity"), short = tr("Complexity"),
+                   comparator = function(a, b)
+                       return cmp(a.complexity_score, b.complexity_score)
+                   end },
 
 }
 
@@ -847,7 +852,7 @@ SortEngine.ORDER = {
     "last_opened", "date_added", "added_or_opened",
     "percent_read", "time_left", "rating",
     "read_status", "read_status_active", "favorites_first", "read_status_finished",
-    "size", "page_count", "book_count", "words", "grrating", "grvotes", "published"
+    "size", "page_count", "book_count", "words", "grrating", "grvotes", "complexity", "published"
 }
 
 -- chainedComparator(priority): builds a single Lua-table-sort comparator from

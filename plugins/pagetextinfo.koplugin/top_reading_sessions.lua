@@ -2121,19 +2121,25 @@ end
 local cover_cache = { file = nil, bb = nil, debug = false }
 
 -- The cover of the open book (a buffer kept for the next builds), or nil when there is none
-local function getOpenBookCover()
+local function getOpenBookCover(file)
     local ui = getReaderUI()
     local doc = ui and ui.document
-    if not doc then return nil end
-    if cover_cache.bb and cover_cache.file == doc.file then return cover_cache.bb end
+    -- no file: the open book; a file: that book (the last read one, in the file manager)
+    if not file then
+        if not doc then return nil end
+        file = doc.file
+    end
+    if cover_cache.bb and cover_cache.file == file then return cover_cache.bb end
     local ok, bb = pcall(function()
-        return require("apps/filemanager/filemanagerbookinfo"):getCoverImage(doc)
+        local BookInfo = require("apps/filemanager/filemanagerbookinfo")
+        if doc and doc.file == file then return BookInfo:getCoverImage(doc) end
+        return BookInfo:getCoverImage(nil, file)
     end)
     if not ok or not bb then return nil end
     local w, h = bb:getWidth(), bb:getHeight()
     if cover_cache.debug then
         logger.info(string.format("[LS-COVER] %s: raw %dx%d type %s rotation %s inverse %s, screen type %s",
-            tostring(doc.file), w, h, tostring(bb:getType()), tostring(bb:getRotation()),
+            tostring(file), w, h, tostring(bb:getType()), tostring(bb:getRotation()),
             tostring(bb:getInverse()), tostring(Screen.bb:getType())))
         pcall(function() bb:writePNG(DataStorage:getSettingsDir() .. "/ls_cover_1_raw.png") end)
     end
@@ -2146,8 +2152,150 @@ local function getOpenBookCover()
     pcall(function() bb:free() end)
     if not ok_copy or not copy then return nil end
     if cover_cache.bb then cover_cache.bb:free() end
-    cover_cache.file, cover_cache.bb = doc.file, copy
+    cover_cache.file, cover_cache.bb = file, copy
     return copy
+end
+
+-- ── Complexity of a book (book_complexity.lua) ───────────────────────────────
+-- The file made by bookComplexity.py: one entry per book file name. It is read from the settings folder. Kept in the fields of ShowLongestSessionsWindow and cover_cache (no new top-level locals).
+
+-- The most recently read book that still exists (the first of the reading history), or nil
+function ShowLongestSessionsWindow.lastReadFile()
+    local ok, ReadHistory = pcall(require, "readhistory")
+    if not ok or type(ReadHistory) ~= "table" then return nil end
+    local lfs = require("libs/libkoreader-lfs")
+    for _i, item in ipairs(ReadHistory.hist or {}) do
+        if item.file and lfs.attributes(item.file, "mode") == "file" then return item.file end
+    end
+    return nil
+end
+
+-- The table of book_complexity.lua (kept until the file changes), or nil and the paths tried
+function ShowLongestSessionsWindow.loadComplexity()
+    local lfs = require("libs/libkoreader-lfs")
+    local paths = { DataStorage:getSettingsDir() .. "/book_complexity.lua" }
+    for _i, path in ipairs(paths) do
+        local mtime = lfs.attributes(path, "modification")
+        if mtime then
+            if cover_cache.complexity and cover_cache.complexity_path == path
+                    and cover_cache.complexity_mtime == mtime then
+                return cover_cache.complexity
+            end
+            local ok, data = pcall(dofile, path)
+            if ok and type(data) == "table" then
+                cover_cache.complexity, cover_cache.complexity_path, cover_cache.complexity_mtime = data, path, mtime
+                return data
+            end
+        end
+    end
+    return nil, paths
+end
+
+-- The entry of a book file in book_complexity.lua: a table, false (too short) or nil (not there)
+function ShowLongestSessionsWindow.complexityOf(file)
+    local data = ShowLongestSessionsWindow.loadComplexity()
+    if not data then return nil end
+    local _path, name = require("util").splitFilePathName(file)
+    return data[name]
+end
+
+-- The row of a book in calibre.lua (words, pubdate, complexity_score...), or nil. The key is the file name, as Bookshelf does.
+function ShowLongestSessionsWindow.calibreRow(file)
+    local util = require("util")
+    local ok, data = pcall(function() return util.loadCalibreData and util.loadCalibreData() end)
+    if not ok or type(data) ~= "table" or next(data) == nil then
+        -- loadCalibreData gave nothing here (the file manager): read settings/calibre.lua itself, kept until it changes
+        local path = DataStorage:getSettingsDir() .. "/calibre.lua"
+        local mtime = require("libs/libkoreader-lfs").attributes(path, "modification")
+        if not mtime then return nil end
+        if cover_cache.calibre_mtime ~= mtime then
+            local ok_load, loaded = pcall(dofile, path)
+            cover_cache.calibre, cover_cache.calibre_mtime = ok_load and type(loaded) == "table" and loaded or nil, mtime
+        end
+        data = cover_cache.calibre
+        if not data then return nil end
+    end
+    local filename = (file:match("([^/]+)$") or file):gsub("%.[^.]+$", "")
+    return data[filename .. "." .. (file:match("%.([^.]+)$") or "")]
+end
+
+-- Window with everything book_complexity.lua says about a book
+function ShowLongestSessionsWindow.showComplexity(file)
+    local _path, name = require("util").splitFilePathName(file)
+    local title = (name:gsub("%.%w+$", ""))
+    local data, tried = ShowLongestSessionsWindow.loadComplexity()
+    local items, method = {}, nil
+    if not data then
+        items[1] = { _("book_complexity.lua not found"), table.concat(tried or {}, "\n") }
+    else
+        local e = data[name]
+        if type(e) ~= "table" then
+            items[1] = { _("No complexity data"),
+                e == false and _("The book is too short to measure") or _("This book is not in book_complexity.lua yet") }
+        else
+            -- The same constants as bookComplexity.py (SCALES, WEIGHTS and LEVELS): the score is worked out there
+            local rare_low, rare_high, rare_weight = 1, 7, 60
+            local sl_low, sl_high, sl_weight = 10, 18, 40
+            local level_light, level_dense = 45, 70
+            local function share(v, low, high) return math.min(1, math.max(0, ((tonumber(v) or 0) - low) / (high - low))) end
+            local rare_share = share(e.rare, rare_low, rare_high)
+            local sl_share = share(e.sl75, sl_low, sl_high)
+            items[#items + 1] = { _("Summary"),
+                _("The score only measures how rare the words are and how long the sentences get, not metaphors, ornament, or how hard the story is to follow. A score under 30 or over 75 tells you something real. Under 30 means plain, common words and short sentences, so it reads quickly. Over 75 means a lot of rare vocabulary and long sentences, so expect to slow down.") }
+            items[#items + 1] = { _("Complexity"),
+                string.format("%s  \xC2\xB7  %d / 100", tostring(e.level), e.score or 0) .. "\n" ..
+                string.format(_("How dense the prose of the book is, from 0 to 100. It adds two parts: vocabulary (up to %d points) and long sentences (up to %d points). Light is below %d, medium below %d and dense from %d. It measures the words and the sentences, not the plot or how hard the story is to follow."),
+                    rare_weight, sl_weight, level_light, level_dense, level_dense) }
+            items[#items + 1] = { string.format(_("Vocabulary  %d of %d points"), math.floor(rare_share * rare_weight + 0.5), rare_weight),
+                string.format(_("%s%% of the words are rare in English: they appear less than once in a million words (proper names are left out). The scale goes from %d%% (0 points) to %d%% (all %d points), so this book is at %d%% of it."),
+                    tostring(e.rare), rare_low, rare_high, rare_weight, math.floor(rare_share * 100 + 0.5)) }
+            items[#items + 1] = { string.format(_("Long sentences  %d of %d points"), math.floor(sl_share * sl_weight + 0.5), sl_weight),
+                string.format(_("Three of every four sentences have %s words or fewer. The scale goes from %d words (0 points) to %d words (all %d points), so this book is at %d%% of it. The sentences are counted by their punctuation, and the end of a paragraph or a title also ends one."),
+                    tostring(e.sl75 or "-"), sl_low, sl_high, sl_weight, math.floor(sl_share * 100 + 0.5)) }
+            items[#items + 1] = { _("Not in the score"),
+                _("The figures below are shown for information only; they do not change the score.") }
+            items[#items + 1] = { _("Words per sentence"),
+                string.format(_("%s on average. Dialogue is full of very short sentences and pulls this down, which is why the score uses the long sentences instead."), tostring(e.wps)) }
+            items[#items + 1] = { _("Word frequency"),
+                string.format(_("%s on the Zipf scale: the average frequency of the words, where 7 is the most common and a lower number is harder. A plain thriller is near 6, and the denser the vocabulary the lower it goes."), tostring(e.zipf)) }
+            items[#items + 1] = { _("Long words"),
+                string.format(_("%s%% of the words have three or more syllables. The syllables are counted with a rule of thumb, so it is only approximate."), tostring(e.long)) }
+            items[#items + 1] = { _("Reading grade"),
+                string.format(_("Gunning Fog %s and Flesch-Kincaid %s: the years of school needed to read the text, from the length of the sentences and the syllables. They are made for school texts and give low numbers for novels, so they are only for comparing books."), tostring(e.fog), tostring(e.fk)) }
+            items[#items + 1] = { _("Size"),
+                string.format(_("%s words and %s pages. The words are counted in the text of the book itself, and a page is 1500 characters."),
+                    groupThousands(e.words_calc or 0), groupThousands(e.pages_calc or 0)) }
+
+            -- How the figures are worked out, step by step (what bookComplexity.py does)
+            local rare_pts = rare_share * rare_weight
+            local sl_pts = sl_share * sl_weight
+            method = {
+                { _("1. The text"),
+                    _("The text of every chapter of the epub is read in order, without the HTML tags, scripts or styles. A word is a run of letters (an apostrophe inside it is kept, as in don't); numbers are not words. A book with fewer than 5,000 words is not measured.") },
+                { _("2. Names are left out"),
+                    _("A word that is always written with a capital letter, and never in lowercase anywhere in the book, is taken for a proper name and is not counted as vocabulary. This way the names of characters and places (Mistwraith, Kvothe) do not count as rare words. A word that appears in lowercase at least once does count.") },
+                { _("3. Rare words"),
+                    string.format(_("Each remaining word is looked up in wordfreq, a table of how often every English word is used (books, subtitles, news and the web). Its Zipf value is the base-10 logarithm of its uses per billion words. A word is rare when its Zipf is below 3, that is, less than once in a million words. Rare is the share of those words over all the words counted: %s%% in this book. Invented words, archaic words and technical words count as rare."), tostring(e.rare)) },
+                { _("4. Sentences"),
+                    string.format(_("A sentence ends at . ! or ? (with any closing quote) followed by a space, and also at the end of a paragraph or a title. The words of each sentence are counted and the sentences are sorted by length: the one at the 75th percentile gives the figure for long sentences, %s words here. The average (%s) is not used because the short sentences of dialogue pull it down."), tostring(e.sl75 or "-"), tostring(e.wps)) },
+                { _("5. The score"),
+                    string.format(_("Each figure is put on a fixed scale, from 0 at the low end to 1 at the high end (a value outside the scale is cut). Vocabulary: (%s - %d) / (%d - %d) = %.2f, times %d points = %.1f. Long sentences: (%s - %d) / (%d - %d) = %.2f, times %d points = %.1f. The two are added and rounded: %.1f + %.1f = %d."),
+                        tostring(e.rare), rare_low, rare_high, rare_low, rare_share, rare_weight, rare_pts,
+                        tostring(e.sl75 or "-"), sl_low, sl_high, sl_low, sl_share, sl_weight, sl_pts,
+                        rare_pts, sl_pts, e.score or 0) },
+                { _("6. The level"),
+                    string.format(_("Light below %d, medium from %d to %d and dense from %d. The scales are fixed, so the score of a book does not change when other books are added to the library."),
+                        level_light, level_light, level_dense - 1, level_dense) },
+                { _("7. The size"),
+                    _("Words are all the words of the text, names included (so they are more than the ones counted for the vocabulary). Pages are counted file by file (each chapter, the copyright page...): its characters, spaces included, divided by 1500 and rounded up, added together. This is how KOReader's stable pages seem to count them.") },
+                { _("Limits"),
+                    _("It only works for books in English: in another language almost every word is rare and the score means nothing. A book whose text is broken or has no punctuation gives wrong sentences. And two books can have the same score with a very different style, because only the vocabulary and the length of the sentences are measured.") },
+            }
+        end
+    end
+    UIManager:show(ExplainWindow:new{
+        title = title, items = items, sessions = method, sessions_title = _("How it is calculated"),
+    }, "ui")
 end
 
 local CoverBanner = Widget:extend{
@@ -2220,6 +2368,7 @@ end
 -- number of sessions, wpm of the sessions and pages per day read.
 local function buildBookCard(w_width, session, book)
     local right_rows
+    cover_cache.card_file = nil   -- the book of the left card (set by leftContent): a tap on the card opens its complexity
     summary_book_reading = session ~= nil
     if session then
         -- reading: this book, the session in progress, its wpm and its pages
@@ -2255,22 +2404,45 @@ local function buildBookCard(w_width, session, book)
         local ui = getReaderUI()
         local topbar = ui and ui.view and ui.view.topbar
         local title = topbar and topbar.title or ""
-        if title == "" then
-            return TextWidget:new{
-                text = _("Not reading"), face = getFace(FONT_BIG),
-                fgcolor = COLOR_MUTED, max_width = inner_w,
-            }
+        local file, words, pub
+        if title ~= "" then
+            file = ui.document and ui.document.file
+            words = tonumber(topbar.total_words) or 0
+            pub = tostring(topbar.pub_date or "")
+        else
+            -- not reading (file manager): the last read book, with its words from book_complexity.lua
+            file = ShowLongestSessionsWindow.lastReadFile()
+            if not file then
+                return TextWidget:new{
+                    text = _("Not reading"), face = getFace(FONT_BIG),
+                    fgcolor = COLOR_MUTED, max_width = inner_w,
+                }
+            end
+            words, pub = 0, ""
+            local _path, name = require("util").splitFilePathName(file)
+            title = (name:gsub("%.%w+$", ""))
         end
-        local words = tonumber(topbar.total_words) or 0
+        cover_cache.card_file = file
+        -- what calibre.lua knows about the book fills what the reader does not give (the file manager gives nothing)
+        local row = file and ShowLongestSessionsWindow.calibreRow(file) or nil
+        if row then
+            if words <= 0 then words = tonumber(row.words) or 0 end
+            if pub == "" and row.pubdate then pub = tostring(row.pubdate):sub(1, 4) end
+        end
+        -- no calibre row (or no complexity in it): the entry of book_complexity.lua
+        local entry = file and ShowLongestSessionsWindow.complexityOf(file) or nil
+        if type(entry) ~= "table" then entry = nil end
+        if entry and words <= 0 then words = tonumber(entry.words_calc) or 0 end
         local parts = {}
         if words > 0 then
             parts[#parts + 1] = (words >= 1000 and string.format("%dk", math.floor(words / 1000)) or tostring(words)) .. "w"
         end
-        local pub = tostring(topbar.pub_date or "")
         if pub ~= "" then parts[#parts + 1] = pub end
+        local score = (row and tonumber(row.complexity_score)) or (entry and tonumber(entry.score))
+        if score then parts[#parts + 1] = tostring(math.floor(score + 0.5)) end
 
         -- with a cover the text sits on a band, a bit narrower than the card
-        local cover = getOpenBookCover()
+        local cover = getOpenBookCover(file)
         local band_pad = SPACE.l
         local text_w = cover and (inner_w - 2 * band_pad) or inner_w
 
@@ -2282,13 +2454,13 @@ local function buildBookCard(w_width, session, book)
                 -- over the cover: bigger, bold and white so it can be read on the picture
                 -- (without a cover it stays as before: gray on the white card)
                 text = table.concat(parts, SUMMARY_SEPARATOR),
-                face = getFace(cover and (FONT_BIG - 2) or FONT_SUMMARY), bold = cover and true or nil,
+                face = getFace(cover and (FONT_BIG - 8) or FONT_SUMMARY), bold = cover and true or nil,
                 fgcolor = cover and Blitbuffer.COLOR_WHITE or COLOR_MUTED, max_width = text_w, ellipsis = true,
             }
         else
             vg[#vg + 1] = TextWidget:new{
-                text = cleanTopBarText(title), face = getFace(FONT_BIG - 2), bold = true,
-                fgcolor = COLOR_TEXT, max_width = text_w, ellipsis = true,
+                text = cleanTopBarText(title), face = getFace(FONT_BIG - 8), bold = true,
+                fgcolor = cover and Blitbuffer.COLOR_WHITE or COLOR_TEXT, max_width = text_w, ellipsis = true,
             }
         end
         if cover then
@@ -2532,17 +2704,17 @@ local function buildSummaryView(w_width, parent)
         return cards
     end
 
-    local cards = buildCards(w_width)
+    -- The cards always leave room for the scrollbar, so they are the same width whether the list scrolls (reading,
+    -- with more rows) or not (file manager).
+    local scrollbar_w = ScrollableContainer:getScrollbarWidth()
+    local cards = buildCards(w_width - scrollbar_w)
     local max_h = math.floor(Screen:getHeight() * 0.7)
     if cards:getSize().h <= max_h then
         Perf.log("buildSummaryView TOTAL", t_all)
-        return { cards }
+        return { HorizontalGroup:new{ align = "top", cards, HorizontalSpan:new{ width = scrollbar_w } } }
     end
 
-    if DEBUG_PERF then logger.info("[LS-PERF] summary does not fit: rebuilding with scroll") end
-    cards:free()
-    cards = buildCards(w_width - ScrollableContainer:getScrollbarWidth())
-    Perf.log("buildSummaryView TOTAL (rebuilt)", t_all)
+    Perf.log("buildSummaryView TOTAL (scroll)", t_all)
     return { SwipePassthroughScrollable:new{
         dimen = Geom:new{ w = w_width, h = max_h },
         show_parent = parent,
@@ -4607,6 +4779,15 @@ function ShowLongestSessionsWindow:onTapClose(arg, ges)
     end
     -- on the summary, a tap on a zone (TBR, MBR, Finished) closes the window and then acts
     if VIEWS[self.current_view].build == buildSummaryView and ges and ges.pos then
+        -- a tap on the card of the book (left of the last row of cards): everything book_complexity.lua says about it
+        local book_card = summary_book_card and summary_book_card[1]
+        local bd = book_card and book_card.dimen
+        local pos = ges.pos
+        if cover_cache.card_file and bd and bd.w and bd.w > 0
+                and pos.x >= bd.x and pos.x < bd.x + bd.w and pos.y >= bd.y and pos.y < bd.y + bd.h then
+            ShowLongestSessionsWindow.showComplexity(cover_cache.card_file)
+            return true
+        end
         local zone = hitSummaryZone(ges.pos)
         if zone then
             -- leaving for Bookshelf: do not come back to where the window was opened from

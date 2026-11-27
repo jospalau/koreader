@@ -1296,6 +1296,10 @@ function ListRow.lineText(record, line, template)
             if cb.grvotes and cb.grvotes ~= "" then
                 parts[#parts + 1] = "GRV: " .. tostring(cb.grvotes)
             end
+            -- Prose complexity of the text (bookComplexity.py, through the calibre generator)
+            if tonumber(cb.complexity_score) then
+                parts[#parts + 1] = "CX: " .. tostring(math.floor(tonumber(cb.complexity_score) + 0.5))
+            end
             if #parts > 0 then
                 text = text .. "  " .. table.concat(parts, "  ")
             end

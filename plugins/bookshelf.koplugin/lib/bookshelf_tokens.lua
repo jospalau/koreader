@@ -174,7 +174,7 @@ Tokens.CATALOGUE = {
     { category = "Progress", token = "%books_unread",     description = _("Books unread") },
     { category = "Progress", token = "%books_read_this_month", description = _("Books finished this month") },
     { category = "Book",     token = "%sort_label",       description = _("Calibre sort picked with the two-finger swipe inside a tag, genre or author (empty otherwise)") },
-    { category = "Book",     token = "%calibre2{name}",   description = _("A raw column from settings/calibre.lua by name (words, pages, pubdate, grrating, grvotes, series, genre) — 'N/A' if missing") },
+    { category = "Book",     token = "%calibre2{name}",   description = _("A raw column from settings/calibre.lua by name (words, pages, pubdate, grrating, grvotes, complexity, complexity_score, series, genre) — 'N/A' if missing") },
 }
 
 local function metaToken(field)

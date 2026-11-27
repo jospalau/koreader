@@ -5087,11 +5087,11 @@ local function heroCoverBand(name)
     if type(b) == "table" and tonumber(b[1]) and tonumber(b[2]) then return tonumber(b[1]), tonumber(b[2]) end
 end
 
--- Metadata line "1984 - 275kw - 4.1★ (1234)" (publication year, kilowords, Goodreads rating and votes). Same data as the
+-- Metadata line "1984 - 275kw - 4.1★ (1234) - dense 71" (publication year, kilowords, Goodreads rating and votes, prose complexity). Same data as the
 -- file dialog title; it lives in the calibre_data table of the file manager's file chooser, keyed by file name.
 -- Returns "" when there is nothing for the open book.
 local function heroMetadataText(book, ui)
-    local text = ""
+    local text, extra = "", nil
     pcall(function()
         local rui = ui or require("apps/reader/readerui").instance
         local file = (rui and rui.document and rui.document.file) or (book and book.file) or (book and book.path)
@@ -5123,9 +5123,16 @@ local function heroMetadataText(book, ui)
         if rating then
             table.insert(parts, tostring(rating) .. "★" .. (votes and (" (" .. tostring(votes) .. ")") or ""))
         end
+        -- prose complexity of the text (bookComplexity.py, through calibre.lua): "dense 71", added by the caller if it fits
+        local complexity = field("complexity")
+        if complexity then
+            local score = tonumber(field("complexity_score"))
+            extra = { level = tostring(complexity),
+                      full = tostring(complexity) .. (score and (" " .. math.floor(score)) or "") }
+        end
         text = table.concat(parts, " - ")
     end)
-    return text
+    return text, extra
 end
 
 -- The text taken from the cover itself (only used by the "Bottom: cover text" option of custombg): the band of the cover with the most text-like detail (many light/dark changes
@@ -5267,11 +5274,26 @@ local function buildHeroProgressSide(width, pct, book, device_state, progress_cf
     local HeroBar = require("lib/bookshelf_hero_bar")
 
     local col = VerticalGroup:new{ align = "center" }
-    local meta = heroMetadataText(book, ui)
+    local meta, extra = heroMetadataText(book, ui)
     if meta ~= "" then
-        local tw = TextWidget:new{
-            text = meta, face = Font:getFace("cfont", 15), padding = 0, fgcolor = Bb.COLOR_BLACK, max_width = width,
-        }
+        -- the complexity goes at the end only if the whole line fits: first "dense 72", then "dense", then nothing, so it never
+        -- cuts the year, the words or the rating
+        local face = Font:getFace("cfont", 15)
+        local candidates = {}
+        if extra then
+            table.insert(candidates, meta .. " - " .. extra.full)
+            if extra.level ~= extra.full then table.insert(candidates, meta .. " - " .. extra.level) end
+        end
+        table.insert(candidates, meta)
+        local tw
+        for i, text in ipairs(candidates) do
+            if tw then tw:free() end
+            local last = (i == #candidates)
+            -- the last one (without the complexity) is cut only if it does not fit by itself
+            tw = TextWidget:new{ text = text, face = face, padding = 0, fgcolor = Bb.COLOR_BLACK,
+                                 max_width = last and width or nil }
+            if last or tw:getSize().w <= width then break end
+        end
         table.insert(col, CenterContainer:new{ dimen = Geom:new{ w = width, h = tw:getSize().h }, tw })
         table.insert(col, VerticalSpan:new{ width = Screen:scaleBySize(6) })
     end

@@ -4000,6 +4000,7 @@ local function _dirLabels(key)
     if key == "page_count" or key == "time_left" then return _("Shortest first"), _("Longest first") end
     if key == "book_count" or key == "words" or key == "grrating" or key == "grvotes"
         then return _("Fewest first"), _("Most first") end
+    if key == "complexity" then return _("Lightest first"), _("Densest first") end
     -- Named for what leads: "First" / "Last" read "Favorites first: Last".
     if key == "read_status" then return _("Unread first"), _("Finished first") end
     if key == "read_status_active" then return _("Reading first"), _("Finished first") end
@@ -4128,7 +4129,7 @@ function Editor:_openSort(draft, on_change, on_arranged, on_back, arrange)
         if is_group and sel == 1 then
             add({ type = "heading", text = _("Order the groups by") })
             local keys = { "series_name", "author_surname", "book_count",
-                           "last_opened", "date_added", "added_or_opened", "pub_date", "modified_date", "words", "grrating", "grvotes" }
+                           "last_opened", "date_added", "added_or_opened", "pub_date", "modified_date", "words", "grrating", "grvotes", "complexity" }
             if kind == "decades" then table.insert(keys, 1, "published") end
             add(chips(keys))
         else
@@ -4176,7 +4177,7 @@ function Editor:_openSort(draft, on_change, on_arranged, on_back, arrange)
             add({ type = "heading", text = _("Size") })
             add(chips({ "page_count", "size", "book_count" }))
             add({ type = "heading", text = _("Calibre") })
-            add(chips({ "pub_date", "words", "grrating", "grvotes" }))
+            add(chips({ "pub_date", "words", "grrating", "grvotes", "complexity" }))
         end
         return { strip = strip, blocks = blocks }
     end

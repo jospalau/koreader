@@ -969,6 +969,9 @@ function ShelfRow.new(opts)
                         if cb.grvotes and cb.grvotes ~= "" then
                             parts[#parts + 1] = tostring(cb.grvotes)
                         end
+                        if tonumber(cb.complexity_score) then
+                            parts[#parts + 1] = tostring(math.floor(tonumber(cb.complexity_score)))
+                        end
                     end
                     local title_text = #parts > 0 and table.concat(parts, " ") or _labelFor(item)
                     -- TextWidget (single-line) auto-truncates with ellipsis at
