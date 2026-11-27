@@ -1008,7 +1008,7 @@ function PageTextInfo:getSessionWpm()
     pcall(function()
         local page_data = stats.page_stat[stats.curr_page]
         local tuple = page_data and page_data[#page_data]
-        if tuple and tuple[1] and not stats._reading_paused_ts then
+        if tuple and tuple[1] and not stats._reading_paused_ts and not stats._skip_first_turn then
             local elapsed = os.time() - tuple[1]
             if elapsed >= stats.settings.min_sec then
                 secs = secs + math.min(elapsed, stats.settings.max_sec)

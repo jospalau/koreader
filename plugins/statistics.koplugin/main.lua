@@ -237,8 +237,14 @@ function ReaderStatistics:init()
     }
 
     self.start_current_period = os.time()
+    -- Document reload (font, margins...): the page open now was partly read before it, so its words must not be counted
+    -- against only the time since the reload (same as after a resume, see onPageUpdate and PageTextInfo:getSessionWpm)
+    local reloading = ReaderStatistics.preserve
     if ReaderStatistics.preserve then
         ReaderStatistics.preserve = nil
+    end
+    if reloading then
+        self._skip_first_turn = true
     end
     if ReaderStatistics.preserved_start_current_period then
         self.start_current_period = ReaderStatistics.preserved_start_current_period
@@ -296,6 +302,14 @@ function ReaderStatistics:init()
             self._session_start_pct = nil
             self._pending_start_pct = nil
             self._ref_mode = nil
+            -- the session starts again at 0: so does the wpm shown, or the previous one is shown until the next page turn
+            pcall(function()
+                local f = io.open(DataStorage:getSettingsDir() .. "/wpm_session.json", "w")
+                if f then
+                    f:write(string.format('{"wpm":0,"words":0,"pages":0,"updated":%d}', os.time()))
+                    f:close()
+                end
+            end)
             local res = nil
             local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
             self._last_nbwords = nbwords
@@ -3425,6 +3439,7 @@ function ReaderStatistics:onPageUpdate(pageno)
     end
 
 
+
     self.pageturn_count = self.pageturn_count + 1
     local now_ts = os.time()
 
@@ -3451,6 +3466,12 @@ function ReaderStatistics:onPageUpdate(pageno)
         return
     end
 
+    -- First page turn after a resume or a reload: the page was partly read before (and the screensaver may have
+    -- stayed on it), so its words must not be counted against only the time since then. Cleared here, at the first
+    -- real page turn, not at the page update of the opening (that one has no timestamp and returns above).
+    local skip_session_count = self._skip_first_turn
+    self._skip_first_turn = nil
+
     -- By now, we're sure that we actually have a tuple (and the rest of the code ensures they're sane, i.e., zero-initialized)
     local curr_duration = data_tuple[2]
     -- NOTE: If all goes well, given the earlier curr_page != pageno check, curr_duration should always be 0 here.
@@ -3464,7 +3485,7 @@ function ReaderStatistics:onPageUpdate(pageno)
         end
         -- Update the tuple with the computed duration
         data_tuple[2] = curr_duration + diff_time
-        if not closing and not self.ui.searching then -- don't count statistics when closing the book and when searching
+        if not closing and not self.ui.searching and not skip_session_count then -- don't count statistics when closing the book and when searching
             -- This to be done only when computing a page obviously
             self._total_words = self._last_nbwords + self._total_words
             self._total_pages = self._total_pages + 1
@@ -3500,7 +3521,7 @@ function ReaderStatistics:onPageUpdate(pageno)
         data_tuple[2] = curr_duration + self.settings.max_sec
 
         -- The new table sessions don't take into account the maximum time so I compute all the stats as well
-        if not closing and not self.ui.searching then -- don't count statistics when closing the book and when searching
+        if not closing and not self.ui.searching and not skip_session_count then -- don't count statistics when closing the book and when searching
             self._total_words = self._last_nbwords + self._total_words
             self._total_pages = self._total_pages + 1
             self:markSessionStartRef()
@@ -3703,6 +3724,15 @@ function ReaderStatistics:onResume()
         self._session_start_pct = nil
         self._pending_start_pct = nil
         self._ref_mode = nil
+        self._skip_first_turn = true
+        -- New session: clear the wpm of the previous one, or it is shown until the next page turn
+        pcall(function()
+            local f = io.open(DataStorage:getSettingsDir() .. "/wpm_session.json", "w")
+            if f then
+                f:write(string.format('{"wpm":0,"words":0,"pages":0,"updated":%d}', os.time()))
+                f:close()
+            end
+        end)
         self._prev_ref = self:getCurrentRefPage()
         self._prev_pct, self._prev_page = self:getCurrentProgress()
         local nbwords = select(2, self.ui.view:getCurrentPageLineWordCounts())
