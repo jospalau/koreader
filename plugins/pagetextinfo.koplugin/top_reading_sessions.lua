@@ -2414,36 +2414,25 @@ local function buildBookCard(w_width, session, book)
         local score = (row and tonumber(row.complexity_score)) or (entry and tonumber(entry.score))
         if score then parts[#parts + 1] = tostring(math.floor(score + 0.5)) end
 
-        -- with a cover the text sits on a band, a bit narrower than the card
-        -- no cover in the file manager (decoding it from the epub was slow); only with a book open
-        local cover = (ui and ui.document) and getOpenBookCover(file) or nil
-        local band_pad = SPACE.l
-        local text_w = cover and (inner_w - 2 * band_pad) or inner_w
-
-        -- Only the words and the publication year (no title, no series, no author).
-        -- The title is shown only when neither is known, so the card is never empty.
+        -- title (bold), series (muted) and words · year · complexity (muted)
         local vg = VerticalGroup:new{ align = "center" }
-        if #parts > 0 then
+        vg[#vg + 1] = TextWidget:new{
+            text = cleanTopBarText(title), face = getFace(FONT_BIG - 2), bold = true,
+            fgcolor = COLOR_TEXT, max_width = inner_w, ellipsis = true,
+        }
+        local series = cleanTopBarText(topbar.series)
+        if series ~= "" then
+            vg[#vg + 1] = VerticalSpan:new{ width = SPACE.s }
             vg[#vg + 1] = TextWidget:new{
-                -- over the cover: bigger, bold and white so it can be read on the picture
-                -- (without a cover it stays as before: gray on the white card)
-                text = table.concat(parts, SUMMARY_SEPARATOR),
-                face = getFace(cover and (FONT_BIG - 8) or FONT_SUMMARY), bold = cover and true or nil,
-                fgcolor = cover and Blitbuffer.COLOR_WHITE or COLOR_MUTED, max_width = text_w, ellipsis = true,
-            }
-        else
-            vg[#vg + 1] = TextWidget:new{
-                text = cleanTopBarText(title), face = getFace(FONT_BIG - 8), bold = true,
-                fgcolor = cover and Blitbuffer.COLOR_WHITE or COLOR_TEXT, max_width = text_w, ellipsis = true,
+                text = series, face = getFace(FONT_SUMMARY),
+                fgcolor = COLOR_MUTED, max_width = inner_w, ellipsis = true,
             }
         end
-        if cover then
-            -- room above and below the band, so the cover shows
-            local margin = Screen:scaleBySize(16)
-            local height = math.max(min_h or 0, vg:getSize().h + 2 * band_pad + 2 * margin)
-            return CoverBanner:new{
-                width = inner_w, height = height, cover = cover, content = vg, pad = band_pad,
-                bottom_gap = margin,   -- the text sits this far from the top edge of the cover
+        if #parts > 0 then
+            vg[#vg + 1] = VerticalSpan:new{ width = SPACE.s }
+            vg[#vg + 1] = TextWidget:new{
+                text = table.concat(parts, SUMMARY_SEPARATOR), face = getFace(FONT_SUMMARY),
+                fgcolor = COLOR_MUTED, max_width = inner_w, ellipsis = true,
             }
         end
         return vg
@@ -4426,7 +4415,7 @@ end
 function ShowLongestSessionsWindow:onShow()
     -- dithered: the cover is a photo, without it e-ink shows banding
     UIManager:setDirty(self, function()
-        return "ui", self[1][1].dimen, true
+        return "ui", self[1][1].dimen
     end)
     if DEBUG_PERF and Perf.open_t0 then
         local t0 = Perf.open_t0
