@@ -2095,7 +2095,7 @@ function ReaderStatistics:getCurrentStat()
     local stats_last_months = getLastMonthsStats(5,false)
     local time_this_week,pages_this_week = getThisWeekStats()
     local time_this_month,pages_this_month = getThisMonthStats()
-    local wpm_today = getWpmToday() .. "wpm"
+    local wpm_today = getWpmToday(self) .. "wpm"
     -- Use more_arrow to indicate that an option shows another view
     -- Use " ⓘ" to indicate that an option will show an info message
     local more_arrow = BD.mirroredUILayout() and "◂" or "▸"
@@ -2465,40 +2465,47 @@ getThisMonthStats = function ()
     last_week_time = datetime.secondsToClockDuration(user_duration_format,last_week_time, true)
     return last_week_time,last_month_pages
 end
-getWpmToday = function ()
-    -- local DataStorage = require("datastorage")
-    -- local db_location = DataStorage:getSettingsDir() .. "/statistics.sqlite3"
-    -- local from_begin_day = now_t.hour * 3600 + now_t.min * 60 + now_t.sec
-    -- local start_today_time = now_stamp - from_begin_day
-    -- local conn = SQ3.open(db_location)
-    -- local sql_stmt = [[
-    --     SELECT count(*),
-    --            sum(sum_duration)
-    --     FROM    (
-    --                  SELECT sum(duration)    AS sum_duration
-    --                  FROM   page_stat
-    --                  WHERE  start_time >= strftime('%s', DATE('now'))
-    --                  GROUP  BY id_book, page
-    --             );
-    -- ]]
-    -- local pages_read_today,time_reading_today = conn:rowexec(sql_stmt)
+-- WPM of today, the same one the Top reading sessions card shows: the words of the sessions divided by their reading time
+-- (words / read_secs of wpm_stat_data, summed first and divided after, so a long session weighs more than a short one),
+-- plus the session in progress, which is not saved yet. `stats` is the ReaderStatistics instance; without it only the saved
+-- sessions are used. 0 when there is no data.
+getWpmToday = function (stats)
+    local now_t = os.date("*t")
+    local start_today_time = os.time() - (now_t.hour * 3600 + now_t.min * 60 + now_t.sec)
+    local words, secs = 0, 0
 
-    -- conn:close()
+    -- The session in progress may be saved already (the Top reading sessions window saves it when it opens): it is left
+    -- out of the query and added from the live counters, so it is never counted twice.
+    local skip_book, skip_start = -1, -1
+    if stats then
+        skip_book = tonumber(stats.id_curr_book) or -1
+        skip_start = tonumber(stats.start_current_period) or -1
+    end
 
-    -- if pages_read_today == nil then
-    --     pages_read_today = 0
-    -- end
-    -- pages_read_today = tonumber(pages_read_today)
-    -- if time_reading_today == nil then
-    --     time_reading_today = 0
-    -- end
-    local WPP = 270
-    local time_reading_today = tonumber(time_reading_today)
-    local today_duration, today_pages = ReaderStatistics:getTodayBookStats()
-    -- datetime.secondsToClockDuration(user_duration_format, today_duration, false)
+    pcall(function()
+        local conn = SQ3.open(db_location)
+        local ok, w, s = pcall(conn.rowexec, conn, string.format([[
+            SELECT COALESCE(SUM(words), 0), COALESCE(SUM(read_secs), 0)
+            FROM   wpm_stat_data
+            WHERE  words IS NOT NULL AND read_secs > 0 AND start_time >= %d
+              AND  NOT (id_book = %d AND start_time = %d);
+        ]], start_today_time, skip_book, skip_start))
+        conn:close()
+        if ok then
+            words = tonumber(w) or 0
+            secs = tonumber(s) or 0
+        end
+    end)
 
-    local wpm = math.floor((today_pages * WPP)/(today_duration/60))
-    return wpm
+    if stats and (tonumber(stats.start_current_period) or 0) >= start_today_time then
+        words = words + (tonumber(stats._total_words) or 0)
+        secs = secs + (tonumber(stats._total_read_time) or 0)
+    end
+
+    if words > 0 and secs > 0 then
+        return math.floor(words / (secs / 60) + 0.5)
+    end
+    return 0
 end
 
 function ReaderStatistics:getBookStat(id_book)

@@ -1621,17 +1621,31 @@ end
 local WPM_STALE_S = 300
 
 local function readWpmSession()
+    -- wpm: calculated live by the plugin, the same number as the tap in the bottom right corner of the reader
+    -- (PageTextInfo:getSessionWpm), so the card and the tap agree and the card does not fall to 0 when the last page turn
+    -- was more than 5 minutes ago. The json file is the fallback (no reader or no plugin).
+    -- pages: always from the json (0 when it is stale).
+    local live
+    pcall(function()
+        local ReaderUI = require("apps/reader/readerui")
+        local plugin = ReaderUI.instance and ReaderUI.instance.pagetextinfo
+        if plugin and plugin.getSessionWpm then
+            live = tonumber(plugin:getSessionWpm())
+        end
+    end)
+    if live and live <= 0 then live = nil end
+
     local f = io.open(DataStorage:getSettingsDir() .. "/wpm_session.json", "r")
-    if not f then return 0, 0 end
+    if not f then return live or 0, 0 end
     local raw = f:read("*a")
     f:close()
-    if not raw or raw == "" then return 0, 0 end
+    if not raw or raw == "" then return live or 0, 0 end
     local wpm     = tonumber(raw:match('"wpm"%s*:%s*(%d+)'))
     local pages   = tonumber(raw:lower():match('"pages[%w_]*"%s*:%s*(%d+)'))
     local updated = tonumber(raw:match('"updated"%s*:%s*(%d+)'))
-    if not wpm or not updated then return 0, 0 end
-    if os.time() - updated > WPM_STALE_S then return 0, 0 end
-    return wpm, pages or 0
+    if not wpm or not updated then return live or 0, 0 end
+    if os.time() - updated > WPM_STALE_S then return live or 0, 0 end
+    return live or wpm, pages or 0
 end
 
 -- Pages read in the session in progress: the distinct pages of
