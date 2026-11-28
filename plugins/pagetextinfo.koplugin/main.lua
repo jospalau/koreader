@@ -884,12 +884,15 @@ function SessionOverlay:buildTexts(color)
     self.widgets = {}
     self.sizes = self.sizes or {}
     local max_w = math.floor(Screen:getWidth() * cfg.width_ratio)
+    -- and the height of its own part of the screen (with many texts, like the legibility message, 100 pt overlapped)
+    local max_h = math.floor(Screen:getHeight() / math.max(1, #self.texts) * 0.85)
     for i, text in ipairs(self.texts) do
         local size = self.sizes[i] or cfg.font_size
         local w
         while true do
             w = TextWidget:new{ text = text, face = self:getFace(size), fgcolor = color, padding = 0 }
-            if w:getSize().w <= max_w or size <= cfg.min_font_size then break end
+            local sz = w:getSize()
+            if (sz.w <= max_w and sz.h <= max_h) or size <= cfg.min_font_size then break end
             w:free()
             size = size - 6
         end
@@ -2711,9 +2714,180 @@ end
 
 -- Switch the widget time overlay on/off from the menu entry (same flag the "×" of the overlay switches off)
 
+-- ===== Legibility grade (legibility.lua) =====
+-- The page on screen (CreDocument keeps its bitmap in document.buffer) is measured and the grade is shown big over
+-- the page, like "Off" / "Double tap on": on demand with the swipe down, and, with "Legibility after typesetting
+-- changes" on, every time a typesetting change makes the book render again (font, size, margins, line or word
+-- spacing, hyphenation, weight, style tweaks...)
+-- Loaded the first time it is used: if legibility.lua is missing or broken, only this feature fails (a require
+-- here at load time made the whole plugin fail, and with it ptutil and the other modules of this folder)
+local Legibility
+local function getLegibility()
+    if Legibility == nil then
+        local ok, mod = pcall(require, "legibility")
+        if not ok then require("logger").warn("PageTextInfo: legibility.lua not loaded:", mod) end
+        Legibility = ok and mod or false
+    end
+    return Legibility or nil
+end
+
+-- Measures the current page. Returns the tracker (its result is nil when the page cannot be measured: images,
+-- 2 pages, scroll mode, too little text)
+function PageTextInfo:measureLegibility()
+    local doc = self.ui and self.ui.document
+    if not (doc and doc.provider == "crengine" and doc.buffer and doc._document) then return nil end
+    if doc._view_mode ~= doc.PAGE_VIEW_MODE or doc:getVisiblePageCount() ~= 1 then return nil end
+    if (doc._drawn_images_count or 0) > 0 then return nil end
+    local Legibility = getLegibility()
+    if not Legibility then return nil end
+    self.legibility = self.legibility or Legibility.newTracker()
+    local bb = doc.buffer
+    local pageno = doc:getCurrentPage()
+    local hash = doc:getDocumentRenderingHash(true)
+    if self.legibility:has(hash, pageno) then return self.legibility end
+    local m = doc:getPageMargins() or {}
+    local w, h = bb:getWidth(), bb:getHeight()
+    local chars
+    local ok0, xp0 = pcall(doc.getPageXPointer, doc, pageno)
+    local ok1, xp1 = pcall(doc.getPageXPointer, doc, pageno + 1)
+    if ok0 and ok1 and xp0 and xp1 then
+        local okt, text = pcall(doc.getTextFromXPointers, doc, xp0, xp1)
+        if okt and type(text) == "string" then
+            chars = Legibility.utf8len((text:gsub("[\n\r]", "")))
+        end
+    end
+    -- x-height in mm: the same calculation as the fonts menu and the top bar, if available
+    local xh_mm
+    if self.getFontXHeightInfo and self.ui.font then
+        local okx, xi = pcall(self.getFontXHeightInfo, self, self.ui.font.font_face)
+        if okx and xi and xi.mm and xi.mm > 0 then xh_mm = xi.mm end
+    end
+    -- Line spacing: the same figures as the top bar (topbar.lua, typography line: "lF: 2.41 (balanced)"), so
+    -- "tight lines" here and "compact" there agree. Worked out once per settings
+    if self._legibility_lead_hash ~= hash then
+        self._legibility_lead_hash = hash
+        self._legibility_lead = nil
+        pcall(function()
+            local dpi = Device:getDeviceScreenDPI() or Screen:getDPI()
+            local cfg = doc.configurable
+            local size_px = math.floor(dpi * cfg.font_size / 72 + 0.5)
+            local face_name = (self.getFaceName and self:getFaceName())
+                or (doc._document:getFontFace():gsub("%s+", "") .. "-Regular")
+            local face = Font:getFace(face_name, size_px, 0, true)
+            if not face then return end
+            local xh = face.ftsize:getXHeight()
+            local x_height = (xh < 1) and (xh * size_px) or xh
+            local xi = self.getFontXHeightInfo and self.ui.font and self:getFontXHeightInfo(self.ui.font.font_face)
+            if xi and xi.mm then x_height = xi.mm * dpi / 25.4 end
+            local x2, asc, desc = face.ftsize:getAscDesc()
+            if not (x_height > 0 and x2 and x2 > 0) then return end
+            self._legibility_lead = {
+                -- the distance between lines is measured on the page (legibility.lua: lF = pitch / xh_px), so
+                -- the line-height of the book counts; x-height and safe_min are the ones of the font, as the top bar
+                xh_px = x_height,
+                safe_min = (asc + desc) / x2,
+                -- the top bar's estimate (1.2 em), only shown in the details
+                lf_estimate = (1.2 * size_px * ((cfg.line_spacing or 100) / 100)) / x_height,
+            }
+        end)
+    end
+    self.legibility:addPage(bb, {
+        leading = self._legibility_lead,
+        hash = hash, pageno = pageno, px = doc:getFontSize(),
+        box = { m.left or 0, m.top or 0, w - 1 - (m.right or 0), h - 1 - (m.bottom or 0) },
+        chars = chars, dpi = Device:getDeviceScreenDPI() or Screen:getDPI(), xh_mm = xh_mm,
+        margin_px = math.min(m.left or 0, m.right or 0),
+        word_expansion = doc.configurable and doc.configurable.word_expansion or 0,
+    })
+    return self.legibility
+end
+
+-- Line spacing measured on the page for the current settings, for the top bar (topbar.lua, "lF: 2.41 (balanced)"):
+-- { lf, safe_min } or nil when nothing has been measured yet with these settings
+function PageTextInfo:getMeasuredLeading()
+    local t = self.legibility
+    local lead = self._legibility_lead
+    if not (t and t.metrics and t.metrics.pitch_px and lead and lead.xh_px and lead.xh_px > 0) then return nil end
+    local doc = self.ui and self.ui.document
+    local ok, hash = pcall(doc.getDocumentRenderingHash, doc, true)
+    if not ok or hash ~= t.hash or hash ~= self._legibility_lead_hash then return nil end
+    return { lf = t.metrics.pitch_px / lead.xh_px, safe_min = lead.safe_min }
+end
+
+-- After the page is drawn: measures it when there is no line spacing yet for these settings (once per settings,
+-- not on every page) and refreshes the top bar so its lF is the measured one
+function PageTextInfo:scheduleLeadingMeasure()
+    if self:getMeasuredLeading() then return end
+    if self._leading_measure then UIManager:unschedule(self._leading_measure) end
+    self._leading_measure = function()
+        self._leading_measure = nil
+        local ok = pcall(self.measureLegibility, self)
+        if ok and self:getMeasuredLeading() then self:refreshTopBarLeading() end
+    end
+    UIManager:scheduleIn(0.5, self._leading_measure)
+end
+
+function PageTextInfo:refreshTopBarLeading()
+    local topbar = self.view and self.view.topbar
+    if not (topbar and topbar.toggleBar) then return end
+    topbar:toggleBar()
+    UIManager:setDirty(self.view.dialog, function()
+        return "ui", Geom:new{ w = Screen:getWidth(), h = topbar:getHeight(), y = 0 }
+    end)
+end
+
+-- Measures and shows the grade big over the page. on_demand: "No data" is said too (after a typesetting change
+-- nothing is shown when the page cannot be measured)
+function PageTextInfo:showLegibility(on_demand)
+    if self._legibility_check then
+        UIManager:unschedule(self._legibility_check)
+        self._legibility_check = nil
+    end
+    local ok, tracker = pcall(self.measureLegibility, self)
+    if not ok then
+        require("logger").warn("PageTextInfo legibility:", tracker)
+        tracker = nil
+    end
+    if tracker and tracker.metrics then self:refreshTopBarLeading() end
+    local texts
+    if tracker and tracker.result then
+        texts = tracker:overlayTexts()
+    elseif on_demand then
+        texts = { _("No data") }
+    else
+        return
+    end
+    -- and the figures of the word counter banner (wordcount_overlay.lua): lines and words of the page, characters
+    -- of the first and the longest line with its rating, and the session
+    local okw, info = pcall(function() return require("wordcount_overlay").pageInfo(self) end)
+    if okw and info then
+        texts[#texts + 1] = info.page
+        if info.chars then texts[#texts + 1] = info.chars end
+        if info.session then texts[#texts + 1] = info.session end
+    elseif not okw then
+        require("logger").warn("PageTextInfo legibility, word counts:", info)
+    end
+    self:showSessionOverlay(texts)
+end
+
+-- Sent by ReaderRolling when the book has been rendered again with other settings. The page is measured a moment
+-- later, when it is already painted; several changes in a row (tapping + + +) show only the last one
+function PageTextInfo:onDocumentRerendered()
+    if not self.initialized or not self.settings:nilOrTrue("legibility_on_typesetting") then return end
+    if self._legibility_check then UIManager:unschedule(self._legibility_check) end
+    self._legibility_check = function()
+        self._legibility_check = nil
+        self:showLegibility(false)
+    end
+    UIManager:scheduleIn(1, self._legibility_check)
+end
+-- With partial rerendering (KOReader's default) a setting change does not send "DocumentRerendered" but this one
+PageTextInfo.onDocumentPartiallyRerendered = PageTextInfo.onDocumentRerendered
+
 function PageTextInfo:onPageUpdate(pageno)
     -- Avoid double execution when loading document
     if not self.initialized then return end
+    pcall(self.scheduleLeadingMeasure, self)
 
     -- the bottom picture (if chosen in custombg) is built again so its progress and time left advance with the page
     local custombg = self.ui and self.ui.custombg
@@ -3641,11 +3815,11 @@ This is to be active only if the option flash buttons and menu items or the opti
                 --     end,
                 -- },
                 {
-                    text = _("Fade out big texts"),
-                    checked_func = function() return not self.settings:isTrue("no_overlay_fade") end,
-                    help_text = _([[The big texts over the page (frontlight "Off", the number of the margin preset and the clock / session time / wpm of the bottom right tap) fade out in some steps. Each step is a refresh of the screen. Unchecked, they go away at once.]]),
+                    text = _("Legibility after typesetting changes"),
+                    checked_func = function() return self.settings:nilOrTrue("legibility_on_typesetting") end,
+                    help_text = _([[Every time a typesetting change renders the book again (font, size, margins, line or word spacing, hyphenation, weight...), the legibility grade of the page on screen is shown big over the page: A (best) to E and 0-100, and the main problem when there is one. Nothing is shown when the page cannot be measured (images, too little text, 2 pages, scroll mode).]]),
                     callback = function()
-                        self.settings:saveSetting("no_overlay_fade", not self.settings:isTrue("no_overlay_fade"))
+                        self.settings:saveSetting("legibility_on_typesetting", not self.settings:nilOrTrue("legibility_on_typesetting"))
                         self.settings:flush()
                         return true
                     end,
@@ -3674,6 +3848,16 @@ This is to be active only if the option flash buttons and menu items or the opti
                             }
                         end
                         return items
+                    end,
+                },
+                {
+                    text = _("Fade out big texts"),
+                    checked_func = function() return not self.settings:isTrue("no_overlay_fade") end,
+                    help_text = _([[The big texts over the page (frontlight "Off", the number of the margin preset and the clock / session time / wpm of the bottom right tap) fade out in some steps. Each step is a refresh of the screen. Unchecked, they go away at once.]]),
+                    callback = function()
+                        self.settings:saveSetting("no_overlay_fade", not self.settings:isTrue("no_overlay_fade"))
+                        self.settings:flush()
+                        return true
                     end,
                 },
                 {
@@ -4030,6 +4214,15 @@ end
 
 
 function PageTextInfo:onCloseDocument()
+    -- legibility: pending checks of this book
+    if self._legibility_check then
+        UIManager:unschedule(self._legibility_check)
+        self._legibility_check = nil
+    end
+    if self._leading_measure then
+        UIManager:unschedule(self._leading_measure)
+        self._leading_measure = nil
+    end
     local _time = require("ui/time")
     local _t_close = _time.now()
     -- UIManager:unschedule(self.insertSession)

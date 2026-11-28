@@ -41,6 +41,7 @@ local RATING = {
     { 90, "Still readable" },
     { math.huge, "Too long" },
 }
+local SHOW_LEGIBILITY = true               -- 3rd line: legibility of the typesetting, 0-100 and its word (legibility.lua)
 local MIN_WPM_MINUTES = 0.1                -- only for the fallback wpm (stock statistics plugin)
 
 local HYPHEN_FIX = true   -- a word split by a hyphen at the end of a line counts once
@@ -235,7 +236,7 @@ local function paintLineCounts(self, bb, x, y)
 end
 
 -- ─── the info banner ─────────────────────────────────────────────────────────
--- A small two-line banner at the top right. It builds itself the first time
+-- A small banner at the top right (two lines, three with the legibility). It builds itself the first time
 -- it is painted.
 
 local function ensurePanel(self)
@@ -243,7 +244,7 @@ local function ensurePanel(self)
     local face = Font:getFace(FACE_NAME, PANEL_FONT)
     local group = VerticalGroup:new{ align = "right" }
     local lines = {}
-    for i = 1, 2 do
+    for i = 1, SHOW_LEGIBILITY and 3 or 2 do
         lines[i] = TextWidget:new{ text = " ", face = face, fgcolor = Blitbuffer.COLOR_BLACK }
         group[i] = lines[i]
     end
@@ -282,6 +283,18 @@ local function sessionWpm(stats)
     return minutes >= MIN_WPM_MINUTES and math.floor(words / minutes) or 0
 end
 
+local function legibilityText(self)
+    if not self.measureLegibility then return "\226\128\147" end
+    local ok, err = pcall(self.measureLegibility, self)
+    if not ok then logger.warn("wordcount legibility:", err) end
+    local tracker, doc = self.legibility, self.ui.document
+    local r = tracker and tracker.result
+    if not r then return "\226\128\147" end
+    local okh, hash = pcall(doc.getDocumentRenderingHash, doc, true)
+    if not okh or hash ~= tracker.hash then return "\226\128\147" end -- figure of other settings
+    return tracker:label()
+end
+
 local function updateInfoPanels(self)
     local panel = ensurePanel(self)
 
@@ -309,6 +322,12 @@ local function updateInfoPanels(self)
     else
         setLine(panel, 2, "Statistics off")
     end
+
+    -- line 3: legibility of the typesetting (pagetextinfo measures the page already drawn, once per page; the
+    -- last pages with the same settings are pooled). "–" while there is no figure for the current settings
+    if SHOW_LEGIBILITY and panel.lines[3] then
+        setLine(panel, 3, "Legibility " .. legibilityText(self))
+    end
     return panel
 end
 
@@ -320,7 +339,40 @@ local function paint(self, bb, x, y)
     panel.frame:paintTo(bb, x + Screen:getWidth() - size.w - PANEL_MARGIN, y + PANEL_MARGIN)
 end
 
+-- The banner's figures as plain texts, without painting anything (used by the big legibility message of
+-- pagetextinfo). self needs .ui and .view. Returns { page = "Lines 38 · Words 312", chars = "CFL 61 · CML 68
+-- Excellent", session = "1234 w · 12 p · 250 wpm" } (session nil with statistics off)
+local function pageInfo(self)
+    local out = {}
+    local nblines, nbwords = self.ui.view:getCurrentPageLineWordCounts()
+    local cml
+    local boxes = getLineBoxes(self)
+    if boxes then
+        local data = getLineCounts(self, boxes)
+        cml = data.max_chars
+        if WORDS_FROM == "own" then nbwords = data.total end
+    end
+    out.page = "Lines " .. tostring(nblines or 0) .. SEP .. "Words " .. tostring(nbwords or 0)
+    local parts = {}
+    if SHOW_CFL then
+        local first = self.ui.document._document:getTextFromPositions(0, 0, Screen:getWidth(), 1, false, true)
+        parts[#parts + 1] = "CFL " .. countChars(first and first.text)
+    end
+    if SHOW_CML and cml then
+        local rating = SHOW_RATING and rateLine(cml)
+        parts[#parts + 1] = "CML " .. tostring(cml) .. (rating and (" " .. rating) or "")
+    end
+    if #parts > 0 then out.chars = table.concat(parts, SEP) end
+    local stats = self.ui.statistics
+    if stats and stats.start_current_period then
+        out.session = string.format("%s w%s%s p%s%s wpm",
+            stats._total_words or 0, SEP, stats._total_pages or 0, SEP, sessionWpm(stats))
+    end
+    return out
+end
+
 return {
+    pageInfo = pageInfo,
     paint = paint,
     countWords = countWords,
     paintLineCounts = paintLineCounts,

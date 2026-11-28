@@ -2204,8 +2204,13 @@ function TopBar:toggleBar(light_on)
             -- The line height is the distance from one baseline line to the other
             -- Unrounded here; rounding happens only in the %.2f below
             local leading_factor = (1.2 * size_px * line_spacing_factor) / x_height -- 1.2em hardcoded as it is in all books in Calibre
+            -- Real distance between lines, measured on the page by page text info (legibility.lua), so the line-height
+            -- of the book counts. Until it is measured (a moment after opening or changing settings) the 1.2 em
+            -- estimate is shown with "~"
+            local measured = plugin and plugin.getMeasuredLeading and plugin:getMeasuredLeading()
+            if measured then leading_factor = measured.lf end
             -- %.2f rounds (1.679 -> 1.68), same as the popup
-            leading_factor_text = string.format("%.2f (%s)", leading_factor,
+            leading_factor_text = string.format("%s%.2f (%s)", measured and "" or "~", leading_factor,
                 self:classifyLeading(leading_factor, x_height2, ascender, descender))
         end
 
