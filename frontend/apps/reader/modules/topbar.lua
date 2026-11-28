@@ -1717,13 +1717,14 @@ function TopBar:getLightLevelText()
     return ""
 end
 
--- " N" with the number of the current margin preset of the page text info plugin, "" when there is no
+-- "N" with the number of the current margin preset of the page text info plugin, "" when there is no
 -- plugin or the side margins are not any preset
 function TopBar:getCurrentPresetText()
     local pti = self.ui and self.ui.pagetextinfo
     if not (pti and pti.getCurrentPresetIndex) then return "" end
     local ok, idx = pcall(pti.getCurrentPresetIndex, pti)
-    if ok and idx then return " " .. idx end
+    -- right after the mark, without a space ("●2 ☼1"), the same as the light level goes right after the sun
+    if ok and idx then return tostring(idx) end
     return ""
 end
 
@@ -1963,6 +1964,9 @@ TopBar.INDICATOR_TOP = 6 -- was 3, too close to the top edge
 -- With the bar enabled the indicator sits on the title line; this lowers it a little from there (dp)
 TopBar.INDICATOR_ENABLED_DOWN = 3
 
+-- Pixels (scaled) between the margin symbol ● / ○ and the number of the preset next to it. Tune it by eye: more = further
+TopBar.PRESET_GAP = 2
+
 function TopBar:paintLightAndMarginIndicator(bb, x, y)
     if not (self.light_widget_container and self.test_light_text and self.margin_mark_text and self.light_rest_text) then return end
     -- Setting "Show light and margins indicator" (Top bar menu), on by default
@@ -2000,12 +2004,14 @@ function TopBar:paintLightAndMarginIndicator(bb, x, y)
     local mark_w = self.margin_mark_text:getSize().w
     local rest_w = self.light_rest_text:getSize().w
     self.margin_mark_text:paintTo(bb, text_x, center_y - math.floor((centers.mark_c or ((dot.top + dot.bottom) / 2)) + 0.5))
+    -- extra gap between ● and the preset number, so it looks like the one between ☼ and the light level
+    local dx = self.light_rest_text.text:match("^%d") and Screen:scaleBySize(TopBar.PRESET_GAP) or 0
     if self.light_rest_text.text ~= "" then
         local rest_c = centers.rest_c or centers.mark_c or ((dot.top + dot.bottom) / 2)
-        self.light_rest_text:paintTo(bb, text_x + mark_w, center_y - math.floor(rest_c + 0.5))
+        self.light_rest_text:paintTo(bb, text_x + mark_w + dx, center_y - math.floor(rest_c + 0.5))
     end
     if self.warm_on then
-        self:paintWarmMark(bb, text_x + mark_w + rest_w, center_y)
+        self:paintWarmMark(bb, text_x + mark_w + dx + rest_w, center_y)
     end
 end
 
