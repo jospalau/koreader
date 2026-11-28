@@ -3862,16 +3862,6 @@ This is to be active only if the option flash buttons and menu items or the opti
                     end,
                 },
                 {
-                    text = _("Fade out big texts"),
-                    checked_func = function() return not self.settings:isTrue("no_overlay_fade") end,
-                    help_text = _([[The big texts over the page (frontlight "Off", the number of the margin preset and the clock / session time / wpm of the bottom right tap) fade out in some steps. Each step is a refresh of the screen. Unchecked, they go away at once.]]),
-                    callback = function()
-                        self.settings:saveSetting("no_overlay_fade", not self.settings:isTrue("no_overlay_fade"))
-                        self.settings:flush()
-                        return true
-                    end,
-                },
-                {
                     text_func = function()
                         return T(_("Big texts duration: %1 s"), self:getOverlayHold())
                     end,
@@ -3891,6 +3881,16 @@ This is to be active only if the option flash buttons and menu items or the opti
                             }
                         end
                         return items
+                    end,
+                },
+                {
+                    text = _("Fade out big texts"),
+                    checked_func = function() return not self.settings:isTrue("no_overlay_fade") end,
+                    help_text = _([[The big texts over the page (frontlight "Off", the number of the margin preset and the clock / session time / wpm of the bottom right tap) fade out in some steps. Each step is a refresh of the screen. Unchecked, they go away at once.]]),
+                    callback = function()
+                        self.settings:saveSetting("no_overlay_fade", not self.settings:isTrue("no_overlay_fade"))
+                        self.settings:flush()
+                        return true
                     end,
                 },
                 {

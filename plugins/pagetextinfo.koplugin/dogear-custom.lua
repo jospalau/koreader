@@ -152,22 +152,61 @@ if not ReaderView._custom_dogear_top_patched then
 
     local orig_paintTo = ReaderView.paintTo
     ReaderView.paintTo = function(self, bb, x, y)
-        local visible = self.dogear_visible
-        if not visible or not self.dogear then
+        local dogear = self.dogear
+        -- ReaderView:paintTo() calls itself again when a partial rerendering (typesetting change) moved the page:
+        -- the outer call already muted the dogear and paints it at the end, so the inner one only paints the page
+        if not dogear or self._custom_dogear_painting then
             return orig_paintTo(self, bb, x, y)
         end
         -- Skip the early stock paint WITHOUT touching dogear_visible: other view modules (e.g. the top bar moves its
         -- corner mark to the bottom-right while a bookmark dogear is showing) read that flag while they paint.
         -- So the dogear widget's own paintTo is muted for the duration of the original paint instead.
-        local dogear = self.dogear
+        -- It is muted always, not only when visible: after a typesetting change the bookmark state of the new page is
+        -- only known WHILE the page is drawn (ReaderRolling:handlePartialRerendering() sends PageUpdate from inside
+        -- this paint), so whether to paint the dogear is decided after the original paint, with the final state.
         local real_paintTo = dogear.paintTo
         local own_paintTo = rawget(dogear, "paintTo")
         dogear.paintTo = function() end
+        self._custom_dogear_painting = true
         local ok, err = pcall(orig_paintTo, self, bb, x, y)
+        self._custom_dogear_painting = nil
         dogear.paintTo = own_paintTo         -- nil removes the override again
-        pcall(real_paintTo, dogear, bb, x, y)   -- on top of everything
+        local visible = self.dogear_visible and true or false
+        if visible then
+            pcall(real_paintTo, dogear, bb, x, y)   -- on top of everything
+        end
+        rawset(dogear, "_painted_visible", visible)  -- what is on screen now (see "Stale dogear" below)
         if not ok then
             error(err, 0)                    -- keep the original behaviour for real errors
         end
+    end
+end
+
+-- ===== Stale dogear =====
+-- The bookmark state of the page is updated on PageUpdate/PosUpdate, which can come AFTER the page has been painted
+-- (after a typesetting change the page is repainted while dogear_visible still says the old page had a bookmark). If
+-- then only a strip of the top is refreshed (top bar, page text info), half of the old dogear stays on screen.
+-- So when the visibility changes from what was last painted, the whole dogear corner is repainted.
+if not ReaderDogear._custom_dogear_visibility_patched then
+    ReaderDogear._custom_dogear_visibility_patched = true
+    local Geom = require("ui/geometry")
+    local UIManager = require("ui/uimanager")
+
+    local orig_onSetDogearVisibility = ReaderDogear.onSetDogearVisibility
+    ReaderDogear.onSetDogearVisibility = function(self, visible)
+        local ret = orig_onSetDogearVisibility(self, visible)
+        local painted = rawget(self, "_painted_visible")
+        -- (not while the page is being painted: the paint itself then decides with the new state)
+        if painted ~= nil and painted ~= (visible and true or false) and self.view and self.view.dialog
+                and not self.view._custom_dogear_painting then
+            local size = self.dogear_size or 0
+            local h = (self.dogear_y_offset or 0) + size
+            if size > 0 then
+                local w = Screen:getWidth()
+                local region = Geom:new{ x = BD.mirroredUILayout() and 0 or (w - size), y = 0, w = size, h = h }
+                UIManager:setDirty(self.view.dialog, function() return "ui", region end)
+            end
+        end
+        return ret
     end
 end

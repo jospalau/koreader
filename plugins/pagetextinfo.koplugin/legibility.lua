@@ -223,7 +223,7 @@ function Legibility.metrics(pages, px)
             for _, r in ipairs(ln.runs) do widths[#widths + 1] = r.w end
         end
     end
-    if #widths < 50 then return nil, "not enough text" end
+    if #widths < 20 then return nil, "not enough text" end
     local T = clamp(otsu(widths, floor(2 * px)), max(2, floor(0.06 * px)), max(3, floor(0.35 * px)))
 
     local natural, full_lines, xhs, pitches, measure_px, inks = {}, {}, {}, {}, {}, {}
@@ -232,7 +232,7 @@ function Legibility.metrics(pages, px)
     local hyph, ladders, river_cost = 0, 0, 0
     for _, pg in ipairs(pages) do
         local ls = pg.lines
-        if #ls >= 6 then
+        if #ls >= 4 then
             npages = npages + 1
             local lefts, rights = {}, {}
             for _, ln in ipairs(ls) do lefts[#lefts + 1] = ln.left; rights[#rights + 1] = ln.right end
@@ -293,7 +293,10 @@ function Legibility.metrics(pages, px)
             if gap_lines >= 1.3 and gap_lines <= 6 then fill_bad = fill_bad + 1 end
         end
     end
-    if #full_lines < Legibility.MIN_FULL_LINES then return nil, "not enough justified lines" end
+    -- With a big font a page holds only a few lines: then fewer justified lines are enough (half of the lines, at
+    -- least 3), and the figure is marked as rough ("~" in the label) until MIN_FULL_LINES are pooled
+    local need = max(3, min(Legibility.MIN_FULL_LINES, floor(0.5 * nlines)))
+    if #full_lines < need then return nil, "not enough justified lines" end
 
     local s
     if #natural >= 15 then
@@ -329,7 +332,7 @@ function Legibility.metrics(pages, px)
         stretch = bad_sum / nf / 100, loose = loose / nf, hyph = hyph / nf,
         ladders = ladders * 100 / nf, rivers = river_cost * 100 / nf,
         pagefill = fill_n > 0 and fill_bad / fill_n or 0,
-        n_full = nf, n_pages = npages,
+        n_full = nf, n_pages = npages, rough = nf < Legibility.MIN_FULL_LINES,
     }
 end
 
@@ -508,7 +511,8 @@ end
 function Tracker:label()
     local r = self.result
     if not r then return "" end
-    return r.score .. " " .. r.category .. (r.reason and (" (" .. r.reason .. ")") or "")
+    local m = self.metrics
+    return (m and m.rough and "~" or "") .. r.score .. " " .. r.category .. (r.reason and (" (" .. r.reason .. ")") or "")
 end
 
 --- Texts for the big overlay: { "A 87", "main problem" } (the second one only when it really costs points)
