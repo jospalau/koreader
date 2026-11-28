@@ -239,6 +239,15 @@ function Legibility.metrics(pages, px)
             local tL, tR = percentile(lefts, 0.1), percentile(rights, 0.9)
             measure_px[#measure_px + 1] = tR - tL
             local tol = max(2, 0.04 * px)
+            -- word gaps a justified line needs: 3 normally; with a very big font a line holds only 2-4 words, so
+            -- then 2 or even 1 (half of the gaps of a typical line of the page, at most 3)
+            local ngaps = {}
+            for _, ln in ipairs(ls) do
+                local c = 0
+                for _, r in ipairs(ln.runs) do if r.w >= T then c = c + 1 end end
+                ngaps[#ngaps + 1] = c
+            end
+            local min_gaps = clamp(floor(0.5 * (percentile(ngaps, 0.75) or 0)), 1, 3)
             local prev_full, run_h = nil, 0
             for li, ln in ipairs(ls) do
                 local gaps = {}
@@ -247,7 +256,7 @@ function Legibility.metrics(pages, px)
                 end
                 ln.gaps = gaps
                 local left_ok = ln.left <= tL + 2.2 * px
-                ln.full = left_ok and ln.right >= tR - tol and #gaps >= 3
+                ln.full = left_ok and ln.right >= tR - tol and #gaps >= min_gaps
                 if left_ok and not ln.full and ln.right < tR - 0.6 * px and #gaps >= 2 then
                     for _, g in ipairs(gaps) do natural[#natural + 1] = g.w end
                 end
