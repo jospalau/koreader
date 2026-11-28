@@ -2760,10 +2760,20 @@ function PageTextInfo:measureLegibility()
     local xh_mm
     if self.getFontXHeightInfo and self.ui.font then
         local okx, xi = pcall(self.getFontXHeightInfo, self, self.ui.font.font_face)
-        if okx and xi and xi.mm and xi.mm > 0 then xh_mm = xi.mm end
+        -- with the rem factor of the book and the style tweaks (settings_menu.lua), as the menu and the top bar
+        if okx and xi and xi.mm and xi.mm > 0 then
+            xh_mm = xi.mm   -- xi.rem is the same factor as getBookRemScale() below
+        end
     end
     -- Line spacing: the same figures as the top bar (topbar.lua, typography line: "lF: 2.41 (balanced)"), so
     -- "tight lines" here and "compact" there agree. Worked out once per settings
+    -- rem books (main text at 0.88rem...): the text really drawn is the chosen size x the factor of the book
+    -- (settings_menu.lua: getBookRemScale, nil when there is none or a style tweak puts the text at the chosen size)
+    local rem
+    if self.getBookRemScale then
+        local okr, f = pcall(self.getBookRemScale, self)
+        if okr and type(f) == "number" and f > 0 and f ~= 1 then rem = f end
+    end
     if self._legibility_lead_hash ~= hash then
         self._legibility_lead_hash = hash
         self._legibility_lead = nil
@@ -2776,7 +2786,8 @@ function PageTextInfo:measureLegibility()
             local face = Font:getFace(face_name, size_px, 0, true)
             if not face then return end
             local xh = face.ftsize:getXHeight()
-            local x_height = (xh < 1) and (xh * size_px) or xh
+            local x_height = ((xh < 1) and (xh * size_px) or xh) * (rem or 1)
+            -- getFontXHeightInfo already applies the rem factor of the book
             local xi = self.getFontXHeightInfo and self.ui.font and self:getFontXHeightInfo(self.ui.font.font_face)
             if xi and xi.mm then x_height = xi.mm * dpi / 25.4 end
             local x2, asc, desc = face.ftsize:getAscDesc()
@@ -2787,13 +2798,13 @@ function PageTextInfo:measureLegibility()
                 xh_px = x_height,
                 safe_min = (asc + desc) / x2,
                 -- the top bar's estimate (1.2 em), only shown in the details
-                lf_estimate = (1.2 * size_px * ((cfg.line_spacing or 100) / 100)) / x_height,
+                lf_estimate = (1.2 * size_px * (rem or 1) * ((cfg.line_spacing or 100) / 100)) / x_height,
             }
         end)
     end
     self.legibility:addPage(bb, {
         leading = self._legibility_lead,
-        hash = hash, pageno = pageno, px = doc:getFontSize(),
+        hash = hash, pageno = pageno, px = doc:getFontSize() * (rem or 1), rem = rem,
         box = { m.left or 0, m.top or 0, w - 1 - (m.right or 0), h - 1 - (m.bottom or 0) },
         chars = chars, dpi = Device:getDeviceScreenDPI() or Screen:getDPI(), xh_mm = xh_mm,
         margin_px = math.min(m.left or 0, m.right or 0),

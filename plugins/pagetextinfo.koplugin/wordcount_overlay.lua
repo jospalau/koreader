@@ -42,6 +42,7 @@ local RATING = {
     { math.huge, "Too long" },
 }
 local SHOW_LEGIBILITY = true               -- 3rd line: legibility of the typesetting, 0-100 and its word (legibility.lua)
+local SHOW_LEGIBILITY_DETAILS = true       -- and below it one line per parameter: measured value, points it costs, weight
 local MIN_WPM_MINUTES = 0.1                -- only for the fallback wpm (stock statistics plugin)
 
 local HYPHEN_FIX = true   -- a word split by a hyphen at the end of a line counts once
@@ -256,8 +257,39 @@ local function ensurePanel(self)
         padding = PANEL_PADDING,
         group,
     }
-    self._wc_panel = { frame = frame, group = group, lines = lines, last = {} }
+    self._wc_panel = { frame = frame, group = group, lines = lines, last = {}, face = face,
+                       base = #lines }
     return self._wc_panel
+end
+
+-- Lines after the fixed ones (the legibility details): as many as texts, made or removed as needed
+local function setExtraLines(panel, texts)
+    local want = panel.base + #texts
+    local changed = false
+    while #panel.lines < want do
+        local w = TextWidget:new{ text = " ", face = panel.face, fgcolor = Blitbuffer.COLOR_BLACK }
+        panel.lines[#panel.lines + 1] = w
+        panel.group[#panel.group + 1] = w
+        changed = true
+    end
+    while #panel.lines > want do
+        local i = #panel.lines
+        panel.lines[i]:free()
+        panel.lines[i] = nil
+        panel.group[i] = nil
+        panel.last[i] = nil
+        changed = true
+    end
+    if changed then panel.group:resetLayout() end
+    for i, text in ipairs(texts) do
+        local n = panel.base + i
+        if panel.last[n] ~= text then
+            panel.last[n] = text
+            panel.lines[n]:setText(text)
+            changed = true
+        end
+    end
+    if changed then panel.group:resetLayout() end
 end
 
 -- Sets the text of line i, only when it changed (setText relays the line out).
@@ -326,7 +358,15 @@ local function updateInfoPanels(self)
     -- line 3: legibility of the typesetting (pagetextinfo measures the page already drawn, once per page; the
     -- last pages with the same settings are pooled). "–" while there is no figure for the current settings
     if SHOW_LEGIBILITY and panel.lines[3] then
-        setLine(panel, 3, "Legibility " .. legibilityText(self))
+        local leg = legibilityText(self)
+        setLine(panel, 3, "Legibility " .. leg)
+        -- below: every parameter with its value, the points it costs alone and its weight (legibility.lua)
+        local details = {}
+        if SHOW_LEGIBILITY_DETAILS and self.legibility and leg ~= "\226\128\147" then
+            local ok, d = pcall(self.legibility.detailLines, self.legibility)
+            if ok and d then details = d end
+        end
+        setExtraLines(panel, details)
     end
     return panel
 end

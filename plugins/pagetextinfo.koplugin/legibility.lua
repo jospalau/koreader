@@ -29,6 +29,7 @@ local Legibility = {
     VIEW_DISTANCE = 400,  -- mm, the same for every device
     BAND_DISTANCE = 400,  -- mm, distance at which XH_MIN / XH_MAX are given
     REASON_MIN = 1.0,
+    XH_FONT_TRUST = 1.3,  -- the x-height of the fonts menu is used if within x1.3 of the measured one
     -- "balanced" line spacing of the top bar: safe_min + 0.15 ... safe_min + 0.40 (no penalty inside)
     LEADING_BALANCED = { 0.15, 0.40 },     -- a problem is named in brackets when its penalty is at least this
     SCALE = 12,           -- P -> score: 100 * exp(-P / SCALE)
@@ -355,12 +356,20 @@ function Legibility.reason(parts, xh_mm, lf, target, cpl)
 end
 
 --- Penalties, score 0-100 and letter.
--- p = { dpi, margin_px, word_expansion } (p.xh_mm is only shown in the details: the x-height used is the one
+-- p = { dpi, margin_px, word_expansion, xh_mm, rem }. xh_mm: the x-height of the fonts menu (getFontXHeightInfo, with the
+-- rem factor of the book and the style tweaks), the same the top bar and the menu show; used unless it is far from
+-- the one measured on the page (more than XH_FONT_TRUST apart: a wrong font file). Without it, the measured one.
+-- (Before: p.xh_mm was only shown in the details and the x-height used was always the measured one,
 -- measured on the page, so it does not depend on the font name, NV fonts included)
 function Legibility.grade(m, p)
     local W = Legibility.W
     local mm = 25.4 / p.dpi
-    local xh_mm = m.xh_px * mm
+    local xh_measured = m.xh_px * mm
+    local xh_mm = xh_measured
+    if p.xh_mm and p.xh_mm > 0 and xh_measured > 0 then
+        local ratio = p.xh_mm / xh_measured
+        if ratio >= 1 / Legibility.XH_FONT_TRUST and ratio <= Legibility.XH_FONT_TRUST then xh_mm = p.xh_mm end
+    end
     local parts = {}
     -- the same mm seen from VIEW_DISTANCE instead of BAND_DISTANCE
     local seen = xh_mm * Legibility.BAND_DISTANCE / Legibility.VIEW_DISTANCE
@@ -420,7 +429,9 @@ function Legibility.grade(m, p)
         if score >= c[1] then category = c[2]; break end
     end
     return { score = score, letter = letter, category = category, penalty = total, parts = parts,
-             xh_mm = xh_mm, xh_mm_font = p.xh_mm, leading = lf, leading_target = target,
+             margin_mm = side, expansion = p.word_expansion or 0, cpl = cpl,
+             rem = p.rem,
+             xh_mm = xh_mm, xh_mm_font = p.xh_mm, xh_mm_measured = xh_measured, leading = lf, leading_target = target,
              leading_class = leading_class, safe_min = safe_min,
              reason = Legibility.reason(parts, xh_mm, lf, target, cpl) }
 end
@@ -506,6 +517,39 @@ function Tracker:overlayTexts()
     if not r then return { "No data" } end
     -- the number (0-100) and its word, "87 Good": no letter and no problem name (the breakdown is in Tracker:details())
     return { self:label() }
+end
+
+--- The parameters for the word counter banner, in 4 short lines: each one with what was measured (units attached:
+-- 1.78mm) and the points it costs alone (100 * (1 - exp(-penalty / SCALE)), -0 = perfect). The multiplying
+-- weights go after the value (x10); the band ones (x-height, line length, line spacing, margins) are squared
+-- distances out of their band. Last item: total penalty.
+function Tracker:detailLines()
+    local r, m = self.result, self.metrics
+    if not (r and m) then return {} end
+    local S, W = Legibility.SCALE, Legibility.W
+    local function c(k)
+        return string.format("-%d", floor(100 * (1 - exp(-(r.parts[k] or 0) / S)) + 0.5))
+    end
+    local function w(k, base)
+        local f = base * (W[k] or 1)
+        return f ~= 1 and string.format("x%g", f) or ""
+    end
+    local sep = " \194\183 "
+    local rem = r.rem and string.format(" rem%.2f", r.rem) or ""
+    return {
+        string.format("xH %.2fmm%s %s", r.xh_mm, rem, c("size")) .. sep
+            .. string.format("%.0fcpl %s", m.cpl, c("measure")) .. sep
+            .. string.format("lF %.2f %s %s", r.leading, r.leading_class or "", c("leading")),
+        string.format("stretch %.2f %s", m.stretch, c("stretch")) .. sep
+            .. string.format("loose %.0f%%%s %s", 100 * m.loose, w("loose", 10), c("loose")) .. sep
+            .. string.format("hyph %.0f%%%s %s", 100 * m.hyph, w("hyph", 3), c("hyph")),
+        string.format("ladders %.1f%s %s", m.ladders, w("ladder", 0.5), c("ladder")) .. sep
+            .. string.format("rivers %.0f%s %s", m.rivers, w("rivers", 0.1), c("rivers")) .. sep
+            .. string.format("margins %.1fmm %s", r.margin_mm or 0, c("margin")),
+        string.format("exp %d%% %s", r.expansion or 0, c("expand")) .. sep
+            .. string.format("fill %.0f%% %s", 100 * m.pagefill, c("pagefill")) .. sep
+            .. string.format("P %.1f (%dp, %dl)", r.penalty, m.n_pages, m.n_full),
+    }
 end
 
 --- Multi-line breakdown for the details popup

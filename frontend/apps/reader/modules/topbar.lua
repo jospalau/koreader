@@ -2203,7 +2203,10 @@ function TopBar:toggleBar(light_on)
             -- How many times the x_height fits in the line height
             -- The line height is the distance from one baseline line to the other
             -- Unrounded here; rounding happens only in the %.2f below
-            local leading_factor = (1.2 * size_px * line_spacing_factor) / x_height -- 1.2em hardcoded as it is in all books in Calibre
+            -- rem books: the text is drawn at size x factor of the book (xi.rem, set by getFontXHeightInfo, which
+            -- already scaled x_height), so the 1.2 em line is that much smaller too
+            local rem_factor = (xi and xi.rem) or 1
+            local leading_factor = (1.2 * size_px * rem_factor * line_spacing_factor) / x_height -- 1.2em hardcoded as it is in all books in Calibre
             -- Real distance between lines, measured on the page by page text info (legibility.lua), so the line-height
             -- of the book counts. Until it is measured (a moment after opening or changing settings) the 1.2 em
             -- estimate is shown with "~"
